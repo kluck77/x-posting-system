@@ -1,0 +1,71 @@
+# =============================================================================
+# X Posting System - .gitignore
+# =============================================================================
+# 이 파일에 적힌 패턴과 일치하는 파일은 Git이 무시합니다.
+# 절대로 GitHub에 올라가지 않아야 하는 것들을 여기 적습니다.
+# =============================================================================
+
+# --- 환경변수 (API 키가 들어있으므로 절대 커밋 금지!) ---
+.env
+.env.local
+.env.production
+
+# --- 데이터베이스 파일 ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+
+# --- Python 캐시 ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# --- Python 빌드/배포 ---
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# --- 가상환경 ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- IDE 설정 ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# --- OS 생성 파일 ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# --- 로그 파일 ---
+*.log
+logs/
+
+# --- 테스트/커버리지 ---
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
+
+# --- Claude Code 로컬 설정 ---
+.claude/
+
+# --- 기타 ---
+*.bak
+*.tmp
+*.temp

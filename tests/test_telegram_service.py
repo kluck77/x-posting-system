@@ -1,0 +1,68 @@
+"""
+텔레그램 서비스 테스트
+======================
+콜백 파싱, 승인 카드 빌드를 테스트합니다.
+"""
+
+import pytest
+from app.services.telegram_service import (
+    parse_callback_data, build_approval_card, build_inline_keyboard,
+)
+from app.models.content import (
+    Draft, ContentCategory, RiskLevel, ApprovalStatus,
+)
+
+
+class TestParseCallbackData:
+    def test_valid_approve(self):
+        result = parse_callback_data("approve:42")
+        assert result == ("approve", 42)
+
+    def test_valid_reject(self):
+        result = parse_callback_data("reject:1")
+        assert result == ("reject", 1)
+
+    def test_valid_defer(self):
+        result = parse_callback_data("defer:100")
+        assert result == ("defer", 100)
+
+    def test_valid_regenerate(self):
+        result = parse_callback_data("regenerate:5")
+        assert result == ("regenerate", 5)
+
+    def test_invalid_action(self):
+        result = parse_callback_data("delete:42")
+        assert result is None
+
+    def test_invalid_format_no_colon(self):
+        result = parse_callback_data("approve42")
+        assert result is None
+
+    def test_invalid_format_too_many_parts(self):
+        result = parse_callback_data("approve:42:extra")
+        assert result is None
+
+    def test_invalid_id_not_number(self):
+        result = parse_callback_data("approve:abc")
+        assert result is None
+
+    def test_empty_string(self):
+        result = parse_callback_data("")
+        assert result is None
+
+
+class TestBuildInlineKeyboard:
+    def test_keyboard_has_buttons(self):
+        kb = build_inline_keyboard(42)
+        assert "inline_keyboard" in kb
+        rows = kb["inline_keyboard"]
+        assert len(rows) == 2  # 2줄
+
+        # 첫 줄: Approve, Reject
+        assert len(rows[0]) == 2
+        assert rows[0][0]["callback_data"] == "approve:42"
+        assert rows[0][1]["callback_data"] == "reject:42"
+
+        # 둘째 줄: Defer, Regenerate
+        assert rows[1][0]["callback_data"] == "defer:42"
+        assert rows[1][1]["callback_data"] == "regenerate:42"
