@@ -79,6 +79,11 @@ def _run_schema_migrations():
             "column": "prediction_reasoning",
             "ddl": "ALTER TABLE drafts ADD COLUMN prediction_reasoning TEXT",
         },
+        {
+            "table": "drafts",
+            "column": "community_warning",
+            "ddl": "ALTER TABLE drafts ADD COLUMN community_warning TEXT",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")

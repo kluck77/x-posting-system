@@ -133,6 +133,9 @@ class Draft(Base):
     )
     published_at = Column(DateTime, nullable=True, comment="게시 시간")
 
+    # 커뮤니티 입력 경고
+    community_warning = Column(Text, nullable=True, comment="커뮤니티 기반 입력 경고 및 검증 필요 항목")
+
     # 예측 게시 시간
     predicted_publish_at = Column(DateTime, nullable=True, comment="예측 최적 게시 시간 (UTC)")
     prediction_reasoning = Column(Text, nullable=True, comment="예측 근거")
@@ -208,6 +211,7 @@ class DraftResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    community_warning: Optional[str] = None
     predicted_publish_at: Optional[datetime] = None
     prediction_reasoning: Optional[str] = None
 

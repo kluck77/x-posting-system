@@ -26,7 +26,10 @@ from app.models.content import (
 )
 from app.services.source_service import SourceService
 from app.services.draft_service import DraftService
-from app.services.classifier import classify_category, classify_risk
+from app.services.classifier import (
+    classify_category, classify_risk,
+    classify_community_risk, build_community_warning,
+)
 from app.services.prediction_service import predict_publish_time
 from app.services.telegram_service import send_approval_card, send_publish_confirmation
 from app.services.x_publisher import XPublisher
@@ -155,6 +158,18 @@ class Orchestrator:
                 data.title, data.source_text, category,
             )
 
+        # 커뮤니티 입력 리스크 강제 적용
+        is_community = data.source_type == "community_input"
+        community_warning = None
+        if is_community:
+            logger.info("커뮤니티 입력 감지 — 리스크 재평가 적용")
+            risk_level, risk_reasoning = classify_community_risk(
+                data.title, data.source_text, category, risk_level, risk_reasoning,
+            )
+            community_warning = build_community_warning(
+                data.title, data.source_text, category, risk_level,
+            )
+
         # 중복 체크
         if self.draft_service.is_duplicate_text(review.body):
             logger.warning("중복 텍스트 감지!")
@@ -170,6 +185,12 @@ class Orchestrator:
             ai_rationale=review.ai_rationale,
             thread_continuation=review.thread_continuation,
         )
+
+        # 커뮤니티 경고 저장
+        if community_warning:
+            draft.community_warning = community_warning
+            self.db.commit()
+            logger.info(f"커뮤니티 경고 저장: draft_id={draft.id}")
 
         # 예측 게시 시간 계산
         try:
