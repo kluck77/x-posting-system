@@ -133,6 +133,10 @@ class Draft(Base):
     )
     published_at = Column(DateTime, nullable=True, comment="게시 시간")
 
+    # 예측 게시 시간
+    predicted_publish_at = Column(DateTime, nullable=True, comment="예측 최적 게시 시간 (UTC)")
+    prediction_reasoning = Column(Text, nullable=True, comment="예측 근거")
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 
@@ -204,6 +208,8 @@ class DraftResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    predicted_publish_at: Optional[datetime] = None
+    prediction_reasoning: Optional[str] = None
 
     class Config:
         from_attributes = True

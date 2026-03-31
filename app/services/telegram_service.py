@@ -17,8 +17,11 @@
 import json
 import logging
 import httpx
+from zoneinfo import ZoneInfo
 from app.config import settings
 from app.models.content import Draft, RiskLevel, ContentCategory
+
+KST = ZoneInfo("Asia/Seoul")
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,12 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
 
     if draft.ai_rationale:
         card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
+
+    if getattr(draft, "predicted_publish_at", None):
+        kst_time = draft.predicted_publish_at.astimezone(KST)
+        card += f"⏰ <b>예측 최적 게시 시간:</b> {kst_time.strftime('%m/%d(%a) %H:%M KST')}\n"
+        if getattr(draft, "prediction_reasoning", None):
+            card += f"   └ {draft.prediction_reasoning}\n"
 
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"

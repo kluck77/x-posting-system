@@ -16,6 +16,7 @@
 """
 
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
@@ -26,6 +27,7 @@ from app.models.content import (
 from app.services.source_service import SourceService
 from app.services.draft_service import DraftService
 from app.services.classifier import classify_category, classify_risk
+from app.services.prediction_service import predict_publish_time
 from app.services.telegram_service import send_approval_card, send_publish_confirmation
 from app.services.x_publisher import XPublisher
 from app.services.rate_limiter import RateLimiter
@@ -168,6 +170,20 @@ class Orchestrator:
             ai_rationale=review.ai_rationale,
             thread_continuation=review.thread_continuation,
         )
+
+        # 예측 게시 시간 계산
+        try:
+            pred_time, pred_reason = predict_publish_time(
+                category=draft.category,
+                risk_level=draft.risk_level,
+                now=datetime.now(timezone.utc),
+            )
+            draft.predicted_publish_at = pred_time
+            draft.prediction_reasoning = pred_reason
+            self.db.commit()
+            logger.info(f"예측 게시 시간: {pred_time.isoformat()} — {pred_reason}")
+        except Exception as e:
+            logger.warning(f"예측 게시 시간 계산 실패 (무시): {e}")
 
         logger.info(
             f"=== 파이프라인 완료: draft_id={draft.id}, "

@@ -5,7 +5,7 @@ SQLite 데이터베이스에 연결하고, 테이블을 생성하고, 세션을 
 """
 
 import logging
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import settings
 
@@ -55,6 +55,45 @@ def get_db() -> Session:
     return db
 
 
+def _get_existing_columns(conn, table_name: str) -> set:
+    """PRAGMA table_info로 기존 컬럼명 집합 반환."""
+    result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+    return {row[1] for row in result}
+
+
+def _run_schema_migrations():
+    """
+    기존 테이블에 누락된 컬럼을 안전하게 추가합니다.
+    - Base.metadata.create_all()은 기존 테이블의 컬럼을 추가하지 않으므로
+      PRAGMA table_info로 존재 여부 확인 후 ALTER TABLE 실행합니다.
+    - nullable 컬럼만 추가 (SQLite ALTER TABLE 제약)
+    """
+    migrations = [
+        {
+            "table": "drafts",
+            "column": "predicted_publish_at",
+            "ddl": "ALTER TABLE drafts ADD COLUMN predicted_publish_at DATETIME",
+        },
+        {
+            "table": "drafts",
+            "column": "prediction_reasoning",
+            "ddl": "ALTER TABLE drafts ADD COLUMN prediction_reasoning TEXT",
+        },
+    ]
+    with engine.connect() as conn:
+        existing_cols = _get_existing_columns(conn, "drafts")
+        for m in migrations:
+            if m["column"] not in existing_cols:
+                try:
+                    conn.execute(text(m["ddl"]))
+                    conn.commit()
+                    logger.info(f"[migration] 컬럼 추가: {m['column']}")
+                except Exception as e:
+                    logger.error(f"[migration] 오류: {m['column']} — {e}")
+            else:
+                logger.debug(f"[migration] 이미 존재: {m['column']}")
+
+
 def init_db():
     """
     데이터베이스 테이블을 생성합니다.
@@ -63,4 +102,5 @@ def init_db():
     """
     from app.models.content import Base  # 순환 import 방지
     Base.metadata.create_all(bind=engine)
+    _run_schema_migrations()
     logger.info("데이터베이스 테이블 초기화 완료")
