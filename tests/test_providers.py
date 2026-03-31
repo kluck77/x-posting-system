@@ -1,7 +1,7 @@
 """
 AI 프로바이더 테스트
 ====================
-Mock 프로바이더 5종이 올바르게 동작하는지 테스트합니다.
+Mock 프로바이더 5종 + 실제 프로바이더 클래스 검증을 테스트합니다.
 """
 
 import pytest
@@ -9,7 +9,10 @@ from app.providers.mock_providers import (
     MockDraftWriter, MockReviewer, MockResearcher,
     MockTrendHunter, MockFactChecker,
 )
-from app.providers.base import DraftResult, ResearchResult
+from app.providers.base import (
+    DraftResult, ResearchResult,
+    BaseResearcher, BaseTrendHunter, BaseFactChecker,
+)
 
 
 class TestMockDraftWriter:
@@ -107,3 +110,47 @@ class TestProviderFallback:
         assert review.hook
         assert review.risk_level
         assert trends.trending_topics
+
+
+class TestNewProviderImports:
+    """새 프로바이더 클래스가 올바르게 import 되고 인터페이스를 구현하는지 테스트"""
+
+    def test_gemini_researcher_is_base_researcher(self):
+        from app.providers.gemini_provider import GeminiResearcher
+        assert issubclass(GeminiResearcher, BaseResearcher)
+
+    def test_grok_trend_hunter_is_base_trend_hunter(self):
+        from app.providers.grok_provider import GrokTrendHunter
+        assert issubclass(GrokTrendHunter, BaseTrendHunter)
+
+    def test_perplexity_fact_checker_is_base_fact_checker(self):
+        from app.providers.perplexity_provider import PerplexityFactChecker
+        assert issubclass(PerplexityFactChecker, BaseFactChecker)
+
+    def test_gemini_researcher_instantiates(self):
+        from app.providers.gemini_provider import GeminiResearcher
+        r = GeminiResearcher()
+        assert r is not None
+
+    def test_grok_trend_hunter_instantiates(self):
+        from app.providers.grok_provider import GrokTrendHunter
+        t = GrokTrendHunter()
+        assert t is not None
+
+    def test_perplexity_fact_checker_instantiates(self):
+        from app.providers.perplexity_provider import PerplexityFactChecker
+        f = PerplexityFactChecker()
+        assert f is not None
+
+
+class TestAITeamCreation:
+    """create_ai_team()이 다양한 설정에서 올바르게 동작하는지 테스트"""
+
+    def test_creates_all_mock_team(self):
+        from app.providers.ai_provider import create_ai_team
+        team = create_ai_team()
+        assert team.draft_writer is not None
+        assert team.reviewer is not None
+        assert team.researcher is not None
+        assert team.trend_hunter is not None
+        assert team.fact_checker is not None

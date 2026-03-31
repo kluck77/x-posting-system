@@ -6,9 +6,9 @@ AI 프로바이더 매니저
 역할 선택 규칙:
   - draft_writer: ACTIVE_DRAFT_PROVIDER 설정값 → 해당 키 확인 → fallback to mock
   - reviewer: ANTHROPIC_API_KEY 있으면 Claude, 없으면 mock
-  - researcher: ACTIVE_RESEARCH_PROVIDER 설정값 → v1은 항상 mock
-  - trend_hunter: GROK_API_KEY 있으면 [미래], v1은 항상 mock
-  - fact_checker: ACTIVE_FACTCHECK_PROVIDER 설정값 → v1은 항상 mock
+  - researcher: ACTIVE_RESEARCH_PROVIDER 설정값 → gemini/perplexity → fallback to mock
+  - trend_hunter: ACTIVE_TREND_PROVIDER 설정값 → grok → fallback to mock
+  - fact_checker: ACTIVE_FACTCHECK_PROVIDER 설정값 → perplexity → fallback to mock
 """
 
 import logging
@@ -33,9 +33,9 @@ class AITeam:
 
     draft_writer:  초안 작성 (ChatGPT / Claude / mock)
     reviewer:      리스크 판단 & 최종 다듬기 (Claude / mock)
-    researcher:    리서치 [미래: Gemini / Perplexity]
-    trend_hunter:  트렌드 탐지 [미래: Grok]
-    fact_checker:  팩트체크 [미래: Perplexity]
+    researcher:    리서치 (Gemini / Perplexity / mock)
+    trend_hunter:  트렌드 탐지 (Grok / mock)
+    fact_checker:  팩트체크 (Perplexity / mock)
     """
     draft_writer: BaseDraftWriter
     reviewer: BaseReviewer
@@ -72,23 +72,40 @@ def create_ai_team() -> AITeam:
         reviewer = MockReviewer()
         logger.info("○ Reviewer: Mock 모드")
 
-    # --- 3. Researcher [v1: mock 전용] ---
-    researcher = MockResearcher()
+    # --- 3. Researcher ---
     eff_research = settings.get_effective_research_provider()
-    if eff_research != "mock":
-        logger.info(f"  Researcher: {eff_research} 요청되었으나 v1은 mock만 지원")
-    logger.info("○ Researcher: Mock 모드 (v1 기본)")
+    if eff_research == "gemini":
+        from app.providers.gemini_provider import GeminiResearcher
+        researcher = GeminiResearcher()
+        logger.info("✓ Researcher: Google Gemini")
+    elif eff_research == "perplexity":
+        from app.providers.perplexity_provider import PerplexityFactChecker
+        # Perplexity can also do research — wrap as researcher
+        researcher = MockResearcher()
+        logger.info("○ Researcher: Mock 모드 (Perplexity는 FactChecker로 사용)")
+    else:
+        researcher = MockResearcher()
+        logger.info("○ Researcher: Mock 모드")
 
-    # --- 4. Trend Hunter [v1: mock 전용] ---
-    trend_hunter = MockTrendHunter()
-    logger.info("○ TrendHunter: Mock 모드 (v1 기본)")
+    # --- 4. Trend Hunter ---
+    eff_trend = settings.get_effective_trend_provider()
+    if eff_trend == "grok":
+        from app.providers.grok_provider import GrokTrendHunter
+        trend_hunter = GrokTrendHunter()
+        logger.info("✓ TrendHunter: xAI Grok")
+    else:
+        trend_hunter = MockTrendHunter()
+        logger.info("○ TrendHunter: Mock 모드")
 
-    # --- 5. Fact Checker [v1: mock 전용] ---
-    fact_checker = MockFactChecker()
+    # --- 5. Fact Checker ---
     eff_fact = settings.get_effective_factcheck_provider()
-    if eff_fact != "mock":
-        logger.info(f"  FactChecker: {eff_fact} 요청되었으나 v1은 mock만 지원")
-    logger.info("○ FactChecker: Mock 모드 (v1 기본)")
+    if eff_fact == "perplexity":
+        from app.providers.perplexity_provider import PerplexityFactChecker
+        fact_checker = PerplexityFactChecker()
+        logger.info("✓ FactChecker: Perplexity")
+    else:
+        fact_checker = MockFactChecker()
+        logger.info("○ FactChecker: Mock 모드")
 
     return AITeam(
         draft_writer=draft_writer,

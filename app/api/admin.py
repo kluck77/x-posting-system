@@ -217,6 +217,18 @@ async def retry_draft(draft_id: int):
         orchestrator.close()
 
 
+# === 트렌드 탐색 ===
+
+@app.get("/trends")
+async def get_trends(topic: str = "korea"):
+    """TrendHunter를 실행하여 현재 한국 관련 트렌딩 토픽을 탐색합니다."""
+    orchestrator = Orchestrator()
+    try:
+        return await orchestrator.get_trending_topics(topic)
+    finally:
+        orchestrator.close()
+
+
 # === 일일 사용량 ===
 
 @app.get("/usage")

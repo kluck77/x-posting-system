@@ -4,15 +4,17 @@
 전체 워크플로를 조율합니다:
 
 1. 소스 입력 → DB 저장
-2. Researcher: 리서치 (v1: mock)
-3. DraftWriter: 초안 생성 (ChatGPT / Claude / mock)
-4. Reviewer: 리스크 판단 & 최종 다듬기 (Claude / mock)
-5. 분류 & 위험도 확정
-6. 텔레그램 승인 카드 전송
-7. 승인 → X 게시
-8. 결과 DB 저장 & 텔레그램 확인
+2. Researcher: 리서치 (Gemini / Mock)
+3. DraftWriter: 초안 생성 (ChatGPT / Claude / Mock)
+4. FactChecker: 팩트체크 (Perplexity / Mock)
+5. Reviewer: 리스크 판단 & 최종 다듬기 (Claude / Mock)
+6. 분류 & 위험도 확정
+7. 텔레그램 승인 카드 전송
+8. 승인 → X 게시
+9. 결과 DB 저장 & 텔레그램 확인
 
-모든 게시는 사람의 승인이 필요합니다 (v1 기본값).
+별도: TrendHunter (Grok / Mock) — /trends 명령으로 트렌드 탐색
+모든 게시는 사람의 승인이 필요합니다.
 """
 
 import logging
@@ -338,6 +340,20 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"파이프라인 오류: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+
+    async def get_trending_topics(self, topic_area: str = "korea") -> dict:
+        """TrendHunter를 사용해 현재 트렌딩 토픽을 탐색합니다."""
+        logger.info(f"트렌드 탐색: '{topic_area}'")
+        try:
+            result = await self.ai.trend_hunter.find_trends(topic_area)
+            return {
+                "success": True,
+                "topics": result.trending_topics,
+                "notes": result.relevance_notes,
+            }
+        except Exception as e:
+            logger.error(f"트렌드 탐색 실패: {e}")
+            return {"success": False, "error": str(e), "topics": []}
 
     def close(self):
         if self.db:

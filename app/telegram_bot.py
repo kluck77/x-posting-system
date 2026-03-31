@@ -36,7 +36,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔄 Regenerate = 다시 생성\n\n"
         "Commands:\n"
         "/status - 시스템 상태\n"
-        "/pending - 대기 중인 초안\n",
+        "/pending - 대기 중인 초안\n"
+        "/trends - 한국 트렌드 탐색\n",
         parse_mode="HTML",
     )
 
@@ -77,6 +78,36 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, parse_mode="HTML")
     finally:
         db.close()
+
+
+async def trends_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/trends 명령어 - TrendHunter로 한국 관련 트렌드 탐색"""
+    topic = " ".join(context.args) if context.args else "korea"
+    await update.message.reply_text(f"🔍 트렌드 탐색 중: {topic}...")
+
+    orchestrator = Orchestrator()
+    try:
+        result = await orchestrator.get_trending_topics(topic)
+
+        if result.get("success") and result.get("topics"):
+            topics = result["topics"]
+            text = f"📈 <b>Trending Topics</b> ({topic})\n\n"
+            for i, t in enumerate(topics[:10], 1):
+                text += f"{i}. {t}\n"
+            if result.get("notes"):
+                text += f"\n💡 {result['notes'][:200]}"
+            await update.message.reply_text(text, parse_mode="HTML")
+        elif result.get("success"):
+            await update.message.reply_text("📭 현재 감지된 트렌드가 없습니다.")
+        else:
+            await update.message.reply_text(
+                f"⚠️ 트렌드 탐색 실패: {result.get('error', 'Unknown')[:200]}"
+            )
+    except Exception as e:
+        logger.error(f"트렌드 명령어 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 오류: {str(e)[:200]}")
+    finally:
+        orchestrator.close()
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -149,6 +180,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("pending", pending_command))
+    app.add_handler(CommandHandler("trends", trends_command))
 
     # 인라인 버튼 콜백 핸들러 등록
     app.add_handler(CallbackQueryHandler(callback_handler))

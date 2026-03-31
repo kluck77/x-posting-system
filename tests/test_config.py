@@ -102,3 +102,53 @@ class TestSettings:
     def test_x_credentials_incomplete(self):
         s = Settings(_env_file=None, x_api_key="k")
         assert s.has_x_credentials is False
+
+    def test_effective_research_gemini(self):
+        s = Settings(
+            _env_file=None,
+            gemini_api_key="k",
+            active_research_provider="gemini",
+        )
+        assert s.get_effective_research_provider() == "gemini"
+
+    def test_effective_research_gemini_fallback(self):
+        s = Settings(_env_file=None, active_research_provider="gemini")
+        assert s.get_effective_research_provider() == "mock"
+
+    def test_effective_trend_grok(self):
+        s = Settings(
+            _env_file=None,
+            grok_api_key="k",
+            active_trend_provider="grok",
+        )
+        assert s.get_effective_trend_provider() == "grok"
+
+    def test_effective_trend_grok_fallback(self):
+        s = Settings(_env_file=None, active_trend_provider="grok")
+        assert s.get_effective_trend_provider() == "mock"
+
+    def test_effective_factcheck_perplexity(self):
+        s = Settings(
+            _env_file=None,
+            perplexity_api_key="k",
+            active_factcheck_provider="perplexity",
+        )
+        assert s.get_effective_factcheck_provider() == "perplexity"
+
+    def test_effective_factcheck_perplexity_fallback(self):
+        s = Settings(_env_file=None, active_factcheck_provider="perplexity")
+        assert s.get_effective_factcheck_provider() == "mock"
+
+    def test_ai_status_summary_all_providers(self):
+        s = Settings(
+            _env_file=None,
+            anthropic_api_key="k", gemini_api_key="k",
+            grok_api_key="k", perplexity_api_key="k",
+            active_research_provider="gemini",
+            active_trend_provider="grok",
+            active_factcheck_provider="perplexity",
+        )
+        status = s.ai_status_summary()
+        assert status["research"] == "gemini"
+        assert status["trend"] == "grok"
+        assert status["factcheck"] == "perplexity"

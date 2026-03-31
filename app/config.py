@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # --- 활성 프로바이더 선택 ---
     active_draft_provider: str = Field(default="mock", description="초안 작성 프로바이더")
     active_research_provider: str = Field(default="mock", description="리서치 프로바이더")
+    active_trend_provider: str = Field(default="mock", description="트렌드 탐지 프로바이더")
     active_factcheck_provider: str = Field(default="mock", description="팩트체크 프로바이더")
 
     # --- 텔레그램 ---
@@ -131,6 +132,13 @@ class Settings(BaseSettings):
             return "perplexity"
         return "mock"
 
+    def get_effective_trend_provider(self) -> str:
+        """실제로 사용할 트렌드 탐지 프로바이더를 결정합니다."""
+        requested = self.active_trend_provider.lower().strip()
+        if requested == "grok" and self.has_grok:
+            return "grok"
+        return "mock"
+
     def get_effective_factcheck_provider(self) -> str:
         """실제로 사용할 팩트체크 프로바이더를 결정합니다."""
         requested = self.active_factcheck_provider.lower().strip()
@@ -144,7 +152,7 @@ class Settings(BaseSettings):
             "draft_writer": self.get_effective_draft_provider(),
             "reviewer": "anthropic" if self.has_anthropic else "mock",
             "research": self.get_effective_research_provider(),
-            "trend": "grok" if self.has_grok else "mock",
+            "trend": self.get_effective_trend_provider(),
             "factcheck": self.get_effective_factcheck_provider(),
             "telegram": "LIVE" if self.has_telegram_config else "MOCK",
             "x_api": "LIVE" if self.has_x_credentials else "MOCK",
