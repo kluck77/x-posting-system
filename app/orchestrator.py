@@ -101,6 +101,7 @@ class Orchestrator:
                 title=data.title,
                 source_text=data.source_text,
                 language=settings.default_language,
+                source_type=data.source_type,
             )
         except Exception as e:
             logger.warning(f"DraftWriter 실패, 기본 초안 사용: {e}")

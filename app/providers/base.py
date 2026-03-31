@@ -80,7 +80,11 @@ class BaseDraftWriter(ABC):
 
     @abstractmethod
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self,
+        title: str,
+        source_text: str,
+        language: str = "en",
+        source_type: str = "manual",
     ) -> DraftResult:
         """소스 텍스트를 기반으로 X 포스트 초안을 생성합니다."""
         ...

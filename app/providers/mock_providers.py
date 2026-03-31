@@ -20,24 +20,45 @@ class MockDraftWriter(BaseDraftWriter):
     """Mock 초안 작성기. API 키 없이 데모용 초안을 생성합니다."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self,
+        title: str,
+        source_text: str,
+        language: str = "en",
+        source_type: str = "manual",
     ) -> DraftResult:
         logger.info(f"[Mock DraftWriter] 초안 생성: '{title[:50]}'")
+
+        if source_type == "community_input":
+            return DraftResult(
+                hook=f"Korean online communities are reacting strongly to this: {title[:60]}",
+                body=(
+                    f"A recurring theme in Korean online discussion right now is concern about {title[:80]}. "
+                    f"The sentiment is notably [pessimistic/skeptical] — though none of these claims are verified. "
+                    f"Follow to track how this develops."
+                ),
+                thread_continuation=(
+                    f"For non-Korean readers:\n\n"
+                    f"Korean online forums (DCInside, FMKorea) tend to surface sentiment shifts "
+                    f"before they show up in mainstream coverage. This is worth watching — but treat it as signal, not fact."
+                ),
+                category_suggestion="society",
+                tone_notes="Mock community_input mode: sentiment signal, unverified claims flagged",
+            )
+
         return DraftResult(
-            hook=f"🇰🇷 Here's what you need to know: {title[:80]}",
+            hook=f"The numbers don't add up — and that's exactly the point. {title[:60]}",
             body=(
-                f"South Korea update: {title}\n\n"
-                f"Key takeaway — understanding Korean society "
-                f"means looking beyond the surface.\n\n"
-                f"This is what many overseas observers miss."
+                f"Here's what's actually happening: {title[:100]}\n\n"
+                f"Most coverage misses the context non-Koreans need to understand why this matters. "
+                f"Follow to get Korea's economy in plain English — before it hits global headlines."
             ),
             thread_continuation=(
                 f"Context for non-Koreans:\n\n"
-                f"Korea's unique position as a rapidly developed democracy "
-                f"means these stories carry different weight."
+                f"Korea's export-driven economy means moves like this ripple outward fast. "
+                f"What looks local rarely stays local."
             ),
-            category_suggestion="society",
-            tone_notes="Mock mode: informative, accessible",
+            category_suggestion="economy",
+            tone_notes="Mock mode: number shock hook, 5-block structure",
         )
 
 
