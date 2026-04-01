@@ -140,6 +140,9 @@ class Draft(Base):
     predicted_publish_at = Column(DateTime, nullable=True, comment="예측 최적 게시 시간 (UTC)")
     prediction_reasoning = Column(Text, nullable=True, comment="예측 근거")
 
+    # 댓글(reply) 대상 트윗 ID
+    reply_to_tweet_id = Column(String(50), nullable=True, comment="답글 대상 트윗 ID (있으면 reply로 게시)")
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 

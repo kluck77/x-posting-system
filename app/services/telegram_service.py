@@ -230,6 +230,95 @@ async def send_publish_confirmation(draft: Draft) -> None:
         logger.error(f"게시 확인 메시지 전송 오류: {e}")
 
 
+def build_analysis_card(
+    title: str,
+    content_type: str,
+    research_summary: str,
+    factcheck_summary: str,
+    char_count: int,
+) -> str:
+    """
+    URL/사진 분석 결과 카드 텍스트를 생성합니다.
+    이 카드 아래에 '게시글로 / 댓글로 / 취소' 버튼이 붙습니다.
+    """
+    card = (
+        f"🔍 <b>분석 완료</b>\n"
+        f"{'─' * 30}\n\n"
+        f"📰 <b>제목/주제:</b>\n{title[:200]}\n\n"
+        f"📋 <b>유형:</b> {content_type}\n\n"
+    )
+    if research_summary:
+        card += f"🔬 <b>핵심 내용:</b>\n{research_summary[:400]}\n\n"
+    if factcheck_summary:
+        card += f"✅ <b>팩트체크:</b>\n{factcheck_summary[:300]}\n\n"
+    card += (
+        f"{'─' * 30}\n"
+        f"📏 추출 텍스트: {char_count}자\n\n"
+        f"<b>어떻게 사용할까요?</b>"
+    )
+    return card
+
+
+def build_type_selection_keyboard(pending_id: str) -> dict:
+    """
+    '게시글로 / 댓글로 / 취소' 인라인 키보드.
+    pending_id = 상태 저장 키 (보통 str(message_id))
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📝 새 게시글", "callback_data": f"type_tweet:{pending_id}"},
+                {"text": "💬 댓글로", "callback_data": f"type_reply:{pending_id}"},
+            ],
+            [
+                {"text": "❌ 취소", "callback_data": f"type_cancel:{pending_id}"},
+            ],
+        ]
+    }
+
+
+async def send_analysis_card(
+    title: str,
+    content_type: str,
+    research_summary: str,
+    factcheck_summary: str,
+    char_count: int,
+    pending_id: str,
+) -> int | None:
+    """
+    분석 카드를 텔레그램으로 전송합니다.
+    Returns: 전송된 message_id, 실패 시 None
+    """
+    if not settings.has_telegram_config:
+        logger.info("[MOCK 텔레그램] 분석 카드 전송 스킵")
+        return None
+
+    card_text = build_analysis_card(
+        title, content_type, research_summary, factcheck_summary, char_count
+    )
+    keyboard = build_type_selection_keyboard(pending_id)
+
+    payload = {
+        "chat_id": settings.telegram_chat_id,
+        "text": card_text,
+        "parse_mode": "HTML",
+        "reply_markup": json.dumps(keyboard),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(_get_api_url("sendMessage"), data=payload)
+            response.raise_for_status()
+            result = response.json()
+            if result.get("ok"):
+                return result["result"]["message_id"]
+            logger.error(f"분석 카드 전송 오류: {result}")
+            return None
+    except httpx.HTTPError as e:
+        logger.error(f"분석 카드 전송 실패: {e}")
+        return None
+
+
 def parse_callback_data(callback_data: str) -> tuple[str, int] | None:
     """
     텔레그램 인라인 버튼의 callback_data를 파싱합니다.

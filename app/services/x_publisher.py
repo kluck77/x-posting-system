@@ -128,8 +128,10 @@ class XPublisher:
         mock_id = f"mock_{random.randint(1000000000, 9999999999)}"
         mock_url = f"https://x.com/user/status/{mock_id}"
 
+        reply_id = getattr(draft, "reply_to_tweet_id", None)
+        mode = f"답글→{reply_id}" if reply_id else "새 게시글"
         logger.info(
-            f"[MOCK X 게시] draft_id={draft.id}\n"
+            f"[MOCK X 게시] draft_id={draft.id}, mode={mode}\n"
             f"텍스트: {post_text[:100]}...\n"
             f"Mock ID: {mock_id}"
         )
@@ -151,7 +153,13 @@ class XPublisher:
 
     async def _real_publish(self, draft: Draft, post_text: str) -> PublishResult:
         """실제 X API를 호출하여 게시합니다."""
-        payload = {"text": post_text}
+        payload: dict = {"text": post_text}
+
+        # 답글(reply) 모드
+        reply_id = getattr(draft, "reply_to_tweet_id", None)
+        if reply_id:
+            payload["reply"] = {"in_reply_to_tweet_id": reply_id}
+            logger.info(f"답글 모드: in_reply_to={reply_id}")
         request_json = json.dumps(payload)
 
         try:

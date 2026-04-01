@@ -84,6 +84,11 @@ def _run_schema_migrations():
             "column": "community_warning",
             "ddl": "ALTER TABLE drafts ADD COLUMN community_warning TEXT",
         },
+        {
+            "table": "drafts",
+            "column": "reply_to_tweet_id",
+            "ddl": "ALTER TABLE drafts ADD COLUMN reply_to_tweet_id VARCHAR(50)",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")
