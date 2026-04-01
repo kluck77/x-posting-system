@@ -15,6 +15,40 @@ from app.utils.logging_config import setup_logging
 logger = logging.getLogger(__name__)
 
 
+def _start_news_monitor():
+    """APScheduler로 뉴스 모니터를 백그라운드에서 시작합니다."""
+    if not settings.monitor_enabled:
+        logger.info("뉴스 모니터 비활성 (MONITOR_ENABLED=false)")
+        return
+
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from app.services.news_monitor import run_monitor_cycle
+
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(
+            run_monitor_cycle,
+            "interval",
+            minutes=settings.monitor_interval_minutes,
+            id="news_monitor",
+            max_instances=1,        # 중복 실행 방지
+            coalesce=True,
+        )
+        scheduler.start()
+        interval = settings.monitor_interval_minutes
+        logger.info(
+            f"✓ 뉴스 모니터 시작: {interval}분 간격, "
+            f"최대 {settings.monitor_max_alerts_per_run}건/사이클"
+        )
+        return scheduler
+    except ImportError:
+        logger.warning("apscheduler 미설치 — 뉴스 모니터 비활성. pip install apscheduler")
+        return None
+    except Exception as e:
+        logger.error(f"뉴스 모니터 시작 실패: {e}")
+        return None
+
+
 def run_fastapi_server():
     """FastAPI 서버를 실행합니다."""
     uvicorn.run(
@@ -52,6 +86,9 @@ async def run_all():
     api_thread.start()
     logger.info("FastAPI 서버 시작: http://localhost:8000")
     logger.info("API 문서: http://localhost:8000/docs")
+
+    # 뉴스 모니터 시작 (APScheduler — asyncio 이벤트 루프에서 실행)
+    _start_news_monitor()
 
     # 텔레그램 봇 실행
     if settings.has_telegram_config:

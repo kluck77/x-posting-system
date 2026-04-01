@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     grok_api_key: str = Field(default="", description="Grok API 키 (Trend) [미래]")
     perplexity_api_key: str = Field(default="", description="Perplexity API 키 (Factcheck) [미래]")
 
+    # --- Naver Open API (뉴스 검색, 무료) ---
+    naver_client_id: str = Field(default="", description="Naver API Client ID (뉴스 검색)")
+    naver_client_secret: str = Field(default="", description="Naver API Client Secret")
+
     # --- 활성 프로바이더 선택 ---
     active_draft_provider: str = Field(default="mock", description="초안 작성 프로바이더")
     active_research_provider: str = Field(default="mock", description="리서치 프로바이더")
@@ -54,6 +58,11 @@ class Settings(BaseSettings):
     # --- 앱 설정 ---
     default_language: str = Field(default="en")
     log_level: str = Field(default="INFO")
+
+    # --- 속보 모니터 설정 ---
+    monitor_enabled: bool = Field(default=True, description="뉴스 모니터 활성화")
+    monitor_interval_minutes: int = Field(default=1, description="모니터 폴링 간격 (분)")
+    monitor_max_alerts_per_run: int = Field(default=3, description="사이클당 최대 알림 수")
 
     # --- 안전 설정 ---
     enable_auto_post_low_risk: bool = Field(default=False)

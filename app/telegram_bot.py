@@ -390,6 +390,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     logger.info(f"콜백 수신: {callback_data}")
 
+    # --- 뉴스 모니터 알림 콜백 ---
+    if callback_data.startswith("news_"):
+        await _handle_news_callback(query, context)
+        return
+
     # --- 타입 선택 콜백 ---
     if callback_data.startswith("type_"):
         await _handle_type_callback(query, context)
@@ -439,6 +444,112 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"❌ 오류: {str(e)[:200]}")
     finally:
         orchestrator.close()
+
+
+async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    """
+    뉴스 모니터 속보 알림 버튼 처리.
+    news_draft:{hash} → AI 파이프라인 → 초안 텍스트 Telegram 전달
+    news_skip:{hash}  → 무시
+    """
+    from app.services.news_monitor import get_pending_article, remove_pending_article
+
+    data = query.data  # "news_draft:abc123" or "news_skip:abc123"
+    parts = data.split(":", 1)
+    if len(parts) != 2:
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    action, article_hash = parts[0], parts[1]
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    if action == "news_skip":
+        remove_pending_article(article_hash)
+        await query.message.reply_text("⏭ 스킵됐어요.")
+        return
+
+    if action == "news_regen":
+        # 재생성 — news_draft와 동일한 로직 재실행
+        action = "news_draft"
+
+    # news_draft
+    article = get_pending_article(article_hash)
+    if not article:
+        await query.message.reply_text("⚠️ 기사 정보 만료. 다시 링크를 보내주세요.")
+        return
+
+    await query.message.reply_text(
+        f"✍️ <b>초안 작성 중...</b>\n📰 {article['title'][:80]}",
+        parse_mode="HTML",
+    )
+
+    try:
+        from app.models.content import SourceItemCreate
+        from app.services.content_fetcher import fetch_url_content
+        from app.services.quality_scorer import score_draft, should_regenerate, format_score_report
+
+        # 기사 본문 수집
+        fetched = await fetch_url_content(article["url"])
+        source_text = fetched["text"] if fetched["text"] else article.get("summary", article["title"])
+
+        source_data = SourceItemCreate(
+            title=article["title"],
+            url=article["url"],
+            source_text=source_text,
+            source_type="manual",
+            language="ko",
+        )
+
+        orchestrator = Orchestrator()
+        try:
+            draft = await orchestrator.ingest_and_generate(source_data)
+
+            # 품질 점수 체크 → 미달 시 1회 재생성
+            score, reasons = score_draft(
+                type("D", (), {"hook": draft.hook, "body": draft.body})(),
+                source_type="manual",
+            )
+            if should_regenerate(score):
+                logger.info(f"품질 미달({score}점) → 재생성")
+                new_draft = await orchestrator.ingest_and_generate(source_data)
+                new_score, _ = score_draft(
+                    type("D", (), {"hook": new_draft.hook, "body": new_draft.body})(),
+                )
+                if new_score >= score:
+                    draft = new_draft
+                    score = new_score
+
+        finally:
+            orchestrator.close()
+
+        remove_pending_article(article_hash)
+
+        # 초안 텍스트 전달 (자동 게시 없음 — 사용자가 직접 X에 붙여넣기)
+        draft_text = f"{draft.hook}\n\n{draft.body}"
+        if draft.thread_continuation:
+            draft_text += f"\n\n🧵 {draft.thread_continuation}"
+
+        score_line = f"📊 품질: {score}/100"
+
+        reply = (
+            f"📝 <b>초안 완성!</b> {score_line}\n"
+            f"{'─' * 28}\n"
+            f"{draft_text}\n"
+            f"{'─' * 28}\n"
+            f"📋 {draft.category.value} | {draft.risk_level.value.upper()}\n\n"
+            f"위 텍스트를 복사해서 X에 붙여넣기 해주세요."
+        )
+
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔄 재생성", callback_data=f"news_regen:{article_hash}"),
+        ]])
+
+        # 재생성용으로 기사 정보 유지
+        await query.message.reply_text(reply, parse_mode="HTML", reply_markup=keyboard)
+
+    except Exception as e:
+        logger.error(f"뉴스 초안 생성 오류: {e}", exc_info=True)
+        await query.message.reply_text(f"❌ 초안 생성 실패: {str(e)[:200]}")
 
 
 async def _handle_type_callback(query, context: ContextTypes.DEFAULT_TYPE):
