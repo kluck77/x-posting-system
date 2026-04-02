@@ -162,3 +162,114 @@ def format_score_report(score: int, reasons: list[str]) -> str:
     grade = "✅ 통과" if score >= REGEN_THRESHOLD else "⚠️ 재생성 필요"
     lines = [f"📊 품질 점수: {score}/100 {grade}"] + reasons
     return "\n".join(lines)
+
+
+# ─── 스레드 품질 채점 ─────────────────────────────────────────────────────────
+
+THREAD_REGEN_THRESHOLD = 55  # 스레드는 기준을 약간 낮게 (트윗이 많아 평균 편차)
+
+
+def score_thread(tweets: list[str]) -> tuple[int, list[str]]:
+    """
+    트위터 스레드 전체를 채점합니다.
+
+    채점 기준:
+      +20  첫 트윗(훅)에 숫자 포함
+      +20  첫 트윗이 금지 시작어로 시작하지 않음
+      +15  마지막 트윗에 CTA 포함
+      +15  모든 트윗이 270자 이하
+      +10  "you/your" 직접 호칭 (스레드 전체에서)
+      +10  한국 관련 구체적 맥락 포함
+      +10  4번째 트윗에 커뮤니티/포럼 언급
+      -15  금지어 포함 (전체)
+      -5   270자 초과 트윗당
+
+    Returns:
+        (score: int, reasons: list[str])
+    """
+    if not tweets:
+        return 0, ["스레드 트윗 없음"]
+
+    score = 0
+    reasons: list[str] = []
+    hook = tweets[0]
+    last = tweets[-1]
+    all_text = "\n".join(tweets).lower()
+    hook_lower = hook.lower()
+
+    # +20 첫 트윗에 숫자
+    if _NUMBER_PATTERN.search(hook):
+        score += 20
+        reasons.append("+20 훅(1번 트윗)에 숫자/지표 있음")
+    else:
+        reasons.append(" 0 훅에 숫자 없음")
+
+    # +20 금지 시작어 없음
+    bad_starts = ("south korea", "korea's", "in south korea", "south korea's")
+    if not any(hook_lower.startswith(s) for s in bad_starts):
+        score += 20
+        reasons.append("+20 훅 시작어 OK")
+    else:
+        reasons.append(" 0 훅이 금지 시작어로 시작")
+
+    # +15 마지막 트윗에 CTA
+    if any(re.search(p, last.lower()) for p in _CTA_PATTERNS):
+        score += 15
+        reasons.append("+15 마지막 트윗에 CTA 있음")
+    else:
+        reasons.append(" 0 마지막 트윗 CTA 없음")
+
+    # +15 모든 트윗 270자 이하
+    over_limit = [i + 1 for i, t in enumerate(tweets) if len(t) > 270]
+    if not over_limit:
+        score += 15
+        reasons.append("+15 모든 트윗 270자 이하")
+    else:
+        penalty = len(over_limit) * 5
+        score -= penalty
+        reasons.append(f"-{penalty} 트윗 {over_limit} 270자 초과")
+
+    # +10 "you" 호칭
+    if re.search(r"\byou\b|\byour\b", all_text):
+        score += 10
+        reasons.append("+10 'you' 직접 호칭")
+    else:
+        reasons.append(" 0 'you' 없음")
+
+    # +10 구체적 맥락
+    context_pattern = re.compile(
+        r"\b(korea|korean|seoul|won|krw|bok|samsung|hyundai|sk|lg|kospi|"
+        r"bitcoin|ethereum|btc|eth|binance|upbit|bithumb)\b",
+        re.IGNORECASE,
+    )
+    if context_pattern.search("\n".join(tweets)):
+        score += 10
+        reasons.append("+10 구체적 맥락 포함")
+    else:
+        reasons.append(" 0 구체적 맥락 없음")
+
+    # +10 4번째 트윗에 커뮤니티 언급 (있을 때)
+    if len(tweets) >= 4:
+        forum_pattern = re.compile(
+            r"\b(forum|community|dcinside|fmkorea|reddit|korean.{0,10}say|reaction|sentiment)\b",
+            re.IGNORECASE,
+        )
+        if forum_pattern.search(tweets[3]):
+            score += 10
+            reasons.append("+10 4번째 트윗에 커뮤니티 반응 언급")
+        else:
+            reasons.append(" 0 4번째 트윗 커뮤니티 언급 없음")
+
+    # -15 금지어 (전체 스레드)
+    for pattern in _BANNED:
+        if re.search(pattern, all_text):
+            score -= 15
+            reasons.append(f"-15 금지어: '{pattern}'")
+
+    score = max(0, min(100, score))
+    return score, reasons
+
+
+def should_regenerate_thread(score: int) -> bool:
+    """스레드 점수가 임계값 미만이면 재생성 필요."""
+    return score < THREAD_REGEN_THRESHOLD

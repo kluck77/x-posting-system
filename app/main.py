@@ -16,28 +16,48 @@ logger = logging.getLogger(__name__)
 
 
 def _start_news_monitor():
-    """APScheduler로 뉴스 모니터를 백그라운드에서 시작합니다."""
+    """APScheduler로 뉴스 모니터 + 모닝 다이제스트를 백그라운드에서 시작합니다."""
     if not settings.monitor_enabled:
         logger.info("뉴스 모니터 비활성 (MONITOR_ENABLED=false)")
         return
 
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from apscheduler.triggers.cron import CronTrigger
         from app.services.news_monitor import run_monitor_cycle
+        from app.services.morning_digest import run_morning_digest
 
         scheduler = AsyncIOScheduler()
+
+        # 1분 간격 속보 모니터
         scheduler.add_job(
             run_monitor_cycle,
             "interval",
             minutes=settings.monitor_interval_minutes,
             id="news_monitor",
-            max_instances=1,        # 중복 실행 방지
+            max_instances=1,
             coalesce=True,
         )
+
+        # 오전 5시 KST (= 20:00 UTC) 모닝 다이제스트
+        if settings.digest_enabled:
+            digest_utc_hour = (settings.digest_hour_kst - 9) % 24
+            scheduler.add_job(
+                run_morning_digest,
+                CronTrigger(hour=digest_utc_hour, minute=0, timezone="UTC"),
+                id="morning_digest",
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info(
+                f"✓ 모닝 다이제스트 예약: 오전 {settings.digest_hour_kst}시 KST "
+                f"(UTC {digest_utc_hour:02d}:00)"
+            )
+
         scheduler.start()
-        interval = settings.monitor_interval_minutes
         logger.info(
-            f"✓ 뉴스 모니터 시작: {interval}분 간격, "
+            f"✓ 뉴스 모니터 시작: {settings.monitor_interval_minutes}분 간격, "
+            f"교차 확인 최소 {settings.cross_verify_min_sources}개 출처, "
             f"최대 {settings.monitor_max_alerts_per_run}건/사이클"
         )
         return scheduler

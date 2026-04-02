@@ -179,6 +179,11 @@ async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    # 스레드 생성 대기 중
+    if _get_state(context) == STATE_AWAITING_THREAD_INPUT:
+        await _generate_and_send_thread(update, context, url)
+        return
+
     # 댓글 대상 URL 입력 대기 중
     if _get_state(context) == STATE_AWAITING_REPLY_TARGET:
         await _handle_reply_target_url(update, context, url)
@@ -209,6 +214,11 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     """사용자가 일반 텍스트(커뮤 복붙 등)를 보낸 경우."""
     text = update.message.text.strip()
     logger.info(f"텍스트 수신: {text[:60]}")
+
+    # 스레드 생성 대기 중
+    if _get_state(context) == STATE_AWAITING_THREAD_INPUT:
+        await _generate_and_send_thread(update, context, text)
+        return
 
     # 댓글 대상 URL 대기 중인데 URL 아닌 텍스트가 오면 안내
     if _get_state(context) == STATE_AWAITING_REPLY_TARGET:
@@ -602,14 +612,15 @@ async def _handle_type_callback(query, context: ContextTypes.DEFAULT_TYPE):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start"""
     await update.message.reply_text(
-        "🇰🇷 <b>X Posting System Bot</b>\n\n"
+        "🇰🇷 <b>X Posting System — @cheesesvav</b>\n"
+        "<i>Beyond headlines: how Korea really works, feels, and changes.</i>\n\n"
         "<b>사용법:</b>\n"
         "1️⃣ 뉴스 기사 URL 또는 스크린샷 전송\n"
         "2️⃣ 분석 결과 확인\n"
         "3️⃣ [📝 새 게시글] 또는 [💬 댓글로] 선택\n"
-        "4️⃣ 댓글 선택 시 → 답글 달 트윗 URL 전송\n"
-        "5️⃣ 승인 카드에서 Approve → X 게시!\n\n"
+        "4️⃣ 초안 텍스트를 복사해서 X에 게시\n\n"
         "<b>Commands:</b>\n"
+        "/thread — 뉴스 링크로 5~7 트윗 스레드 생성 🧵\n"
         "/status — AI 프로바이더 상태\n"
         "/pending — 대기 중인 초안\n"
         "/trends — 트렌드 탐색\n"
@@ -689,6 +700,112 @@ async def trends_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================================================
+# /thread 커맨드 — 스레드 생성기
+# =============================================================================
+
+# 스레드 대기 상태
+STATE_AWAITING_THREAD_INPUT = "awaiting_thread_input"
+
+
+async def thread_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/thread — 뉴스 링크 또는 텍스트로 5~7 트윗 스레드 생성"""
+    # 인수로 직접 입력한 경우 (예: /thread https://...)
+    if context.args:
+        source = " ".join(context.args)
+        await _generate_and_send_thread(update, context, source)
+    else:
+        _set_state(context, STATE_AWAITING_THREAD_INPUT)
+        await update.message.reply_text(
+            "🧵 <b>스레드 생성</b>\n\n"
+            "스레드로 만들 뉴스 링크 또는 내용을 보내주세요.\n"
+            "예: https://news.com/article\n\n"
+            "/cancel 로 취소",
+            parse_mode="HTML",
+        )
+
+
+async def _generate_and_send_thread(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    source: str,
+    num_tweets: int = 5,
+) -> None:
+    """소스 텍스트/URL → 스레드 생성 → Telegram 전송."""
+    _clear(context)
+    msg = await update.message.reply_text("🧵 스레드 생성 중... (잠시만요)")
+
+    try:
+        # URL이면 콘텐츠 fetch
+        from app.services.content_fetcher import is_url, fetch_url_content
+        if is_url(source):
+            fetched = await fetch_url_content(source)
+            title = fetched.get("title", source[:80])
+            body  = fetched.get("text", "")[:2500]
+        else:
+            title = source[:80]
+            body  = source[:2500]
+
+        # AI 스레드 생성
+        provider_name = settings.get_effective_draft_provider()
+        if provider_name == "openai" and settings.has_openai:
+            from app.providers.openai_provider import OpenAIDraftWriter
+            writer = OpenAIDraftWriter()
+            result = await writer.generate_thread(title, body, num_tweets=num_tweets)
+        elif provider_name == "anthropic" and settings.has_anthropic:
+            from app.providers.anthropic_provider import AnthropicDraftWriter
+            writer = AnthropicDraftWriter()
+            result = await writer.generate_thread(title, body, num_tweets=num_tweets)
+        else:
+            # Mock
+            from app.providers.openai_provider import ThreadResult
+            result = ThreadResult(
+                tweets=[
+                    f"[MOCK] Hook: {title[:80]}",
+                    "[MOCK] The key fact with a specific number.",
+                    "[MOCK] Your take — one opinion, no hedging.",
+                    "[MOCK] In Korean forums, the reaction is...",
+                    "[MOCK] Global impact + Follow for more Korea signal.",
+                ],
+                content_pillar="economy",
+                optimal_post_time="09:00 EST",
+            )
+
+        # 스레드 포맷 전송
+        pillar_emoji = {"economy": "📈", "crypto": "🪙", "geopolitics": "🌏", "community": "💬"}.get(
+            result.content_pillar, "📰"
+        )
+        header = (
+            f"🧵 <b>스레드 생성 완료</b> ({result.tweet_count}개 트윗)\n"
+            f"{pillar_emoji} {result.content_pillar.upper()} | "
+            f"📅 최적 게시: {result.optimal_post_time}\n"
+            f"{'─' * 28}\n\n"
+        )
+
+        thread_text = result.format_for_telegram()
+
+        full_msg = header + thread_text
+        # 4096자 초과 시 분할 전송
+        if len(full_msg) <= 4000:
+            await msg.edit_text(full_msg, parse_mode="HTML")
+        else:
+            await msg.edit_text(header + "트윗 목록:", parse_mode="HTML")
+            for i, tweet in enumerate(result.tweets, 1):
+                await update.message.reply_text(
+                    f"[{i}/{result.tweet_count}]\n{tweet}",
+                )
+
+        # tone notes
+        if result.tone_notes:
+            await update.message.reply_text(
+                f"💡 <i>{result.tone_notes[:200]}</i>", parse_mode="HTML"
+            )
+
+    except Exception as e:
+        logger.error(f"스레드 생성 오류: {e}")
+        await msg.edit_text(f"❌ 스레드 생성 실패: {str(e)[:200]}")
+
+
+# =============================================================================
 # 봇 앱 생성 & 실행
 # =============================================================================
 
@@ -705,6 +822,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("pending", pending_command))
     app.add_handler(CommandHandler("trends", trends_command))
+    app.add_handler(CommandHandler("thread", thread_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))

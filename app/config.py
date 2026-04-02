@@ -63,6 +63,20 @@ class Settings(BaseSettings):
     monitor_enabled: bool = Field(default=True, description="뉴스 모니터 활성화")
     monitor_interval_minutes: int = Field(default=1, description="모니터 폴링 간격 (분)")
     monitor_max_alerts_per_run: int = Field(default=3, description="사이클당 최대 알림 수")
+    cross_verify_min_sources: int = Field(default=4, description="속보 전송 최소 교차 출처 수")
+
+    # --- 모닝 다이제스트 설정 ---
+    digest_enabled: bool = Field(default=True, description="오전 5시 KST 모닝 다이제스트 활성화")
+    digest_hour_kst: int = Field(default=5, description="다이제스트 전송 시각 (KST, 0~23)")
+    digest_top_n: int = Field(default=5, description="다이제스트에 포함할 기사 수")
+
+    # --- 콘텐츠 전략 ---
+    daily_post_target: int = Field(default=30, description="하루 목표 게시 수")
+    # 4 필러 비중 (비율은 float, 합계 = 1.0)
+    pillar_economy_ratio: float = Field(default=0.35, description="경제/금융 필러 비중")
+    pillar_crypto_ratio: float = Field(default=0.30, description="크립토/디파이 필러 비중")
+    pillar_geopolitics_ratio: float = Field(default=0.20, description="지정학/정치 필러 비중")
+    pillar_community_ratio: float = Field(default=0.15, description="커뮤니티 반응 필러 비중")
 
     # --- 안전 설정 ---
     enable_auto_post_low_risk: bool = Field(default=False)
