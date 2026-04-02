@@ -34,6 +34,8 @@ class ContentCategory(str, enum.Enum):
     SOCIETY = "society"
     KPOP_CULTURE = "kpop_culture"
     EVERGREEN = "evergreen"
+    CRYPTO = "crypto"         # 크립토/디파이 (AI 출력과 일치)
+    COMMUNITY = "community"   # 한국 커뮤니티 반응 포스트
 
 
 class RiskLevel(str, enum.Enum):

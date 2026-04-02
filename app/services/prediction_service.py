@@ -29,6 +29,8 @@ _CATEGORY_TARGET_HOUR_UTC: dict[ContentCategory, int] = {
     ContentCategory.SOCIETY:      13,
     ContentCategory.KPOP_CULTURE:  0,
     ContentCategory.EVERGREEN:    10,
+    ContentCategory.CRYPTO:       14,  # UTC 14:00 = US East 9am market open
+    ContentCategory.COMMUNITY:    13,  # Slightly after economy posts
 }
 
 # 카테고리별 선호 요일 (0=월요일 ~ 6=일요일)
@@ -40,6 +42,8 @@ _CATEGORY_PREFERRED_DAYS: dict[ContentCategory, list[int]] = {
     ContentCategory.SOCIETY:      [1, 2, 3],
     ContentCategory.KPOP_CULTURE: [1, 2, 3, 4, 5],  # 화~토 (팬덤은 주말도 활발)
     ContentCategory.EVERGREEN:    [1, 3],            # 화·목
+    ContentCategory.CRYPTO:       [0, 1, 2, 3, 4, 5, 6],  # 크립토는 7일 내내
+    ContentCategory.COMMUNITY:    [1, 2, 3],
 }
 
 _CATEGORY_REASONING: dict[ContentCategory, str] = {
@@ -55,6 +59,10 @@ _CATEGORY_REASONING: dict[ContentCategory, str] = {
         "K-pop/문화 – KST 09:00 아침 피크 + 미국 서부 전날 저녁 교차 (UTC 00:00)",
     ContentCategory.EVERGREEN:
         "에버그린 – 영국 오전 피크 (UTC 10:00)",
+    ContentCategory.CRYPTO:
+        "크립토 – 미국 동부 오전 시장 오픈 (UTC 14:00 = EST 09:00)",
+    ContentCategory.COMMUNITY:
+        "커뮤니티 반응 – 미국 동부 오전 피크 (UTC 13:00)",
 }
 
 
