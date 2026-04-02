@@ -5,10 +5,10 @@
 
 5-역할 AI 아키텍처:
   - ChatGPT (OpenAI): 드래프트 작성 (빠른 초안, 톤 조정)
-  - Claude (Anthropic): 아키텍트 & 리뷰어 (리스크 판단, 최종 다듬기)
-  - Gemini (Google): 리서치 & 분석 [미래]
-  - Grok (xAI): 트렌드 탐지 [미래]
-  - Perplexity: 팩트체크 & 출처 [미래]
+  - Claude (Anthropic): 리뷰어 (리스크 판단, 최종 다듬기)
+  - Gemini (Google): 리서치 & 분석
+  - Grok (xAI): 트렌드 탐지
+  - Perplexity: 팩트체크 & 출처
 """
 
 from pathlib import Path
@@ -25,18 +25,11 @@ class Settings(BaseSettings):
     """앱의 모든 설정값."""
 
     # --- AI 프로바이더 키 ---
-    # 기존
     openai_api_key: str = Field(default="", description="OpenAI API 키 (Draft Writer)")
     anthropic_api_key: str = Field(default="", description="Anthropic Claude (Reviewer + Draft)")
     gemini_api_key: str = Field(default="", description="Google Gemini (Researcher)")
     grok_api_key: str = Field(default="", description="xAI Grok (TrendHunter) — x.ai 에서 발급")
     perplexity_api_key: str = Field(default="", description="Perplexity (FactChecker)")
-    # 신규 — 키 입력 시 자동 활성화
-    deepseek_api_key: str = Field(default="", description="DeepSeek (DraftWriter/Reviewer) — platform.deepseek.com")
-    groq_api_key: str = Field(default="", description="Groq LPU 고속 (FastWriter) — console.groq.com (무료)")
-    tavily_api_key: str = Field(default="", description="Tavily WebSearch (컨텍스트 보강) — tavily.com (1000회/월 무료)")
-    mistral_api_key: str = Field(default="", description="Mistral AI (Reviewer 대안, GDPR) — console.mistral.ai")
-    together_api_key: str = Field(default="", description="Together AI (Llama 405B DraftWriter) — api.together.xyz")
 
     # --- Naver Open API (뉴스 검색, 무료) ---
     naver_client_id: str = Field(default="", description="Naver API Client ID (뉴스 검색)")
@@ -119,31 +112,10 @@ class Settings(BaseSettings):
         return self._has(self.perplexity_api_key)
 
     @property
-    def has_deepseek(self) -> bool:
-        return self._has(self.deepseek_api_key)
-
-    @property
-    def has_groq(self) -> bool:
-        return self._has(self.groq_api_key)
-
-    @property
-    def has_tavily(self) -> bool:
-        return self._has(self.tavily_api_key)
-
-    @property
-    def has_mistral(self) -> bool:
-        return self._has(self.mistral_api_key)
-
-    @property
-    def has_together(self) -> bool:
-        return self._has(self.together_api_key)
-
-    @property
     def has_any_ai(self) -> bool:
         return any([
             self.has_openai, self.has_anthropic,
             self.has_gemini, self.has_grok, self.has_perplexity,
-            self.has_deepseek, self.has_groq, self.has_together, self.has_mistral,
         ])
 
     @property
@@ -173,9 +145,6 @@ class Settings(BaseSettings):
         _draft_map = {
             "openai":    self.has_openai,
             "anthropic": self.has_anthropic,
-            "deepseek":  self.has_deepseek,
-            "groq":      self.has_groq,
-            "together":  self.has_together,
         }
         # 명시적 mock 요청
         if requested == "mock":
@@ -195,10 +164,6 @@ class Settings(BaseSettings):
         """실제로 사용할 리뷰어 프로바이더를 결정합니다."""
         if self.has_anthropic:
             return "anthropic"
-        if self.has_mistral:
-            return "mistral"
-        if self.has_deepseek:
-            return "deepseek"
         return "mock"
 
     def get_effective_research_provider(self) -> str:
@@ -226,12 +191,6 @@ class Settings(BaseSettings):
             return "perplexity"
         return "mock"
 
-    def get_effective_websearch_provider(self) -> str:
-        """실제로 사용할 웹 검색 프로바이더를 결정합니다."""
-        if self.has_tavily:
-            return "tavily"
-        return "mock"
-
     def ai_status_summary(self) -> dict[str, str]:
         """각 역할별 프로바이더 상태 요약."""
         return {
@@ -240,24 +199,18 @@ class Settings(BaseSettings):
             "research":      self.get_effective_research_provider(),
             "trend":         self.get_effective_trend_provider(),
             "factcheck":     self.get_effective_factcheck_provider(),
-            "web_search":    self.get_effective_websearch_provider(),
             "telegram":      "LIVE" if self.has_telegram_config else "MOCK",
             "x_api":         "LIVE" if self.has_x_credentials else "MOCK",
         }
 
     def provider_keys_status(self) -> dict[str, bool]:
-        """각 프로바이더 키 존재 여부 (전체 10개)."""
+        """각 프로바이더 키 존재 여부."""
         return {
             "openai":      self.has_openai,
             "anthropic":   self.has_anthropic,
             "gemini":      self.has_gemini,
             "grok":        self.has_grok,
             "perplexity":  self.has_perplexity,
-            "deepseek":    self.has_deepseek,
-            "groq":        self.has_groq,
-            "tavily":      self.has_tavily,
-            "mistral":     self.has_mistral,
-            "together":    self.has_together,
         }
 
 

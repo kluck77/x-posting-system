@@ -2,15 +2,15 @@
 Mock 프로바이더 모음
 ====================
 API 키 없이도 전체 시스템을 테스트할 수 있는 Mock 구현체들.
-모든 6개 역할에 대한 Mock이 여기에 있습니다.
+모든 5개 역할에 대한 Mock이 여기에 있습니다.
 """
 
 import logging
 from app.providers.base import (
     BaseDraftWriter, BaseReviewer, BaseResearcher,
-    BaseTrendHunter, BaseFactChecker, BaseWebSearcher,
+    BaseTrendHunter, BaseFactChecker,
     DraftResult, ReviewResult, ResearchResult,
-    TrendResult, FactCheckResult, WebSearchResult,
+    TrendResult, FactCheckResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,23 +132,4 @@ class MockFactChecker(BaseFactChecker):
             corrections=[],
             sources=["https://example.com/mock-verification"],
             raw_response="Mock fact-check: no real verification performed",
-        )
-
-
-class MockWebSearcher(BaseWebSearcher):
-    """Mock 웹 검색기. API 키 없이 테스트용."""
-
-    async def search(self, query: str, max_results: int = 5) -> WebSearchResult:
-        logger.info(f"[Mock WebSearcher] 검색: '{query[:60]}'")
-        return WebSearchResult(
-            query=query,
-            results=[
-                {
-                    "title":   f"Mock Result for: {query[:40]}",
-                    "url":     "https://example.com/mock-search",
-                    "content": "Mock web search result — no real search performed.",
-                    "score":   0.5,
-                }
-            ],
-            summary="Mock search summary — configure TAVILY_API_KEY for real results.",
         )

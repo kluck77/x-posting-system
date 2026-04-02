@@ -1,15 +1,14 @@
 """
 AI 프로바이더 추상 인터페이스
 ==============================
-6개 역할(Role)에 대한 공통 데이터 구조와 추상 클래스를 정의합니다.
+5개 역할(Role)에 대한 공통 데이터 구조와 추상 클래스를 정의합니다.
 
 역할:
-  1. DraftWriter   — 초안 작성 (OpenAI / Claude / DeepSeek / Groq / Together)
-  2. Reviewer       — 리스크 판단 & 최종 다듬기 (Claude / Mistral)
+  1. DraftWriter   — 초안 작성 (OpenAI / Claude)
+  2. Reviewer       — 리스크 판단 & 최종 다듬기 (Claude)
   3. Researcher     — 리서치 & 데이터 분석 (Gemini / Perplexity)
   4. TrendHunter    — 실시간 트렌드 탐지 (Grok)
   5. FactChecker    — 팩트체크 & 출처 찾기 (Perplexity)
-  6. WebSearcher    — 실시간 웹 검색 & 컨텍스트 보강 (Tavily)  ← NEW
 
 모든 프로바이더는 반드시 대응하는 Mock 구현체가 있어야 합니다.
 """
@@ -72,28 +71,6 @@ class FactCheckResult:
     raw_response: str = ""
 
 
-@dataclass
-class WebSearchResult:
-    """WebSearcher 가 수집한 실시간 웹 검색 결과."""
-    query: str
-    results: list[dict] = field(default_factory=list)  # [{title, url, content, score}]
-    summary: str = ""
-
-    def as_context(self, max_chars: int = 1500) -> str:
-        """프롬프트 주입용 컨텍스트 문자열로 변환합니다."""
-        if not self.results:
-            return ""
-        lines = [f"[Web Search: {self.query}]"]
-        total = 0
-        for r in self.results:
-            snippet = f"• {r.get('title','')} — {r.get('content','')[:300]}"
-            total += len(snippet)
-            if total > max_chars:
-                break
-            lines.append(snippet)
-        return "\n".join(lines)
-
-
 # =============================================================================
 # 추상 클래스 — 각 역할의 인터페이스
 # =============================================================================
@@ -148,13 +125,4 @@ class BaseFactChecker(ABC):
 
     @abstractmethod
     async def check_facts(self, claim: str, context: str = "") -> FactCheckResult:
-        ...
-
-
-class BaseWebSearcher(ABC):
-    """역할 6: 실시간 웹 검색 & 컨텍스트 보강 (Tavily)."""
-
-    @abstractmethod
-    async def search(self, query: str, max_results: int = 5) -> WebSearchResult:
-        """실시간 웹 검색을 수행하고 결과를 반환합니다."""
         ...

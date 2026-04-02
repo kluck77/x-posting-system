@@ -1,16 +1,15 @@
 """
 AI 프로바이더 매니저
 ====================
-10개 프로바이더를 6개 역할에 자동으로 배분합니다.
+5개 프로바이더를 5개 역할에 자동으로 배분합니다.
 API 키가 있는 프로바이더는 자동 활성화됩니다.
 
 역할 선택 우선순위:
-  DraftWriter:  ACTIVE_DRAFT_PROVIDER 설정값 → 키 보유 순(openai→anthropic→deepseek→groq→together) → mock
-  Reviewer:     anthropic → mistral → deepseek → mock
+  DraftWriter:  ACTIVE_DRAFT_PROVIDER 설정값 → 키 보유 순(openai→anthropic) → mock
+  Reviewer:     anthropic → mock
   Researcher:   gemini → perplexity → mock
   TrendHunter:  grok → mock
   FactChecker:  perplexity → mock
-  WebSearcher:  tavily → mock  ← 신규 역할
 
 월 $30 예산 배분 (30 posts/day 기준):
   OpenAI GPT-4o-mini   DraftWriter   ~$2/월
@@ -18,11 +17,8 @@ API 키가 있는 프로바이더는 자동 활성화됩니다.
   Google Gemini Flash  Researcher     무료
   xAI Grok             TrendHunter   ~$1/월
   Perplexity Sonar     FactChecker   ~$2/월
-  Tavily               WebSearcher    무료 1000회/월
-  DeepSeek Chat        대안 Draft    ~$1/월 (선택)
-  Groq Llama 4         속보 Draft     무료 티어
   ─────────────────────────────────────
-  합계                               ~$9/월 (여유 $21)
+  합계                               ~$8/월 (여유 $22)
 """
 
 import logging
@@ -30,11 +26,11 @@ from dataclasses import dataclass
 from app.config import settings
 from app.providers.base import (
     BaseDraftWriter, BaseReviewer, BaseResearcher,
-    BaseTrendHunter, BaseFactChecker, BaseWebSearcher,
+    BaseTrendHunter, BaseFactChecker,
 )
 from app.providers.mock_providers import (
     MockDraftWriter, MockReviewer, MockResearcher,
-    MockTrendHunter, MockFactChecker, MockWebSearcher,
+    MockTrendHunter, MockFactChecker,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,21 +39,19 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AITeam:
     """
-    6개 역할의 AI 프로바이더를 묶은 팀.
+    5개 역할의 AI 프로바이더를 묶은 팀.
 
     draft_writer:   초안 작성
     reviewer:       리스크 판단 & 최종 다듬기
     researcher:     리서치 & 분석
     trend_hunter:   트렌드 탐지
     fact_checker:   팩트체크
-    web_searcher:   실시간 웹 검색 (컨텍스트 보강) — 신규
     """
     draft_writer:  BaseDraftWriter
     reviewer:      BaseReviewer
     researcher:    BaseResearcher
     trend_hunter:  BaseTrendHunter
     fact_checker:  BaseFactChecker
-    web_searcher:  BaseWebSearcher
 
 
 def create_ai_team() -> AITeam:
@@ -76,18 +70,6 @@ def create_ai_team() -> AITeam:
         from app.providers.anthropic_provider import AnthropicDraftWriter
         draft_writer = AnthropicDraftWriter()
         logger.info("✓ DraftWriter: Anthropic Claude")
-    elif eff == "deepseek":
-        from app.providers.deepseek_provider import DeepSeekDraftWriter
-        draft_writer = DeepSeekDraftWriter()
-        logger.info("✓ DraftWriter: DeepSeek Chat (한국어 최적화, 저비용)")
-    elif eff == "groq":
-        from app.providers.groq_fast_provider import GroqFastWriter
-        draft_writer = GroqFastWriter()
-        logger.info("✓ DraftWriter: Groq LPU Llama 4 (고속, 무료 티어)")
-    elif eff == "together":
-        from app.providers.together_provider import TogetherDraftWriter
-        draft_writer = TogetherDraftWriter()
-        logger.info("✓ DraftWriter: Together AI Llama 405B")
     else:
         draft_writer = MockDraftWriter()
         logger.info("○ DraftWriter: Mock 모드")
@@ -98,14 +80,6 @@ def create_ai_team() -> AITeam:
         from app.providers.anthropic_provider import AnthropicReviewer
         reviewer: BaseReviewer = AnthropicReviewer()
         logger.info("✓ Reviewer: Anthropic Claude")
-    elif eff_rev == "mistral":
-        from app.providers.mistral_provider import MistralReviewer
-        reviewer = MistralReviewer()
-        logger.info("✓ Reviewer: Mistral Large (GDPR 준수)")
-    elif eff_rev == "deepseek":
-        from app.providers.deepseek_provider import DeepSeekReviewer
-        reviewer = DeepSeekReviewer()
-        logger.info("✓ Reviewer: DeepSeek Reasoner")
     else:
         reviewer = MockReviewer()
         logger.info("○ Reviewer: Mock 모드")
@@ -116,6 +90,10 @@ def create_ai_team() -> AITeam:
         from app.providers.gemini_provider import GeminiResearcher
         researcher: BaseResearcher = GeminiResearcher()
         logger.info("✓ Researcher: Google Gemini Flash (무료)")
+    elif eff_res == "perplexity":
+        from app.providers.perplexity_provider import PerplexityResearcher
+        researcher = PerplexityResearcher()
+        logger.info("✓ Researcher: Perplexity Sonar")
     else:
         researcher = MockResearcher()
         logger.info("○ Researcher: Mock 모드")
@@ -138,20 +116,10 @@ def create_ai_team() -> AITeam:
         fact_checker = MockFactChecker()
         logger.info("○ FactChecker: Mock 모드")
 
-    # ── 6. Web Searcher ───────────────────────────────────────────────────────
-    if settings.has_tavily:
-        from app.providers.tavily_provider import TavilySearcher
-        web_searcher: BaseWebSearcher = TavilySearcher()
-        logger.info("✓ WebSearcher: Tavily (1000회/월 무료)")
-    else:
-        web_searcher = MockWebSearcher()
-        logger.info("○ WebSearcher: Mock 모드")
-
     return AITeam(
         draft_writer=draft_writer,
         reviewer=reviewer,
         researcher=researcher,
         trend_hunter=trend_hunter,
         fact_checker=fact_checker,
-        web_searcher=web_searcher,
     )
