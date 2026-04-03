@@ -229,21 +229,19 @@ def get_post_queue() -> PostQueue:
 
 async def run_queue_scheduler():
     """매 5분 실행. 최적 슬롯이면 큐에서 발행."""
-    from app.config import settings
-    from app.services.telegram_service import send_telegram_message
+    from app.services.growth._tg_helper import tg_send
 
     queue = get_post_queue()
     post = await queue.try_publish_next()
 
     if post:
-        # Telegram 알림
         msg = (
-            "✅ *게시물 자동 발행됨*\n\n"
-            f"`{post.text[:200]}`\n\n"
+            "✅ <b>게시물 자동 발행됨</b>\n\n"
+            f"<code>{post.text[:200]}</code>\n\n"
             f"🔗 https://x.com/sskorea02/status/{post.post_id}\n"
             f"📋 큐 잔여: {queue.count_pending()}개"
         )
         try:
-            await send_telegram_message(msg, parse_mode="Markdown")
+            await tg_send(msg)
         except Exception as e:
             logger.warning(f"Telegram 알림 실패: {e}")

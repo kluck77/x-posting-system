@@ -280,8 +280,7 @@ async def run_reply_monitor():
     매 5분 실행.
     새 답글 발견 시 Claude 초안 생성 → Telegram 승인 요청.
     """
-    from app.services.telegram_service import send_telegram_message
-    from app.telegram_bot import get_pending_reply_approvals
+    from app.services.growth._tg_helper import tg_send
 
     monitor = ReplyMonitor()
     new_replies = await monitor.poll_new_replies()
@@ -290,15 +289,8 @@ async def run_reply_monitor():
         try:
             draft = await generate_rereply_draft(reply)
             reply.my_reply_draft = draft
-
             msg = reply.format_for_telegram()
-            # 승인 버튼 포함해서 전송 (telegram_bot 핸들러가 처리)
-            await send_telegram_message(
-                msg + "\n\n👇 아래 버튼으로 승인/거절",
-                parse_mode="Markdown",
-                extra_data={"type": "reply_approval", "reply_id": reply.reply_id,
-                            "draft": draft},
-            )
+            await tg_send(msg)
             monitor.mark_processed(reply.reply_id)
         except Exception as e:
             logger.error(f"답글 처리 실패 {reply.reply_id}: {e}")

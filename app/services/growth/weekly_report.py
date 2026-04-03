@@ -253,7 +253,7 @@ async def run_weekly_report():
     매주 월요일 오전 9시 KST 실행.
     성과 리포트 + AI 분석 → Telegram 발송.
     """
-    from app.services.telegram_service import send_telegram_message
+    from app.services.growth._tg_helper import tg_send
 
     logger.info("주간 성과 리포트 생성 중...")
     reporter = WeeklyReporter()
@@ -262,8 +262,8 @@ async def run_weekly_report():
         metrics = await reporter.collect()
         ai_tips = await reporter.analyze_with_ai(metrics)
         report_text = metrics.format_for_telegram()
-        full_msg = f"{report_text}\n\n**🤖 다음 주 개선 포인트**\n{ai_tips}"
-        await send_telegram_message(full_msg, parse_mode="Markdown")
+        full_msg = f"{report_text}\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+        await tg_send(full_msg)
         logger.info("✓ 주간 리포트 발송 완료")
     except Exception as e:
         logger.error(f"주간 리포트 실패: {e}")
