@@ -118,6 +118,11 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
 
     AI 우선순위: OpenAI → Anthropic → Mock
     실패 시 Mock 폴백 — 절대 예외 발생 안 함.
+
+    Layer 2 (try/except 보호):
+      - RepetitionGuard: 최근 승인 초안과 Jaccard 유사도 비교
+      - VoiceGuard: AI 어투 패턴 감지
+    두 가드 실패 시 pack 정상 반환 (style_warnings만 누락).
     """
     source_text = request.to_source_text()
     title = request.to_title()
@@ -138,10 +143,44 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
                 f"콘텐츠 팩 생성 완료: {len(pack.main_posts)} posts, "
                 f"tags={pack.topic_tags}"
             )
+            _apply_guards(pack)
             return pack
 
     logger.warning("AI 응답 파싱 실패 — Mock 팩 반환")
-    return _mock_pack(request)
+    pack = _mock_pack(request)
+    _apply_guards(pack)
+    return pack
+
+
+def _apply_guards(pack: "ContentPack") -> None:
+    """
+    RepetitionGuard + VoiceGuard를 pack에 적용.
+    실패 시 무시 (Layer 2 — style_warnings 미반영이 최악의 결과).
+    """
+    # VoiceGuard — DB 불필요, 항상 실행
+    try:
+        from app.services.voice_guard import check_pack_voices
+        voice_warnings = check_pack_voices(
+            pack.main_posts + [pack.short_version] + pack.reply_drafts
+        )
+        for w in voice_warnings:
+            if w not in pack.style_warnings:
+                pack.style_warnings.append(w)
+    except Exception as e:
+        logger.warning(f"[VoiceGuard] 실패 (무시): {e}")
+
+    # RepetitionGuard — DB 세션 필요
+    try:
+        from app.db import get_db
+        from app.services.repetition_guard import RepetitionGuard
+        db = get_db()
+        guard = RepetitionGuard(db)
+        rep_warnings = guard.check_pack(pack)
+        for w in rep_warnings:
+            if w not in pack.style_warnings:
+                pack.style_warnings.append(w)
+    except Exception as e:
+        logger.warning(f"[RepetitionGuard] 실패 (무시): {e}")
 
 
 async def _call_ai(user_prompt: str) -> Optional[str]:

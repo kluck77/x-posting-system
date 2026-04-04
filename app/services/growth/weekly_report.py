@@ -251,7 +251,7 @@ X 알고리즘 기준 (답글 가중치 = 좋아요 × 27배, 재게시 = 좋아
 async def run_weekly_report():
     """
     매주 월요일 오전 9시 KST 실행.
-    성과 리포트 + AI 분석 → Telegram 발송.
+    성과 리포트 + 콘텐츠 믹스 + AI 분석 → Telegram 발송.
     """
     from app.services.growth._tg_helper import tg_send
 
@@ -262,7 +262,24 @@ async def run_weekly_report():
         metrics = await reporter.collect()
         ai_tips = await reporter.analyze_with_ai(metrics)
         report_text = metrics.format_for_telegram()
-        full_msg = f"{report_text}\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+
+        # Layer 2: 콘텐츠 믹스 섹션 (실패 시 무시)
+        mix_section = ""
+        try:
+            from app.db import get_db
+            from app.services.topic_memory import TopicMemory
+            db = get_db()
+            mix_section = TopicMemory(db).format_mix_report(days=7)
+            if mix_section:
+                mix_section = f"\n\n{mix_section}"
+        except Exception as _mix_err:
+            logger.warning(f"[TopicMemory] 믹스 섹션 생성 실패 (무시): {_mix_err}")
+
+        full_msg = (
+            f"{report_text}"
+            f"{mix_section}"
+            f"\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+        )
         await tg_send(full_msg)
         logger.info("✓ 주간 리포트 발송 완료")
     except Exception as e:
