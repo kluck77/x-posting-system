@@ -88,6 +88,8 @@ STRICT RULES:
 - Body under 270 characters
 - One opinion. One point. Don't hedge.
 - Reflect the 4 pillars: economy/finance | crypto/DeFi | geopolitics/politics | community sentiment
+- Block 3 (YOUR TAKE) must go beyond the fact: explain mechanism, structural cause, or what it signals forward
+- If the topic fails the marketability check, reframe the angle — don't just summarize
 
 Respond in JSON ONLY:
 {
@@ -97,7 +99,8 @@ Respond in JSON ONLY:
   "category_suggestion": "politics|policy|economy|society|crypto|kpop_culture|evergreen",
   "content_pillar": "economy|crypto|geopolitics|community",
   "optimal_post_time": "e.g. 09:00 EST — Korean market close + US open overlap",
-  "tone_notes": "hook type used, opinion expressed, why this angle"
+  "tone_notes": "hook type | interpretation angle | marketability reason | repeat signal",
+  "criteria_pass": "expertise|marketability|consistency|follower_fit|repeat — note any weak"
 }"""
 
 # --- 스레드 시스템 프롬프트 ---
@@ -151,23 +154,66 @@ This content comes from Korean online communities (DCInside / FMKorea / crypto b
 """
 
 # --- Reviewer 시스템 프롬프트 ---
-REVIEW_SYSTEM_PROMPT = """You are the editorial reviewer and safety brain for @cheesesvav — an English-language X account about Korean economy and policy.
+REVIEW_SYSTEM_PROMPT = """You are the editorial reviewer and quality brain for @cheesesvav — an English-language X account about Korean economy and policy.
 
-Your job:
-1. Check that the draft follows the 5-block writing system (hook / fact / why unusual / context / landing + CTA)
-2. Verify the hook does NOT start with "South Korea" or "Korea's"
-3. Verify the body has a specific number or data point
-4. Flag anything unconfirmed as uncertain
-5. Assess risk: low / medium / high
-6. Refine if needed — keep post body under 270 characters
-7. Ensure the CTA is present and natural
+Account standard: "Beyond headlines: how Korea really works, feels, and changes."
+You are the last line of defense. You decide if a post is good enough to represent this account.
+
+YOUR JOB — evaluate the draft against TWO frameworks:
+
+══════════════════════════════════════════
+FRAMEWORK 1 — 5-CRITERIA QUALITY GATE
+══════════════════════════════════════════
+
+Score each criterion: PASS / WEAK / FAIL
+
+1. EXPERTISE (Interpretation ≠ Translation)
+   PASS: Post contains a non-obvious interpretation, mechanism explanation, or structural insight
+   WEAK: Post restates facts clearly but adds no unique angle
+   FAIL: Post is just a reformatted news summary — a reader could get this from Reuters
+
+2. MARKETABILITY (Topic selection)
+   PASS: Topic connects Korea to global markets, geopolitics, crypto, or tech supply chain
+   WEAK: Topic is locally relevant but has thin global signal
+   FAIL: Topic only matters to people already following Korean news closely
+
+3. CONSISTENCY (Brand voice and pillar fit)
+   PASS: Fits 4 pillars (economy | crypto | geopolitics | community), tone is analytical not emotional
+   WEAK: Pillar fit is marginal, or tone drifts toward outrage / entertainment
+   FAIL: Off-brand; would confuse followers about what this account stands for
+
+4. FOLLOWER QUALITY (Right audience fit)
+   PASS: Will attract informed, globally-minded readers interested in Korea as a signal
+   WEAK: Will attract casual readers who may disengage quickly
+   FAIL: Will attract the wrong audience (tourists, K-pop fans, controversy seekers)
+
+5. REPEAT CONSUMPTION (Return power)
+   PASS: Post contains a "watch this" angle, data series hook, or pattern signal that rewards following
+   WEAK: Interesting once, but no obvious reason to check back
+   FAIL: Pure one-off curiosity with no follow-up value
+
+IF any criterion is FAIL → set recommended_action to "regenerate" and explain what angle would fix it.
+IF two or more are WEAK → set recommended_action to "review" and suggest improvements.
+IF all PASS or WEAK → proceed to Framework 2.
+
+══════════════════════════════════════════
+FRAMEWORK 2 — STRUCTURE + SAFETY CHECK
+══════════════════════════════════════════
+
+1. Hook does NOT start with "South Korea" or "Korea's"
+2. Hook contains: specific number OR named contradiction OR timing signal
+3. Body has one clear interpretation (not hedged)
+4. Body under 270 characters
+5. CTA is present and natural
+6. Nothing is presented as confirmed fact unless it is
+7. Assess risk: low / medium / high
 
 STRICT SAFETY RULES:
 - Politics / policy / economy / society / K-POP controversy → always medium or high risk
 - Community input (DCInside / FMKorea / crypto forums) → minimum medium risk, treat claims as unverified
 - Evergreen educational content → can be low risk
-- NEVER include unconfirmed rumors presented as facts
 - NEVER sensationalize
+- NEVER include unconfirmed claims as facts
 
 Respond in JSON ONLY:
 {
@@ -177,8 +223,15 @@ Respond in JSON ONLY:
   "category": "politics|policy|economy|society|kpop_culture|evergreen",
   "risk_level": "low|medium|high",
   "risk_reasoning": "why this risk level",
-  "ai_rationale": "why this draft serves the audience well",
-  "recommended_action": "approve|review|reject"
+  "ai_rationale": "what makes this post worth the account's reputation",
+  "recommended_action": "approve|review|regenerate|reject",
+  "criteria_scores": {
+    "expertise": "pass|weak|fail — reason",
+    "marketability": "pass|weak|fail — reason",
+    "consistency": "pass|weak|fail — reason",
+    "follower_quality": "pass|weak|fail — reason",
+    "repeat_consumption": "pass|weak|fail — reason"
+  }
 }"""
 
 
@@ -320,7 +373,26 @@ class AnthropicReviewer(BaseReviewer):
                 content = resp.json()["content"][0]["text"]
                 data = json.loads(content)
 
-            logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
+            # 5-criteria 점수 로깅
+            criteria = data.get("criteria_scores", {})
+            if criteria:
+                logger.info(
+                    f"[Claude Reviewer] 5-Criteria: "
+                    f"expertise={criteria.get('expertise','?')} | "
+                    f"marketability={criteria.get('marketability','?')} | "
+                    f"consistency={criteria.get('consistency','?')} | "
+                    f"follower_quality={criteria.get('follower_quality','?')} | "
+                    f"repeat={criteria.get('repeat_consumption','?')}"
+                )
+            logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')} action={data.get('recommended_action')}")
+
+            # Reviewer가 regenerate 권고하면 ai_rationale에 이유 포함
+            rationale = data.get("ai_rationale", "")
+            if data.get("recommended_action") == "regenerate" and criteria:
+                fails = [f"{k}: {v}" for k, v in criteria.items() if "fail" in str(v).lower()]
+                if fails:
+                    rationale += f" | REGENERATE 이유: {'; '.join(fails)}"
+
             return ReviewResult(
                 hook=data.get("hook", draft.hook),
                 body=data.get("body", draft.body),
@@ -328,7 +400,7 @@ class AnthropicReviewer(BaseReviewer):
                 category=data.get("category", "evergreen"),
                 risk_level=data.get("risk_level", "medium"),
                 risk_reasoning=data.get("risk_reasoning", ""),
-                ai_rationale=data.get("ai_rationale", ""),
+                ai_rationale=rationale,
                 recommended_action=data.get("recommended_action", "review"),
             )
         except Exception as e:

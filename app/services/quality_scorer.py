@@ -273,3 +273,162 @@ def score_thread(tweets: list[str]) -> tuple[int, list[str]]:
 def should_regenerate_thread(score: int) -> bool:
     """스레드 점수가 임계값 미만이면 재생성 필요."""
     return score < THREAD_REGEN_THRESHOLD
+
+
+# =============================================================================
+# 5-CRITERIA 품질 필터
+# =============================================================================
+
+# 해석 신호 (단순 번역이 아닌 관점 제시 증거)
+_INTERPRETATION_SIGNALS = re.compile(
+    r"\b(means|signals|explains|because|structural|mechanism|pattern|"
+    r"what this (tells|shows|reveals)|the real (reason|issue|story)|"
+    r"beneath|underneath|what (nobody|most) (says|knows|covers))\b",
+    re.IGNORECASE,
+)
+
+# 시장성 신호 (해외 독자 관련성)
+_MARKETABILITY_SIGNALS = re.compile(
+    r"\b(global|supply chain|usd|dollar|semiconductor|chip|crypto|bitcoin|"
+    r"geopolit|trade|export|import|market|investor|hedge fund|wall street|"
+    r"your (wallet|portfolio|iphone|investment))\b",
+    re.IGNORECASE,
+)
+
+# 반복 방문 신호
+_REPEAT_SIGNALS = re.compile(
+    r"\b(watch|track|follow|developing|pattern|series|next week|by (friday|monday)|"
+    r"this is part of|will continue|won't stop|over the (next|coming))\b",
+    re.IGNORECASE,
+)
+
+# 잘못된 청중 신호 (엔터테인먼트, 클릭베이트)
+_WRONG_AUDIENCE_SIGNALS = re.compile(
+    r"\b(shocking|unbelievable|can't believe|omg|insane|crazy|viral|drama|"
+    r"celebrity|idol|dating|scandal|rumors|gossip)\b",
+    re.IGNORECASE,
+)
+
+# 단순 번역 패턴 (Reuters 그대로 옮기는 패턴)
+_TRANSLATION_PATTERNS = re.compile(
+    r"^(south korea|korea) (announced|said|reported|stated|confirmed|revealed)\b",
+    re.IGNORECASE,
+)
+
+
+def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
+    """
+    5-criteria 프레임워크로 초안을 평가합니다.
+
+    반환값:
+    {
+        "scores": {"expertise": int, "marketability": int, ...},  # 각 0~20
+        "total": int,       # 0~100
+        "flags": [str],     # 실패/약점 항목 설명
+        "action": "pass"|"warn"|"reject"
+    }
+
+    임계값:
+        total >= 70  → pass
+        total 50~69  → warn (검토 필요)
+        total < 50   → reject (재생성)
+    """
+    full = f"{hook}\n{body}"
+    full_lower = full.lower()
+    flags: list[str] = []
+    scores: dict[str, int] = {}
+
+    # ── 1. Expertise (해석 vs 번역) ──────────────────────────────────────────
+    exp_score = 0
+    if _INTERPRETATION_SIGNALS.search(full):
+        exp_score += 15
+    if not _TRANSLATION_PATTERNS.search(hook):
+        exp_score += 5
+    scores["expertise"] = min(exp_score, 20)
+    if exp_score < 10:
+        flags.append("⚠️ Expertise WEAK: 해석/관점 없음. 단순 번역 의심.")
+
+    # ── 2. Marketability (해외 독자 관련성) ─────────────────────────────────
+    mkt_score = 0
+    if _MARKETABILITY_SIGNALS.search(full):
+        mkt_score += 20
+    elif re.search(r"\b(korea|korean|seoul|won|kospi)\b", full_lower):
+        mkt_score += 8  # 한국 언급은 있지만 글로벌 연결 없음
+    scores["marketability"] = min(mkt_score, 20)
+    if mkt_score < 10:
+        flags.append("⚠️ Marketability WEAK: 해외 독자 관련성 불명확.")
+
+    # ── 3. Consistency (브랜드 일관성) ──────────────────────────────────────
+    con_score = 20
+    if _WRONG_AUDIENCE_SIGNALS.search(full):
+        con_score -= 15
+        flags.append("❌ Consistency FAIL: 클릭베이트/엔터테인먼트 신호 감지.")
+    pillar_pattern = re.compile(
+        r"\b(economy|crypto|geopolit|policy|community|finance|trade|politic)\w*\b",
+        re.IGNORECASE,
+    )
+    if not pillar_pattern.search(full):
+        con_score -= 5
+        flags.append("⚠️ Consistency WEAK: 4개 필러 중 어느 것도 명확하지 않음.")
+    scores["consistency"] = max(0, con_score)
+
+    # ── 4. Follower Quality (적합한 팔로워 유인) ─────────────────────────────
+    fq_score = 0
+    right_audience = re.compile(
+        r"\b(investor|analyst|market|hedge|fund|trader|researcher|"
+        r"economist|policy|analyst|strategist)\b",
+        re.IGNORECASE,
+    )
+    if right_audience.search(full):
+        fq_score += 10
+    if _MARKETABILITY_SIGNALS.search(full):
+        fq_score += 5
+    if re.search(r"\byou\b|\byour\b", full_lower):
+        fq_score += 5
+    scores["follower_quality"] = min(fq_score, 20)
+    if fq_score < 10:
+        flags.append("⚠️ Follower Quality WEAK: 정보 지향 독자를 구체적으로 겨냥하지 않음.")
+
+    # ── 5. Repeat Consumption (재방문 유인) ──────────────────────────────────
+    rc_score = 0
+    if _REPEAT_SIGNALS.search(full):
+        rc_score += 20
+    elif re.search(r"\bfollow\b", full_lower):
+        rc_score += 10  # CTA는 있지만 패턴/시리즈 신호 없음
+    scores["repeat_consumption"] = min(rc_score, 20)
+    if rc_score < 10:
+        flags.append("⚠️ Repeat Consumption WEAK: 재방문 유인 신호(패턴/시리즈/추적) 없음.")
+
+    total = sum(scores.values())
+
+    if total >= 70:
+        action = "pass"
+    elif total >= 50:
+        action = "warn"
+    else:
+        action = "reject"
+
+    return {
+        "scores": scores,
+        "total": total,
+        "flags": flags,
+        "action": action,
+    }
+
+
+def format_5criteria_report(result: dict) -> str:
+    """5-criteria 결과를 Telegram용 텍스트로 포맷합니다."""
+    icons = {"pass": "✅", "warn": "⚠️", "reject": "❌"}
+    icon = icons.get(result["action"], "❓")
+    lines = [
+        f"🔬 5-Criteria 품질 분석: {result['total']}/100 {icon}",
+        f"  전문성(해석): {result['scores']['expertise']}/20",
+        f"  시장성(관련성): {result['scores']['marketability']}/20",
+        f"  일관성(브랜드): {result['scores']['consistency']}/20",
+        f"  팔로워 적합성: {result['scores']['follower_quality']}/20",
+        f"  재방문 유인: {result['scores']['repeat_consumption']}/20",
+    ]
+    if result["flags"]:
+        lines.append("")
+        lines.extend(result["flags"])
+    return "\n".join(lines)

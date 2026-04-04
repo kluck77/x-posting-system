@@ -36,6 +36,10 @@ from app.services.prediction_service import predict_publish_time
 from app.services.telegram_service import send_approval_card, send_publish_confirmation
 from app.services.x_publisher import XPublisher
 from app.services.rate_limiter import RateLimiter
+from app.services.quality_scorer import (
+    score_draft, score_5criteria, format_5criteria_report,
+    should_regenerate, REGEN_THRESHOLD,
+)
 from app.providers.ai_provider import AITeam, create_ai_team
 from app.providers.base import DraftResult, ResearchResult
 
@@ -122,6 +126,29 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"FactChecker 실패: {e}")
             factcheck = None
+
+        # Step 4.5: 5-Criteria 품질 필터 (Reviewer 전 사전 체크)
+        criteria_result = score_5criteria(
+            draft_result.hook, draft_result.body, data.source_type
+        )
+        logger.info(
+            f"5-Criteria 결과: {criteria_result['total']}/100 [{criteria_result['action']}] "
+            f"flags={criteria_result['flags']}"
+        )
+        if criteria_result["action"] == "reject":
+            logger.warning(
+                "5-Criteria REJECT — 초안이 품질 기준 미달. "
+                "재생성 시도 (최대 1회)."
+            )
+            try:
+                draft_result = await self.ai.draft_writer.generate_draft(
+                    title=data.title,
+                    source_text=data.source_text + "\n\nIMPROVEMENT REQUIRED: " + " | ".join(criteria_result["flags"]),
+                    language=settings.default_language,
+                    source_type=data.source_type,
+                )
+            except Exception as e:
+                logger.warning(f"재생성 실패, 원본 사용: {e}")
 
         # Step 5: Reviewer — 리스크 판단 & 최종 다듬기
         logger.info("[5/6] Reviewer: 최종 판단")

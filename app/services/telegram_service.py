@@ -114,6 +114,18 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         if getattr(draft, "prediction_reasoning", None):
             card += f"   └ {draft.prediction_reasoning}\n"
 
+    # 5-criteria 실시간 평가
+    try:
+        from app.services.quality_scorer import score_5criteria, format_5criteria_report
+        criteria_result = score_5criteria(draft.hook, draft.body)
+        if criteria_result["action"] != "pass" or criteria_result["flags"]:
+            card += f"\n{'─' * 30}\n"
+            card += f"🔬 <b>5-Criteria 품질 분석:</b> {criteria_result['total']}/100\n"
+            for flag in criteria_result["flags"]:
+                card += f"  {flag}\n"
+    except Exception:
+        pass
+
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"
