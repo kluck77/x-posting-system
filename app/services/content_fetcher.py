@@ -10,9 +10,13 @@ URL에서 뉴스 기사 텍스트를 추출합니다.
   3. Google Cache — 오래된 기사 복구
 
 403/404/빈 콘텐츠 시 자동으로 다음 전략 시도.
+
+GitHub 파일 링크:
+  github.com/.../blob/{branch}/path → 로컬 파일 직접 읽기 → GPT 등에 공유
 """
 
 import re
+from pathlib import Path
 import logging
 import httpx
 from html.parser import HTMLParser
@@ -300,3 +304,129 @@ async def fetch_url_content(url: str) -> dict:
         "source": "failed",
         "error": "모든 수집 전략 실패 (직접 접근 / Jina / Google Cache). 기사 텍스트를 직접 붙여넣어 주세요.",
     }
+
+
+# =============================================================================
+# GitHub 파일 링크 → 로컬 파일 읽기
+# =============================================================================
+
+# 프로젝트 루트 (봇이 실행되는 VPS와 동일한 경로)
+_REPO_ROOT = Path("/home/user/x-posting-system")
+
+# 지원하는 GitHub 도메인 (github.com + 로컬 Gitea)
+_GITHUB_BLOB_RE = re.compile(
+    r"https?://(?:github\.com|127\.0\.0\.1[:\d]*/git)/[^/]+/[^/]+/blob/([^/]+)/(.+)"
+)
+
+
+def is_github_file_url(url: str) -> bool:
+    """github.com/.../blob/... 형식의 파일 URL인지 확인."""
+    return bool(_GITHUB_BLOB_RE.search(url))
+
+
+def github_url_to_local_path(url: str) -> Path | None:
+    """
+    GitHub blob URL을 로컬 파일 경로로 변환.
+
+    예)
+      https://github.com/kluck77/x-posting-system/blob/main/app/config.py
+      → /home/user/x-posting-system/app/config.py
+    """
+    m = _GITHUB_BLOB_RE.search(url)
+    if not m:
+        return None
+    # branch = m.group(1)  (사용 안 함, 로컬 파일은 현재 체크아웃 기준)
+    rel_path = m.group(2).lstrip("/")
+    return _REPO_ROOT / rel_path
+
+
+def read_github_file(url: str) -> dict:
+    """
+    GitHub 파일 URL → 로컬 파일 내용 읽기.
+
+    Returns:
+        {
+            "path": str,           # 상대 경로
+            "content": str,        # 파일 내용
+            "language": str,       # 확장자 기반 언어 (py/ts/md 등)
+            "line_count": int,
+            "error": str | None,
+        }
+    """
+    local_path = github_url_to_local_path(url)
+    if local_path is None:
+        return {"path": url, "content": "", "language": "", "line_count": 0,
+                "error": "GitHub blob URL 파싱 실패"}
+
+    if not local_path.exists():
+        return {"path": str(local_path), "content": "", "language": "", "line_count": 0,
+                "error": f"파일 없음: {local_path.relative_to(_REPO_ROOT)}"}
+
+    try:
+        content = local_path.read_text(encoding="utf-8")
+        ext = local_path.suffix.lstrip(".")
+        lang_map = {
+            "py": "python", "ts": "typescript", "tsx": "typescript",
+            "js": "javascript", "json": "json", "md": "markdown",
+            "yaml": "yaml", "yml": "yaml", "sh": "bash", "toml": "toml",
+        }
+        language = lang_map.get(ext, ext or "text")
+        rel = str(local_path.relative_to(_REPO_ROOT))
+        line_count = content.count("\n") + 1
+        logger.info(f"[GitHub 파일 읽기] {rel} ({line_count}줄)")
+        return {
+            "path": rel,
+            "content": content,
+            "language": language,
+            "line_count": line_count,
+            "error": None,
+        }
+    except Exception as e:
+        return {"path": str(local_path), "content": "", "language": "", "line_count": 0,
+                "error": str(e)[:200]}
+
+
+def split_code_for_telegram(path: str, content: str, language: str) -> list[str]:
+    """
+    긴 파일을 Telegram 4096자 제한에 맞게 분할.
+    각 파트는 독립적으로 코드블록으로 감싸짐.
+
+    Returns:
+        list[str] — Telegram에 순서대로 전송할 메시지들
+    """
+    LIMIT = 3800  # 헤더/코드블록 마크업 여유분 포함
+
+    header = f"📄 <b>{path}</b>\n"
+    lines = content.splitlines(keepends=True)
+    parts: list[str] = []
+    chunk_lines: list[str] = []
+    chunk_len = 0
+
+    for line in lines:
+        if chunk_len + len(line) > LIMIT and chunk_lines:
+            chunk = "".join(chunk_lines)
+            part_num = len(parts) + 1
+            parts.append(
+                f"{header}{'(파트 ' + str(part_num) + ')' if part_num > 1 else ''}\n"
+                f"<pre><code class=\"language-{language}\">{_esc(chunk)}</code></pre>"
+            )
+            chunk_lines = [line]
+            chunk_len = len(line)
+        else:
+            chunk_lines.append(line)
+            chunk_len += len(line)
+
+    if chunk_lines:
+        chunk = "".join(chunk_lines)
+        part_num = len(parts) + 1
+        parts.append(
+            f"{header}{'(파트 ' + str(part_num) + ')' if part_num > 1 else ''}\n"
+            f"<pre><code class=\"language-{language}\">{_esc(chunk)}</code></pre>"
+        )
+
+    return parts
+
+
+def _esc(text: str) -> str:
+    """HTML 특수문자 이스케이프 (<pre> 내부용)."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
