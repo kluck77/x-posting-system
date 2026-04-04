@@ -161,88 +161,12 @@ async def _run_analysis_and_show_card(
 # 메시지 핸들러 — URL 텍스트
 # =============================================================================
 
-async def share_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /share <파일경로>
-    로컬 프로젝트 파일을 Telegram으로 전송. GPT 등에 공유용.
-    예: /share app/providers/openai_provider.py
-    """
-    from app.services.content_fetcher import (
-        read_github_file, split_code_for_telegram, _REPO_ROOT
-    )
-    from pathlib import Path
-
-    args = " ".join(context.args).strip() if context.args else ""
-    if not args:
-        await update.message.reply_text(
-            "📄 <b>/share 사용법</b>\n\n"
-            "<code>/share app/providers/openai_provider.py</code>\n\n"
-            "또는 GitHub 파일 링크를 그냥 붙여넣어도 됩니다.",
-            parse_mode="HTML",
-        )
-        return
-
-    local_path = _REPO_ROOT / args.lstrip("/")
-    if not local_path.exists():
-        await update.message.reply_text(
-            f"❌ 파일 없음: <code>{args}</code>",
-            parse_mode="HTML",
-        )
-        return
-
-    try:
-        from pathlib import Path
-        content = local_path.read_text(encoding="utf-8")
-        ext = local_path.suffix.lstrip(".")
-        lang_map = {
-            "py": "python", "ts": "typescript", "js": "javascript",
-            "json": "json", "md": "markdown", "yaml": "yaml", "yml": "yaml",
-        }
-        language = lang_map.get(ext, ext or "text")
-        rel = str(local_path.relative_to(_REPO_ROOT))
-        parts = split_code_for_telegram(rel, content, language)
-        for part in parts:
-            await update.message.reply_text(part, parse_mode="HTML")
-    except Exception as e:
-        await update.message.reply_text(f"❌ 읽기 실패: {e}")
-
-
 async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """사용자가 URL을 보낸 경우."""
-    from app.services.content_fetcher import (
-        fetch_url_content, is_x_url,
-        is_github_file_url, read_github_file, split_code_for_telegram,
-    )
+    from app.services.content_fetcher import fetch_url_content, is_x_url
 
     url = update.message.text.strip()
     logger.info(f"URL 수신: {url[:80]}")
-
-    # ── GitHub 파일 링크 → 로컬 파일 읽어서 전송 ──────────────────────────
-    if is_github_file_url(url):
-        result = read_github_file(url)
-        if result["error"]:
-            await update.message.reply_text(
-                f"❌ <b>파일 읽기 실패</b>\n<code>{result['error']}</code>",
-                parse_mode="HTML",
-            )
-            return
-        parts = split_code_for_telegram(
-            result["path"], result["content"], result["language"]
-        )
-        total = len(parts)
-        for i, part in enumerate(parts, 1):
-            if total > 1:
-                await update.message.reply_text(
-                    f"({i}/{total})\n{part}", parse_mode="HTML"
-                )
-            else:
-                await update.message.reply_text(part, parse_mode="HTML")
-        await update.message.reply_text(
-            f"✅ <b>{result['path']}</b> ({result['line_count']}줄)\n"
-            "↑ 위 코드를 GPT/Claude 등에 붙여넣어 사용하세요.",
-            parse_mode="HTML",
-        )
-        return
 
     # X/Twitter URL은 댓글 대상으로만 사용 가능 — 안내
     if is_x_url(url) and _get_state(context) != STATE_AWAITING_REPLY_TARGET:
@@ -716,12 +640,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "4️⃣ 초안 텍스트를 복사해서 X에 게시\n\n"
         "<b>Commands:</b>\n"
         "/thread — 뉴스 링크로 5~7 트윗 스레드 생성 🧵\n"
-        "/share &lt;파일경로&gt; — 코드 파일을 GPT/Claude에 공유용으로 전송 📄\n"
         "/status — AI 프로바이더 상태\n"
         "/pending — 대기 중인 초안\n"
         "/trends — 트렌드 탐색\n"
-        "/cancel — 현재 작업 취소\n\n"
-        "<b>GitHub 파일 링크</b> 붙여넣기 → 코드 내용 바로 전송 (GPT 공유용)\n",
+        "/cancel — 현재 작업 취소\n",
         parse_mode="HTML",
     )
 
@@ -920,7 +842,6 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("pending", pending_command))
     app.add_handler(CommandHandler("trends", trends_command))
     app.add_handler(CommandHandler("thread", thread_command))
-    app.add_handler(CommandHandler("share", share_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))
