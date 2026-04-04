@@ -189,15 +189,34 @@ async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _handle_reply_target_url(update, context, url)
         return
 
-    await update.message.reply_text("🔍 기사 분석 중...")
+    status_msg = await update.message.reply_text("🔍 기사 분석 중...")
 
     result = await fetch_url_content(url)
-    if result.get("error") and not result["text"]:
-        await update.message.reply_text(
-            f"⚠️ URL 로딩 실패: {result['error']}\n\n"
-            "텍스트로 직접 내용을 보내주세요."
+
+    # 수집 전략 표시
+    source_label = {
+        "direct": "직접 수집",
+        "jina": "Jina AI Reader",
+        "google_cache": "Google 캐시",
+        "failed": None,
+    }.get(result.get("source", ""), "")
+
+    if result.get("source") == "failed" or not result["text"]:
+        await status_msg.edit_text(
+            "⚠️ <b>URL 콘텐츠를 읽을 수 없습니다</b>\n\n"
+            "3가지 방법을 모두 시도했지만 실패했습니다:\n"
+            "① 직접 접근 → 차단\n"
+            "② Jina AI Reader → 실패\n"
+            "③ Google 캐시 → 없음\n\n"
+            "📋 <b>해결 방법:</b>\n"
+            "기사 본문 텍스트를 복사해서 직접 붙여넣어 주세요.\n"
+            "제목 + 주요 내용 몇 문단이면 충분합니다.",
+            parse_mode="HTML",
         )
         return
+
+    if source_label and source_label != "직접 수집":
+        await status_msg.edit_text(f"🔍 기사 분석 중... ({source_label}로 수집)")
 
     # 뉴스 기사 = manual (팩트 기반)
     await _run_analysis_and_show_card(
