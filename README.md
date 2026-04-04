@@ -19,6 +19,7 @@
 - 자동 좋아요 / 팔로우 / DM / 리플 없음
 - 스팸·조작 기능 없음
 - 위험 콘텐츠 자동 게시 없음
+- 이미지·영상 자동 생성 없음 (DALL-E, Stable Diffusion 등 영구 제외)
 
 ---
 
@@ -188,8 +189,13 @@ x-posting-system/
 | v4 | 5-Criteria 품질 프레임워크 | 완료 |
 | v4 | URL 수집 3단계 fallback (Jina AI) | 완료 |
 | v4 | Growth 파이프라인 (Queue/Hunter/Monitor) | 완료 |
+| v4 | ContentPack 멀티 초안 출력 | 완료 |
+| v4 | criteria_signals → 프롬프트 주입 | 완료 |
 | v5 | RSS 자동 수집 & 뉴스 모니터 | 진행 중 |
-| v6 | 저위험 자동 게시 (feature flag) | 계획 중 |
+| v5 | 토픽 메모리 + 콘텐츠 믹스 어드바이저 | 계획 중 |
+| v5 | 보이스 가드 (AI 어투 감지) | 계획 중 |
+| v6 | 품질 점수 어드바이저리 (텔레그램 카드) | 계획 중 |
+| v6 | 운영자 메모 캡처 + 프롬프트 개선 | 계획 중 |
 
 ---
 

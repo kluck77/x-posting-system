@@ -78,6 +78,26 @@
 | v4 | 5-Criteria quality framework | Done |
 | v4 | URL 3-strategy fallback (Jina AI) | Done |
 | v4 | Growth pipelines (Queue/Hunter/Monitor) | Done |
+| v4 | ContentPack (multi-draft output suite) | Done |
+| v4 | criteria_signals → DraftWriter + Reviewer prompt injection | Done |
 | v5 | RSS auto-collection & news monitor | In progress |
-| v6 | Low-risk auto-posting (feature flag) | Planned |
-| v7 | Analytics dashboard | Planned |
+| v5 | Topic memory + content-mix advisor | Planned |
+| v5 | Voice guard (anti-AI phrase detection) | Planned |
+| v5 | RepetitionGuard wiring into ContentPack | Planned |
+| v6 | Quality gate advisory (score display in Telegram) | Planned |
+| v6 | Operator manual note capture (reject callback) | Planned |
+| v6 | Prompt quality audit (based on real outputs) | Planned |
+
+### Permanent Exclusions
+
+The following are out of scope and will not be built:
+
+- Image generation (DALL-E, Stable Diffusion, thumbnails, any visual generation)
+- Video / multimedia generation
+- Auto-posting without approval
+- Auto-like / auto-follow / auto-reply
+- Web dashboard / analytics UI
+- ML fine-tuning / embedding store / RAG
+- Multi-user support
+
+See `CLAUDE.md` for full project rules.
