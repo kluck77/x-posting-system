@@ -145,6 +145,24 @@ class Draft(Base):
     # 댓글(reply) 대상 트윗 ID
     reply_to_tweet_id = Column(String(50), nullable=True, comment="답글 대상 트윗 ID (있으면 reply로 게시)")
 
+    # ── Phase 4: 성과 로깅 기반 필드 ────────────────────────────────────────
+    content_type = Column(
+        String(50), nullable=True,
+        comment="입력 소스 유형 (news_link/x_post/observation/screenshot_ref/raw_text)"
+    )
+    topic_tags = Column(
+        String(500), nullable=True,
+        comment="주제 태그 JSON 배열 — 예: '[\"economy\",\"BOK\",\"rates\"]'"
+    )
+    output_format = Column(
+        String(20), nullable=True, default="single",
+        comment="출력 형식: single | pack"
+    )
+    manual_notes = Column(
+        Text, nullable=True,
+        comment="사용자 수동 메모 (선택)"
+    )
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 

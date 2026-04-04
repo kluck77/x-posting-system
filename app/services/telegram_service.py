@@ -331,6 +331,80 @@ async def send_analysis_card(
         return None
 
 
+def send_content_pack_messages(pack) -> list[dict]:
+    """
+    ContentPack을 텔레그램 전송용 메시지 목록으로 변환합니다.
+    실제 전송은 telegram_bot.py의 update.message.reply_text()가 담당합니다.
+
+    Returns:
+        [{"text": str, "pack_index": int | None, "post_text": str | None}, ...]
+        pack_index: None = 참조용(버튼 없음), 0-2 = 메인포스트, 10 = 짧은버전
+    """
+    messages: list[dict] = []
+
+    # ── 1. 개요 카드 ──────────────────────────────────────────────────────────
+    overview_lines = ["📦 <b>콘텐츠 팩 생성 완료</b>\n"]
+
+    if pack.why_it_matters:
+        overview_lines.append(f"🌏 <b>Why it matters</b>\n{pack.why_it_matters}\n")
+
+    if pack.topic_tags:
+        tags = " ".join(f"#{t}" for t in pack.topic_tags)
+        overview_lines.append(f"🏷 {tags}\n")
+
+    if pack.risk_flags:
+        flags = "\n".join(f"  • {f}" for f in pack.risk_flags)
+        overview_lines.append(f"⚠️ <b>Risk flags</b>\n{flags}\n")
+
+    if pack.style_warnings:
+        warns = "\n".join(f"  • {w}" for w in pack.style_warnings)
+        overview_lines.append(f"🔄 <b>Style warnings</b>\n{warns}\n")
+
+    overview_lines.append(
+        f"<i>메인 {len(pack.main_posts)}개 · 짧은버전 1개 · 댓글초안 {len(pack.reply_drafts)}개"
+        f" · 인용 {len(pack.quote_post_drafts)}개"
+        + (" · 스레드 있음" if pack.thread_option else "")
+        + "</i>"
+    )
+
+    messages.append({"text": "\n".join(overview_lines), "pack_index": None, "post_text": None})
+
+    # ── 2. 메인 포스트 × 3 (승인 버튼 있음) ──────────────────────────────────
+    for i, post in enumerate(pack.main_posts[:3]):
+        label = ["A", "B", "C"][i]
+        text = f"📝 <b>메인 포스트 {label}</b>\n\n<code>{post}</code>"
+        messages.append({"text": text, "pack_index": i, "post_text": post})
+
+    # ── 3. 짧은 버전 (승인 버튼 있음, pack_index=10) ─────────────────────────
+    if pack.short_version:
+        text = f"⚡ <b>짧은 버전</b>\n\n<code>{pack.short_version}</code>"
+        messages.append({"text": text, "pack_index": 10, "post_text": pack.short_version})
+
+    # ── 4. 댓글 초안 × 3 (복사 전용 — 버튼 없음) ────────────────────────────
+    if pack.reply_drafts:
+        reply_text = "💬 <b>댓글 초안</b> (복사해서 사용)\n\n"
+        for j, r in enumerate(pack.reply_drafts[:3], 1):
+            reply_text += f"{j}. <code>{r}</code>\n\n"
+        messages.append({"text": reply_text.strip(), "pack_index": None, "post_text": None})
+
+    # ── 5. 인용 포스트 × 2 (복사 전용) ──────────────────────────────────────
+    if pack.quote_post_drafts:
+        quote_text = "🔁 <b>인용 포스트</b> (복사해서 사용)\n\n"
+        for j, q in enumerate(pack.quote_post_drafts[:2], 1):
+            quote_text += f"{j}. <code>{q}</code>\n\n"
+        messages.append({"text": quote_text.strip(), "pack_index": None, "post_text": None})
+
+    # ── 6. 스레드 옵션 (복사 전용) ───────────────────────────────────────────
+    if pack.thread_option:
+        thread_text = (
+            f"🧵 <b>스레드 시작</b> (복사해서 사용)\n\n"
+            f"<code>{pack.thread_option}</code>"
+        )
+        messages.append({"text": thread_text, "pack_index": None, "post_text": None})
+
+    return messages
+
+
 def parse_callback_data(callback_data: str) -> tuple[str, int] | None:
     """
     텔레그램 인라인 버튼의 callback_data를 파싱합니다.

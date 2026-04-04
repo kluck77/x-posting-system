@@ -89,6 +89,27 @@ def _run_schema_migrations():
             "column": "reply_to_tweet_id",
             "ddl": "ALTER TABLE drafts ADD COLUMN reply_to_tweet_id VARCHAR(50)",
         },
+        # Phase 4: 성과 로깅 기반 필드
+        {
+            "table": "drafts",
+            "column": "content_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN content_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "topic_tags",
+            "ddl": "ALTER TABLE drafts ADD COLUMN topic_tags VARCHAR(500)",
+        },
+        {
+            "table": "drafts",
+            "column": "output_format",
+            "ddl": "ALTER TABLE drafts ADD COLUMN output_format VARCHAR(20) DEFAULT 'single'",
+        },
+        {
+            "table": "drafts",
+            "column": "manual_notes",
+            "ddl": "ALTER TABLE drafts ADD COLUMN manual_notes TEXT",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")

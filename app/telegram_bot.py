@@ -149,6 +149,7 @@ async def _run_analysis_and_show_card(
             InlineKeyboardButton("💬 댓글로", callback_data=f"type_reply:{msg_id}"),
         ],
         [
+            InlineKeyboardButton("📦 콘텐츠 팩", callback_data=f"type_pack:{msg_id}"),
             InlineKeyboardButton("❌ 취소", callback_data=f"type_cancel:{msg_id}"),
         ],
     ])
@@ -424,6 +425,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_news_callback(query, context)
         return
 
+    # --- 콘텐츠 팩 선택 콜백 ---
+    if callback_data.startswith("pack_select:"):
+        await _handle_pack_select_callback(query, context)
+        return
+
     # --- 타입 선택 콜백 ---
     if callback_data.startswith("type_"):
         await _handle_type_callback(query, context)
@@ -623,6 +629,13 @@ async def _handle_type_callback(query, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML",
         )
 
+    elif action == "type_pack":
+        await _run_content_pack(
+            type("FakeUpdate", (), {"message": query.message})(),
+            context,
+            pending=pending,
+        )
+
 
 # =============================================================================
 # 커맨드 핸들러
@@ -633,17 +646,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🇰🇷 <b>X Posting System — @cheesesvav</b>\n"
         "<i>Beyond headlines: how Korea really works, feels, and changes.</i>\n\n"
-        "<b>사용법:</b>\n"
-        "1️⃣ 뉴스 기사 URL 또는 스크린샷 전송\n"
-        "2️⃣ 분석 결과 확인\n"
-        "3️⃣ [📝 새 게시글] 또는 [💬 댓글로] 선택\n"
-        "4️⃣ 초안 텍스트를 복사해서 X에 게시\n\n"
+        "<b>기본 사용법:</b>\n"
+        "1️⃣ 뉴스 URL · 스크린샷 · 텍스트 전송\n"
+        "2️⃣ 분석 카드에서 원하는 모드 선택\n"
+        "   • [📝 새 게시글] — 단일 포스트 → 승인 후 X 게시\n"
+        "   • [📦 콘텐츠 팩] — 메인 3개+댓글+인용+짧은버전 일괄 생성\n"
+        "   • [💬 댓글로] — 특정 트윗에 답글\n\n"
         "<b>Commands:</b>\n"
-        "/thread — 뉴스 링크로 5~7 트윗 스레드 생성 🧵\n"
-        "/status — AI 프로바이더 상태\n"
-        "/pending — 대기 중인 초안\n"
+        "/pack [url/text] — 콘텐츠 팩 직접 생성 📦\n"
+        "/thread — 스레드 생성 🧵\n"
         "/trends — 트렌드 탐색\n"
-        "/cancel — 현재 작업 취소\n",
+        "/queue — 게시 큐\n"
+        "/hunt — 댓글 기회 탐색\n"
+        "/status — AI 상태\n"
+        "/pending — 대기 초안\n"
+        "/cancel — 취소\n",
         parse_mode="HTML",
     )
 
@@ -825,6 +842,220 @@ async def _generate_and_send_thread(
 
 
 # =============================================================================
+# 콘텐츠 팩 파이프라인
+# =============================================================================
+
+# user_data 키
+CONTENT_PACK_KEY = "content_pack"
+
+
+async def _run_content_pack(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    pending: dict | None = None,
+    source_override: str | None = None,
+) -> None:
+    """
+    ContentRequest → ContentPack 생성 → Telegram 멀티 메시지 전송.
+    기존 단일 포스트 승인 파이프라인과 완전히 병렬로 동작합니다.
+    """
+    from app.models.content_request import ContentRequest
+    from app.services.content_pack import generate_content_pack
+    from app.services.repetition_guard import RepetitionGuard
+    from app.services.telegram_service import send_content_pack_messages
+    from app.db import get_db
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    _clear(context)
+    msg = await update.message.reply_text("📦 <b>콘텐츠 팩 생성 중...</b>", parse_mode="HTML")
+
+    try:
+        # 입력 정규화
+        if source_override:
+            # /pack <text or url>
+            from app.services.content_fetcher import is_url
+            if is_url(source_override):
+                from app.services.content_fetcher import fetch_url_content
+                fetched = await fetch_url_content(source_override)
+                req = ContentRequest(
+                    source_url=source_override,
+                    source_type="news_link",
+                    raw_text=fetched.get("text", ""),
+                    note=None,
+                )
+            else:
+                req = ContentRequest(
+                    source_type="raw_text",
+                    raw_text=source_override,
+                )
+        elif pending:
+            # 분석 카드에서 "콘텐츠 팩" 버튼 → pending에 이미 수집된 데이터 사용
+            fetched_text = pending.get("fetched_text", "") or pending.get("source_text", "")
+            req = ContentRequest(
+                source_url=pending.get("url"),
+                source_type="news_link" if pending.get("url") else "raw_text",
+                raw_text=fetched_text,
+                note=pending.get("note"),
+            )
+        else:
+            await msg.edit_text("⚠️ 소스 정보 없음. URL이나 텍스트를 보내주세요.")
+            return
+
+        if not req.has_content():
+            await msg.edit_text("⚠️ 콘텐츠 내용이 부족합니다. 텍스트나 URL을 함께 보내주세요.")
+            return
+
+        # 팩 생성
+        pack = await generate_content_pack(req)
+
+        # 반복 경고 주입
+        try:
+            db = get_db()
+            try:
+                guard = RepetitionGuard(db)
+                extra_warnings = guard.check_pack(pack)
+                pack.style_warnings = (pack.style_warnings or []) + extra_warnings
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"RepetitionGuard 실패 (무시): {e}")
+
+        # user_data에 팩 저장 (pack_select 콜백에서 참조)
+        context.user_data[CONTENT_PACK_KEY] = pack
+
+        await msg.delete()
+
+        # 멀티 메시지 전송
+        pack_messages = send_content_pack_messages(pack)
+        for pm in pack_messages:
+            text = pm["text"][:4096]  # Telegram 메시지 최대 길이
+            pack_index = pm.get("pack_index")
+
+            if pack_index is not None:
+                # 승인 가능한 항목 → "이걸로 승인 큐에 추가" 버튼
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "✅ 승인 큐에 추가",
+                        callback_data=f"pack_select:{pack_index}",
+                    )
+                ]])
+                await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+            else:
+                await update.message.reply_text(text, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"콘텐츠 팩 생성 오류: {e}", exc_info=True)
+        await msg.edit_text(f"❌ 콘텐츠 팩 생성 실패: {str(e)[:200]}")
+
+
+async def _handle_pack_select_callback(
+    query, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    pack_select:{index} 콜백 처리.
+    선택된 포스트를 DB Draft로 저장하고 기존 승인 카드 전송.
+    """
+    parts = query.data.split(":", 1)
+    if len(parts) != 2:
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    try:
+        pack_index = int(parts[1])
+    except ValueError:
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    pack = context.user_data.get(CONTENT_PACK_KEY)
+    if not pack:
+        await query.message.reply_text("⚠️ 팩 정보 만료. /pack 으로 다시 생성해주세요.")
+        return
+
+    # 인덱스 → 텍스트 추출
+    if pack_index == 10:
+        post_text = pack.short_version
+    elif 0 <= pack_index < len(pack.main_posts):
+        post_text = pack.main_posts[pack_index]
+    else:
+        await query.message.reply_text("⚠️ 잘못된 인덱스. 팩을 다시 생성해주세요.")
+        return
+
+    if not post_text:
+        await query.message.reply_text("⚠️ 선택된 포스트 내용이 비어 있습니다.")
+        return
+
+    # hook + body 분리 (첫 줄 = hook, 나머지 = body)
+    lines = post_text.strip().splitlines()
+    hook = lines[0].strip()
+    body = "\n".join(lines[1:]).strip() if len(lines) > 1 else hook
+
+    await query.message.reply_text(
+        f"✅ <b>승인 큐에 추가됨</b>\n\n<code>{post_text[:300]}</code>\n\n"
+        f"<i>기존 승인 카드로 처리됩니다.</i>",
+        parse_mode="HTML",
+    )
+
+    # 기존 파이프라인으로 넘기기 — SourceItemCreate 생성 후 ingest
+    try:
+        from app.models.content import SourceItemCreate
+        from app.orchestrator import Orchestrator
+        import json
+
+        source_data = SourceItemCreate(
+            title=hook[:200],
+            url=pack.source_url or "",
+            source_text=post_text,
+            source_type="manual",
+            language="english",
+        )
+
+        orchestrator = Orchestrator()
+        try:
+            draft = await orchestrator.ingest_and_generate(source_data)
+            # 팩 메타 기록
+            if draft and hasattr(draft, "id"):
+                from app.db import get_db
+                db = get_db()
+                try:
+                    from app.models.content import Draft
+                    db_draft = db.query(Draft).filter(Draft.id == draft.id).first()
+                    if db_draft:
+                        db_draft.content_type = pack.source_type
+                        db_draft.topic_tags = json.dumps(pack.topic_tags or [])
+                        db_draft.output_format = "pack"
+                        db.commit()
+                finally:
+                    db.close()
+        finally:
+            orchestrator.close()
+    except Exception as e:
+        logger.error(f"팩 선택 → 파이프라인 오류: {e}", exc_info=True)
+        await query.message.reply_text(
+            f"⚠️ 승인 카드 생성 중 오류: {str(e)[:200]}\n"
+            "텍스트를 직접 복사해서 X에 게시할 수 있습니다.",
+        )
+
+
+async def pack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/pack [url or text] — 콘텐츠 팩 직접 생성."""
+    args_text = " ".join(context.args).strip() if context.args else ""
+
+    if args_text:
+        await _run_content_pack(update, context, source_override=args_text)
+    else:
+        await update.message.reply_text(
+            "📦 <b>콘텐츠 팩 생성</b>\n\n"
+            "사용법:\n"
+            "• <code>/pack https://뉴스URL</code>\n"
+            "• <code>/pack 한국은행 기준금리 2.75%로 동결. 수출 둔화 우려.</code>\n\n"
+            "또는 URL이나 텍스트를 보내면 분석 카드에서 [📦 콘텐츠 팩] 버튼을 누르세요.",
+            parse_mode="HTML",
+        )
+
+
+# =============================================================================
 # Growth 파이프라인 커맨드
 # =============================================================================
 
@@ -968,6 +1199,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("pending", pending_command))
     app.add_handler(CommandHandler("trends", trends_command))
     app.add_handler(CommandHandler("thread", thread_command))
+    app.add_handler(CommandHandler("pack", pack_command))
     app.add_handler(CommandHandler("queue", queue_command))
     app.add_handler(CommandHandler("hunt", hunt_command))
     app.add_handler(CommandHandler("report", report_command))
