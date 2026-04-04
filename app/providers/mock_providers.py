@@ -10,7 +10,7 @@ from app.providers.base import (
     BaseDraftWriter, BaseReviewer, BaseResearcher,
     BaseTrendHunter, BaseFactChecker,
     DraftResult, ReviewResult, ResearchResult,
-    TrendResult, FactCheckResult,
+    TrendResult, FactCheckResult, CriteriaSignals,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,12 @@ class MockResearcher(BaseResearcher):
                 "International interest is growing",
             ],
             sources=["https://example.com/mock-source-1"],
+            interpretation_gaps=["Reuters misses the structural context"],
+            fact_labels={"South Korea is the 13th largest economy globally": "confirms_common_narrative"},
+            criteria_signals=CriteriaSignals(
+                expertise={"score": None, "note": "1개 해석 갭 (mock)"},
+                context_gap={"score": None, "note": "0개 고가치 팩트 (mock)"},
+            ),
         )
 
 
@@ -118,6 +124,10 @@ class MockTrendHunter(BaseTrendHunter):
                 "South Korea birth rate",
             ],
             relevance_notes="Mock trends for demonstration",
+            criteria_signals=CriteriaSignals(
+                marketability={"score": 7.5, "note": "3개 트렌드 평균 (mock)"},
+                follower_quality={"score": 7.0, "note": "3개 트렌드 평균 follower_fit (mock)"},
+            ),
         )
 
 
@@ -132,4 +142,10 @@ class MockFactChecker(BaseFactChecker):
             corrections=[],
             sources=["https://example.com/mock-verification"],
             raw_response="Mock fact-check: no real verification performed",
+            interpretation_opportunity="medium — fact is interesting but straightforward",
+            marketability_signal="regional",
+            criteria_signals=CriteriaSignals(
+                interpretation={"score": None, "note": "medium — straightforward (mock)"},
+                marketability={"score": None, "note": "signal=regional (mock)"},
+            ),
         )

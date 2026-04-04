@@ -93,6 +93,10 @@ class Orchestrator:
             research = await self.ai.researcher.research(
                 query=data.title, context=data.source_text[:1000],
             )
+            if research.criteria_signals.any_populated():
+                logger.info(
+                    f"[Researcher criteria] {research.criteria_signals.to_log_str()}"
+                )
         except Exception as e:
             logger.warning(f"리서치 실패, 빈 결과 사용: {e}")
             research = ResearchResult(
@@ -132,6 +136,10 @@ class Orchestrator:
             factcheck = await self.ai.fact_checker.check_facts(
                 claim=draft_result.body, context=data.source_text[:500],
             )
+            if factcheck and factcheck.criteria_signals.any_populated():
+                logger.info(
+                    f"[FactChecker criteria] {factcheck.criteria_signals.to_log_str()}"
+                )
         except Exception as e:
             logger.warning(f"FactChecker 실패: {e}")
             factcheck = None
@@ -182,16 +190,33 @@ class Orchestrator:
                 ai_rationale="Fallback: reviewer unavailable.",
             )
 
-        # Step 5.5: Reviewer regenerate 권고 처리
-        if review.recommended_action == "regenerate":
-            logger.warning("Reviewer REGENERATE 권고 — DraftWriter 재실행 (최대 1회)")
+        # Step 5.5: Reviewer regenerate 권고 처리 (루프 + 안전장치)
+        MAX_REGEN_ATTEMPTS = 2
+        regen_attempts = 0
+
+        while review.recommended_action == "regenerate" and regen_attempts < MAX_REGEN_ATTEMPTS:
+            # regeneration_hint 우선, 없으면 ai_rationale 사용
+            hint = (review.regeneration_hint or review.ai_rationale or "").strip()
+            if not hint:
+                logger.warning(
+                    f"[Regen] regenerate 권고지만 hint 없음 — 무한루프 방지를 위해 건너뜀"
+                )
+                break
+
+            regen_attempts += 1
+            logger.warning(
+                f"[Regen {regen_attempts}/{MAX_REGEN_ATTEMPTS}] "
+                f"재생성 시도: {hint[:120]}"
+            )
+
             try:
-                feedback_prompt = (
-                    data.source_text + "\n\nREVIEWER FEEDBACK: " + review.ai_rationale
+                regen_source = (
+                    data.source_text
+                    + f"\n\n[REGENERATION GUIDANCE #{regen_attempts}]: {hint}"
                 )
                 draft_result = await self.ai.draft_writer.generate_draft(
                     title=data.title,
-                    source_text=feedback_prompt[:3000],
+                    source_text=regen_source[:3000],
                     language=settings.default_language,
                     source_type=data.source_type,
                 )
@@ -202,9 +227,25 @@ class Orchestrator:
                     research=research,
                     factcheck=factcheck,
                 )
-                logger.info(f"Reviewer 재평가 완료: action={review.recommended_action}")
+                logger.info(
+                    f"[Regen {regen_attempts}] 재평가 완료: "
+                    f"action={review.recommended_action}"
+                )
             except Exception as e:
-                logger.warning(f"Reviewer-triggered 재생성 실패, 원본 결과 사용: {e}")
+                logger.warning(f"[Regen {regen_attempts}] 재생성 실패: {e}")
+                break
+
+        # 최대 시도 후에도 regenerate → 수동 검토로 전환
+        if review.recommended_action == "regenerate":
+            logger.error(
+                f"[Regen] 최대 재생성 횟수({MAX_REGEN_ATTEMPTS}회) 도달 — "
+                f"수동 검토 필요로 전환"
+            )
+            review.recommended_action = "review"
+            review.ai_rationale = (
+                f"[재생성 {regen_attempts}회 후 미통과 — 수동 검토 필요] "
+                + review.ai_rationale
+            )
 
         # Step 6: 분류 & 위험도 확정
         logger.info("[6/6] 분류 & 위험도 확정")

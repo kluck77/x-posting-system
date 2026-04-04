@@ -11,7 +11,7 @@ import json
 import logging
 import httpx
 from app.config import settings
-from app.providers.base import BaseTrendHunter, TrendResult
+from app.providers.base import BaseTrendHunter, TrendResult, CriteriaSignals
 
 logger = logging.getLogger(__name__)
 
@@ -122,29 +122,58 @@ class GrokTrendHunter(BaseTrendHunter):
 
             topics_raw = data.get("trending_topics", [])
             # Normalize: could be list of strings or list of dicts
-            topics = []
-            filter_summary = []
+            topics: list[str] = []
+            mkt_scores: list[float] = []
+            fit_scores: list[float] = []
+            filter_summary: list[str] = []
+
             for t in topics_raw:
                 if isinstance(t, str):
                     topics.append(t)
                 elif isinstance(t, dict):
                     topic_name = t.get("topic", str(t))
                     topics.append(topic_name)
-                    # 5-criteria 필터 점수 로깅
-                    mkt = t.get("marketability_score", "?")
-                    fit = t.get("follower_fit_score", "?")
+
+                    mkt = t.get("marketability_score")
+                    fit = t.get("follower_fit_score")
                     note = t.get("criteria_note", "")
-                    filter_summary.append(f"{topic_name} [mkt={mkt} fit={fit}]")
+
+                    if isinstance(mkt, (int, float)):
+                        mkt_scores.append(float(mkt))
+                    if isinstance(fit, (int, float)):
+                        fit_scores.append(float(fit))
+
+                    filter_summary.append(
+                        f"{topic_name} [mkt={mkt or '?'} fit={fit or '?'}]"
+                    )
                     if note:
                         logger.debug(f"  └ {note}")
 
             if filter_summary:
                 logger.info(f"[Grok] 5-criteria 통과 트렌드: {'; '.join(filter_summary)}")
             logger.info(f"[Grok TrendHunter] {len(topics)}개 트렌드 발견")
+
+            # CriteriaSignals 구성 — 통과한 트렌드 점수 집계
+            avg_mkt = round(sum(mkt_scores) / len(mkt_scores), 1) if mkt_scores else None
+            avg_fit = round(sum(fit_scores) / len(fit_scores), 1) if fit_scores else None
+            criteria_signals = CriteriaSignals(
+                marketability={
+                    "score": avg_mkt,
+                    "note": f"{len(topics)}개 트렌드 평균 (≥6 필터 통과분)",
+                } if avg_mkt is not None else {},
+                follower_quality={
+                    "score": avg_fit,
+                    "note": f"{len(topics)}개 트렌드 평균 follower_fit",
+                } if avg_fit is not None else {},
+            )
+            if criteria_signals.any_populated():
+                logger.info(f"[Grok] criteria_signals: {criteria_signals.to_log_str()}")
+
             return TrendResult(
                 trending_topics=topics,
                 relevance_notes=data.get("relevance_notes", ""),
                 raw_response=raw_text,
+                criteria_signals=criteria_signals,
             )
 
         except Exception as e:

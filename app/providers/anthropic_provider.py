@@ -225,6 +225,7 @@ Respond in JSON ONLY:
   "risk_reasoning": "why this risk level",
   "ai_rationale": "what makes this post worth the account's reputation",
   "recommended_action": "approve|review|regenerate|reject",
+  "regeneration_hint": "REQUIRED if recommended_action is regenerate — one specific instruction for the DraftWriter: what angle to take, what to avoid, what single fix would make this pass. Empty string otherwise.",
   "criteria_scores": {
     "expertise": "pass|weak|fail — reason",
     "marketability": "pass|weak|fail — reason",
@@ -393,6 +394,7 @@ class AnthropicReviewer(BaseReviewer):
                 if fails:
                     rationale += f" | REGENERATE 이유: {'; '.join(fails)}"
 
+            regen_hint = data.get("regeneration_hint", "")
             return ReviewResult(
                 hook=data.get("hook", draft.hook),
                 body=data.get("body", draft.body),
@@ -402,6 +404,7 @@ class AnthropicReviewer(BaseReviewer):
                 risk_reasoning=data.get("risk_reasoning", ""),
                 ai_rationale=rationale,
                 recommended_action=data.get("recommended_action", "review"),
+                regeneration_hint=regen_hint,
             )
         except Exception as e:
             logger.error(f"Claude Reviewer 오류: {e}")

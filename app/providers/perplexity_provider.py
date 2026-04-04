@@ -11,7 +11,7 @@ import json
 import logging
 import httpx
 from app.config import settings
-from app.providers.base import BaseFactChecker, FactCheckResult
+from app.providers.base import BaseFactChecker, FactCheckResult, CriteriaSignals
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,21 @@ class PerplexityFactChecker(BaseFactChecker):
                 f"verified={data.get('verified')}, confidence={data.get('confidence')} | "
                 f"interpretation={interp} marketability={mkt}"
             )
+
+            # CriteriaSignals 구성 — interpretation + marketability 신호 매핑
+            criteria_signals = CriteriaSignals(
+                interpretation={
+                    "score": None,
+                    "note": interp,
+                } if interp else {},
+                marketability={
+                    "score": None,
+                    "note": f"signal={mkt}",
+                } if mkt else {},
+            )
+            if criteria_signals.any_populated():
+                logger.info(f"[Perplexity] criteria_signals: {criteria_signals.to_log_str()}")
+
             return FactCheckResult(
                 verified=data.get("verified", False),
                 confidence=data.get("confidence", "low"),
@@ -135,6 +150,7 @@ class PerplexityFactChecker(BaseFactChecker):
                 raw_response=raw_text,
                 interpretation_opportunity=interp,
                 marketability_signal=mkt,
+                criteria_signals=criteria_signals,
             )
 
         except Exception as e:

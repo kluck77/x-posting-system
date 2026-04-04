@@ -9,7 +9,7 @@ import json
 import logging
 import httpx
 from app.config import settings
-from app.providers.base import BaseResearcher, ResearchResult
+from app.providers.base import BaseResearcher, ResearchResult, CriteriaSignals
 
 logger = logging.getLogger(__name__)
 
@@ -117,12 +117,31 @@ class GeminiResearcher(BaseResearcher):
 
             gaps = data.get("interpretation_gaps", [])
             labels = data.get("fact_labels", {})
+            high_value = [f for f, lbl in labels.items() if lbl != "confirms_common_narrative"]
+
             if gaps:
                 logger.info(f"[Gemini Researcher] 해석 갭 {len(gaps)}개 발견: {gaps[0][:80]}")
-            high_value = [f for f, lbl in labels.items() if lbl != "confirms_common_narrative"]
             if high_value:
                 logger.info(f"[Gemini Researcher] 고가치 팩트 {len(high_value)}개 (challenges/missing)")
             logger.info("[Gemini Researcher] 리서치 성공")
+
+            # CriteriaSignals 구성 — expertise(해석 갭) + context_gap(고가치 팩트)
+            criteria_signals = CriteriaSignals(
+                expertise={
+                    "score": None,
+                    "note": f"해석 갭 {len(gaps)}개 발견",
+                } if gaps else {},
+                context_gap={
+                    "score": None,
+                    "note": (
+                        f"고가치 팩트 {len(high_value)}개 "
+                        f"(challenges_assumption/missing_context)"
+                    ),
+                } if high_value else {},
+            )
+            if criteria_signals.any_populated():
+                logger.info(f"[Gemini] criteria_signals: {criteria_signals.to_log_str()}")
+
             return ResearchResult(
                 summary=data.get("summary", ""),
                 key_facts=data.get("key_facts", []),
@@ -130,6 +149,7 @@ class GeminiResearcher(BaseResearcher):
                 raw_response=raw_text,
                 interpretation_gaps=gaps,
                 fact_labels=labels,
+                criteria_signals=criteria_signals,
             )
 
         except Exception as e:
