@@ -229,6 +229,7 @@ class OpenAIDraftWriter(BaseDraftWriter):
         source_text: str,
         language: str = "en",
         source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
         logger.info(f"[OpenAI DraftWriter] 초안 생성: '{title[:50]}'")
 
@@ -236,7 +237,10 @@ class OpenAIDraftWriter(BaseDraftWriter):
         if source_type == "community_input":
             system = SYSTEM_PROMPT + COMMUNITY_INPUT_ADDENDUM
 
-        user_msg = (
+        user_msg = ""
+        if criteria_context:
+            user_msg += f"{criteria_context}\n\n"
+        user_msg += (
             f"Write an X post draft about this Korean topic.\n\n"
             f"Title: {title}\n\n"
             f"Source text:\n{source_text[:2000]}\n\n"

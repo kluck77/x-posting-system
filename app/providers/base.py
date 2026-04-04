@@ -143,6 +143,7 @@ class BaseDraftWriter(ABC):
         source_text: str,
         language: str = "en",
         source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
         ...
 
@@ -158,6 +159,7 @@ class BaseReviewer(ABC):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str = "",
     ) -> ReviewResult:
         ...
 

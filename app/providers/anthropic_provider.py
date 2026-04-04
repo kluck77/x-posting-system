@@ -245,6 +245,7 @@ class AnthropicDraftWriter(BaseDraftWriter):
         source_text: str,
         language: str = "en",
         source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
         logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}'")
 
@@ -252,7 +253,10 @@ class AnthropicDraftWriter(BaseDraftWriter):
         if source_type == "community_input":
             system = DRAFT_SYSTEM_PROMPT + DRAFT_COMMUNITY_ADDENDUM
 
-        user_msg = (
+        user_msg = ""
+        if criteria_context:
+            user_msg += f"{criteria_context}\n\n"
+        user_msg += (
             f"Write an X post draft.\n\n"
             f"Title: {title}\nSource:\n{source_text[:2000]}\n"
             f"Language: {language}\nRespond in JSON only."
@@ -333,6 +337,7 @@ class AnthropicReviewer(BaseReviewer):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str = "",
     ) -> ReviewResult:
         logger.info(f"[Claude Reviewer] 리뷰: '{title[:50]}'")
 
@@ -352,6 +357,8 @@ class AnthropicReviewer(BaseReviewer):
                 f"## Fact Check\nVerified: {factcheck.verified}\n"
                 f"Corrections: {'; '.join(factcheck.corrections[:3])}\n\n"
             )
+        if criteria_context:
+            user_msg += f"{criteria_context}\n\n"
         user_msg += "Review and refine. Respond in JSON only."
 
         try:

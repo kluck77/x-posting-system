@@ -41,9 +41,76 @@ from app.services.quality_scorer import (
     should_regenerate, REGEN_THRESHOLD,
 )
 from app.providers.ai_provider import AITeam, create_ai_team
-from app.providers.base import DraftResult, ResearchResult
+from app.providers.base import DraftResult, ResearchResult, FactCheckResult, TrendResult
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Layer 2 헬퍼 — criteria 신호 → 프롬프트 컨텍스트 빌더
+# =============================================================================
+
+def _build_criteria_context(
+    research: ResearchResult | None = None,
+    factcheck: FactCheckResult | None = None,
+    trends: TrendResult | None = None,
+) -> str:
+    """
+    가용한 5-criteria 신호를 프롬프트용 텍스트 블록으로 변환합니다.
+
+    - 비어있는 신호는 생략 (empty dict / empty str / None)
+    - 호출 실패 시 "" 반환 (Layer 1 보호)
+    - interpretation_gaps는 orchestrator Step 3에서 이미 enriched_source에 포함됨 →
+      여기서는 fact_labels(고가치 팩트)와 factcheck 신호만 추가
+
+    반환값: "[UPSTREAM CRITERIA SIGNALS]\\n..." 또는 ""
+    """
+    lines = []
+
+    # Grok TrendHunter 신호 (main pipeline에서는 보통 None — /trends 명령 전용)
+    if trends and trends.criteria_signals.any_populated():
+        cs = trends.criteria_signals
+        if cs.marketability:
+            score = cs.marketability.get("score")
+            note = (cs.marketability.get("note") or "").strip()
+            score_str = f"{score:.1f}/10" if score is not None else "—"
+            lines.append(
+                f"- Trend marketability: {score_str}" + (f" ({note})" if note else "")
+            )
+        if cs.follower_quality:
+            score = cs.follower_quality.get("score")
+            note = (cs.follower_quality.get("note") or "").strip()
+            score_str = f"{score:.1f}/10" if score is not None else "—"
+            lines.append(
+                f"- Follower quality: {score_str}" + (f" ({note})" if note else "")
+            )
+
+    # Gemini Researcher — 고가치 팩트 (challenges_assumption / missing_context)
+    # interpretation_gaps는 Step 3의 enriched_source에 이미 포함되므로 중복 생략
+    if research and research.fact_labels:
+        high_value = [
+            k[:80]
+            for k, v in research.fact_labels.items()
+            if v in ("challenges_assumption", "missing_context")
+        ]
+        if high_value:
+            lines.append(
+                f"- High-value facts ({len(high_value)}): {high_value[0]}"
+            )
+
+    # Perplexity FactChecker 신호
+    if factcheck:
+        if factcheck.interpretation_opportunity:
+            lines.append(
+                f"- Interpretation opportunity: {factcheck.interpretation_opportunity[:120]}"
+            )
+        if factcheck.marketability_signal:
+            lines.append(f"- Marketability: {factcheck.marketability_signal}")
+
+    if not lines:
+        return ""
+
+    return "[UPSTREAM CRITERIA SIGNALS]\n" + "\n".join(lines)
 
 
 class Orchestrator:
@@ -106,6 +173,18 @@ class Orchestrator:
 
         # Step 3: DraftWriter — 초안 생성
         logger.info("[3/6] DraftWriter: 초안 생성")
+
+        # Layer 2: research 신호로 DraftWriter 컨텍스트 빌드 (실패 시 "" — Layer 1 보호)
+        try:
+            draft_criteria_ctx = _build_criteria_context(research=research)
+            if draft_criteria_ctx:
+                logger.debug(
+                    f"[criteria_context] DraftWriter 주입: {len(draft_criteria_ctx)}자"
+                )
+        except Exception as _ctx_err:
+            logger.warning(f"[criteria_context] DraftWriter 빌드 실패 (무시): {_ctx_err}")
+            draft_criteria_ctx = ""
+
         try:
             # Gemini interpretation_gaps를 source_text에 추가 → DraftWriter가 해석 각도 활용
             enriched_source = data.source_text
@@ -121,6 +200,7 @@ class Orchestrator:
                 source_text=enriched_source[:3000],
                 language=settings.default_language,
                 source_type=data.source_type,
+                criteria_context=draft_criteria_ctx,
             )
         except Exception as e:
             logger.warning(f"DraftWriter 실패, 기본 초안 사용: {e}")
@@ -163,9 +243,23 @@ class Orchestrator:
                     source_text=data.source_text + "\n\nIMPROVEMENT REQUIRED: " + " | ".join(criteria_result["flags"]),
                     language=settings.default_language,
                     source_type=data.source_type,
+                    criteria_context=draft_criteria_ctx,
                 )
             except Exception as e:
                 logger.warning(f"재생성 실패, 원본 사용: {e}")
+
+        # Layer 2: research + factcheck 신호로 Reviewer 컨텍스트 빌드 (실패 시 "" — Layer 1 보호)
+        try:
+            review_criteria_ctx = _build_criteria_context(
+                research=research, factcheck=factcheck
+            )
+            if review_criteria_ctx:
+                logger.debug(
+                    f"[criteria_context] Reviewer 주입: {len(review_criteria_ctx)}자"
+                )
+        except Exception as _ctx_err:
+            logger.warning(f"[criteria_context] Reviewer 빌드 실패 (무시): {_ctx_err}")
+            review_criteria_ctx = ""
 
         # Step 5: Reviewer — 리스크 판단 & 최종 다듬기
         logger.info("[5/6] Reviewer: 최종 판단")
@@ -176,6 +270,7 @@ class Orchestrator:
                 draft=draft_result,
                 research=research,
                 factcheck=factcheck,
+                criteria_context=review_criteria_ctx,
             )
         except Exception as e:
             logger.warning(f"Reviewer 실패, DraftWriter 결과 직접 사용: {e}")
@@ -219,6 +314,7 @@ class Orchestrator:
                     source_text=regen_source[:3000],
                     language=settings.default_language,
                     source_type=data.source_type,
+                    criteria_context=review_criteria_ctx,
                 )
                 review = await self.ai.reviewer.review_and_refine(
                     title=data.title,
@@ -226,6 +322,7 @@ class Orchestrator:
                     draft=draft_result,
                     research=research,
                     factcheck=factcheck,
+                    criteria_context=review_criteria_ctx,
                 )
                 logger.info(
                     f"[Regen {regen_attempts}] 재평가 완료: "

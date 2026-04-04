@@ -25,6 +25,7 @@ class MockDraftWriter(BaseDraftWriter):
         source_text: str,
         language: str = "en",
         source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
         logger.info(f"[Mock DraftWriter] 초안 생성: '{title[:50]}'")
 
@@ -72,6 +73,7 @@ class MockReviewer(BaseReviewer):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str = "",
     ) -> ReviewResult:
         logger.info(f"[Mock Reviewer] 리뷰: '{title[:50]}'")
         return ReviewResult(
