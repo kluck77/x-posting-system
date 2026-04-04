@@ -825,6 +825,132 @@ async def _generate_and_send_thread(
 
 
 # =============================================================================
+# Growth 파이프라인 커맨드
+# =============================================================================
+
+async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/queue — 게시 큐 현황 조회 또는 항목 추가.
+
+    /queue          → 큐 목록 표시
+    /queue <본문>   → 큐에 추가
+    """
+    from app.services.growth.post_queue import get_post_queue
+
+    args_text = " ".join(context.args).strip() if context.args else ""
+
+    queue = get_post_queue()
+
+    if args_text:
+        # 큐에 추가
+        post = queue.add(args_text)
+        pending_count = queue.count_pending()
+        from datetime import datetime, timezone, timedelta
+        added_kst = (post.added_at + timedelta(hours=9)).strftime("%H:%M KST")
+        await update.message.reply_text(
+            f"✅ <b>큐에 추가됨</b>\n\n"
+            f"<code>{post.text[:200]}</code>\n\n"
+            f"📋 대기 중: {pending_count}개\n"
+            f"🕐 등록 시각: {added_kst}\n\n"
+            f"<i>최적 슬롯(9:00/10:30/12:00/13:30/15:00/19:00/21:00 KST)에 자동 발행됩니다.</i>",
+            parse_mode="HTML",
+        )
+        return
+
+    # 큐 목록 표시
+    pending = queue.list_pending()
+    if not pending:
+        await update.message.reply_text(
+            "📋 <b>게시 큐가 비어 있습니다.</b>\n\n"
+            "추가하려면:\n<code>/queue 게시할 본문 내용</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    from datetime import timedelta
+    lines = []
+    for i, p in enumerate(pending[:10], 1):
+        added_kst = (p.added_at + timedelta(hours=9)).strftime("%m/%d %H:%M")
+        lines.append(f"{i}. [{added_kst}] {p.text[:60]}{'…' if len(p.text) > 60 else ''}")
+
+    msg = (
+        f"📋 <b>게시 큐 ({len(pending)}개 대기)</b>\n\n"
+        + "\n".join(lines)
+        + "\n\n<i>최적 슬롯에 순서대로 자동 발행됩니다.</i>"
+    )
+    await update.message.reply_text(msg, parse_mode="HTML")
+
+
+async def hunt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/hunt — CommentHunter로 댓글 기회 탐색."""
+    from app.services.growth.comment_hunter import CommentHunter, generate_reply_draft
+
+    msg = await update.message.reply_text("🔍 <b>댓글 기회 탐색 중...</b>", parse_mode="HTML")
+
+    try:
+        hunter = CommentHunter()
+        targets = await hunter.hunt(max_results=5)
+
+        if not targets:
+            await msg.edit_text("🔍 현재 댓글 기회가 없습니다. 나중에 다시 시도해주세요.")
+            return
+
+        await msg.edit_text(f"✅ <b>댓글 기회 {len(targets)}건 발견</b>", parse_mode="HTML")
+
+        for target in targets:
+            # 초안이 아직 없으면 생성
+            if not target.reply_draft:
+                try:
+                    target.reply_draft = await generate_reply_draft(target)
+                except Exception:
+                    target.reply_draft = "(초안 생성 실패)"
+
+            await update.message.reply_text(
+                target.format_for_telegram(),
+                parse_mode="Markdown",
+                disable_web_page_preview=True,
+            )
+
+    except Exception as e:
+        logger.error(f"/hunt 오류: {e}", exc_info=True)
+        await msg.edit_text(f"❌ 탐색 실패: {str(e)[:200]}")
+
+
+async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/report — 주간 성과 리포트 즉시 생성."""
+    from app.services.growth.weekly_report import WeeklyReporter
+
+    msg = await update.message.reply_text("📊 <b>주간 리포트 생성 중...</b>", parse_mode="HTML")
+
+    try:
+        reporter = WeeklyReporter()
+        metrics = await reporter.collect()
+        ai_tips = await reporter.analyze_with_ai(metrics)
+        report_text = metrics.format_for_telegram()
+        full_msg = f"{report_text}\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+
+        await msg.delete()
+        await update.message.reply_text(full_msg, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"/report 오류: {e}", exc_info=True)
+        await msg.edit_text(f"❌ 리포트 생성 실패: {str(e)[:200]}")
+
+
+async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/digest — 모닝 다이제스트 즉시 생성."""
+    from app.services.morning_digest import run_morning_digest
+
+    msg = await update.message.reply_text("📰 <b>다이제스트 생성 중...</b>", parse_mode="HTML")
+
+    try:
+        await run_morning_digest()
+        await msg.edit_text("✅ 다이제스트를 생성하여 전송했습니다.")
+    except Exception as e:
+        logger.error(f"/digest 오류: {e}", exc_info=True)
+        await msg.edit_text(f"❌ 다이제스트 생성 실패: {str(e)[:200]}")
+
+
+# =============================================================================
 # 봇 앱 생성 & 실행
 # =============================================================================
 
@@ -842,6 +968,10 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("pending", pending_command))
     app.add_handler(CommandHandler("trends", trends_command))
     app.add_handler(CommandHandler("thread", thread_command))
+    app.add_handler(CommandHandler("queue", queue_command))
+    app.add_handler(CommandHandler("hunt", hunt_command))
+    app.add_handler(CommandHandler("report", report_command))
+    app.add_handler(CommandHandler("digest", digest_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))
