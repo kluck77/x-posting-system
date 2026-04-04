@@ -30,6 +30,23 @@ Focus areas:
 - Korean crypto/market sentiment shifts
 - Social trends (employment, housing, demographics)
 
+══════════════════════════════════════════
+5-CRITERIA QUALITY FILTER — apply before including any trend
+══════════════════════════════════════════
+
+MARKETABILITY CHECK (Criteria 2): Does this trend connect to global markets, supply chains, crypto, or geopolitics?
+- PASS (score 7-10): Connects to USD/KRW, semiconductors, crypto, global trade, or international geopolitics
+- WEAK (score 4-6): Regionally relevant but thin global signal
+- FAIL (score 1-3): Purely domestic story with no international implication → EXCLUDE
+
+FOLLOWER QUALITY CHECK (Criteria 4): Will this attract informed, globally-minded followers?
+- PASS (score 7-10): Attracts investors, analysts, researchers, policy watchers, traders
+- WEAK (score 4-6): Mixed audience, some informed readers
+- FAIL (score 1-3): Entertainment/celebrity/gossip → EXCLUDE
+
+RULE: Only include trends where BOTH marketability_score >= 6 AND follower_fit_score >= 6.
+If a trend fails either check, skip it — do not include it in the output.
+
 For each trend, assess:
 - How much engagement it's getting
 - Whether it's relevant for non-Korean audiences
@@ -50,10 +67,13 @@ Respond in JSON ONLY:
       "description": "1-2 sentence description",
       "sentiment": "positive|negative|mixed|neutral",
       "urgency": "breaking|trending|ongoing",
-      "relevance_score": 1-10
+      "relevance_score": 1-10,
+      "marketability_score": 1-10,
+      "follower_fit_score": 1-10,
+      "criteria_note": "why this trend passes the quality filter"
     }
   ],
-  "relevance_notes": "overall assessment of current Korean trend landscape"
+  "relevance_notes": "overall assessment — how many trends passed the filter and why"
 }"""
 
 
@@ -103,12 +123,23 @@ class GrokTrendHunter(BaseTrendHunter):
             topics_raw = data.get("trending_topics", [])
             # Normalize: could be list of strings or list of dicts
             topics = []
+            filter_summary = []
             for t in topics_raw:
                 if isinstance(t, str):
                     topics.append(t)
                 elif isinstance(t, dict):
-                    topics.append(t.get("topic", str(t)))
+                    topic_name = t.get("topic", str(t))
+                    topics.append(topic_name)
+                    # 5-criteria 필터 점수 로깅
+                    mkt = t.get("marketability_score", "?")
+                    fit = t.get("follower_fit_score", "?")
+                    note = t.get("criteria_note", "")
+                    filter_summary.append(f"{topic_name} [mkt={mkt} fit={fit}]")
+                    if note:
+                        logger.debug(f"  └ {note}")
 
+            if filter_summary:
+                logger.info(f"[Grok] 5-criteria 통과 트렌드: {'; '.join(filter_summary)}")
             logger.info(f"[Grok TrendHunter] {len(topics)}개 트렌드 발견")
             return TrendResult(
                 trending_topics=topics,

@@ -51,6 +51,10 @@ class ResearchResult:
     key_facts: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
     raw_response: str = ""
+    # 5-criteria 지원 필드 (Gemini가 채움)
+    interpretation_gaps: list[str] = field(default_factory=list)
+    # {"fact text": "confirms_common_narrative|challenges_assumption|missing_context"}
+    fact_labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -69,6 +73,9 @@ class FactCheckResult:
     corrections: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
     raw_response: str = ""
+    # 5-criteria 지원 필드 (Perplexity가 채움)
+    interpretation_opportunity: str = ""   # high|medium|low — reason
+    marketability_signal: str = ""         # global|regional|local
 
 
 # =============================================================================

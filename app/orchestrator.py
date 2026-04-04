@@ -103,9 +103,18 @@ class Orchestrator:
         # Step 3: DraftWriter — 초안 생성
         logger.info("[3/6] DraftWriter: 초안 생성")
         try:
+            # Gemini interpretation_gaps를 source_text에 추가 → DraftWriter가 해석 각도 활용
+            enriched_source = data.source_text
+            if research.interpretation_gaps:
+                gaps_text = "\n".join(f"- {g}" for g in research.interpretation_gaps[:3])
+                enriched_source = (
+                    f"{data.source_text}\n\n"
+                    f"[Researcher identified interpretation gaps — use these for your angle]:\n"
+                    f"{gaps_text}"
+                )
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
-                source_text=data.source_text,
+                source_text=enriched_source[:3000],
                 language=settings.default_language,
                 source_type=data.source_type,
             )
@@ -172,6 +181,30 @@ class Orchestrator:
                 risk_reasoning=f"Reviewer 실패, 안전하게 medium 설정: {e}",
                 ai_rationale="Fallback: reviewer unavailable.",
             )
+
+        # Step 5.5: Reviewer regenerate 권고 처리
+        if review.recommended_action == "regenerate":
+            logger.warning("Reviewer REGENERATE 권고 — DraftWriter 재실행 (최대 1회)")
+            try:
+                feedback_prompt = (
+                    data.source_text + "\n\nREVIEWER FEEDBACK: " + review.ai_rationale
+                )
+                draft_result = await self.ai.draft_writer.generate_draft(
+                    title=data.title,
+                    source_text=feedback_prompt[:3000],
+                    language=settings.default_language,
+                    source_type=data.source_type,
+                )
+                review = await self.ai.reviewer.review_and_refine(
+                    title=data.title,
+                    source_text=data.source_text,
+                    draft=draft_result,
+                    research=research,
+                    factcheck=factcheck,
+                )
+                logger.info(f"Reviewer 재평가 완료: action={review.recommended_action}")
+            except Exception as e:
+                logger.warning(f"Reviewer-triggered 재생성 실패, 원본 결과 사용: {e}")
 
         # Step 6: 분류 & 위험도 확정
         logger.info("[6/6] 분류 & 위험도 확정")

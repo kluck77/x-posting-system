@@ -40,13 +40,36 @@ Confidence levels:
 - "medium": One reliable source or partially confirmed
 - "low": Cannot verify or conflicting information
 
+══════════════════════════════════════════
+5-CRITERIA SUPPORT — beyond fact-checking
+══════════════════════════════════════════
+
+After verifying the facts, also evaluate:
+
+INTERPRETATION OPPORTUNITY (Criteria 1 — Expertise):
+Does this verified fact create an opportunity for unique interpretation?
+- "high": The fact contradicts common assumptions, reveals a structural issue, or tells a counter-intuitive story
+  Example: "Korea's birth rate hits 0.72 — lowest ever, despite $200B in government spending" → high
+- "medium": Fact is interesting but the interpretation is straightforward
+- "low": Fact confirms what everyone already knows — adds no interpretive value
+
+MARKETABILITY SIGNAL (Criteria 2 — Marketability):
+Is this fact globally relevant, or only locally interesting?
+- "global": Connects to international markets, supply chains, crypto, geopolitics, or tech
+- "regional": Relevant to Asia/Pacific but not globally traded
+- "local": Primarily meaningful to Koreans only
+
+These fields are NOT corrections — they help the draft writer decide the angle and depth.
+
 Respond in JSON ONLY:
 {
   "verified": true/false,
   "confidence": "low|medium|high",
   "corrections": ["correction 1 if any", "correction 2 if any"],
   "sources": ["https://source-url-1", "https://source-url-2"],
-  "details": "brief explanation of verification result"
+  "details": "brief explanation of verification result",
+  "interpretation_opportunity": "high|medium|low — one sentence reason",
+  "marketability_signal": "global|regional|local"
 }"""
 
 
@@ -97,9 +120,12 @@ class PerplexityFactChecker(BaseFactChecker):
 
                 data = json.loads(text)
 
+            interp = data.get("interpretation_opportunity", "")
+            mkt = data.get("marketability_signal", "")
             logger.info(
                 f"[Perplexity FactChecker] 완료: "
-                f"verified={data.get('verified')}, confidence={data.get('confidence')}"
+                f"verified={data.get('verified')}, confidence={data.get('confidence')} | "
+                f"interpretation={interp} marketability={mkt}"
             )
             return FactCheckResult(
                 verified=data.get("verified", False),
@@ -107,6 +133,8 @@ class PerplexityFactChecker(BaseFactChecker):
                 corrections=data.get("corrections", []),
                 sources=data.get("sources", []),
                 raw_response=raw_text,
+                interpretation_opportunity=interp,
+                marketability_signal=mkt,
             )
 
         except Exception as e:
