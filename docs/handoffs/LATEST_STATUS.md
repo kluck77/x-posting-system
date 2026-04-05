@@ -1,7 +1,7 @@
 # Latest Status
 
 ## Current Phase
-v8 complete. Awaiting operator instruction for v9.
+v9 in progress. Reply monitor inline button done.
 
 ---
 
@@ -23,6 +23,7 @@ v8 complete. Awaiting operator instruction for v9.
 | /monitor off/on/status | Locked |
 | Idle pipeline reminder (activity_tracker.py) | Locked |
 | /status improvements | Locked |
+| Reply monitor inline button (reply_use/reply_skip, _pending_reply_drafts) | Locked |
 
 ---
 
@@ -39,14 +40,11 @@ v8 complete. Awaiting operator instruction for v9.
 
 ## Next Candidates (v9)
 
-**A — Reply monitor inline approval button** *(recommended next)*
-- Re-reply drafts currently go out as plain text with no action button
-- All other paths have inline keyboard buttons; this is the one gap
-- Risk: low (growth service only, Layer 2)
-
-**B — `/queue view <n>` detail command** *(defer)*
+**A — `/queue view <n>` detail command** *(recommended next)*
 - Queue listing shows 60-char truncates; no way to read full text before slot fires
 - Risk: very low (read-only)
+
+**B — Nothing urgent** — system is stable and well-tested (467 tests)
 
 ---
 

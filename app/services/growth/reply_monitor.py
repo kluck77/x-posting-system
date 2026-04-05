@@ -32,6 +32,23 @@ X_TWEET_URL = "https://api.x.com/2/tweets"
 # 내 계정 ID (X에서 확인 필요)
 MY_USERNAME = "sskorea02"
 
+# 최근 재답글 초안 임시 저장 (callback 처리용, 재시작 시 초기화됨)
+# { reply_id: (draft_text, author_username) }
+_pending_reply_drafts: dict[str, tuple[str, str]] = {}
+
+
+def store_pending_draft(reply_id: str, draft: str, author_username: str) -> None:
+    """재답글 초안을 콜백 조회용으로 저장 (최대 100개 유지)."""
+    _pending_reply_drafts[reply_id] = (draft, author_username)
+    if len(_pending_reply_drafts) > 100:
+        oldest = next(iter(_pending_reply_drafts))
+        del _pending_reply_drafts[oldest]
+
+
+def get_pending_draft(reply_id: str) -> tuple[str, str] | None:
+    """저장된 재답글 초안 조회. 없으면 None."""
+    return _pending_reply_drafts.get(reply_id)
+
 
 @dataclass
 class IncomingReply:
@@ -48,13 +65,14 @@ class IncomingReply:
     my_reply_id: str | None = None  # 재답글 후 채워짐
 
     def format_for_telegram(self) -> str:
+        """HTML 형식 Telegram 알림 메시지."""
         age = int((datetime.now(timezone.utc) - self.created_at).total_seconds() / 60)
         return (
-            f"💬 *새 답글 발견!* ({age}분 전)\n\n"
+            f"💬 <b>새 답글 발견!</b> ({age}분 전)\n\n"
             f"👤 @{self.author_username} ({self.author_followers:,} 팔로워)\n\n"
-            f"📄 내 원문:\n`{self.parent_tweet_text[:100]}`\n\n"
-            f"📩 답글:\n`{self.reply_text}`\n\n"
-            f"✍️ 재답글 초안:\n`{self.my_reply_draft}`\n\n"
+            f"📄 내 원문:\n<code>{self.parent_tweet_text[:100]}</code>\n\n"
+            f"📩 답글:\n<code>{self.reply_text[:200]}</code>\n\n"
+            f"✍️ 재답글 초안:\n<code>{self.my_reply_draft}</code>\n\n"
             f"🔗 https://x.com/{self.author_username}/status/{self.reply_id}"
         )
 
@@ -285,14 +303,14 @@ async def generate_rereply_draft(reply: IncomingReply) -> str:
 async def run_reply_monitor():
     """
     매 5분 실행.
-    새 답글 발견 시 Claude 초안 생성 → Telegram 승인 요청.
+    새 답글 발견 시 Claude 초안 생성 → Telegram 승인 카드 (인라인 버튼 포함).
     /monitor off 로 일시정지 가능.
     """
     from app.services.growth.monitor_state import is_paused
     if is_paused():
         return
 
-    from app.services.growth._tg_helper import tg_send
+    from app.services.growth._tg_helper import tg_send_with_keyboard
 
     monitor = ReplyMonitor()
     new_replies = await monitor.poll_new_replies()
@@ -301,8 +319,16 @@ async def run_reply_monitor():
         try:
             draft = await generate_rereply_draft(reply)
             reply.my_reply_draft = draft
+
+            # 콜백 조회용으로 초안 저장
+            store_pending_draft(reply.reply_id, draft, reply.author_username)
+
             msg = reply.format_for_telegram()
-            await tg_send(msg)
+            keyboard = [[
+                {"text": "📋 초안 사용", "callback_data": f"reply_use:{reply.reply_id}"},
+                {"text": "⏭ 건너뜀", "callback_data": f"reply_skip:{reply.reply_id}"},
+            ]]
+            await tg_send_with_keyboard(msg, keyboard)
             monitor.mark_processed(reply.reply_id)
         except Exception as e:
             logger.error(f"답글 처리 실패 {reply.reply_id}: {e}")

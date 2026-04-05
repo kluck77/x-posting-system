@@ -440,6 +440,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_queue_callback(query, context)
         return
 
+    # --- 재답글 초안 콜백 ---
+    if callback_data.startswith("reply_"):
+        await _handle_reply_callback(query, context)
+        return
+
     # --- 뉴스 모니터 알림 콜백 ---
     if callback_data.startswith("news_"):
         await _handle_news_callback(query, context)
@@ -540,6 +545,50 @@ async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             "⚠️ 해당 게시물을 찾을 수 없습니다.\n이미 게시됐거나 큐에서 제거됐을 수 있습니다."
         )
+
+
+async def _handle_reply_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    """
+    재답글 초안 콜백 처리.
+    callback_data 형식:
+      reply_use:{reply_id}  — 초안 텍스트 재전송 (X에서 복사 사용)
+      reply_skip:{reply_id} — 건너뜀
+    """
+    from app.services.growth.reply_monitor import get_pending_draft
+
+    data = query.data
+    parts = data.split(":", 1)
+    if len(parts) != 2:
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    action, reply_id = parts[0], parts[1]
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    if action == "reply_skip":
+        await query.message.reply_text("⏭ 건너뜀.")
+        return
+
+    if action == "reply_use":
+        entry = get_pending_draft(reply_id)
+        if not entry:
+            await query.message.reply_text(
+                "⚠️ 초안 정보가 만료됐습니다.\n"
+                "시스템이 재시작됐거나 오래된 알림일 수 있습니다."
+            )
+            return
+        draft_text, author_username = entry
+        x_link = f"https://x.com/{author_username}/status/{reply_id}"
+        await query.message.reply_text(
+            f"✍️ <b>재답글 초안</b>\n\n"
+            f"<code>{draft_text}</code>\n\n"
+            f"X에서 직접 답글 달기: {x_link}",
+            parse_mode="HTML",
+        )
+        return
+
+    # 알 수 없는 액션
+    await query.message.reply_text("⚠️ 알 수 없는 요청입니다.")
 
 
 async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
