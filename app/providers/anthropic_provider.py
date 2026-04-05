@@ -214,6 +214,7 @@ STRICT SAFETY RULES:
 - Evergreen educational content → can be low risk
 - NEVER sensationalize
 - NEVER include unconfirmed claims as facts
+- When rewriting hook or body, NEVER use: delve into, game-changer, this underscores, unprecedented
 
 Respond in JSON ONLY:
 {
