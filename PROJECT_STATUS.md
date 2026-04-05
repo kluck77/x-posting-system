@@ -130,11 +130,6 @@
 - Needs: time-window check + approval bypass guard scoped to low-risk category only
 - Requires explicit operator opt-in; not building without instruction
 
-**v8 — Low-risk auto-posting (feature flag)**
-- `ENABLE_AUTO_POST_LOW_RISK=false` already in config
-- Needs: time-window check + approval bypass guard scoped to low-risk category only
-- Requires explicit operator opt-in; not building without instruction
-
 ### Permanent Exclusions
 
 The following are out of scope and will not be built:

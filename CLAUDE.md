@@ -109,15 +109,22 @@ silently. Layer 1 continues unaffected.
 ### Done
 - v1–v4: core pipeline, quality framework, growth pipelines
 - criteria_signals → DraftWriter + Reviewer prompt injection
+- v5: topic memory, voice guard, RepetitionGuard wiring, content-mix weekly report
+- v6: quality gate (advisory), prompt quality audit, manual note capture (/note)
+- v6: prompt banned list sync, DraftWriter 5-criteria compact gate, VoiceGuard wiring
+- v7: content performance feedback loop (/perf), pattern analysis, hint lifecycle (/hint · /hints · /hint clear)
+- v7: operator hint → DraftWriter injection ([OPERATOR HINTS] block, Layer 2)
+- v7: [HINT]×[PERF] co-occurrence summary (format_hint_impact_summary)
+- v7: operational stability patch (session close, log commit guard, reply error handling)
+- v7: operator command reliability bundle (_parse_draft_id helper, /hint clear UX, /report session guard)
 
-### Active (1-month plan)
-- Week 3: topic memory, voice guard, RepetitionGuard wiring, content-mix weekly report
-- Week 4: quality gate (advisory), prompt quality audit, manual note capture
+### Active
+- None. v7 complete. Awaiting operator instruction for v8.
 
-### Future (text quality focus only)
-- Low-risk auto-posting (feature flag, requires explicit approval)
-- Content performance feedback loop (which posts performed → inform future drafts)
-- Operator note → prompt improvement pipeline
+### Future (requires explicit operator opt-in before building)
+- Low-risk auto-posting (feature flag — `ENABLE_AUTO_POST_LOW_RISK` exists, logic not built)
+- Content performance feedback loop (already done in v7; no further action)
+- Operator note → prompt improvement pipeline (already done in v7; no further action)
 
 ---
 
