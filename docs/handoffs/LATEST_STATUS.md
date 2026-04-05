@@ -29,6 +29,8 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 | OpenAI SYSTEM_PROMPT refresh (audience, credibility>virality, expanded bans, no editorializing) | Locked |
 | Reviewer quality_flags (ReviewResult field + REVIEW_SYSTEM_PROMPT checklist + parse) | Locked |
 | Growth Intelligence Bundle (advisory.py, source/draft labels, weekly report upgrade) | Locked |
+| Phase 13 news_regen fix (article retained for regen button) | Locked |
+| Phase 14 hygiene bundle (processed_replies cap, x_username config, pending_articles cap) | Locked |
 
 ---
 
@@ -45,13 +47,13 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 
 ## Next Candidates
 
-**Nothing urgent.** System is stable and well-tested (495 tests).
-Growth advisory layer now active. Operator tools complete.
+**Nothing urgent.** System is stable and well-tested (504 tests).
+Growth advisory layer active. Operator tools complete. Hygiene bundle done.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-05 (session 4 — Growth Intelligence Bundle)
+- Date: 2026-04-05 (session 6 — Phase 14 Hygiene Bundle)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`

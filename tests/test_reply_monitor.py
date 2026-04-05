@@ -274,3 +274,94 @@ class TestRunReplyMonitorInlineButton:
         draft, username = entry
         assert draft == "저장 테스트 초안"
         assert username == "store_user"
+
+
+class TestProcessedIdsTrim:
+    """_load_processed() — 파일 크기 상한 적용 검증."""
+
+    def _write_ids(self, path, ids: list) -> None:
+        import json
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(ids, f)
+
+    def test_under_limit_loads_all(self, tmp_path):
+        """1000개 미만이면 전부 로드."""
+        from app.services.growth.reply_monitor import ReplyMonitor, _PROCESSED_IDS_MAX
+        f = tmp_path / "processed_replies.json"
+        ids = [str(i) for i in range(100)]
+        self._write_ids(f, ids)
+
+        monitor = ReplyMonitor.__new__(ReplyMonitor)
+        monitor.PROCESSED_FILE = str(f)
+        result = monitor._load_processed()
+        assert len(result) == 100
+
+    def test_over_limit_trims_to_max(self, tmp_path):
+        """1001개 → 1000개로 정리."""
+        from app.services.growth.reply_monitor import ReplyMonitor, _PROCESSED_IDS_MAX
+        f = tmp_path / "processed_replies.json"
+        ids = [str(i) for i in range(_PROCESSED_IDS_MAX + 1)]
+        self._write_ids(f, ids)
+
+        monitor = ReplyMonitor.__new__(ReplyMonitor)
+        monitor.PROCESSED_FILE = str(f)
+        result = monitor._load_processed()
+        assert len(result) == _PROCESSED_IDS_MAX
+
+    def test_trim_keeps_largest_numeric_ids(self, tmp_path):
+        """숫자 ID 정렬 — 가장 큰(최신) ID가 보존된다."""
+        from app.services.growth.reply_monitor import ReplyMonitor, _PROCESSED_IDS_MAX
+        f = tmp_path / "processed_replies.json"
+        # 1001개: 0~1000. 가장 큰 값은 1000.
+        ids = [str(i) for i in range(_PROCESSED_IDS_MAX + 1)]
+        self._write_ids(f, ids)
+
+        monitor = ReplyMonitor.__new__(ReplyMonitor)
+        monitor.PROCESSED_FILE = str(f)
+        result = monitor._load_processed()
+        # 최신(가장 큰) ID "1000"은 보존
+        assert "1000" in result
+        # 가장 오래된 "0"은 제거
+        assert "0" not in result
+
+    def test_non_numeric_ids_survive(self, tmp_path):
+        """mock/비숫자 ID도 정리 후에도 포함된다 (수가 적으면)."""
+        from app.services.growth.reply_monitor import ReplyMonitor, _PROCESSED_IDS_MAX
+        f = tmp_path / "processed_replies.json"
+        # 숫자 999개 + 비숫자 1개 = 1000개 → 상한 미만, 전부 보존
+        ids = [str(i) for i in range(999)] + ["mock_reply_xyz"]
+        self._write_ids(f, ids)
+
+        monitor = ReplyMonitor.__new__(ReplyMonitor)
+        monitor.PROCESSED_FILE = str(f)
+        result = monitor._load_processed()
+        assert "mock_reply_xyz" in result
+
+
+class TestXUsernameConfig:
+    """settings.x_username 기본값 및 override 검증."""
+
+    def test_default_username(self):
+        """기본값은 'sskorea02'."""
+        from app.config import Settings
+        s = Settings(_env_file=None)
+        assert s.x_username == "sskorea02"
+
+    def test_override_username(self):
+        """환경변수로 override 가능."""
+        from app.config import Settings
+        s = Settings(_env_file=None, x_username="my_custom_account")
+        assert s.x_username == "my_custom_account"
+
+    def test_reply_monitor_uses_settings_username(self):
+        """_get_my_user_id()가 settings.x_username을 URL에 사용한다."""
+        import app.services.growth.reply_monitor as rm
+        # settings.x_username이 URL에 포함되는지 확인
+        # (실제 HTTP 호출 없이 URL 구성 로직만 검증)
+        from app.config import settings
+        expected_fragment = settings.x_username
+        # URL 구성 패턴이 settings.x_username을 포함하는지 소스로 확인
+        import inspect
+        src = inspect.getsource(rm.ReplyMonitor._get_my_user_id)
+        assert "settings.x_username" in src

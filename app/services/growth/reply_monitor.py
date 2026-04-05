@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 X_MENTIONS_URL = "https://api.x.com/2/users/{user_id}/mentions"
 X_TWEET_URL = "https://api.x.com/2/tweets"
 
-# 내 계정 ID (X에서 확인 필요)
-MY_USERNAME = "sskorea02"
+# 처리 완료 ID 보관 최대 수 (파일 크기 제한)
+_PROCESSED_IDS_MAX = 1000
 
 # 최근 재답글 초안 임시 저장 (callback 처리용, 재시작 시 초기화됨)
 # { reply_id: (draft_text, author_username) }
@@ -95,7 +95,17 @@ class ReplyMonitor:
             import os
             os.makedirs("data", exist_ok=True)
             with open(self.PROCESSED_FILE, "r") as f:
-                return set(json.load(f))
+                ids: list = json.load(f)
+            if len(ids) > _PROCESSED_IDS_MAX:
+                # 스노우플레이크 ID: 숫자가 클수록 최신 → 내림차순 정렬 후 상위 N개 보관
+                def _key(x: str):
+                    try:
+                        return (0, -int(x))   # 숫자 ID: 내림차순
+                    except (ValueError, TypeError):
+                        return (1, x)          # 비숫자 ID(mock 등): 숫자 뒤에 배치
+                ids = sorted(ids, key=_key)[:_PROCESSED_IDS_MAX]
+                logger.info(f"[ReplyMonitor] 처리 목록 {len(ids)}개로 정리 (상한 {_PROCESSED_IDS_MAX})")
+            return set(ids)
         except FileNotFoundError:
             return set()
         except Exception:
@@ -115,7 +125,7 @@ class ReplyMonitor:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.get(
-                    f"https://api.x.com/2/users/by/username/{MY_USERNAME}",
+                    f"https://api.x.com/2/users/by/username/{settings.x_username}",
                     headers={"Authorization": f"Bearer {settings.x_bearer_token}"},
                 )
                 r.raise_for_status()
@@ -265,7 +275,7 @@ async def generate_rereply_draft(reply: IncomingReply) -> str:
         return f"@{reply.author_username} 좋은 질문이에요! 제 경험상 {reply.reply_text[:30]}... 에 대해서는 포지션 크기 제한이 핵심이었습니다. 더 자세히 공유해드릴게요."
 
     try:
-        prompt = f"""너는 X 계정 @sskorea02야. Gate.io 선물 자동매매 봇 1인 운영자.
+        prompt = f"""너는 X 계정 @{settings.x_username}야. Gate.io 선물 자동매매 봇 1인 운영자.
 
 내 원문: "{reply.parent_tweet_text[:150]}"
 상대방 답글 (@{reply.author_username}): "{reply.reply_text}"

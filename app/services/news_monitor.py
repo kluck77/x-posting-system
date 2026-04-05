@@ -44,7 +44,9 @@ _CAT_EMOJI = {
 _seen_urls: set[str] = set()
 
 # pending 기사 저장소: hash → article dict (Telegram 콜백용)
+# 인메모리 상한: 운영자가 skip하지 않아도 오래된 항목이 자동 정리됨
 _pending_articles: dict[str, dict] = {}
+_PENDING_ARTICLES_MAX = 200
 
 # 교차 확인 후보 스토리 클러스터
 # key = story_key (normalized title words hash)
@@ -175,6 +177,11 @@ async def _send_news_alert(cluster: dict) -> None:
             {"text": "⏭ 스킵",       "callback_data": f"news_skip:{ah}"},
         ]]
     }
+
+    # 인메모리 상한 초과 시 가장 오래된 항목 제거 (Python 3.7+ dict 삽입 순서 보장)
+    if len(_pending_articles) >= _PENDING_ARTICLES_MAX:
+        oldest_key = next(iter(_pending_articles))
+        del _pending_articles[oldest_key]
 
     _pending_articles[ah] = {
         "title":    cluster["title"],

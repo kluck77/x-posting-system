@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     telegram_chat_id: str = Field(default="", description="텔레그램 채팅 ID")
 
     # --- X (트위터) API ---
+    x_username: str = Field(default="sskorea02", description="X 계정 사용자명 (@ 없이, 답글 모니터에서 사용)")
     x_bearer_token: str = Field(default="", description="X Bearer Token")
     x_api_key: str = Field(default="", description="X API Key")
     x_api_secret: str = Field(default="", description="X API Secret")
