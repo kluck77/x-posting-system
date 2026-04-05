@@ -53,6 +53,14 @@ def _create_draft(db_session, source_id: int, **kwargs) -> Draft:
 class TestRateLimiter:
     """RateLimiter 테스트"""
 
+    def test_uses_settings_defaults_when_no_override(self, db_session):
+        """override 없이 생성하면 settings 필드 값을 사용한다 (v10 externalization)."""
+        from app.config import settings
+        limiter = RateLimiter(db_session)
+        assert limiter.max_drafts == settings.max_drafts_per_day
+        assert limiter.max_telegram == settings.max_telegram_per_day
+        assert limiter.max_posts == settings.max_posts_per_day
+
     def test_can_create_draft_within_limit(self, db_session):
         """제한 내에서 초안 생성 가능"""
         limiter = RateLimiter(db_session, max_drafts=5)
