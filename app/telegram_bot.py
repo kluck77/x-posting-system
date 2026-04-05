@@ -667,7 +667,8 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
         finally:
             orchestrator.close()
 
-        remove_pending_article(article_hash)
+        # 기사 정보는 재생성(news_regen) 버튼 클릭을 위해 유지.
+        # skip 시에만 제거 (line 612). 봇 재시작 시 자연 소멸.
 
         # 초안 텍스트 전달 (자동 게시 없음 — 사용자가 직접 X에 붙여넣기)
         draft_text = f"{draft.hook}\n\n{draft.body}"
