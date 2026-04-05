@@ -442,3 +442,25 @@ class TestGetRecentOperatorHints:
         assert len(result) == 1
         assert "장기 스타일 힌트" in result[0]
         assert "[PERF]" not in result[0]
+
+    # /hint 명령 저장 형식 호환 테스트
+
+    def test_hint_command_format_compatible(self, db_session, source_item):
+        """/hint가 저장하는 '[HINT] <text>' 형식이 get_recent_operator_hints()에서 정상 수집된다."""
+        # /hint 42 항상 통화정책 각도로 써줘  →  "[HINT] 항상 통화정책 각도로 써줘"
+        hint_text = "[HINT] " + "항상 통화정책 각도로 써줘"
+        self._make_draft_with_note(db_session, source_item, "h1", "b1", hint_text)
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert "항상 통화정책 각도로 써줘" in result[0]
+        assert result[0].startswith("[HINT]") is False  # prefix 제거 확인
+
+    def test_hint_command_max_length(self, db_session, source_item):
+        """/hint의 prefix 포함 500자 이내 저장 — 493자 본문 + '[HINT] ' = 500자."""
+        body = "A" * 493
+        hint_text = "[HINT] " + body
+        assert len(hint_text) == 500
+        self._make_draft_with_note(db_session, source_item, "h1", "b1", hint_text)
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert len(result[0]) <= 120  # 수집 시 120자로 잘림

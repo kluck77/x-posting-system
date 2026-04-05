@@ -659,6 +659,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/queue — 게시 큐\n"
         "/hunt — 댓글 기회 탐색\n"
         "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
+        "/hint &lt;id&gt; &lt;메모&gt; — 장기 힌트 저장 (다음 초안 작성에 반영)\n"
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
         "/status — AI 상태\n"
@@ -1307,6 +1308,48 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ 메모 저장 실패: {str(e)[:200]}")
 
 
+async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/hint <draft_id> <메모> — [HINT] prefix로 장기 힌트 저장 (다음 초안 반영용)."""
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "사용법: <code>/hint &lt;draft_id&gt; &lt;메모&gt;</code>\n"
+            "예: <code>/hint 42 항상 통화정책 충격 각도로 써줘</code>\n"
+            "<i>장기적으로 다음 초안 작성에 반영되는 힌트입니다.</i>",
+            parse_mode="HTML",
+        )
+        return
+
+    try:
+        draft_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+        return
+
+    note_text = "[HINT] " + " ".join(args[1:])[:493]  # prefix 7자 포함 500자 이내
+
+    try:
+        db = get_db()
+        from app.services.draft_service import DraftService
+        draft_service = DraftService(db)
+        draft = draft_service.get_by_id(draft_id)
+        if not draft:
+            await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+            return
+
+        draft.manual_notes = note_text
+        db.commit()
+        await update.message.reply_text(
+            f"✅ <b>장기 힌트 저장됨</b> (draft #{draft_id})\n"
+            f"<i>{note_text[:200]}</i>",
+            parse_mode="HTML",
+        )
+        logger.info(f"[/hint] draft_id={draft_id} 힌트 저장: {note_text[:60]}")
+    except Exception as e:
+        logger.error(f"/hint 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 힌트 저장 실패: {str(e)[:200]}")
+
+
 # =============================================================================
 # 봇 앱 생성 & 실행
 # =============================================================================
@@ -1331,6 +1374,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("report", report_command))
     app.add_handler(CommandHandler("digest", digest_command))
     app.add_handler(CommandHandler("note", note_command))
+    app.add_handler(CommandHandler("hint", hint_command))
     app.add_handler(CommandHandler("perf", perf_command))
 
     # 콜백 (모든 인라인 버튼)
