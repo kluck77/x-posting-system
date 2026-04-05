@@ -627,12 +627,35 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
 
         score_line = f"📊 품질: {score}/100"
 
+        char_count = len(draft_text)
+        char_line = f"Characters: {char_count}"
+        if char_count > 280:
+            char_line += " ⚠️ X 한도 초과 — 편집 필요"
+
+        meta_lines = f"📋 {draft.category.value} | {draft.risk_level.value.upper()} | {char_line}"
+
+        # topic tags (optional)
+        try:
+            import json as _json
+            _tags = getattr(draft, "topic_tags", None)
+            if _tags:
+                _tag_list = _json.loads(_tags)
+                if _tag_list:
+                    meta_lines += "\n🏷 " + " ".join(f"#{t.lstrip('#')}" for t in _tag_list[:5])
+        except Exception:
+            pass
+
+        # ai rationale (optional)
+        _rationale = getattr(draft, "ai_rationale", None)
+        if _rationale:
+            meta_lines += f"\n🤖 {_rationale}"
+
         reply = (
             f"📝 <b>초안 완성!</b> {score_line}\n"
             f"{'─' * 28}\n"
             f"{draft_text}\n"
             f"{'─' * 28}\n"
-            f"📋 {draft.category.value} | {draft.risk_level.value.upper()}\n\n"
+            f"{meta_lines}\n\n"
             f"위 텍스트를 복사해서 X에 붙여넣기 해주세요."
         )
 

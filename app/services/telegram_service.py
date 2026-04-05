@@ -101,6 +101,17 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     if draft.ai_rationale:
         card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
 
+    # topic tags (Layer 2, advisory)
+    try:
+        _tags = getattr(draft, "topic_tags", None)
+        if _tags:
+            _tag_list = json.loads(_tags)
+            if _tag_list:
+                tag_str = " ".join(f"#{t.lstrip('#')}" for t in _tag_list[:5])
+                card += f"🏷 {tag_str}\n"
+    except Exception:
+        pass
+
     if getattr(draft, "community_warning", None):
         card += (
             f"\n{'─' * 30}\n"
@@ -152,11 +163,15 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         pass
 
+    char_info = f"Characters: {draft.text_length}"
+    if draft.text_length > 280:
+        char_info += " ⚠️ X 한도 초과 — 편집 필요"
+
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"
         f"Draft ID: {draft.id} | Version: {draft.version}\n"
-        f"Characters: {draft.text_length}"
+        f"{char_info}"
     )
 
     return card

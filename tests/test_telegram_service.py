@@ -189,3 +189,81 @@ class TestBuildApprovalCardVoiceGuard:
             card = build_approval_card(draft)
         assert "Voice 경고" not in card
         assert "NEW DRAFT FOR REVIEW" in card
+
+
+class TestBuildApprovalCardTopicTags:
+    """topic_tags 표시 + 글자수 경고 테스트."""
+
+    def _make_draft(self, body: str, topic_tags=None, text_length=None):
+        from unittest.mock import MagicMock
+        draft = MagicMock()
+        draft.id = 1
+        draft.version = 1
+        draft.hook = "BOK cuts rates 25bp"
+        draft.body = body
+        draft.thread_continuation = None
+        draft.category = ContentCategory.ECONOMY
+        draft.risk_level = RiskLevel.LOW
+        draft.risk_reasoning = None
+        draft.ai_rationale = None
+        draft.community_warning = None
+        draft.predicted_publish_at = None
+        draft.prediction_reasoning = None
+        draft.topic_tags = topic_tags
+        draft.text_length = text_length if text_length is not None else len(body)
+        return draft
+
+    def test_topic_tags_shown_in_card(self):
+        """topic_tags JSON 문자열이 있으면 # 해시태그로 카드에 표시된다."""
+        import json
+        tags = json.dumps(["KoreaEconomy", "#BOK", "RatesWatch"])
+        draft = self._make_draft("Some body text.", topic_tags=tags)
+        card = build_approval_card(draft)
+        assert "#KoreaEconomy" in card
+        assert "#BOK" in card
+        assert "#RatesWatch" in card
+        assert "🏷" in card
+
+    def test_topic_tags_limited_to_five(self):
+        """topic_tags가 6개 이상이어도 최대 5개만 표시된다."""
+        import json
+        tags = json.dumps(["T1", "T2", "T3", "T4", "T5", "T6", "T7"])
+        draft = self._make_draft("Some body.", topic_tags=tags)
+        card = build_approval_card(draft)
+        assert "#T5" in card
+        assert "#T6" not in card
+
+    def test_no_topic_tags_section_when_none(self):
+        """topic_tags가 None이면 🏷 섹션이 없다."""
+        draft = self._make_draft("Some body.", topic_tags=None)
+        card = build_approval_card(draft)
+        assert "🏷" not in card
+
+    def test_invalid_topic_tags_json_does_not_crash(self):
+        """topic_tags가 잘못된 JSON이어도 카드가 정상 생성된다."""
+        draft = self._make_draft("Some body.", topic_tags="not-valid-json")
+        card = build_approval_card(draft)
+        assert "NEW DRAFT FOR REVIEW" in card
+        assert "🏷" not in card
+
+    def test_char_count_within_limit_no_warning(self):
+        """글자수 280 이하면 초과 경고 없음."""
+        draft = self._make_draft("Short post.", text_length=150)
+        card = build_approval_card(draft)
+        assert "Characters: 150" in card
+        assert "X 한도 초과" not in card
+
+    def test_char_count_over_280_shows_warning(self):
+        """글자수 281 이상이면 X 한도 초과 경고 표시."""
+        draft = self._make_draft("x" * 300, text_length=300)
+        card = build_approval_card(draft)
+        assert "Characters: 300" in card
+        assert "X 한도 초과" in card
+        assert "편집 필요" in card
+
+    def test_char_count_exactly_280_no_warning(self):
+        """글자수 정확히 280이면 경고 없음."""
+        draft = self._make_draft("x" * 280, text_length=280)
+        card = build_approval_card(draft)
+        assert "Characters: 280" in card
+        assert "X 한도 초과" not in card
