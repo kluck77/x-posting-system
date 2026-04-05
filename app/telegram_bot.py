@@ -660,6 +660,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/hunt — 댓글 기회 탐색\n"
         "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
         "/hint &lt;id&gt; &lt;메모&gt; — 장기 힌트 저장 (다음 초안 작성에 반영)\n"
+        "/hints — 활성 힌트 목록 조회\n"
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
         "/status — AI 상태\n"
@@ -1350,6 +1351,35 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ 힌트 저장 실패: {str(e)[:200]}")
 
 
+async def hints_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/hints — 현재 활성 [HINT] 목록 조회 (DraftWriter에 우선 반영될 힌트들)."""
+    try:
+        db = get_db()
+        from app.services.draft_service import DraftService
+        items = DraftService(db).get_hint_lines_with_draft_id(limit=10)
+    except Exception as e:
+        logger.error(f"/hints 조회 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 힌트 조회 실패: {str(e)[:200]}")
+        return
+
+    if not items:
+        await update.message.reply_text(
+            "활성 [HINT]가 없습니다.\n"
+            "<code>/hint &lt;id&gt; &lt;메모&gt;</code> 로 장기 힌트를 추가하세요.",
+            parse_mode="HTML",
+        )
+        return
+
+    lines = ["📌 <b>활성 힌트 목록</b> (DraftWriter 우선 반영 대상)\n"]
+    for draft_id, text in items:
+        lines.append(f"• [#{draft_id}] {text}")
+    lines.append(
+        f"\n<i>총 {len(items)}개 — /hint &lt;id&gt; &lt;메모&gt; 로 추가</i>"
+    )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
 # =============================================================================
 # 봇 앱 생성 & 실행
 # =============================================================================
@@ -1375,6 +1405,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("digest", digest_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("hint", hint_command))
+    app.add_handler(CommandHandler("hints", hints_command))
     app.add_handler(CommandHandler("perf", perf_command))
 
     # 콜백 (모든 인라인 버튼)

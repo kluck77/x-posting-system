@@ -275,6 +275,46 @@ class DraftService:
             logger.warning(f"[OperatorHints] 수집 실패 (무시): {e}")
             return []
 
+    def get_hint_lines_with_draft_id(
+        self, limit: int = 10
+    ) -> list[tuple[int, str]]:
+        """
+        최근 approved/published 초안의 [HINT] 라인을 (draft_id, text) 형태로 반환.
+
+        /hints 조회 명령용 read path.
+        - [HINT] prefix가 있는 라인만 수집 (fallback 없음 — 명시적 힌트만 표시)
+        - 초안당 모든 [HINT] 라인 수집 (get_recent_operator_hints와 달리 1개 제한 없음)
+        - 빈 결과면 [] 반환
+        """
+        try:
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status.in_([
+                        ApprovalStatus.APPROVED,
+                        ApprovalStatus.PUBLISHED,
+                    ]),
+                    Draft.manual_notes.like("%[HINT]%"),
+                )
+                .order_by(Draft.updated_at.desc())
+                .limit(20)
+                .all()
+            )
+            results: list[tuple[int, str]] = []
+            for d in drafts:
+                for line in (d.manual_notes or "").splitlines():
+                    line = line.strip()
+                    if line.startswith("[HINT]"):
+                        text = line[6:].strip()
+                        if text:
+                            results.append((d.id, text[:120]))
+                if len(results) >= limit:
+                    break
+            return results[:limit]
+        except Exception as e:
+            logger.warning(f"[HintLines] 조회 실패 (무시): {e}")
+            return []
+
     def get_published_with_perf_notes(self, limit: int = 5) -> list[Draft]:
         """
         [PERF] 태그가 있는 최근 게시 초안을 반환합니다.

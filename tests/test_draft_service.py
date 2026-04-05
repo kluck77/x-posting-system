@@ -464,3 +464,65 @@ class TestGetRecentOperatorHints:
         result = DraftService(db_session).get_recent_operator_hints()
         assert len(result) == 1
         assert len(result[0]) <= 120  # 수집 시 120자로 잘림
+
+
+class TestGetHintLinesWithDraftId:
+    """get_hint_lines_with_draft_id() — /hints 조회용 read path 테스트."""
+
+    def _make_draft_with_note(self, db_session, source_item, hook, body, note,
+                               status=ApprovalStatus.PUBLISHED):
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        draft.manual_notes = note
+        draft.approval_status = status
+        db_session.commit()
+        return draft
+
+    def test_returns_empty_when_no_hints(self, db_session, source_item):
+        """[HINT]가 없으면 빈 리스트."""
+        result = DraftService(db_session).get_hint_lines_with_draft_id()
+        assert result == []
+
+    def test_returns_draft_id_and_text(self, db_session, source_item):
+        """(draft_id, text) 튜플 반환, prefix 제거 확인."""
+        d = self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "[HINT] 통화정책 각도로"
+        )
+        result = DraftService(db_session).get_hint_lines_with_draft_id()
+        assert len(result) == 1
+        draft_id, text = result[0]
+        assert draft_id == d.id
+        assert text == "통화정책 각도로"
+
+    def test_excludes_plain_and_perf_notes(self, db_session, source_item):
+        """일반 메모와 [PERF] 라인은 반환되지 않는다."""
+        self._make_draft_with_note(db_session, source_item, "h1", "b1", "일반 메모")
+        self._make_draft_with_note(db_session, source_item, "h2", "b2", "[PERF] 좋아요 10개")
+        result = DraftService(db_session).get_hint_lines_with_draft_id()
+        assert result == []
+
+    def test_multiple_hint_lines_per_draft(self, db_session, source_item):
+        """초안 1개에 [HINT]가 여러 줄이면 모두 수집된다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1",
+            "[HINT] 힌트A\n[HINT] 힌트B\n[PERF] 성과메모"
+        )
+        result = DraftService(db_session).get_hint_lines_with_draft_id()
+        assert len(result) == 2
+        texts = [t for _, t in result]
+        assert "힌트A" in texts
+        assert "힌트B" in texts
+
+    def test_respects_limit(self, db_session, source_item):
+        """limit 파라미터가 적용된다."""
+        for i in range(5):
+            self._make_draft_with_note(
+                db_session, source_item, f"h{i}", f"b{i}", f"[HINT] 힌트{i}"
+            )
+        result = DraftService(db_session).get_hint_lines_with_draft_id(limit=3)
+        assert len(result) <= 3
