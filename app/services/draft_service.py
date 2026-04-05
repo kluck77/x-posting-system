@@ -232,15 +232,16 @@ class DraftService:
 
     def format_perf_summary(self, days: int = 30) -> str:
         """
-        [PERF] 메모 기반 간단 집계 요약 텍스트 반환.
+        [PERF] 메모 기반 집계 요약 + v2 패턴 분석 텍스트 반환.
 
-        - 카테고리 / topic_tags / output_format 빈도 집계
-        - 최근 PERF 메모 원문 3개
-        - 분석 엔진 없음 — 운영자가 패턴을 읽는 참고용
-        - 빈 결과면 "" 반환
+        v1: 카테고리 / topic_tags / output_format 빈도 집계 + 최근 PERF 메모 원문 3개
+        v2: 전체 게시 초안 태그와 교차 비교 → 늘릴 후보 / 줄일 후보 제안
+        분석 엔진 없음 — 운영자가 패턴을 읽는 참고용. 빈 결과면 "" 반환.
         """
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        drafts = (
+
+        # [PERF] 메모가 있는 게시 초안 (성과 데이터)
+        perf_drafts = (
             self.db.query(Draft)
             .filter(
                 Draft.approval_status == ApprovalStatus.PUBLISHED,
@@ -252,21 +253,22 @@ class DraftService:
             .all()
         )
 
-        if not drafts:
+        if not perf_drafts:
             return ""
 
+        # v1: 성과 초안 집계
         categories: Counter = Counter()
-        tags: Counter = Counter()
+        perf_tags: Counter = Counter()
         formats: Counter = Counter()
         recent_notes: list[str] = []
 
-        for d in drafts:
+        for d in perf_drafts:
             if d.category:
                 categories[d.category.value] += 1
             if d.topic_tags:
                 try:
                     for tag in json.loads(d.topic_tags):
-                        tags[tag] += 1
+                        perf_tags[tag.strip().lower()] += 1
                 except Exception:
                     pass
             if d.output_format:
@@ -277,14 +279,14 @@ class DraftService:
                     if note:
                         recent_notes.append(note)
 
-        lines = [f"📊 <b>성과 메모 요약 ({days}일 / {len(drafts)}건)</b>"]
+        lines = [f"📊 <b>성과 메모 요약 ({days}일 / {len(perf_drafts)}건)</b>"]
         if categories:
             lines.append("• 카테고리: " + ", ".join(
                 f"{k}×{v}" for k, v in categories.most_common(4)
             ))
-        if tags:
+        if perf_tags:
             lines.append("• 태그: " + ", ".join(
-                f"{k}×{v}" for k, v in tags.most_common(5)
+                f"{k}×{v}" for k, v in perf_tags.most_common(5)
             ))
         if formats:
             lines.append("• 형식: " + ", ".join(
@@ -294,5 +296,43 @@ class DraftService:
             lines.append("• 최근 메모:")
             for note in recent_notes[:3]:
                 lines.append(f'  - "{note[:80]}"')
+
+        # v2: 전체 게시 초안 태그와 교차 비교 → 패턴 제안
+        all_tags: Counter = Counter()
+        try:
+            all_published = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status == ApprovalStatus.PUBLISHED,
+                    Draft.published_at >= cutoff,
+                    Draft.topic_tags.isnot(None),
+                )
+                .limit(100)
+                .all()
+            )
+            for d in all_published:
+                try:
+                    for tag in json.loads(d.topic_tags):
+                        all_tags[tag.strip().lower()] += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        if all_tags:
+            # 늘릴 후보: [PERF] 비율 ≥ 40% (perf_count / total_count)
+            increase = [
+                t for t, pc in perf_tags.most_common()
+                if all_tags[t] > 0 and pc / all_tags[t] >= 0.4
+            ]
+            # 줄일 후보: 전체에서 2회 이상 등장하지만 [PERF] 메모에 전혀 없는 태그
+            decrease = [
+                t for t, tc in all_tags.most_common(10)
+                if tc >= 2 and perf_tags[t] == 0
+            ]
+            if increase:
+                lines.append("→ 늘릴 후보: " + ", ".join(increase[:3]))
+            if decrease:
+                lines.append("→ 줄일 후보: " + ", ".join(decrease[:3]))
 
         return "\n".join(lines)

@@ -239,12 +239,12 @@ class TestFormatPerfSummary:
         assert "economy" in result
 
     def test_includes_tag_count(self, db_session, source_item):
-        """topic_tags 집계가 포함된다."""
+        """topic_tags 집계가 포함된다 (소문자 정규화)."""
         self._make_published_with_perf(
             db_session, source_item, "h1", "b1", "메모", tags="BOK"
         )
         result = DraftService(db_session).format_perf_summary()
-        assert "BOK" in result
+        assert "bok" in result
 
     def test_includes_recent_note_text(self, db_session, source_item):
         """최근 PERF 메모 원문이 포함된다."""
@@ -259,3 +259,47 @@ class TestFormatPerfSummary:
         self._make_published_with_perf(db_session, source_item, "h1", "b1", "메모")
         result = DraftService(db_session).format_perf_summary(days=0)
         assert result == ""
+
+    # v2 패턴 분석 테스트
+
+    def _make_published_no_perf(self, db_session, source_item, hook, body, tags=None):
+        """[PERF] 메모 없이 게시만 한 초안 (분모 데이터)."""
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        draft.topic_tags = f'["{tags}"]' if tags else None
+        db_session.commit()
+        service.mark_published(draft.id, f"x{draft.id}", f"https://x.com/x{draft.id}")
+        return draft
+
+    def test_increase_candidate_shown(self, db_session, source_item):
+        """[PERF] 비율이 높은 태그가 늘릴 후보에 포함된다."""
+        # BOK 태그: 2회 게시 중 2회 모두 [PERF] → 비율 100%
+        self._make_published_with_perf(db_session, source_item, "h1", "b1", "좋아요", tags="bok")
+        self._make_published_with_perf(db_session, source_item, "h2", "b2", "리트윗", tags="bok")
+        result = DraftService(db_session).format_perf_summary()
+        assert "늘릴 후보" in result
+        assert "bok" in result
+
+    def test_decrease_candidate_shown(self, db_session, source_item):
+        """전체에서 2회 이상이지만 [PERF] 없는 태그가 줄일 후보에 포함된다."""
+        # "crypto" 태그: 3회 게시지만 [PERF] 0건
+        self._make_published_no_perf(db_session, source_item, "h3", "b3", tags="crypto")
+        self._make_published_no_perf(db_session, source_item, "h4", "b4", tags="crypto")
+        self._make_published_no_perf(db_session, source_item, "h5", "b5", tags="crypto")
+        # 다른 태그에 [PERF]가 있어야 perf_drafts 쿼리가 결과를 반환함
+        self._make_published_with_perf(db_session, source_item, "h6", "b6", "좋음", tags="bok")
+        result = DraftService(db_session).format_perf_summary()
+        assert "줄일 후보" in result
+        assert "crypto" in result
+
+    def test_no_pattern_section_when_tags_absent(self, db_session, source_item):
+        """태그가 전혀 없으면 패턴 라인이 나타나지 않는다."""
+        self._make_published_with_perf(db_session, source_item, "h1", "b1", "좋음")
+        result = DraftService(db_session).format_perf_summary()
+        assert "늘릴 후보" not in result
+        assert "줄일 후보" not in result
