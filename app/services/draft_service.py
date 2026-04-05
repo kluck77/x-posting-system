@@ -190,3 +190,40 @@ class DraftService:
             logger.warning(f"중복 텍스트 감지: 기존 draft_id={existing.id}")
             return True
         return False
+
+    def save_performance_note(self, draft_id: int, note: str) -> Draft | None:
+        """
+        게시 후 성과 메모를 manual_notes에 [PERF] 태그로 추가합니다.
+
+        pre-draft 메모(/note)와 구분하기 위해 [PERF] 접두어를 사용합니다.
+        기존 메모가 있으면 줄바꿈 후 추가합니다.
+        """
+        draft = self.get_by_id(draft_id)
+        if not draft:
+            return None
+        tag = f"[PERF] {note.strip()}"
+        if draft.manual_notes:
+            draft.manual_notes = draft.manual_notes + f"\n{tag}"
+        else:
+            draft.manual_notes = tag
+        self.db.commit()
+        self.db.refresh(draft)
+        logger.info(f"성과 메모 저장: draft_id={draft_id}, note={note[:60]}")
+        return draft
+
+    def get_published_with_perf_notes(self, limit: int = 5) -> list[Draft]:
+        """
+        [PERF] 태그가 있는 최근 게시 초안을 반환합니다.
+
+        성과 패턴 파악 및 프롬프트 개선 참고용.
+        """
+        return (
+            self.db.query(Draft)
+            .filter(
+                Draft.approval_status == ApprovalStatus.PUBLISHED,
+                Draft.manual_notes.like("%[PERF]%"),
+            )
+            .order_by(Draft.published_at.desc())
+            .limit(limit)
+            .all()
+        )

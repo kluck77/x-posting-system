@@ -142,3 +142,64 @@ class TestDraftService:
         service.mark_failed(draft.id, "error")
         failed = service.get_failed()
         assert len(failed) == 1
+
+
+class TestPerformanceNote:
+    """성과 메모(피드백 루프 1차) 테스트."""
+
+    def _make_published_draft(self, db_session, source_item, hook="hook", body="body"):
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        service.mark_published(draft.id, "x123", "https://x.com/x123")
+        return draft
+
+    def test_save_performance_note_first(self, db_session, source_item):
+        """기존 메모 없을 때 [PERF] 태그로 저장된다."""
+        service = DraftService(db_session)
+        draft = self._make_published_draft(db_session, source_item)
+        result = service.save_performance_note(draft.id, "좋아요 47개")
+        assert result is not None
+        assert result.manual_notes == "[PERF] 좋아요 47개"
+
+    def test_save_performance_note_appends(self, db_session, source_item):
+        """기존 메모가 있으면 줄바꿈 후 추가된다."""
+        service = DraftService(db_session)
+        draft = self._make_published_draft(db_session, source_item)
+        draft.manual_notes = "사전 메모"
+        db_session.commit()
+        service.save_performance_note(draft.id, "팔로워 +3")
+        db_session.refresh(draft)
+        assert "사전 메모" in draft.manual_notes
+        assert "[PERF] 팔로워 +3" in draft.manual_notes
+
+    def test_save_performance_note_nonexistent_draft(self, db_session, source_item):
+        """존재하지 않는 draft_id는 None 반환."""
+        service = DraftService(db_session)
+        result = service.save_performance_note(99999, "메모")
+        assert result is None
+
+    def test_get_published_with_perf_notes(self, db_session, source_item):
+        """[PERF] 메모가 있는 게시 초안만 반환된다."""
+        service = DraftService(db_session)
+        d1 = self._make_published_draft(db_session, source_item, "hook1", "body1")
+        d2 = self._make_published_draft(db_session, source_item, "hook2", "body2")
+        service.save_performance_note(d1.id, "좋아요 30개")
+        # d2는 메모 없음
+        results = service.get_published_with_perf_notes()
+        ids = [d.id for d in results]
+        assert d1.id in ids
+        assert d2.id not in ids
+
+    def test_get_published_with_perf_notes_limit(self, db_session, source_item):
+        """limit 인수가 적용된다."""
+        service = DraftService(db_session)
+        for i in range(4):
+            d = self._make_published_draft(db_session, source_item, f"h{i}", f"b{i}")
+            service.save_performance_note(d.id, f"메모{i}")
+        results = service.get_published_with_perf_notes(limit=2)
+        assert len(results) <= 2

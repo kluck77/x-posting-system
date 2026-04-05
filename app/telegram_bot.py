@@ -659,6 +659,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/queue — 게시 큐\n"
         "/hunt — 댓글 기회 탐색\n"
         "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
+        "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
+        "/perf — 최근 성과 메모 목록\n"
         "/status — AI 상태\n"
         "/pending — 대기 초안\n"
         "/cancel — 취소\n",
@@ -1182,6 +1184,76 @@ async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(f"❌ 다이제스트 생성 실패: {str(e)[:200]}")
 
 
+async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/perf [draft_id] [메모] — 게시 후 성과 메모 추가. 인수 없으면 최근 목록 표시."""
+    args = context.args or []
+
+    if not args:
+        # /perf 단독 → 최근 게시 + PERF 메모 목록
+        try:
+            db = get_db()
+            from app.services.draft_service import DraftService
+            drafts = DraftService(db).get_published_with_perf_notes(limit=5)
+            if not drafts:
+                await update.message.reply_text(
+                    "아직 성과 메모가 없습니다.\n"
+                    "<code>/perf &lt;draft_id&gt; &lt;메모&gt;</code> 로 추가하세요.",
+                    parse_mode="HTML",
+                )
+                return
+            lines = ["📊 <b>최근 성과 메모</b>\n"]
+            for d in drafts:
+                perf_lines = [
+                    ln for ln in (d.manual_notes or "").splitlines()
+                    if ln.startswith("[PERF]")
+                ]
+                perf_text = perf_lines[-1][7:].strip() if perf_lines else ""
+                lines.append(
+                    f"• ID {d.id} [{d.category.value}] "
+                    f"{(d.hook or '')[:40]}…\n"
+                    f"  └ {perf_text[:100]}"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"/perf 목록 조회 오류: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ 목록 조회 실패: {str(e)[:200]}")
+        return
+
+    if len(args) < 2:
+        await update.message.reply_text(
+            "사용법: <code>/perf &lt;draft_id&gt; &lt;성과 메모&gt;</code>\n"
+            "예: <code>/perf 42 좋아요 47개, 팔로워 +3. 훅 숫자 효과 좋음</code>\n"
+            "인수 없이 <code>/perf</code> 만 입력하면 최근 메모 목록을 봅니다.",
+            parse_mode="HTML",
+        )
+        return
+
+    try:
+        draft_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+        return
+
+    note_text = " ".join(args[1:])[:300]
+
+    try:
+        db = get_db()
+        from app.services.draft_service import DraftService
+        draft = DraftService(db).save_performance_note(draft_id, note_text)
+        if not draft:
+            await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+            return
+        await update.message.reply_text(
+            f"📊 <b>성과 메모 저장됨</b> (draft #{draft_id})\n"
+            f"<i>{note_text[:200]}</i>",
+            parse_mode="HTML",
+        )
+        logger.info(f"[/perf] draft_id={draft_id} 성과 메모: {note_text[:60]}")
+    except Exception as e:
+        logger.error(f"/perf 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 성과 메모 저장 실패: {str(e)[:200]}")
+
+
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/note <draft_id> <메모> — 초안에 수동 메모 저장 (최대 500자)."""
     args = context.args or []
@@ -1247,6 +1319,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("report", report_command))
     app.add_handler(CommandHandler("digest", digest_command))
     app.add_handler(CommandHandler("note", note_command))
+    app.add_handler(CommandHandler("perf", perf_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))

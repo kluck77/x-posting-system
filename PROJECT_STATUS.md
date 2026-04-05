@@ -43,6 +43,8 @@
 
 **Operator Tools**
 - [x] `/note <draft_id> <메모>` — save manual note to Draft.manual_notes
+- [x] `/perf <draft_id> <메모>` — save post-publish performance note (v1 feedback loop)
+- [x] `/perf` — list recent published drafts with performance notes
 - [x] ContentRequest.note validator (500자 max, field_validator)
 - [x] `/start` help text includes all active commands
 
@@ -103,7 +105,8 @@
 | v6 | Prompt banned list sync (DraftWriter + Reviewer, 13 expressions) | Done |
 | v6 | Claude DraftWriter 5-criteria compact gate | Done |
 | v6 | VoiceGuard wired into single-draft approval card | Done |
-| v7 | Content performance feedback loop | Planned |
+| v7 | Content performance feedback loop v1 (/perf command) | Done |
+| v7 | Content performance feedback loop v2 (pattern analysis) | Planned |
 | v7 | Operator note → prompt improvement pipeline | Planned |
 | v7 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
 
