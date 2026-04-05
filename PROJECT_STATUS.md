@@ -1,6 +1,6 @@
 # Project Status
 
-## Current Phase: v7 — Operator Feedback, Hint Lifecycle & PostQueue Approval Gate Complete
+## Current Phase: v8 — Operator Utility Bundle Complete
 
 ### What Works Now
 
@@ -42,6 +42,7 @@
 - [x] ContentPack — multi-draft suite (3 mains + short + replies + quote + thread)
 
 **Operator Tools**
+- [x] `/draft [url/text]` — skip analysis card, go straight to pipeline (fast path)
 - [x] `/note <draft_id> <메모>` — save manual note to Draft.manual_notes (최대 500자)
 - [x] `/hint <draft_id> <메모>` — save long-term hint with `[HINT]` prefix (DraftWriter에 우선 반영)
 - [x] `/hint clear <draft_id>` — remove `[HINT]` lines only; plain notes and `[PERF]` preserved
@@ -49,6 +50,13 @@
 - [x] `/perf <draft_id> <메모>` — save post-publish performance note (`[PERF]` prefix)
 - [x] `/perf` — list recent published drafts with performance notes
 - [x] ContentRequest.note validator (500자 max, field_validator)
+- [x] `/queue remove <n>` — remove item n from pending queue (1-indexed, operator-visible order)
+- [x] `/queue clear` — remove all pending queue items (published items preserved)
+- [x] `/monitor off/on/status` — pause/resume reply monitor; state persists across restarts
+- [x] `/status` — AI providers + monitor state + queue count + last activity + approval mode
+- [x] Idle pipeline reminder — Telegram alert after 48h inactivity (24h spam guard)
+- [x] Approval card: topic_tags as #hashtags, char-count warning if > 280
+- [x] Queue listing: 🔔 marker for posts with approval notification already sent
 - [x] `/start` help text includes all active commands
 
 **Operator Feedback & Hint System (Layer 2)**
@@ -122,7 +130,16 @@
 | v7 | Hint lifecycle — /hint (write) · /hints (read) · /hint clear (delete) | Done |
 | v7 | Content performance feedback loop v3 ([HINT]×[PERF] co-occurrence summary) | Done |
 | v7 | PostQueue approval gate — remove auto-publish, require operator tap | Done |
-| v8 | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
+| v8 | `/draft` fast-path (skip analysis card), content pack pending key fix | Done |
+| v8 | Approval card: topic_tags, char-limit warning (>280) | Done |
+| v8 | News monitor draft format parity (topic_tags, ai_rationale, char count) | Done |
+| v8 | `/queue remove <n>` — operator queue management | Done |
+| v8 | `/queue clear` — remove all pending items | Done |
+| v8 | `/monitor off/on/status` — reply monitor pause toggle | Done |
+| v8 | Idle pipeline reminder (48h threshold, 24h spam guard) | Done |
+| v8 | `/status` improvements (monitor + queue + last activity) | Done |
+| v8 | Queue listing: 🔔 notified marker, improved footer | Done |
+| v9 | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
 
 ### Locked Areas — Do Not Reopen
 
@@ -136,29 +153,29 @@ The following are complete and must not be reopened without explicit operator in
 - **hint / perf / operator workflow** — `/hint`, `/hints`, `/hint clear`, `/perf`, `/note`, `/report` complete and stable
 - **5-criteria quality framework** — all 5 providers integrated, Reviewer gate, regenerate loop
 - **Provider integrations** — Grok, Perplexity, Gemini, OpenAI, Anthropic — all complete
+- **`/draft` fast-path** — `draft_command()` direct pipeline route, no analysis card
+- **Posting pack standardization** — topic_tags display, char-limit warning, news monitor parity
+- **`/queue remove <n>` and `/queue clear`** — operator queue management commands
+- **`/monitor off/on/status`** — reply monitor toggle and state persistence
+- **Idle pipeline reminder** — `activity_tracker.py`, 48h threshold, scheduler wired in `main.py`
 
 ### Next Candidates
 
-**Candidate A — `/queue remove <n>` command** *(recommended next)*
-- Operator currently has no way to delete a mistaken queue entry via Telegram
-- Value: removes friction in queue management; reduces need to restart bot
-- Layer 1 risk: none (growth service only, no orchestrator touch)
-- Operator benefit: high — immediate quality-of-life fix
-- Recommendation: **do now**
+**Candidate A — Reply monitor inline approval button**
+- `run_reply_monitor()` currently sends re-reply drafts as plain text with no action button
+- All other draft paths (main approval, queue approval) have inline keyboard buttons
+- Value: consistent UX; removes copy-paste step for re-reply drafts
+- Layer 1 risk: none (growth service only; same pattern as queue approval notification)
+- Operator benefit: high — removes friction in the re-reply workflow
+- Recommendation: do next
 
-**Candidate B — Idle pipeline reminder**
-- A daily Telegram ping when no draft has been created or queued in 48 hours
-- Value: helps operator maintain posting cadence without checking manually
-- Layer 1 risk: none (notification-only, no write path)
-- Operator benefit: medium — reduces silent gaps in the account
-- Recommendation: defer until A is confirmed working
-
-**Candidate C — Reply monitor pause toggle (`/monitor off/on`)**
-- Currently no way to pause mention polling without restarting the bot
-- Value: operator can suppress alerts during vacations or off-hours
-- Layer 1 risk: none (growth service only)
+**Candidate B — `/queue view <n>` detail command**
+- Queue listing shows only 60-char truncated previews
+- No way to see full text of a queued item without removing it
+- Value: operator can verify a post before the approval notification fires
+- Layer 1 risk: none (read-only)
 - Operator benefit: medium
-- Recommendation: defer until B is evaluated
+- Recommendation: defer until A is confirmed working
 
 ### Permanent Exclusions
 

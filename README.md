@@ -86,14 +86,30 @@ API 키 없이도 전체 파이프라인을 테스트할 수 있습니다.
 
 | 커맨드 | 설명 |
 |--------|------|
-| `/start` | 봇 소개 |
-| `/status` | AI 프로바이더 상태 |
-| `/pending` | 승인 대기 초안 목록 |
-| `/trends [키워드]` | Grok 트렌드 탐색 |
+| `/start` | 봇 소개 및 전체 명령어 목록 |
+| `/status` | AI 프로바이더 상태 · 멘션 모니터 · 큐 현황 · 마지막 활동 |
 | `/draft [url/text]` | 분석 카드 없이 즉시 단일 초안 생성 (가장 빠른 경로) |
-| `/digest` | 아침 뉴스 다이제스트 |
-| `/queue` | 게시 큐 현황 / 추가 (슬롯 시각에 승인 알림 발송) |
-| `/report` | 주간 리포트 |
+| `/pack [url/text]` | 콘텐츠 팩 직접 생성 (메인 3개 + 댓글 + 인용 등) |
+| `/thread` | 스레드 생성 |
+| `/trends [키워드]` | Grok 트렌드 탐색 |
+| `/queue` | 게시 큐 현황 |
+| `/queue <본문>` | 게시 큐에 추가 (최적 슬롯에 승인 알림 발송) |
+| `/queue remove <n>` | n번 대기 항목 제거 |
+| `/queue clear` | 대기 항목 전체 제거 |
+| `/monitor` | 멘션 모니터 현재 상태 확인 |
+| `/monitor off` | 멘션 모니터 일시정지 |
+| `/monitor on` | 멘션 모니터 재개 |
+| `/hunt` | 댓글 기회 탐색 (CommentHunter) |
+| `/note <id> <메모>` | 초안에 일회성 메모 추가 |
+| `/hint <id> <메모>` | 장기 힌트 저장 (DraftWriter에 자동 주입) |
+| `/hint clear <id>` | 힌트 라인 제거 |
+| `/hints` | 활성 힌트 목록 조회 |
+| `/perf <id> <메모>` | 게시 후 성과 메모 기록 |
+| `/perf` | 최근 성과 메모 목록 |
+| `/report` | 주간 성과 리포트 (즉시 실행) |
+| `/digest` | 아침 뉴스 다이제스트 (즉시 실행) |
+| `/pending` | 승인 대기 초안 목록 |
+| `/cancel` | 현재 작업 취소 |
 
 승인 카드 버튼: **Approve** · **Reject** · **Defer** · **Regenerate**
 
@@ -160,10 +176,12 @@ x-posting-system/
 │       ├── naver_news.py        # 네이버 뉴스 API
 │       ├── vision_service.py    # 이미지 분석
 │       └── growth/              # 계정 성장 파이프라인
-│           ├── post_queue.py    # 최적 시간대 승인 알림 (자동 게시 없음)
-│           ├── comment_hunter.py # 트렌드 댓글 초안 생성
-│           ├── reply_monitor.py # 멘션 모니터링
-│           └── weekly_report.py # 주간 성과 리포트
+│           ├── post_queue.py       # 최적 시간대 승인 알림 (자동 게시 없음)
+│           ├── comment_hunter.py   # 트렌드 댓글 초안 생성
+│           ├── reply_monitor.py    # 멘션 모니터링 (/monitor off/on으로 제어)
+│           ├── weekly_report.py    # 주간 성과 리포트
+│           ├── monitor_state.py    # 멘션 모니터 on/off 상태 (data/monitor_state.json)
+│           └── activity_tracker.py # 파이프라인 유휴 감지 (48h 알림)
 ├── tests/                       # 자동화 테스트
 ├── scripts/
 │   ├── init_db.py               # DB 초기화
@@ -196,6 +214,12 @@ x-posting-system/
 | v6 | 품질 점수 어드바이저리, 운영자 메모(/note), 프롬프트 감사 | 완료 |
 | v7 | 성과 피드백 루프 (/perf), 힌트 시스템 (/hint · /hints · /hint clear) | 완료 |
 | v7 | PostQueue 승인 게이트 (자동 게시 → 운영자 탭 후 게시) | 완료 |
+| v8 | /draft 즉시 초안 경로, 콘텐츠 팩 pending key 버그 수정 | 완료 |
+| v8 | 승인 카드 topic_tags 표시, 글자수 초과 경고 | 완료 |
+| v8 | /queue remove, /queue clear, 큐 미리보기 개선 | 완료 |
+| v8 | /monitor off/on/status, 멘션 모니터 일시정지 | 완료 |
+| v8 | 유휴 파이프라인 알림 (48h 무활동 → Telegram 알림) | 완료 |
+| v8 | /status 개선 (모니터·큐·활동 시각 통합) | 완료 |
 
 ---
 

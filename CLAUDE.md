@@ -117,6 +117,11 @@ silently. Layer 1 continues unaffected.
 - hint / perf / operator workflow (/hint, /hints, /hint clear, /perf, /note, /report)
 - 5-criteria quality framework (all providers, Reviewer gate, regenerate loop)
 - Provider integrations (Grok, Perplexity, Gemini, OpenAI, Anthropic)
+- /draft fast-path (draft_command direct pipeline route)
+- posting pack standardization (topic_tags, char-limit warning, news monitor parity)
+- /queue remove <n> and /queue clear (operator queue management)
+- /monitor off/on/status (reply monitor toggle, monitor_state.py)
+- idle pipeline reminder (activity_tracker.py, 48h threshold, main.py scheduler)
 
 ---
 
@@ -133,23 +138,38 @@ silently. Layer 1 continues unaffected.
 - v7: [HINT]×[PERF] co-occurrence summary (format_hint_impact_summary)
 - v7: operational stability patch (session close, log commit guard, reply error handling)
 - v7: operator command reliability bundle (_parse_draft_id helper, /hint clear UX, /report session guard)
+- v8: /draft fast-path, content pack pending key fix, double-API-call elimination
+- v8: posting pack standardization (topic_tags, char-limit warning, news monitor parity)
+- v8: /queue remove <n>, /queue clear, queue listing improvements
+- v8: /monitor off/on/status (monitor_state.py, reply monitor pause guard)
+- v8: idle pipeline reminder (activity_tracker.py, 48h/24h thresholds, main.py scheduler)
+- v8: /status improvements (monitor + queue + last activity + approval mode)
 
 ### Active
-- None. v7 complete. Awaiting operator instruction for v8.
+- None. v8 complete. See PROJECT_STATUS.md Next Candidates for v9 direction.
 
 ### Future (requires explicit operator opt-in before building)
 - **Auto-posting of any kind** — permanently deferred; the current direction is manual-posting-first.
   `ENABLE_AUTO_POST_LOW_RISK` flag exists in config but logic will NOT be built without an explicit
   operator directive to reverse the manual-posting-first decision.
-- Content performance feedback loop — already done in v7; no further action
-- Operator note → prompt improvement pipeline — already done in v7; no further action
 
-### Next Candidates (v8)
+### Next Candidates (v9)
 See PROJECT_STATUS.md "Next Candidates" for full descriptions.
 
-- **A — `/queue remove <n>`**: operator queue management command. Recommended next.
-- **B — Idle pipeline reminder**: daily Telegram ping when pipeline has been silent 48h. Defer.
-- **C — `/monitor off/on`**: reply monitor pause toggle. Defer.
+- **A — Reply monitor inline approval button**: re-reply drafts currently sent as plain text; add tap-to-use button. Recommended next.
+- **B — `/queue view <n>`**: show full text of a queued item. Defer.
+
+---
+
+## Handoff Hygiene
+
+`docs/handoffs/` is the canonical session handoff location.
+
+Rules:
+- **LATEST_STATUS.md** — always update after any session that changes locked areas or completes a feature. Keep it short.
+- **CURRENT_SESSION.md** — overwrite at end of every session. Documents only the most recent session.
+- **archive/** — only for milestone-level work (end of a full version). Do NOT archive every small patch.
+- Do NOT create many small handoff files. Two files + archive/ is the full structure.
 
 ---
 
