@@ -126,6 +126,21 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         pass
 
+    # quality advisory — score_draft < 40 경고 (Layer 2, advisory only)
+    try:
+        import types
+        from app.services.quality_scorer import score_draft
+        _mock = types.SimpleNamespace(hook=draft.hook, body=draft.body)
+        _score, _ = score_draft(_mock)
+        if _score < 40:
+            card += (
+                f"\n{'─' * 30}\n"
+                f"🚨 <b>품질 경고:</b> 초안 점수 {_score}/100 — 재검토 권장\n"
+                f"(자동 거절 없음 — 최종 판단은 운영자가 합니다)\n"
+            )
+    except Exception:
+        pass
+
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"
