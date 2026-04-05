@@ -1,6 +1,6 @@
 # Project Status
 
-## Current Phase: v6 — Growth Layer & Quality Advisory Complete
+## Current Phase: v7 — Operator Feedback & Hint Lifecycle Complete
 
 ### What Works Now
 
@@ -37,16 +37,25 @@
 - [x] PostQueue — optimal-slot scheduler (KST: 9:00/10:30/12:00/13:30/15:00/19:00/21:00)
 - [x] CommentHunter — trend detection + reply draft generation
 - [x] ReplyMonitor — mention polling + re-reply drafts
-- [x] WeeklyReporter — 7-day metrics + AI analysis + content-mix section (Monday 9am KST)
+- [x] WeeklyReporter — 7-day metrics + AI analysis + content-mix section + perf summary (Monday 9am KST)
 - [x] TopicMemory — 30-day tag frequency tracking, overuse detection
 - [x] ContentPack — multi-draft suite (3 mains + short + replies + quote + thread)
 
 **Operator Tools**
-- [x] `/note <draft_id> <메모>` — save manual note to Draft.manual_notes
-- [x] `/perf <draft_id> <메모>` — save post-publish performance note (v1 feedback loop)
+- [x] `/note <draft_id> <메모>` — save manual note to Draft.manual_notes (최대 500자)
+- [x] `/hint <draft_id> <메모>` — save long-term hint with `[HINT]` prefix (DraftWriter에 우선 반영)
+- [x] `/hint clear <draft_id>` — remove `[HINT]` lines only; plain notes and `[PERF]` preserved
+- [x] `/hints` — list active `[HINT]` lines across recent approved/published drafts (audit view)
+- [x] `/perf <draft_id> <메모>` — save post-publish performance note (`[PERF]` prefix)
 - [x] `/perf` — list recent published drafts with performance notes
 - [x] ContentRequest.note validator (500자 max, field_validator)
 - [x] `/start` help text includes all active commands
+
+**Operator Feedback & Hint System (Layer 2)**
+- [x] `get_recent_operator_hints()` — reads `[HINT]` lines first, falls back to plain notes; injected into DraftWriter as `[OPERATOR HINTS]` block (Layer 2, try/except)
+- [x] `format_perf_summary()` — aggregates `[PERF]` notes by category / topic_tags / output_format; surfaces 3 recent note texts; appended to `/report` and weekly report
+- [x] Pattern analysis (v2) — cross-references `[PERF]` tags vs all published tags → "늘릴 후보 / 줄일 후보" lines in perf summary
+- [x] Hint lifecycle complete: write (`/hint`) → read (`/hints`) → delete (`/hint clear`)
 
 **Infrastructure**
 - [x] News monitor (Naver API, 1-min interval, cross-verify ≥4 sources)
@@ -105,10 +114,24 @@
 | v6 | Prompt banned list sync (DraftWriter + Reviewer, 13 expressions) | Done |
 | v6 | Claude DraftWriter 5-criteria compact gate | Done |
 | v6 | VoiceGuard wired into single-draft approval card | Done |
-| v7 | Content performance feedback loop v1 (/perf command) | Done |
-| v7 | Content performance feedback loop v2 (pattern analysis) | Planned |
-| v7 | Operator note → prompt improvement pipeline | Planned |
-| v7 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
+| v7 | Content performance feedback loop v1 (/perf command + perf summary) | Done |
+| v7 | Content performance feedback loop v2 (pattern analysis — 늘릴/줄일 후보) | Done |
+| v7 | Operator note → DraftWriter hint pipeline v1 (get_recent_operator_hints) | Done |
+| v7 | Operator hint [HINT] prefix priority over plain notes (v2) | Done |
+| v7 | Hint lifecycle — /hint (write) · /hints (read) · /hint clear (delete) | Done |
+| v8 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
+| v8 | Content performance feedback loop v3 ([HINT] × [PERF] cross-reference) | Planned |
+
+### Next Candidates
+
+**v8 — Low-risk auto-posting (feature flag)**
+- `ENABLE_AUTO_POST_LOW_RISK=false` already in config
+- Needs: time-window check + approval bypass guard scoped to low-risk category only
+- Requires explicit operator opt-in; not building without instruction
+
+**v8 — Perf feedback loop v3**
+- Cross-reference: did posts written after a [HINT] was active receive better [PERF] notes?
+- Advisory read-only — no auto-action. Far future, no urgency.
 
 ### Permanent Exclusions
 
