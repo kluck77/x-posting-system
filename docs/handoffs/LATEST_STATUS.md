@@ -31,6 +31,7 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 | Growth Intelligence Bundle (advisory.py, source/draft labels, weekly report upgrade) | Locked |
 | Phase 13 news_regen fix (article retained for regen button) | Locked |
 | Phase 14 hygiene bundle (processed_replies cap, x_username config, pending_articles cap) | Locked |
+| Phase 15 ops recovery bundle (startup_check, /recover command, corrupt-file warning, recovery_playbook.md) | Locked |
 
 ---
 
@@ -47,13 +48,13 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 
 ## Next Candidates
 
-**Nothing urgent.** System is stable and well-tested (504 tests).
-Growth advisory layer active. Operator tools complete. Hygiene bundle done.
+**Nothing urgent.** System is stable and well-tested (519 tests).
+Growth advisory layer active. Operator tools complete. Hygiene bundle done. Recovery tooling in place.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-05 (session 6 — Phase 14 Hygiene Bundle)
+- Date: 2026-04-05 (session 7 — Phase 15 Ops Recovery Bundle)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`
