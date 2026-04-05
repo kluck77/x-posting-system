@@ -1218,8 +1218,8 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not args:
         # /perf 단독 → 최근 게시 + PERF 메모 목록
+        db = get_db()
         try:
-            db = get_db()
             from app.services.draft_service import DraftService
             drafts = DraftService(db).get_published_with_perf_notes(limit=5)
             if not drafts:
@@ -1245,6 +1245,8 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"/perf 목록 조회 오류: {e}", exc_info=True)
             await update.message.reply_text(f"❌ 목록 조회 실패: {str(e)[:200]}")
+        finally:
+            db.close()
         return
 
     if len(args) < 2:
@@ -1264,8 +1266,8 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     note_text = " ".join(args[1:])[:300]
 
+    db = get_db()
     try:
-        db = get_db()
         from app.services.draft_service import DraftService
         draft = DraftService(db).save_performance_note(draft_id, note_text)
         if not draft:
@@ -1280,6 +1282,8 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"/perf 오류: {e}", exc_info=True)
         await update.message.reply_text(f"❌ 성과 메모 저장 실패: {str(e)[:200]}")
+    finally:
+        db.close()
 
 
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1301,8 +1305,8 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     note_text = " ".join(args[1:])[:500]
 
+    db = get_db()
     try:
-        db = get_db()
         from app.services.draft_service import DraftService
         draft_service = DraftService(db)
         draft = draft_service.get_by_id(draft_id)
@@ -1319,8 +1323,11 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         logger.info(f"[/note] draft_id={draft_id} 메모 저장: {note_text[:60]}")
     except Exception as e:
+        db.rollback()
         logger.error(f"/note 오류: {e}", exc_info=True)
         await update.message.reply_text(f"❌ 메모 저장 실패: {str(e)[:200]}")
+    finally:
+        db.close()
 
 
 async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1341,8 +1348,8 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
             return
+        db = get_db()
         try:
-            db = get_db()
             from app.services.draft_service import DraftService
             draft = DraftService(db).clear_hint_lines(draft_id)
             if not draft:
@@ -1357,6 +1364,8 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"/hint clear 오류: {e}", exc_info=True)
             await update.message.reply_text(f"❌ 힌트 제거 실패: {str(e)[:200]}")
+        finally:
+            db.close()
         return
 
     # /hint <draft_id> <메모>
@@ -1378,8 +1387,8 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     note_text = "[HINT] " + " ".join(args[1:])[:493]  # prefix 7자 포함 500자 이내
 
+    db = get_db()
     try:
-        db = get_db()
         from app.services.draft_service import DraftService
         draft_service = DraftService(db)
         draft = draft_service.get_by_id(draft_id)
@@ -1396,20 +1405,25 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         logger.info(f"[/hint] draft_id={draft_id} 힌트 저장: {note_text[:60]}")
     except Exception as e:
+        db.rollback()
         logger.error(f"/hint 오류: {e}", exc_info=True)
         await update.message.reply_text(f"❌ 힌트 저장 실패: {str(e)[:200]}")
+    finally:
+        db.close()
 
 
 async def hints_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/hints — 현재 활성 [HINT] 목록 조회 (DraftWriter에 우선 반영될 힌트들)."""
+    db = get_db()
     try:
-        db = get_db()
         from app.services.draft_service import DraftService
         items = DraftService(db).get_hint_lines_with_draft_id(limit=10)
     except Exception as e:
         logger.error(f"/hints 조회 오류: {e}", exc_info=True)
         await update.message.reply_text(f"❌ 힌트 조회 실패: {str(e)[:200]}")
         return
+    finally:
+        db.close()
 
     if not items:
         await update.message.reply_text(

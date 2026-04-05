@@ -78,8 +78,12 @@ class XPublisher:
             response_payload=response_payload,
             created_at=datetime.now(timezone.utc),
         )
-        self.db.add(log_entry)
-        self.db.commit()
+        try:
+            self.db.add(log_entry)
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.warning(f"[XPublisher] 게시 로그 저장 실패 (무시): {e}")
 
     async def publish(self, draft: Draft) -> PublishResult:
         """

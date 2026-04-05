@@ -86,3 +86,24 @@ class TestXPublisher:
         result = await publisher.publish(approved_draft)
         assert result.success is False
         assert "이미 게시된" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_log_attempt_commit_failure_does_not_raise(
+        self, db_session, approved_draft, monkeypatch
+    ):
+        """_log_attempt() commit 실패 시 예외가 밖으로 전파되지 않는다."""
+        publisher = XPublisher(db_session)
+
+        def _bad_commit():
+            raise RuntimeError("DB commit 강제 실패")
+
+        monkeypatch.setattr(db_session, "commit", _bad_commit)
+        # _log_attempt 호출 — 예외가 전파되지 않아야 함
+        try:
+            publisher._log_attempt(
+                draft_id=approved_draft.id,
+                action="publish",
+                success=True,
+            )
+        except Exception as e:
+            pytest.fail(f"_log_attempt가 예외를 전파함: {e}")

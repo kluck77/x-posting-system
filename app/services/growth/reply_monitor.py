@@ -211,14 +211,21 @@ class ReplyMonitor:
             resource_owner_key=settings.x_access_token,
             resource_owner_secret=settings.x_access_token_secret,
         )
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(
-                X_TWEET_URL,
-                auth=auth,
-                json={"text": text, "reply": {"in_reply_to_tweet_id": reply_id}},
-            )
-            r.raise_for_status()
-            return r.json().get("data", {}).get("id")
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    X_TWEET_URL,
+                    auth=auth,
+                    json={"text": text, "reply": {"in_reply_to_tweet_id": reply_id}},
+                )
+                if r.status_code == 429:
+                    logger.warning("[ReplyMonitor] post_reply X API rate limit (429) — 스킵")
+                    return None
+                r.raise_for_status()
+                return r.json().get("data", {}).get("id")
+        except Exception as e:
+            logger.error(f"[ReplyMonitor] post_reply 실패: {e}")
+            return None
 
     def _mock_replies(self) -> list[IncomingReply]:
         return [
