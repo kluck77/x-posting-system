@@ -526,3 +526,75 @@ class TestGetHintLinesWithDraftId:
             )
         result = DraftService(db_session).get_hint_lines_with_draft_id(limit=3)
         assert len(result) <= 3
+
+
+class TestClearHintLines:
+    """clear_hint_lines() 테스트."""
+
+    def _make_draft_with_note(self, db_session, source_item, hook, body, note):
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        draft.manual_notes = note
+        draft.approval_status = ApprovalStatus.PUBLISHED
+        db_session.commit()
+        return draft
+
+    def test_returns_none_for_unknown_draft(self, db_session, source_item):
+        """없는 draft_id면 None 반환."""
+        result = DraftService(db_session).clear_hint_lines(99999)
+        assert result is None
+
+    def test_removes_hint_lines(self, db_session, source_item):
+        """[HINT] 라인이 제거된다."""
+        d = self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "[HINT] 통화정책 각도로"
+        )
+        DraftService(db_session).clear_hint_lines(d.id)
+        db_session.refresh(d)
+        assert d.manual_notes is None or "[HINT]" not in (d.manual_notes or "")
+
+    def test_preserves_plain_notes(self, db_session, source_item):
+        """일반 메모는 유지된다."""
+        d = self._make_draft_with_note(
+            db_session, source_item, "h1", "b1",
+            "[HINT] 장기 힌트\n일반 운영 메모"
+        )
+        DraftService(db_session).clear_hint_lines(d.id)
+        db_session.refresh(d)
+        assert "일반 운영 메모" in (d.manual_notes or "")
+        assert "[HINT]" not in (d.manual_notes or "")
+
+    def test_preserves_perf_lines(self, db_session, source_item):
+        """[PERF] 라인은 유지된다."""
+        d = self._make_draft_with_note(
+            db_session, source_item, "h1", "b1",
+            "[HINT] 장기 힌트\n[PERF] 좋아요 30개"
+        )
+        DraftService(db_session).clear_hint_lines(d.id)
+        db_session.refresh(d)
+        assert "[PERF] 좋아요 30개" in (d.manual_notes or "")
+        assert "[HINT]" not in (d.manual_notes or "")
+
+    def test_no_hint_lines_is_noop(self, db_session, source_item):
+        """[HINT]가 없으면 기존 notes 그대로 유지."""
+        d = self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "일반 메모만"
+        )
+        DraftService(db_session).clear_hint_lines(d.id)
+        db_session.refresh(d)
+        assert d.manual_notes == "일반 메모만"
+
+    def test_hint_no_longer_returned_after_clear(self, db_session, source_item):
+        """clear 후 get_hint_lines_with_draft_id()에서 해당 draft가 제외된다."""
+        d = self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "[HINT] 지울 힌트"
+        )
+        service = DraftService(db_session)
+        assert len(service.get_hint_lines_with_draft_id()) == 1
+        service.clear_hint_lines(d.id)
+        assert service.get_hint_lines_with_draft_id() == []

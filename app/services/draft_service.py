@@ -315,6 +315,28 @@ class DraftService:
             logger.warning(f"[HintLines] 조회 실패 (무시): {e}")
             return []
 
+    def clear_hint_lines(self, draft_id: int) -> Draft | None:
+        """
+        draft의 manual_notes에서 [HINT] 라인만 제거하고 나머지는 보존.
+
+        - [PERF] 라인, 일반 메모는 그대로 유지
+        - [HINT] 라인이 없어도 오류 없이 반환
+        - draft 없으면 None 반환
+        """
+        draft = self.get_by_id(draft_id)
+        if not draft:
+            return None
+        original = draft.manual_notes or ""
+        kept = "\n".join(
+            line for line in original.splitlines()
+            if not line.strip().startswith("[HINT]")
+        ).strip()
+        draft.manual_notes = kept if kept else None
+        self.db.commit()
+        self.db.refresh(draft)
+        logger.info(f"[HINT] 라인 제거: draft_id={draft_id}")
+        return draft
+
     def get_published_with_perf_notes(self, limit: int = 5) -> list[Draft]:
         """
         [PERF] 태그가 있는 최근 게시 초안을 반환합니다.

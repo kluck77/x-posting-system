@@ -659,7 +659,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/queue — 게시 큐\n"
         "/hunt — 댓글 기회 탐색\n"
         "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
-        "/hint &lt;id&gt; &lt;메모&gt; — 장기 힌트 저장 (다음 초안 작성에 반영)\n"
+        "/hint &lt;id&gt; &lt;메모&gt; — 장기 힌트 저장 · /hint clear &lt;id&gt; 로 제거\n"
         "/hints — 활성 힌트 목록 조회\n"
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
@@ -1310,13 +1310,48 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/hint <draft_id> <메모> — [HINT] prefix로 장기 힌트 저장 (다음 초안 반영용)."""
+    """/hint <draft_id> <메모> | /hint clear <draft_id> — 장기 힌트 저장/제거."""
     args = context.args or []
+
+    # /hint clear <draft_id>
+    if args and args[0].lower() == "clear":
+        if len(args) < 2:
+            await update.message.reply_text(
+                "사용법: <code>/hint clear &lt;draft_id&gt;</code>\n"
+                "예: <code>/hint clear 42</code>",
+                parse_mode="HTML",
+            )
+            return
+        try:
+            draft_id = int(args[1])
+        except ValueError:
+            await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+            return
+        try:
+            db = get_db()
+            from app.services.draft_service import DraftService
+            draft = DraftService(db).clear_hint_lines(draft_id)
+            if not draft:
+                await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+                return
+            await update.message.reply_text(
+                f"✅ <b>힌트 제거됨</b> (draft #{draft_id})\n"
+                "<i>[HINT] 라인만 삭제됐습니다. 일반 메모·성과 메모는 유지됩니다.</i>",
+                parse_mode="HTML",
+            )
+            logger.info(f"[/hint clear] draft_id={draft_id}")
+        except Exception as e:
+            logger.error(f"/hint clear 오류: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ 힌트 제거 실패: {str(e)[:200]}")
+        return
+
+    # /hint <draft_id> <메모>
     if len(args) < 2:
         await update.message.reply_text(
-            "사용법: <code>/hint &lt;draft_id&gt; &lt;메모&gt;</code>\n"
-            "예: <code>/hint 42 항상 통화정책 충격 각도로 써줘</code>\n"
-            "<i>장기적으로 다음 초안 작성에 반영되는 힌트입니다.</i>",
+            "사용법:\n"
+            "• <code>/hint &lt;draft_id&gt; &lt;메모&gt;</code> — 장기 힌트 저장\n"
+            "• <code>/hint clear &lt;draft_id&gt;</code> — 힌트 제거\n"
+            "예: <code>/hint 42 항상 통화정책 충격 각도로 써줘</code>",
             parse_mode="HTML",
         )
         return
