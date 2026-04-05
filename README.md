@@ -1,8 +1,8 @@
 # X Posting System
 
-**한국 이슈를 해외 독자에게 영어로 전달하는 X(트위터) 자동화 포스팅 시스템**
+**한국 이슈를 해외 독자에게 영어로 전달하는 반수동 콘텐츠 운영 시스템**
 
-*Approval-based X posting pipeline: Korean source → AI draft → Telegram approval → publish.*
+*Semi-manual, approval-first content operating system: Korean source → AI draft suite → Telegram approval → operator posts manually.*
 
 ---
 
@@ -11,7 +11,7 @@
 **하는 것**
 - 한국 뉴스·커뮤니티 소스를 입력하면 영어 X 포스트 초안을 AI가 생성합니다
 - 텔레그램으로 승인 카드를 전송합니다 (Approve / Reject / Defer / Regenerate)
-- Approve를 눌러야만 X에 게시됩니다
+- **Approve를 눌러야만** X에 게시됩니다 — 자동 게시 없음, 예외 없음
 - 모든 기록이 SQLite DB에 저장됩니다
 
 **안 하는 것**
@@ -32,7 +32,7 @@
               └─▶ Perplexity (FactChecker) — 팩트 검증
                     └─▶ Claude (Reviewer)  — 품질·리스크 최종 판단
                           └─▶ 텔레그램 승인 카드
-                                └─▶ [Approve] X 게시
+                                └─▶ [Approve → 운영자가 X에 직접 게시]
 별도: Grok (TrendHunter) — /trends 명령으로 트렌드 탐색
 ```
 
@@ -92,7 +92,7 @@ API 키 없이도 전체 파이프라인을 테스트할 수 있습니다.
 | `/trends [키워드]` | Grok 트렌드 탐색 |
 | `/url [링크]` | URL 수집 후 포스팅 파이프라인 실행 |
 | `/digest` | 아침 뉴스 다이제스트 |
-| `/queue` | 게시 큐 현황 |
+| `/queue` | 게시 큐 현황 / 추가 (슬롯 시각에 승인 알림 발송) |
 | `/report` | 주간 리포트 |
 
 승인 카드 버튼: **Approve** · **Reject** · **Defer** · **Regenerate**
@@ -160,7 +160,7 @@ x-posting-system/
 │       ├── naver_news.py        # 네이버 뉴스 API
 │       ├── vision_service.py    # 이미지 분석
 │       └── growth/              # 계정 성장 파이프라인
-│           ├── post_queue.py    # 최적 시간대 게시 스케줄러
+│           ├── post_queue.py    # 최적 시간대 승인 알림 (자동 게시 없음)
 │           ├── comment_hunter.py # 트렌드 댓글 초안 생성
 │           ├── reply_monitor.py # 멘션 모니터링
 │           └── weekly_report.py # 주간 성과 리포트
@@ -179,7 +179,7 @@ x-posting-system/
 
 ---
 
-## 로드맵
+## 완료된 버전
 
 | 단계 | 내용 | 상태 |
 |------|------|------|
@@ -190,12 +190,12 @@ x-posting-system/
 | v4 | URL 수집 3단계 fallback (Jina AI) | 완료 |
 | v4 | Growth 파이프라인 (Queue/Hunter/Monitor) | 완료 |
 | v4 | ContentPack 멀티 초안 출력 | 완료 |
-| v4 | criteria_signals → 프롬프트 주입 | 완료 |
-| v5 | RSS 자동 수집 & 뉴스 모니터 | 진행 중 |
-| v5 | 토픽 메모리 + 콘텐츠 믹스 어드바이저 | 계획 중 |
-| v5 | 보이스 가드 (AI 어투 감지) | 계획 중 |
-| v6 | 품질 점수 어드바이저리 (텔레그램 카드) | 계획 중 |
-| v6 | 운영자 메모 캡처 + 프롬프트 개선 | 계획 중 |
+| v5 | RSS 자동 수집 & 뉴스 모니터 | 완료 |
+| v5 | 토픽 메모리 + 콘텐츠 믹스 어드바이저 | 완료 |
+| v5 | 보이스 가드 (AI 어투 감지) + RepetitionGuard | 완료 |
+| v6 | 품질 점수 어드바이저리, 운영자 메모(/note), 프롬프트 감사 | 완료 |
+| v7 | 성과 피드백 루프 (/perf), 힌트 시스템 (/hint · /hints · /hint clear) | 완료 |
+| v7 | PostQueue 승인 게이트 (자동 게시 → 운영자 탭 후 게시) | 완료 |
 
 ---
 

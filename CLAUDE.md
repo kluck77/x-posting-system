@@ -7,14 +7,17 @@ Read this before proposing any changes, features, or roadmap items.
 
 ## What This System Is
 
-A **semi-manual X content operating system** for a Korea-focused English account.
+A **semi-manual, approval-first content operating system** for a Korea-focused English account.
+
+The system generates draft content and prepares it for the operator to review and post.
+The operator makes every posting decision. The system never posts without an explicit tap.
 
 Core workflow:
 ```
-source input → AI draft suite → Telegram approval → X post → logs
+source input → AI draft suite → Telegram approval card → [operator taps Approve] → X post → logs
 ```
 
-All posting requires human approval. No exceptions.
+All posting requires human approval. No exceptions. This is not a scheduled auto-poster.
 
 ---
 
@@ -82,8 +85,10 @@ unless this section is explicitly updated.
 
 ### Layer 1 — Operating Core (must never break)
 ```
-ContentRequest → ContentPack → Telegram approval → X post → DB log
+ContentRequest → ContentPack → Telegram approval card → [operator tap] → X post → DB log
 ```
+"X post" here means: XPublisher called only after `ApprovalStatus.APPROVED` is set by an
+explicit operator action. There is no auto-posting path in Layer 1.
 Layer 1 must work without Layer 2. Test this explicitly.
 
 ### Layer 2 — Growth Support (advisory only, never blocking)
@@ -101,6 +106,17 @@ silently. Layer 1 continues unaffected.
 - Do NOT add new DB tables without explicit instruction (use existing columns)
 - Do NOT modify the Telegram approval flow without explicit instruction
 - Do NOT modify the X publisher without explicit instruction
+- Do NOT modify PostQueue to auto-publish without approval
+- Do NOT add any approval bypass, regardless of risk level or category
+
+### Locked Areas (complete — do not reopen)
+- orchestrator Steps 1–7
+- Layer 1 core flow (ContentRequest → XPublisher)
+- Telegram approval callbacks (approve/reject/defer/regenerate)
+- PostQueue approval gate (try_publish_next → notification only)
+- hint / perf / operator workflow (/hint, /hints, /hint clear, /perf, /note, /report)
+- 5-criteria quality framework (all providers, Reviewer gate, regenerate loop)
+- Provider integrations (Grok, Perplexity, Gemini, OpenAI, Anthropic)
 
 ---
 
@@ -122,9 +138,18 @@ silently. Layer 1 continues unaffected.
 - None. v7 complete. Awaiting operator instruction for v8.
 
 ### Future (requires explicit operator opt-in before building)
-- Low-risk auto-posting (feature flag — `ENABLE_AUTO_POST_LOW_RISK` exists, logic not built)
-- Content performance feedback loop (already done in v7; no further action)
-- Operator note → prompt improvement pipeline (already done in v7; no further action)
+- **Auto-posting of any kind** — permanently deferred; the current direction is manual-posting-first.
+  `ENABLE_AUTO_POST_LOW_RISK` flag exists in config but logic will NOT be built without an explicit
+  operator directive to reverse the manual-posting-first decision.
+- Content performance feedback loop — already done in v7; no further action
+- Operator note → prompt improvement pipeline — already done in v7; no further action
+
+### Next Candidates (v8)
+See PROJECT_STATUS.md "Next Candidates" for full descriptions.
+
+- **A — `/queue remove <n>`**: operator queue management command. Recommended next.
+- **B — Idle pipeline reminder**: daily Telegram ping when pipeline has been silent 48h. Defer.
+- **C — `/monitor off/on`**: reply monitor pause toggle. Defer.
 
 ---
 

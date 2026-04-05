@@ -1,6 +1,6 @@
 # Project Status
 
-## Current Phase: v7 — Operator Feedback & Hint Lifecycle Complete
+## Current Phase: v7 — Operator Feedback, Hint Lifecycle & PostQueue Approval Gate Complete
 
 ### What Works Now
 
@@ -11,7 +11,7 @@
 - [x] Perplexity FactChecker — fact verification
 - [x] Claude Reviewer — quality & risk judgment (2-framework: 5-criteria + safety)
 - [x] Telegram approval cards (Approve / Reject / Defer / Regenerate)
-- [x] X publishing (Mock + real API)
+- [x] X publishing — approval-gated only; no publish without operator tap (real + mock modes)
 
 **Quality & Safety**
 - [x] 5-Criteria quality scorer (expertise / marketability / consistency / follower_quality / repeat_consumption)
@@ -34,7 +34,7 @@
 - [x] Handles JS-rendered pages, partial paywall bypass
 
 **Growth Pipelines**
-- [x] PostQueue — optimal-slot scheduler (KST: 9:00/10:30/12:00/13:30/15:00/19:00/21:00)
+- [x] PostQueue — optimal-slot approval-notification scheduler (KST: 9:00/10:30/12:00/13:30/15:00/19:00/21:00); posting requires operator tap, no auto-publish
 - [x] CommentHunter — trend detection + reply draft generation
 - [x] ReplyMonitor — mention polling + re-reply drafts
 - [x] WeeklyReporter — 7-day metrics + AI analysis + content-mix section + perf summary (Monday 9am KST)
@@ -70,9 +70,9 @@
 
 ### Safety Rules (Enforced in Code)
 
-- No publish without human approval
+- No publish without human approval — zero exceptions, enforced in XPublisher and PostQueue
 - politics / policy / economy / society always require approval
-- Auto-post feature flag OFF by default (`ENABLE_AUTO_POST_LOW_RISK=false`)
+- `ENABLE_AUTO_POST_LOW_RISK=false` — flag exists, logic intentionally not built; auto-posting is not the current direction
 - Duplicate text detection
 - Daily usage limits
 - No auto-like / follow / DM / reply
@@ -121,14 +121,44 @@
 | v7 | Operator hint [HINT] prefix priority over plain notes (v2) | Done |
 | v7 | Hint lifecycle — /hint (write) · /hints (read) · /hint clear (delete) | Done |
 | v7 | Content performance feedback loop v3 ([HINT]×[PERF] co-occurrence summary) | Done |
-| v8 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
+| v7 | PostQueue approval gate — remove auto-publish, require operator tap | Done |
+| v8 | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
+
+### Locked Areas — Do Not Reopen
+
+The following are complete and must not be reopened without explicit operator instruction:
+
+- **Orchestrator Steps 1–7** — core pipeline structure locked
+- **Layer 1 core flow** — ContentRequest → ContentPack → Telegram approval → X publish (approval-gated) → DB log
+- **Main Telegram approval flow** — Approve / Reject / Defer / Regenerate callbacks
+- **X publisher** — approval status check enforced; no bypass logic
+- **PostQueue approval gate** — auto-publish removed; `try_publish_next()` sends notification only
+- **hint / perf / operator workflow** — `/hint`, `/hints`, `/hint clear`, `/perf`, `/note`, `/report` complete and stable
+- **5-criteria quality framework** — all 5 providers integrated, Reviewer gate, regenerate loop
+- **Provider integrations** — Grok, Perplexity, Gemini, OpenAI, Anthropic — all complete
 
 ### Next Candidates
 
-**v8 — Low-risk auto-posting (feature flag)**
-- `ENABLE_AUTO_POST_LOW_RISK=false` already in config
-- Needs: time-window check + approval bypass guard scoped to low-risk category only
-- Requires explicit operator opt-in; not building without instruction
+**Candidate A — `/queue remove <n>` command** *(recommended next)*
+- Operator currently has no way to delete a mistaken queue entry via Telegram
+- Value: removes friction in queue management; reduces need to restart bot
+- Layer 1 risk: none (growth service only, no orchestrator touch)
+- Operator benefit: high — immediate quality-of-life fix
+- Recommendation: **do now**
+
+**Candidate B — Idle pipeline reminder**
+- A daily Telegram ping when no draft has been created or queued in 48 hours
+- Value: helps operator maintain posting cadence without checking manually
+- Layer 1 risk: none (notification-only, no write path)
+- Operator benefit: medium — reduces silent gaps in the account
+- Recommendation: defer until A is confirmed working
+
+**Candidate C — Reply monitor pause toggle (`/monitor off/on`)**
+- Currently no way to pause mention polling without restarting the bot
+- Value: operator can suppress alerts during vacations or off-hours
+- Layer 1 risk: none (growth service only)
+- Operator benefit: medium
+- Recommendation: defer until B is evaluated
 
 ### Permanent Exclusions
 
