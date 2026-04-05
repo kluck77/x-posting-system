@@ -137,16 +137,14 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         pass
 
-    # quality advisory — score_draft < 40 경고 (Layer 2, advisory only)
+    # quality advisory — 초안 우선순위 레이블 (Layer 2, advisory only)
     try:
-        import types
-        from app.services.quality_scorer import score_draft
-        _mock = types.SimpleNamespace(hook=draft.hook, body=draft.body)
-        _score, _ = score_draft(_mock)
-        if _score < 40:
+        from app.services.advisory import draft_advisory
+        _adv = draft_advisory(draft.hook, draft.body, getattr(draft, "source_type", "news_link"))
+        if _adv:
             card += (
                 f"\n{'─' * 30}\n"
-                f"🚨 <b>품질 경고 {_score}/100</b> — 승인 전 검토 권장 (참고용)\n"
+                f"📌 <b>초안 우선순위:</b> {_adv} (참고용)\n"
             )
     except Exception:
         pass

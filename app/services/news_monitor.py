@@ -145,8 +145,23 @@ async def _send_news_alert(cluster: dict) -> None:
     region_label = "🇺🇸 US" if cluster.get("region") == "US" else "🇰🇷 KR"
     verified_tag = f"✅ {cluster['source_count']}개 교차 확인"
 
+    # Layer 2: 소스 우선순위 레이블 (실패 시 무시)
+    advisory_label = ""
+    try:
+        from app.services.advisory import source_advisory
+        advisory_label = source_advisory({
+            "title":    cluster["title"],
+            "summary":  "",
+            "region":   cluster.get("region", "KR"),
+            "category": cluster.get("category", ""),
+        })
+    except Exception:
+        pass
+
+    advisory_line = f"  {advisory_label}" if advisory_label else ""
+
     text = (
-        f"🚨 <b>속보</b> {verified_tag}\n"
+        f"🚨 <b>속보</b> {verified_tag}{advisory_line}\n"
         f"{'─' * 28}\n"
         f"{cat_em} [{cluster['category'].upper()}] {region_label}\n\n"
         f"📰 <b>{cluster['title']}</b>\n\n"

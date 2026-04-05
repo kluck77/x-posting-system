@@ -4,66 +4,73 @@
 
 - Date: 2026-04-05
 - Branch: claude/extract-prediction-time-n82UK
-- Phase: post-v10 audit (Phase 12, session 3)
+- Phase: Phase 12, session 4 — Growth Intelligence Bundle
 
 ---
 
 ## What This Session Did
 
-Audit pass — found and closed one real test gap. No doc changes, no logic changes.
+Implemented Growth Intelligence Bundle — advisory-only, Layer 2, no new DB tables.
 
 ---
 
-## Audit Scope
+## Changes Made
 
-Files inspected: all listed in task prompt + full test suite scan.
+### New File: `app/services/advisory.py`
+Central advisory label module. Pure functions, no AI, no DB.
+- `priority_label(score)` → 🔴 우선 / 🟡 보통 / ⚪ 보류
+- `source_advisory(article)` — wraps morning_digest._importance_score(), normalizes to 0–100, returns label
+- `draft_advisory(hook, body)` — wraps quality_scorer.score_draft(), returns label
 
-Already covered by prior sessions (c1e13ed, eedb51b):
-- All growth/* docstrings
-- telegram_bot.py /start help text
-- reply_monitor.py flow description
-- growth/__init__.py pipeline description
+Score normalization for sources:
+- max raw importance score = 43 (theoretical ceiling)
+- normalized = min(raw × 100 / 43, 100)
+- 🔴 우선 ≥ 60, 🟡 보통 ≥ 40, ⚪ 보류 < 40
 
-New this session:
-- test coverage gap scan across all 26 test files
-- orchestrator.py / telegram_service.py: no stale markers found
-- classifier.py "자동 게시" references: appropriate (they describe the Settings flag
-  logic; ENABLE_AUTO_POST_LOW_RISK is intentionally present as a deferred feature flag)
+### `app/services/news_monitor.py` — `_send_news_alert()`
+Added Layer 2 advisory label to news alert header:
+`🚨 속보 ✅ N개 교차 확인  🔴 우선`
+Wrapped in try/except — alert always sends even if advisory fails.
 
----
+### `app/services/telegram_service.py` — `build_approval_card()`
+Replaced old `score_draft < 40 → 품질 경고` block with:
+`📌 초안 우선순위: 🟡 보통 (참고용)`
+Always shows a label (not just on low scores). Still Layer 2.
 
-## Real Issue Found
+### `app/services/growth/weekly_report.py` — `analyze_with_ai()` + `_fallback_analysis()`
+Upgraded prompt to request 4 structured sections:
+- [계속할 패턴] — patterns to lean into
+- [줄일 패턴] — patterns to reduce
+- [추천 콘텐츠 각도 3가지] — 3 recommended next angles
+- [추천 소스/주제 방향 3가지] — 3 recommended source/topic directions
+Fallback also restructured to match the 4-section format.
 
-**test_rate_limiter.py: v10 settings-default path had zero test coverage.**
+### `tests/test_advisory.py` (new)
+13 tests covering priority_label, source_advisory, draft_advisory.
 
-All 11 existing RateLimiter tests pass explicit override args (`max_drafts=5` etc.).
-The v10 feature — "read from settings when no override provided" — was never exercised
-by a test. The code worked, but the central behavior of the v10 externalization was
-unverified.
-
----
-
-## Fix Made
-
-Added `test_uses_settings_defaults_when_no_override` to `TestRateLimiter`:
-- Creates `RateLimiter(db_session)` with no override args
-- Asserts `limiter.max_drafts == settings.max_drafts_per_day`
-- Asserts `limiter.max_telegram == settings.max_telegram_per_day`
-- Asserts `limiter.max_posts == settings.max_posts_per_day`
-
-Risk: zero (test-only addition).
+### `tests/test_telegram_service.py`
+Updated 3 existing quality advisory tests to match new advisory label behavior.
 
 ---
 
 ## Tests
 
-- Before: 481 passed
-- After: 482 passed (+1)
+- Before: 482 passed
+- After: 495 passed (+13)
 - 0 failures
 
 ---
 
-## Remaining Future Candidates (unchanged from Phase 12)
+## Architecture Notes
+
+- All changes are Layer 2 (try/except, advisory-only)
+- No approval flow modified (callbacks untouched)
+- No new DB tables
+- No AI calls added to advisory.py itself (reuses existing scorers)
+
+---
+
+## Remaining Future Candidates (unchanged)
 
 1. `MY_USERNAME = "sskorea02"` hardcoded — move to Settings (low-medium value, low risk)
 2. `processed_replies.json` grows unbounded — trim on load (low value, low risk)

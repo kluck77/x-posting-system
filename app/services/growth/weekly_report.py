@@ -182,19 +182,38 @@ class WeeklyReporter:
         if not settings.has_anthropic:
             return self._fallback_analysis(metrics)
 
-        try:
-            prompt = f"""@sskorea02 계정 주간 성과 분석 (Gate.io 선물봇 계정):
+        top_posts_text = ""
+        for i, p in enumerate(metrics.top_posts[:3], 1):
+            top_posts_text += f"  {i}. RT {p.get('reposts',0)} | {p.get('text','')[:60]}\n"
 
-노출수: {metrics.impressions:,}
-참여율: {metrics.engagement_rate:.2f}%
-재게시: {metrics.reposts} | 답글: {metrics.replies} | 북마크: {metrics.bookmarks}
+        try:
+            prompt = f"""@sskorea02 계정 주간 성과 분석 (Gate.io 선물봇 운영자 계정):
+
+[지표]
+노출수: {metrics.impressions:,} | 참여율: {metrics.engagement_rate:.2f}%
+재게시: {metrics.reposts} | 답글: {metrics.replies} | 좋아요: {metrics.likes} | 북마크: {metrics.bookmarks}
 팔로워 순증: {metrics.net_followers:+d}
 
-X 알고리즘 기준 (답글 가중치 = 좋아요 × 27배, 재게시 = 좋아요 × 2배):
+[TOP 게시물]
+{top_posts_text or "  (데이터 없음)"}
 
-다음 주 집중해야 할 3가지 개선 액션을 구체적으로 (수치 포함) 제시해라.
-각 액션: 현재 문제 → 구체적 해결책 → 기대 효과.
-한국어 200자 이내."""
+X 알고리즘: 답글 = 좋아요 × 27배, 재게시 = 좋아요 × 2배
+
+아래 4개 섹션을 한국어로 출력하라. 각 섹션 제목을 그대로 사용:
+
+[계속할 패턴]
+이번 주 잘 된 것 2가지 (수치 근거 포함)
+
+[줄일 패턴]
+이번 주 효과 낮았던 것 2가지 (수치 근거 포함)
+
+[추천 콘텐츠 각도 3가지]
+다음 주 시도할 구체적 프레임/각도 3개 (각 1줄)
+
+[추천 소스/주제 방향 3가지]
+다음 주 집중할 뉴스 소스나 주제 영역 3개 (각 1줄)
+
+총 250자 이내."""
 
             async with httpx.AsyncClient(timeout=20) as client:
                 r = await client.post(
@@ -206,7 +225,7 @@ X 알고리즘 기준 (답글 가중치 = 좋아요 × 27배, 재게시 = 좋아
                     },
                     json={
                         "model": "claude-haiku-4-5-20251001",
-                        "max_tokens": 300,
+                        "max_tokens": 400,
                         "messages": [{"role": "user", "content": prompt}],
                     },
                 )
@@ -217,16 +236,29 @@ X 알고리즘 기준 (답글 가중치 = 좋아요 × 27배, 재게시 = 좋아
             return self._fallback_analysis(metrics)
 
     def _fallback_analysis(self, metrics: WeeklyMetrics) -> str:
-        tips = []
+        lean = "현재 성장세 유지"
+        reduce = "불필요한 반복 패턴 줄이기"
+        if metrics.reposts >= 20:
+            lean = f"재게시 {metrics.reposts}회 — 스레드 형식 계속 활용"
+        if metrics.replies >= 30:
+            lean += f" / 답글 {metrics.replies}회 — 참여 유지"
         if metrics.reposts < 20:
-            tips.append("① 재게시 부족 → 스레드 게시물 주 1회 이상, 마지막 트윗에 RT CTA 추가")
+            reduce = f"재게시 {metrics.reposts}회 부족 — 단독 트윗 비율 줄이기"
         if metrics.replies < 30:
-            tips.append("② 답글 수 낮음 → 게시 후 첫 30분 내 댓글 달기 5개 이상 실행")
-        if metrics.net_followers < 5:
-            tips.append("③ 팔로워 전환 낮음 → 핀 게시물 교체 (가장 높은 RT 게시물로)")
-        if not tips:
-            tips.append("① 현재 성장세 유지 ② 댓글 달기 루틴 10→15개/일 확대 ③ 스레드 빈도 증가")
-        return "\n".join(tips)
+            reduce += f" / 답글 {metrics.replies}회 낮음 — 질문 없는 게시물 줄이기"
+
+        return (
+            f"[계속할 패턴]\n{lean}\n\n"
+            f"[줄일 패턴]\n{reduce}\n\n"
+            f"[추천 콘텐츠 각도 3가지]\n"
+            f"① 숫자로 시작하는 데이터 포스트\n"
+            f"② 서방 미디어가 놓친 한국 시각\n"
+            f"③ 리스크 관리 실전 경험 공유\n\n"
+            f"[추천 소스/주제 방향 3가지]\n"
+            f"① Fed/BOK 금리 결정 + 환율 연계\n"
+            f"② 크립토 규제 + Gate.io 선물 시장\n"
+            f"③ 한국 수출 데이터 + 글로벌 공급망"
+        )
 
     def _mock_metrics(self) -> WeeklyMetrics:
         return WeeklyMetrics(

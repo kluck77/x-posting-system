@@ -1,7 +1,7 @@
 # Latest Status
 
 ## Current Phase
-v10 complete. Internal hardening: rate-limiter externalization, OpenAI prompt refresh, Reviewer quality_flags.
+Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보류) wired into news alerts and draft approval cards. Weekly report upgraded with patterns + angles + source directions.
 
 ---
 
@@ -28,6 +28,7 @@ v10 complete. Internal hardening: rate-limiter externalization, OpenAI prompt re
 | Rate limiter settings externalization (max_drafts/telegram/posts_per_day in Settings + .env.example) | Locked |
 | OpenAI SYSTEM_PROMPT refresh (audience, credibility>virality, expanded bans, no editorializing) | Locked |
 | Reviewer quality_flags (ReviewResult field + REVIEW_SYSTEM_PROMPT checklist + parse) | Locked |
+| Growth Intelligence Bundle (advisory.py, source/draft labels, weekly report upgrade) | Locked |
 
 ---
 
@@ -42,15 +43,15 @@ v10 complete. Internal hardening: rate-limiter externalization, OpenAI prompt re
 
 ---
 
-## Next Candidates (v10+)
+## Next Candidates
 
-**Nothing urgent.** System is stable and well-tested (481 tests).
-Operator tools are complete. Internal hardening pass done.
+**Nothing urgent.** System is stable and well-tested (495 tests).
+Growth advisory layer now active. Operator tools complete.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-05 (session 3 — milestone freeze)
+- Date: 2026-04-05 (session 4 — Growth Intelligence Bundle)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`
