@@ -64,6 +64,20 @@ def _clear(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop(PENDING_KEY, None)
 
 
+def _parse_draft_id(args: list[str], pos: int = 0) -> tuple[int | None, str]:
+    """
+    args[pos]를 draft_id(int)로 파싱한다.
+
+    Returns:
+        (draft_id, "")         — 성공
+        (None, error_message)  — 실패 (비어있거나 숫자 아님)
+    """
+    try:
+        return int(args[pos]), ""
+    except (ValueError, IndexError):
+        return None, "❌ draft_id는 숫자여야 합니다."
+
+
 # =============================================================================
 # 공통 분석 파이프라인 (URL 또는 사진 모두 여기서 처리)
 # =============================================================================
@@ -1165,25 +1179,29 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Layer 2: 성과 메모 요약 (실패 시 무시)
         perf_section = ""
+        _db_perf = get_db()
         try:
-            db = get_db()
             from app.services.draft_service import DraftService
-            perf_section = DraftService(db).format_perf_summary(days=30)
+            perf_section = DraftService(_db_perf).format_perf_summary(days=30)
             if perf_section:
                 perf_section = f"\n\n{perf_section}"
         except Exception:
             pass
+        finally:
+            _db_perf.close()
 
         # Layer 2: 힌트 영향 요약 — [HINT]×[PERF] 공존 집계 (실패 시 무시)
         hint_impact = ""
+        _db_hint = get_db()
         try:
-            db2 = get_db()
             from app.services.draft_service import DraftService as _DS
-            hint_impact = _DS(db2).format_hint_impact_summary(days=60)
+            hint_impact = _DS(_db_hint).format_hint_impact_summary(days=60)
             if hint_impact:
                 hint_impact = f"\n\n{hint_impact}"
         except Exception:
             pass
+        finally:
+            _db_hint.close()
 
         full_msg = (
             f"{report_text}{perf_section}{hint_impact}"
@@ -1258,10 +1276,9 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    try:
-        draft_id = int(args[0])
-    except ValueError:
-        await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+    draft_id, err = _parse_draft_id(args, 0)
+    if draft_id is None:
+        await update.message.reply_text(err)
         return
 
     note_text = " ".join(args[1:])[:300]
@@ -1271,7 +1288,7 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from app.services.draft_service import DraftService
         draft = DraftService(db).save_performance_note(draft_id, note_text)
         if not draft:
-            await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+            await update.message.reply_text(f"❌ 초안 #{draft_id}을 찾을 수 없습니다.")
             return
         await update.message.reply_text(
             f"📊 <b>성과 메모 저장됨</b> (draft #{draft_id})\n"
@@ -1297,10 +1314,9 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    try:
-        draft_id = int(args[0])
-    except ValueError:
-        await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+    draft_id, err = _parse_draft_id(args, 0)
+    if draft_id is None:
+        await update.message.reply_text(err)
         return
 
     note_text = " ".join(args[1:])[:500]
@@ -1311,7 +1327,7 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         draft_service = DraftService(db)
         draft = draft_service.get_by_id(draft_id)
         if not draft:
-            await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+            await update.message.reply_text(f"❌ 초안 #{draft_id}을 찾을 수 없습니다.")
             return
 
         draft.manual_notes = note_text
@@ -1343,24 +1359,31 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
             )
             return
-        try:
-            draft_id = int(args[1])
-        except ValueError:
-            await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+        draft_id, err = _parse_draft_id(args, 1)
+        if draft_id is None:
+            await update.message.reply_text(err)
             return
         db = get_db()
         try:
             from app.services.draft_service import DraftService
-            draft = DraftService(db).clear_hint_lines(draft_id)
+            svc = DraftService(db)
+            draft = svc.get_by_id(draft_id)
             if not draft:
-                await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+                await update.message.reply_text(f"❌ 초안 #{draft_id}을 찾을 수 없습니다.")
                 return
-            await update.message.reply_text(
-                f"✅ <b>힌트 제거됨</b> (draft #{draft_id})\n"
-                "<i>[HINT] 라인만 삭제됐습니다. 일반 메모·성과 메모는 유지됩니다.</i>",
-                parse_mode="HTML",
-            )
-            logger.info(f"[/hint clear] draft_id={draft_id}")
+            had_hints = bool(draft.manual_notes and "[HINT]" in draft.manual_notes)
+            svc.clear_hint_lines(draft_id)
+            if had_hints:
+                await update.message.reply_text(
+                    f"✅ <b>힌트 제거됨</b> (draft #{draft_id})\n"
+                    "<i>[HINT] 라인만 삭제됐습니다. 일반 메모·성과 메모는 유지됩니다.</i>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(
+                    f"ℹ️ draft #{draft_id}에 [HINT]가 없었습니다.",
+                )
+            logger.info(f"[/hint clear] draft_id={draft_id} had_hints={had_hints}")
         except Exception as e:
             logger.error(f"/hint clear 오류: {e}", exc_info=True)
             await update.message.reply_text(f"❌ 힌트 제거 실패: {str(e)[:200]}")
@@ -1379,10 +1402,9 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    try:
-        draft_id = int(args[0])
-    except ValueError:
-        await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+    draft_id, err = _parse_draft_id(args, 0)
+    if draft_id is None:
+        await update.message.reply_text(err)
         return
 
     note_text = "[HINT] " + " ".join(args[1:])[:493]  # prefix 7자 포함 500자 이내
@@ -1393,7 +1415,7 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         draft_service = DraftService(db)
         draft = draft_service.get_by_id(draft_id)
         if not draft:
-            await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+            await update.message.reply_text(f"❌ 초안 #{draft_id}을 찾을 수 없습니다.")
             return
 
         draft.manual_notes = note_text
