@@ -374,3 +374,74 @@ class TestClearPending:
             queue.clear_pending()
 
         mock_save.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 6. get_pending_at() — 읽기 전용 position 조회 (/queue view <n>)
+# ---------------------------------------------------------------------------
+
+class TestGetPendingAt:
+    """/queue view <n> 핵심 로직: get_pending_at(position) 검증."""
+
+    def test_returns_correct_post_at_position_1(self):
+        """position 1은 첫 번째 대기 게시물을 반환한다."""
+        queue = _make_queue()
+        post1 = _add_post(queue, "첫 번째")
+        _add_post(queue, "두 번째")
+        assert queue.get_pending_at(1) is post1
+
+    def test_returns_correct_post_at_position_2(self):
+        """position 2는 두 번째 대기 게시물을 반환한다."""
+        queue = _make_queue()
+        _add_post(queue, "첫 번째")
+        post2 = _add_post(queue, "두 번째")
+        _add_post(queue, "세 번째")
+        assert queue.get_pending_at(2) is post2
+
+    def test_published_posts_not_counted_in_position(self):
+        """발행 완료된 게시물은 position 카운트에 포함되지 않는다."""
+        queue = _make_queue()
+        published = _add_post(queue, "발행 완료")
+        published.published_at = datetime.now(timezone.utc)
+        pending1 = _add_post(queue, "대기 1")
+        pending2 = _add_post(queue, "대기 2")
+        assert queue.get_pending_at(1) is pending1
+        assert queue.get_pending_at(2) is pending2
+
+    def test_returns_none_for_empty_queue(self):
+        """큐가 비어 있으면 None 반환."""
+        queue = _make_queue()
+        assert queue.get_pending_at(1) is None
+
+    def test_returns_none_for_position_zero(self):
+        """position 0은 유효하지 않다 (1-indexed)."""
+        queue = _make_queue()
+        _add_post(queue)
+        assert queue.get_pending_at(0) is None
+
+    def test_returns_none_for_out_of_range(self):
+        """position이 대기 개수를 초과하면 None 반환."""
+        queue = _make_queue()
+        _add_post(queue, "하나뿐")
+        assert queue.get_pending_at(2) is None
+
+    def test_returns_none_for_negative_position(self):
+        """음수 position은 None 반환."""
+        queue = _make_queue()
+        _add_post(queue)
+        assert queue.get_pending_at(-1) is None
+
+    def test_does_not_modify_queue(self):
+        """get_pending_at()은 큐 상태를 변경하지 않는다."""
+        queue = _make_queue()
+        _add_post(queue, "변경 안 됨")
+        before = len(queue.list_pending())
+        queue.get_pending_at(1)
+        assert len(queue.list_pending()) == before
+
+    def test_result_matches_visible_listing_order(self):
+        """get_pending_at(n)의 결과가 /queue 목록에서 보이는 순서와 동일하다."""
+        queue = _make_queue()
+        posts = [_add_post(queue, f"항목 {i}") for i in range(1, 5)]
+        for i, expected in enumerate(posts, 1):
+            assert queue.get_pending_at(i) is expected

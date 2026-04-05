@@ -1,7 +1,7 @@
 # Latest Status
 
 ## Current Phase
-v9 in progress. Reply monitor inline button done.
+v9 complete. Reply monitor inline button + /queue view done.
 
 ---
 
@@ -24,6 +24,7 @@ v9 in progress. Reply monitor inline button done.
 | Idle pipeline reminder (activity_tracker.py) | Locked |
 | /status improvements | Locked |
 | Reply monitor inline button (reply_use/reply_skip, _pending_reply_drafts) | Locked |
+| /queue view <n> (get_pending_at, read-only) | Locked |
 
 ---
 
@@ -40,11 +41,8 @@ v9 in progress. Reply monitor inline button done.
 
 ## Next Candidates (v9)
 
-**A — `/queue view <n>` detail command** *(recommended next)*
-- Queue listing shows 60-char truncates; no way to read full text before slot fires
-- Risk: very low (read-only)
-
-**B — Nothing urgent** — system is stable and well-tested (467 tests)
+**Nothing urgent.** System is stable and well-tested (476 tests).
+Operator tools are complete for the current phase.
 
 ---
 

@@ -1350,6 +1350,55 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     queue = get_post_queue()
 
+    if args_text.lower().startswith("view "):
+        # /queue view <n> — 대기 게시물 전체 텍스트 조회 (읽기 전용)
+        rest = args_text[5:].strip()
+        try:
+            n = int(rest)
+        except ValueError:
+            await update.message.reply_text(
+                "⚠️ <b>잘못된 번호입니다.</b>\n\n"
+                "사용법: <code>/queue view 1</code>\n"
+                "(번호는 /queue 목록에서 확인)",
+                parse_mode="HTML",
+            )
+            return
+
+        post = queue.get_pending_at(n)
+        if post is None:
+            pending_count = queue.count_pending()
+            if pending_count == 0:
+                await update.message.reply_text(
+                    "📋 게시 큐가 비어 있습니다.\n"
+                    "추가하려면: <code>/queue 게시할 본문 내용</code>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(
+                    f"⚠️ <b>{n}번 항목이 없습니다.</b>\n\n"
+                    f"현재 대기 항목: {pending_count}개 (1–{pending_count})\n"
+                    f"목록 확인: <code>/queue</code>",
+                    parse_mode="HTML",
+                )
+            return
+
+        from datetime import timedelta
+        added_kst = (post.added_at + timedelta(hours=9)).strftime("%m/%d %H:%M KST")
+        notified_line = "🔔 승인 알림 발송됨" if post.notified_at else "⏳ 알림 대기 중"
+        char_info = f"{len(post.text)}자"
+        if len(post.text) > 280:
+            char_info += " ⚠️ X 한도 초과"
+        await update.message.reply_text(
+            f"📋 <b>큐 {n}번 항목</b>\n\n"
+            f"<code>{post.text}</code>\n\n"
+            f"📅 등록: {added_kst}\n"
+            f"{notified_line}\n"
+            f"✏️ {char_info}\n\n"
+            f"<i>제거하려면: /queue remove {n}</i>",
+            parse_mode="HTML",
+        )
+        return
+
     if args_text.lower().startswith("remove "):
         # /queue remove <n> — 대기 게시물 제거
         rest = args_text[7:].strip()
@@ -1447,7 +1496,7 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📋 <b>게시 큐 ({len(pending)}개 대기)</b>\n\n"
         + "\n".join(lines)
         + "\n\n<i>🔔 = 승인 알림 발송됨 · 순서대로 슬롯 알림.</i>"
-        + "\n<i>제거: /queue remove &lt;번호&gt; · 전체 제거: /queue clear</i>"
+        + "\n<i>상세 보기: /queue view &lt;번호&gt; · 제거: /queue remove &lt;번호&gt; · 전체 제거: /queue clear</i>"
     )
     await update.message.reply_text(msg, parse_mode="HTML")
 

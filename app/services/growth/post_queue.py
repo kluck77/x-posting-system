@@ -129,6 +129,17 @@ class PostQueue:
             return post
         return None
 
+    def get_pending_at(self, position: int) -> QueuedPost | None:
+        """
+        운영자 visible position(1-indexed, list_pending() 기준)으로 대기 게시물 조회.
+        /queue view <n> 에서 n이 여기서의 position.
+        발행 완료된 게시물은 카운트하지 않음. 읽기 전용 — 상태 변경 없음.
+        """
+        pending = self.list_pending()
+        if not pending or not (1 <= position <= len(pending)):
+            return None
+        return pending[position - 1]
+
     def remove_pending(self, position: int) -> QueuedPost | None:
         """
         운영자 visible position(1-indexed, list_pending() 기준)으로 대기 게시물 제거.

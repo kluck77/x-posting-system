@@ -4,26 +4,23 @@
 
 - Date: 2026-04-05
 - Branch: claude/extract-prediction-time-n82UK
-- Phase: v9-A — Reply monitor inline approval button
+- Phase: v9-B — /queue view <n>
 
 ---
 
 ## What This Session Did
 
-Added inline keyboard buttons to reply-monitor draft notifications.
-Also fixed a latent bug: `format_for_telegram()` generated Markdown syntax
-but `tg_send()` was sending it in HTML parse mode — `*` and backticks
-rendered as literal characters. Now fixed to proper HTML.
+Added read-only `/queue view <n>` subcommand so the operator can read
+the full text of a queued post before its slot fires.
 
 ---
 
 ## Current Behavior Found (before this session)
 
-- `run_reply_monitor()` called `tg_send(msg)` — plain text, no button
-- `format_for_telegram()` used Markdown (`*bold*`, backticks) but was
-  sent with `parse_mode="HTML"` → formatting was silently broken
-- No way for operator to act on reply-monitor notification without
-  manually copy-pasting the draft
+- `/queue` showed 60-char truncated previews only
+- No way to read full post text without removing it from the queue
+- `list_pending()` was already the canonical ordered view used by all queue
+  subcommands; mapping via `pending[n-1]` was safe
 
 ---
 
@@ -31,74 +28,59 @@ rendered as literal characters. Now fixed to proper HTML.
 
 | File | Change |
 |------|--------|
-| app/services/growth/reply_monitor.py | Added `_pending_reply_drafts` dict, `store_pending_draft()`, `get_pending_draft()`. Fixed `format_for_telegram()` to HTML. `run_reply_monitor()` now uses `tg_send_with_keyboard()` with inline buttons. |
-| app/telegram_bot.py | Added `reply_` routing in `callback_handler`. Added `_handle_reply_callback()` with `reply_use` and `reply_skip` actions. |
-| tests/test_reply_monitor.py | Replaced old 3-test file with 14 tests covering HTML format, pending draft store/get, keyboard buttons, and draft storage in run_reply_monitor(). |
+| app/services/growth/post_queue.py | Added `get_pending_at(position)` — read-only, same 1-indexed mapping as `remove_pending()`, published posts excluded |
+| app/telegram_bot.py | Added `view ` branch in `queue_command` (before `remove `). Updated listing footer to include `/queue view` hint. |
+| tests/test_post_queue.py | Added `TestGetPendingAt` (9 tests) |
 | docs/handoffs/LATEST_STATUS.md | Phase updated, locked area added, next candidates updated |
 | docs/handoffs/CURRENT_SESSION.md | This file |
 
-No orchestrator, x_publisher, or provider files touched.
-
 ---
 
-## Exact Operator-Facing Improvement
+## Exact /queue view <n> Behavior
 
-**Before:** Plain text notification (Markdown formatting broken, no button)
-
-**After:**
+**`/queue view 2`** → shows full post text + context:
 ```
-💬 새 답글 발견! (15분 전)
+📋 큐 2번 항목
 
-👤 @trader_kr_99 (1,200 팔로워)
+<full text in code block>
 
-📄 내 원문:
-<code block>
+📅 등록: 04/05 14:30 KST
+🔔 승인 알림 발송됨  (or ⏳ 알림 대기 중)
+✏️ 142자  (or ✏️ 300자 ⚠️ X 한도 초과)
 
-📩 답글:
-<code block>
-
-✍️ 재답글 초안:
-<code block>
-
-🔗 https://x.com/...
-
-[📋 초안 사용]  [⏭ 건너뜀]
+제거하려면: /queue remove 2
 ```
 
-Tapping **📋 초안 사용**: re-sends just the draft in a clean `<code>` block
-with the X link — easy long-press copy on mobile.
+**Invalid number** → "⚠️ 잘못된 번호입니다." + usage hint
 
-Tapping **⏭ 건너뜀**: dismisses the keyboard, confirms "⏭ 건너뜀."
+**Out of range** → "⚠️ N번 항목이 없습니다." + current count + /queue hint
 
-If draft expires (system restart between notification and tap):
-"⚠️ 초안 정보가 만료됐습니다." — graceful, no crash.
+**Empty queue** → "📋 게시 큐가 비어 있습니다." + add hint
+
+**Mapping**: uses `list_pending()[n-1]` — same source as visible listing,
+published posts excluded, no internal raw index confusion.
 
 ---
 
 ## Tests
 
-- 14 tests in test_reply_monitor.py (was 3)
-- Added: HTML format, pending draft store/get/overflow,
-  run_reply_monitor uses keyboard not plain text,
-  keyboard has correct callback_data, draft stored before send
-- Full suite: 467 passed, 0 failures
+- 9 new tests (TestGetPendingAt in test_post_queue.py)
+- Covers: position 1, position 2, published-not-counted, empty,
+  zero, out-of-range, negative, no-state-change, order-matches-listing
+- Full suite: 476 passed, 0 failures (was 467)
 
 ---
 
 ## Risks Checked
 
-- `_pending_reply_drafts` is in-memory; lost on restart. Acceptable:
-  reply drafts are time-sensitive (minutes), restart is rare.
-  Graceful error shown if expired.
-- Max 100 entries; oldest evicted automatically.
-- No auto-posting added. "📋 초안 사용" only re-sends text; operator
-  still posts manually on X.
-- No locked areas touched.
-- callback_data length: `reply_use:{x_tweet_id}` max ~38 chars → within 64-byte limit.
+- Read-only: `get_pending_at()` does not modify queue, no `_save()` call
+- Same index mapping as `remove_pending()` — already tested and trusted
+- No auto-posting, no locked area touched
+- char-limit warning reuses same `> 280` threshold from approval card
 
 ---
 
 ## Recommended Next Candidates
 
-1. **`/queue view <n>`** — show full text of a queued post. Read-only, very low risk.
-2. Nothing else urgent. System is stable (467 tests).
+Nothing urgent. Operator tools are complete for the current phase.
+System is stable and well-tested (476 tests).
