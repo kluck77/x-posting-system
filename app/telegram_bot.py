@@ -37,6 +37,7 @@ PENDING_KEY = "pending"
 STATE_IDLE = "idle"
 STATE_AWAITING_TYPE = "awaiting_type"
 STATE_AWAITING_REPLY_TARGET = "awaiting_reply_target"
+STATE_AWAITING_THREAD_INPUT = "awaiting_thread_input"
 
 
 # =============================================================================
@@ -706,13 +707,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🇰🇷 <b>X Posting System — @cheesesvav</b>\n"
         "<i>Beyond headlines: how Korea really works, feels, and changes.</i>\n\n"
-        "<b>기본 사용법:</b>\n"
-        "1️⃣ 뉴스 URL · 스크린샷 · 텍스트 전송\n"
-        "2️⃣ 분석 카드에서 원하는 모드 선택\n"
+        "<b>빠른 시작:</b>\n"
+        "• <code>/draft https://뉴스URL</code> — 분석 없이 즉시 초안 생성\n"
+        "• URL / 스크린샷 / 텍스트 전송 → 분석 카드에서 모드 선택\n\n"
+        "<b>분석 카드 모드:</b>\n"
         "   • [📝 새 게시글] — 단일 포스트 → 승인 후 X 게시\n"
         "   • [📦 콘텐츠 팩] — 메인 3개+댓글+인용+짧은버전 일괄 생성\n"
         "   • [💬 댓글로] — 특정 트윗에 답글\n\n"
         "<b>Commands:</b>\n"
+        "/draft [url/text] — 즉시 단일 초안 생성 (가장 빠름) 📝\n"
         "/pack [url/text] — 콘텐츠 팩 직접 생성 📦\n"
         "/thread — 스레드 생성 🧵\n"
         "/trends — 트렌드 탐색\n"
@@ -803,9 +806,6 @@ async def trends_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============================================================================
 # /thread 커맨드 — 스레드 생성기
 # =============================================================================
-
-# 스레드 대기 상태
-STATE_AWAITING_THREAD_INPUT = "awaiting_thread_input"
 
 
 async def thread_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -955,7 +955,8 @@ async def _run_content_pack(
                 )
         elif pending:
             # 분석 카드에서 "콘텐츠 팩" 버튼 → pending에 이미 수집된 데이터 사용
-            fetched_text = pending.get("fetched_text", "") or pending.get("source_text", "")
+            # _run_analysis_and_show_card가 "text" 키로 저장하므로 동일하게 읽는다
+            fetched_text = pending.get("text", "")
             req = ContentRequest(
                 source_url=pending.get("url"),
                 source_type="news_link" if pending.get("url") else "raw_text",
@@ -1118,6 +1119,65 @@ async def pack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "또는 URL이나 텍스트를 보내면 분석 카드에서 [📦 콘텐츠 팩] 버튼을 누르세요.",
             parse_mode="HTML",
         )
+
+
+async def draft_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/draft <url or text> — 분석 카드 없이 즉시 단일 초안 생성 (가장 빠른 경로).
+
+    분석 카드를 거치지 않고 곧바로 AI 파이프라인(Gemini → OpenAI → Perplexity → Claude)을
+    실행합니다. URL이면 콘텐츠를 먼저 수집합니다.
+
+    사용법:
+      /draft https://news.com/article
+      /draft 한국은행 기준금리 2.75%로 동결 결정
+    """
+    args_text = " ".join(context.args).strip() if context.args else ""
+
+    if not args_text:
+        await update.message.reply_text(
+            "📝 <b>즉시 초안 생성</b>\n\n"
+            "사용법:\n"
+            "• <code>/draft https://뉴스URL</code>\n"
+            "• <code>/draft 기사 내용이나 메모</code>\n\n"
+            "분석 카드 없이 바로 초안을 시작합니다.\n"
+            "분석 후 의사결정이 필요하면 URL/텍스트를 그냥 보내주세요.",
+            parse_mode="HTML",
+        )
+        return
+
+    from app.services.content_fetcher import is_url, fetch_url_content
+
+    msg = await update.message.reply_text("📝 초안 생성 중...")
+
+    if is_url(args_text):
+        result = await fetch_url_content(args_text)
+        if result.get("source") == "failed" or not result.get("text"):
+            await msg.edit_text(
+                "⚠️ <b>URL 콘텐츠를 읽을 수 없습니다</b>\n\n"
+                "텍스트를 직접 입력해주세요:\n"
+                "<code>/draft 기사 본문 붙여넣기</code>",
+                parse_mode="HTML",
+            )
+            return
+        title = result.get("title") or args_text[:80]
+        text = result["text"]
+        source_url = args_text
+        source_type = "manual"
+    else:
+        title = args_text[:80] + ("..." if len(args_text) > 80 else "")
+        text = args_text
+        source_url = None
+        source_type = "community_input"
+
+    await msg.delete()
+
+    pending = {
+        "title": title,
+        "text": text,
+        "url": source_url,
+        "source_type": source_type,
+    }
+    await _run_pipeline(update, context, pending=pending, post_mode="tweet")
 
 
 # =============================================================================
@@ -1528,6 +1588,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("pending", pending_command))
     app.add_handler(CommandHandler("trends", trends_command))
+    app.add_handler(CommandHandler("draft", draft_command))
     app.add_handler(CommandHandler("thread", thread_command))
     app.add_handler(CommandHandler("pack", pack_command))
     app.add_handler(CommandHandler("queue", queue_command))
