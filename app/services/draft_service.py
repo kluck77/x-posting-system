@@ -217,10 +217,17 @@ class DraftService:
         """
         최근 approved/published 초안의 manual_notes에서 operator hint 추출.
 
-        - [PERF] 접두어 라인은 제외 (성과 기록 전용)
-        - 초안당 첫 번째 유효 라인만 수집 (중복 방지)
-        - DraftWriter criteria_context에 advisory로 주입하는 용도
-        - 빈 결과면 [] 반환 — 실패 시 조용히 처리 (Layer 2 보호)
+        v2 우선순위:
+        1. [HINT] 접두어 라인 우선 수집 — 운영자가 "장기 반영"으로 표시한 것
+        2. [HINT]가 부족하면 일반 non-[PERF] 라인으로 나머지 채움 (v1 fallback)
+
+        prefix 규칙:
+        - [HINT] <text>  → 장기 힌트, 우선 사용
+        - [PERF] <text>  → 성과 기록, 항상 제외
+        - <text>         → 일반 메모, fallback으로만 사용
+
+        초안당 첫 번째 유효 라인만 수집 (중복 방지).
+        빈 결과면 [] 반환 — 실패 시 조용히 처리 (Layer 2 보호).
         """
         try:
             drafts = (
@@ -237,16 +244,33 @@ class DraftService:
                 .limit(20)
                 .all()
             )
-            hints: list[str] = []
+
+            hint_lines: list[str] = []   # [HINT] 우선 수집
+            fallback_lines: list[str] = []  # 일반 메모 fallback
+
             for d in drafts:
+                found_hint = False
+                found_fallback = False
                 for line in (d.manual_notes or "").splitlines():
                     line = line.strip()
-                    if line and not line.startswith("[PERF]"):
-                        hints.append(line[:120])
-                        break  # 초안당 첫 유효 라인만
-                if len(hints) >= limit:
-                    break
-            return hints
+                    if not line:
+                        continue
+                    if line.startswith("[HINT]"):
+                        text = line[6:].strip()
+                        if text and not found_hint:
+                            hint_lines.append(text[:120])
+                            found_hint = True
+                    elif not line.startswith("[PERF]") and not found_fallback:
+                        fallback_lines.append(line[:120])
+                        found_fallback = True
+
+            # [HINT] 우선 → 부족하면 fallback으로 채움
+            combined = hint_lines[:limit]
+            if len(combined) < limit:
+                needed = limit - len(combined)
+                combined += fallback_lines[:needed]
+            return combined
+
         except Exception as e:
             logger.warning(f"[OperatorHints] 수집 실패 (무시): {e}")
             return []

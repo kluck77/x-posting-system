@@ -383,3 +383,62 @@ class TestGetRecentOperatorHints:
         result = DraftService(db_session).get_recent_operator_hints()
         assert len(result) == 1
         assert len(result[0]) <= 120
+
+    # v2 [HINT] prefix 테스트
+
+    def test_hint_prefix_returned_without_prefix(self, db_session, source_item):
+        """[HINT] 접두어는 제거되고 텍스트만 반환된다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "[HINT] 통화정책 충격 각도로 써줘"
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert "통화정책 충격 각도로 써줘" in result[0]
+        assert "[HINT]" not in result[0]
+
+    def test_hint_preferred_over_plain_note(self, db_session, source_item):
+        """[HINT] 라인이 있으면 일반 메모보다 우선 선택된다."""
+        # draft A: 일반 메모
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "그냥 메모입니다"
+        )
+        # draft B: [HINT] 메모
+        self._make_draft_with_note(
+            db_session, source_item, "h2", "b2", "[HINT] 반드시 반영할 힌트"
+        )
+        result = DraftService(db_session).get_recent_operator_hints(limit=1)
+        assert len(result) == 1
+        assert "반드시 반영할 힌트" in result[0]
+
+    def test_fallback_to_plain_when_no_hint(self, db_session, source_item):
+        """[HINT]가 없으면 v1처럼 일반 메모가 fallback으로 반환된다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "일반 운영 메모"
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert "일반 운영 메모" in result[0]
+
+    def test_hint_fills_first_plain_fills_rest(self, db_session, source_item):
+        """[HINT] 1개 + 일반 메모로 limit=2를 채운다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "[HINT] 장기 힌트"
+        )
+        self._make_draft_with_note(
+            db_session, source_item, "h2", "b2", "일반 메모"
+        )
+        result = DraftService(db_session).get_recent_operator_hints(limit=2)
+        assert len(result) == 2
+        assert any("장기 힌트" in r for r in result)
+        assert any("일반 메모" in r for r in result)
+
+    def test_hint_and_perf_in_same_note(self, db_session, source_item):
+        """같은 manual_notes 안에 [HINT]와 [PERF]가 함께 있는 경우."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1",
+            "[HINT] 장기 스타일 힌트\n[PERF] 좋아요 50개"
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert "장기 스타일 힌트" in result[0]
+        assert "[PERF]" not in result[0]
