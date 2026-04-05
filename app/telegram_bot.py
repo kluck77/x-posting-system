@@ -658,6 +658,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/trends — 트렌드 탐색\n"
         "/queue — 게시 큐\n"
         "/hunt — 댓글 기회 탐색\n"
+        "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
         "/status — AI 상태\n"
         "/pending — 대기 초안\n"
         "/cancel — 취소\n",
