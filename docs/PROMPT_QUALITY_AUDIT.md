@@ -40,7 +40,16 @@ LIMIT 30;
 | "landscape" (비유적) | 과잉 어휘 | 구체적 명사로 대체 |
 | "tapestry" | 과잉 어휘 | 삭제 |
 
-**점검 방법:** VoiceGuard 로그(`style_warnings`)에서 자동 감지됨. 로그 없으면 수동 grep.
+**점검 방법:** VoiceGuard 로그(`style_warnings`)에서 자동 감지됨. 단일 초안 approval card에도 경고 표시됨 (최대 3개). 로그 없으면 수동 grep.
+
+**현재 프롬프트 금지어 목록 (DraftWriter + Reviewer rewrite 공통, 2026-04 기준):**
+furthermore / however / it is worth noting / it should be noted / notably /
+delve into / game-changer / this underscores / unprecedented /
+moreover / pivotal / moving forward / undeniably
+
+**VoiceGuard 감지 중 아직 프롬프트 미반영 (향후 추가 검토):**
+navigate / in the realm of / foster / as we look ahead / in today's X /
+it's important to / it's imperative / undeniably / In conclusion
 
 ---
 

@@ -137,3 +137,55 @@ class TestBuildApprovalCardQualityAdvisory:
         # 경고 없이 카드가 정상 생성됨
         assert "품질 경고" not in card
         assert "NEW DRAFT FOR REVIEW" in card
+
+
+class TestBuildApprovalCardVoiceGuard:
+    """VoiceGuard 단일 초안 연결 테스트 (Layer 2)."""
+
+    def _make_draft(self, hook: str, body: str):
+        from unittest.mock import MagicMock
+        draft = MagicMock()
+        draft.id = 1
+        draft.version = 1
+        draft.hook = hook
+        draft.body = body
+        draft.thread_continuation = None
+        draft.category = ContentCategory.ECONOMY
+        draft.risk_level = RiskLevel.LOW
+        draft.risk_reasoning = None
+        draft.ai_rationale = None
+        draft.community_warning = None
+        draft.predicted_publish_at = None
+        draft.prediction_reasoning = None
+        draft.text_length = len(body)
+        return draft
+
+    def test_voice_warning_shown_when_ai_phrase_present(self):
+        """금지 표현 포함 시 Voice 경고가 카드에 표시된다."""
+        hook = "BOK raises rates 25bp"
+        body = "Furthermore, this underscores Korea's broader challenge. Follow."
+        draft = self._make_draft(hook, body)
+        card = build_approval_card(draft)
+        assert "Voice 경고" in card
+
+    def test_no_voice_warning_for_clean_text(self):
+        """금지 표현 없으면 Voice 경고가 카드에 없다."""
+        hook = "BOK cuts 25bp — what you need to know"
+        body = "The central bank just cut rates 25bp. You should watch this. Follow."
+        draft = self._make_draft(hook, body)
+        card = build_approval_card(draft)
+        assert "Voice 경고" not in card
+
+    def test_voice_guard_failure_does_not_crash_card(self):
+        """VoiceGuard 예외 시 카드 정상 생성된다."""
+        import unittest.mock as mock
+        hook = "BOK raises rates"
+        body = "Short body."
+        draft = self._make_draft(hook, body)
+        with mock.patch(
+            "app.services.voice_guard.check_voice",
+            side_effect=RuntimeError("voice error"),
+        ):
+            card = build_approval_card(draft)
+        assert "Voice 경고" not in card
+        assert "NEW DRAFT FOR REVIEW" in card

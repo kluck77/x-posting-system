@@ -140,6 +140,18 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         pass
 
+    # VoiceGuard — 단일 초안 AI 어투 감지 (Layer 2, advisory only)
+    try:
+        from app.services.voice_guard import check_voice
+        _voice_warnings = check_voice(f"{draft.hook}\n{draft.body}")
+        if _voice_warnings:
+            card += f"\n{'─' * 30}\n"
+            card += "🗣️ <b>Voice 경고</b> (참고용):\n"
+            for _w in _voice_warnings[:3]:
+                card += f"  {_w}\n"
+    except Exception:
+        pass
+
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"

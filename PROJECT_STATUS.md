@@ -19,9 +19,11 @@
 - [x] Reviewer-triggered regenerate loop (max 2 retries, hint-required guard)
 - [x] Interpretation gap injection: Gemini gaps → DraftWriter context
 - [x] criteria_signals → DraftWriter + Reviewer prompt injection (Layer 2)
-- [x] VoiceGuard — AI phrase detection (19 patterns), wired into ContentPack
-- [x] RepetitionGuard — Jaccard similarity check against recent approved drafts
+- [x] VoiceGuard — AI phrase detection (19 patterns), ContentPack + single-draft approval card
+- [x] RepetitionGuard — Jaccard similarity check against recent approved drafts (ContentPack)
 - [x] Quality advisory — score_draft < 40 → 경고 표시 in approval card (advisory only)
+- [x] Prompt banned list sync — DraftWriter + Reviewer rewrite 금지어 통일 (13개)
+- [x] Claude DraftWriter 5-criteria pre-draft gate (marketability + expertise compact check)
 - [x] Duplicate prevention (URL + text hash)
 - [x] Daily rate limits (5 drafts / 5 telegrams / 3 posts)
 - [x] Community input risk escalation
@@ -98,6 +100,9 @@
 | v6 | Quality gate advisory (score display in Telegram) | Done |
 | v6 | Operator manual note capture (/note command) | Done |
 | v6 | Prompt quality audit document | Done |
+| v6 | Prompt banned list sync (DraftWriter + Reviewer, 13 expressions) | Done |
+| v6 | Claude DraftWriter 5-criteria compact gate | Done |
+| v6 | VoiceGuard wired into single-draft approval card | Done |
 | v7 | Content performance feedback loop | Planned |
 | v7 | Operator note → prompt improvement pipeline | Planned |
 | v7 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
