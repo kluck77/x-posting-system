@@ -1,13 +1,13 @@
 """
-Pipeline 1: 최적 게시 시간 자동 스케줄러
+Pipeline 1: 최적 게시 시간 알림 스케줄러
 ==========================================
-사전에 큐에 넣어둔 게시물을 최적 시간에 자동 발행합니다.
+사전에 큐에 넣어둔 게시물을 최적 시간에 운영자에게 알림 → 승인 후 발행합니다.
 X Analytics 기반 최적 시간: 화~목 오전 9시~오후 3시 KST.
 
 흐름:
   1. /queue <본문> 명령으로 게시물 큐 등록
-  2. 스케줄러가 최적 시간 슬롯에 자동 발행
-  3. Telegram으로 "발행됨 + 본문" 알림 발송
+  2. 스케줄러가 최적 시간 슬롯에 Telegram 승인 카드 발송
+  3. 운영자가 "지금 게시" 버튼 탭 → X API 발행
   4. 연속 게시 방지: 최소 30분 간격 enforced
 """
 
@@ -44,6 +44,7 @@ class QueuedPost:
     added_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     post_id: str | None = None          # 발행 후 X tweet ID
     published_at: datetime | None = None
+    notified_at: datetime | None = None  # 승인 알림 발송 시각 (중복 방지)
     is_thread_starter: bool = False     # 스레드 첫 게시물 여부
     hashtags: list[str] = field(default_factory=list)  # 최대 2개
 
@@ -53,6 +54,7 @@ class QueuedPost:
             "added_at": self.added_at.isoformat(),
             "post_id": self.post_id,
             "published_at": self.published_at.isoformat() if self.published_at else None,
+            "notified_at": self.notified_at.isoformat() if self.notified_at else None,
             "is_thread_starter": self.is_thread_starter,
             "hashtags": self.hashtags,
         }
@@ -63,6 +65,7 @@ class QueuedPost:
         p.added_at = datetime.fromisoformat(d["added_at"])
         p.post_id = d.get("post_id")
         p.published_at = datetime.fromisoformat(d["published_at"]) if d.get("published_at") else None
+        p.notified_at = datetime.fromisoformat(d["notified_at"]) if d.get("notified_at") else None
         p.is_thread_starter = d.get("is_thread_starter", False)
         p.hashtags = d.get("hashtags", [])
         return p
@@ -155,8 +158,9 @@ class PostQueue:
 
     async def try_publish_next(self) -> QueuedPost | None:
         """
-        최적 시간 슬롯이고 간격 조건 충족 시 다음 게시물 발행.
-        실제 X API 게시는 x_publisher 에서 담당.
+        최적 시간 슬롯이고 간격 조건 충족 시 첫 대기 게시물에 승인 알림 발송.
+        직접 X API 게시 안 함 — 운영자 승인(Telegram 버튼 탭) 후에만 발행.
+        이미 알림을 보낸 게시물은 중복 발송하지 않음.
         """
         if not self._is_optimal_slot_now():
             return None
@@ -169,7 +173,48 @@ class PostQueue:
 
         post = pending[0]
 
-        # X API 게시
+        # 이미 승인 알림을 보낸 경우 중복 방지
+        if post.notified_at is not None:
+            return None
+
+        try:
+            await self._send_approval_notification(post)
+            post.notified_at = datetime.now(timezone.utc)
+            self._save()
+            logger.info(f"✓ 게시 승인 요청 전송: {post.text[:40]}...")
+            return post
+        except Exception as e:
+            logger.error(f"게시 승인 알림 전송 실패: {e}")
+
+        return None
+
+    async def _send_approval_notification(self, post: "QueuedPost") -> None:
+        """Telegram에 승인 요청 카드 전송 (인라인 버튼 포함)."""
+        from app.services.growth._tg_helper import tg_send_with_keyboard
+
+        # post_key = added_at ISO string — 콜백 핸들러에서 게시물 식별에 사용
+        post_key = post.added_at.isoformat()
+        preview = post.text[:300]
+        text = (
+            "🕐 <b>게시 슬롯 — 승인 요청</b>\n\n"
+            f"<code>{preview}</code>"
+        )
+        keyboard = [[{"text": "✅ 지금 게시", "callback_data": f"queue_approve:{post_key}"}]]
+        await tg_send_with_keyboard(text, keyboard)
+
+    async def approve_queued_post(self, post_key: str) -> "QueuedPost | None":
+        """
+        운영자 승인 콜백: post_key(added_at ISO)로 게시물을 찾아 X API에 발행.
+        발행 성공 시 QueuedPost 반환, 없거나 실패 시 None.
+        """
+        post = next(
+            (p for p in self._queue
+             if p.added_at.isoformat() == post_key and p.published_at is None),
+            None,
+        )
+        if not post:
+            return None
+
         try:
             result = await self._publish_to_x(post)
             if result:
@@ -177,10 +222,10 @@ class PostQueue:
                 post.post_id = result
                 self._last_published = post.published_at
                 self._save()
-                logger.info(f"✓ 자동 발행 완료: {post.text[:40]}...")
+                logger.info(f"✓ 승인 후 발행 완료: {post.text[:40]}...")
                 return post
         except Exception as e:
-            logger.error(f"자동 발행 실패: {e}")
+            logger.error(f"승인 후 발행 실패: {e}")
 
         return None
 
@@ -228,20 +273,9 @@ def get_post_queue() -> PostQueue:
 
 
 async def run_queue_scheduler():
-    """매 5분 실행. 최적 슬롯이면 큐에서 발행."""
-    from app.services.growth._tg_helper import tg_send
-
+    """매 5분 실행. 최적 슬롯이면 승인 알림 발송 (자동 발행 없음)."""
     queue = get_post_queue()
     post = await queue.try_publish_next()
 
     if post:
-        msg = (
-            "✅ <b>게시물 자동 발행됨</b>\n\n"
-            f"<code>{post.text[:200]}</code>\n\n"
-            f"🔗 https://x.com/sskorea02/status/{post.post_id}\n"
-            f"📋 큐 잔여: {queue.count_pending()}개"
-        )
-        try:
-            await tg_send(msg)
-        except Exception as e:
-            logger.warning(f"Telegram 알림 실패: {e}")
+        logger.info(f"[PostQueue] 승인 요청 전송됨: {post.text[:40]}...")

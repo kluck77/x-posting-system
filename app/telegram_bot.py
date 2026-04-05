@@ -434,6 +434,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     logger.info(f"콜백 수신: {callback_data}")
 
+    # --- 게시 큐 승인 콜백 ---
+    if callback_data.startswith("queue_"):
+        await _handle_queue_callback(query, context)
+        return
+
     # --- 뉴스 모니터 알림 콜백 ---
     if callback_data.startswith("news_"):
         await _handle_news_callback(query, context)
@@ -493,6 +498,47 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"❌ 오류: {str(e)[:200]}")
     finally:
         orchestrator.close()
+
+
+async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    """
+    게시 큐 승인 콜백 처리.
+    callback_data 형식: queue_approve:{post_key}
+    post_key = QueuedPost.added_at.isoformat()
+    """
+    from app.services.growth.post_queue import get_post_queue
+
+    data = query.data  # "queue_approve:2026-04-05T12:34:56.789012+00:00"
+    parts = data.split(":", 1)
+    if len(parts) != 2 or parts[0] != "queue_approve":
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("⚠️ 잘못된 큐 요청입니다.")
+        return
+
+    post_key = parts[1]
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    queue = get_post_queue()
+    try:
+        post = await queue.approve_queued_post(post_key)
+    except Exception as e:
+        logger.error(f"큐 게시 실패: {e}", exc_info=True)
+        await query.message.reply_text(f"❌ 게시 실패: {str(e)[:200]}")
+        return
+
+    if post:
+        x_url = f"https://x.com/sskorea02/status/{post.post_id}" if post.post_id else "N/A"
+        await query.message.reply_text(
+            f"✅ <b>게시 완료!</b>\n\n"
+            f"<code>{post.text[:200]}</code>\n\n"
+            f"🔗 {x_url}\n"
+            f"📋 큐 잔여: {queue.count_pending()}개",
+            parse_mode="HTML",
+        )
+    else:
+        await query.message.reply_text(
+            "⚠️ 해당 게시물을 찾을 수 없습니다.\n이미 게시됐거나 큐에서 제거됐을 수 있습니다."
+        )
 
 
 async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
@@ -1101,7 +1147,7 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<code>{post.text[:200]}</code>\n\n"
             f"📋 대기 중: {pending_count}개\n"
             f"🕐 등록 시각: {added_kst}\n\n"
-            f"<i>최적 슬롯(9:00/10:30/12:00/13:30/15:00/19:00/21:00 KST)에 자동 발행됩니다.</i>",
+            f"<i>최적 슬롯(9:00/10:30/12:00/13:30/15:00/19:00/21:00 KST)에 승인 알림이 발송됩니다.</i>",
             parse_mode="HTML",
         )
         return
@@ -1125,7 +1171,7 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         f"📋 <b>게시 큐 ({len(pending)}개 대기)</b>\n\n"
         + "\n".join(lines)
-        + "\n\n<i>최적 슬롯에 순서대로 자동 발행됩니다.</i>"
+        + "\n\n<i>최적 슬롯에 순서대로 승인 알림이 발송됩니다.</i>"
     )
     await update.message.reply_text(msg, parse_mode="HTML")
 
