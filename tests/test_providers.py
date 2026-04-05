@@ -143,6 +143,36 @@ class TestNewProviderImports:
         assert f is not None
 
 
+class TestReviewResultQualityFlags:
+    """ReviewResult.quality_flags 후방 호환 + 기본값 테스트."""
+
+    def test_review_result_quality_flags_defaults_empty(self):
+        """quality_flags 미제공 시 빈 dict 기본값."""
+        from app.providers.base import ReviewResult
+        r = ReviewResult(hook="h", body="b")
+        assert r.quality_flags == {}
+
+    def test_review_result_quality_flags_set(self):
+        """quality_flags 명시 설정 가능."""
+        from app.providers.base import ReviewResult
+        flags = {"hook_strong": True, "specific_fact_present": False}
+        r = ReviewResult(hook="h", body="b", quality_flags=flags)
+        assert r.quality_flags["hook_strong"] is True
+        assert r.quality_flags["specific_fact_present"] is False
+
+    @pytest.mark.asyncio
+    async def test_mock_reviewer_returns_empty_quality_flags(self):
+        """MockReviewer는 quality_flags = {} 반환 (후방 호환)."""
+        from app.providers.mock_providers import MockReviewer
+        from app.providers.base import DraftResult
+        reviewer = MockReviewer()
+        draft = DraftResult(hook="h", body="b", category_suggestion="economy")
+        result = await reviewer.review_and_refine(
+            title="test", source_text="text", draft=draft
+        )
+        assert isinstance(result.quality_flags, dict)
+
+
 class TestAITeamCreation:
     """create_ai_team()이 다양한 설정에서 올바르게 동작하는지 테스트"""
 

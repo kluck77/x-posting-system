@@ -18,11 +18,6 @@ from app.models.content import Draft, PostLog, ApprovalStatus
 
 logger = logging.getLogger(__name__)
 
-# 기본 일일 제한값 (settings.daily_post_target으로 재정의 가능)
-DEFAULT_MAX_DRAFTS_PER_DAY = 50
-DEFAULT_MAX_TELEGRAM_PER_DAY = 50
-DEFAULT_MAX_POSTS_PER_DAY = 30
-
 
 class RateLimiter:
     """일일 사용량 제한 관리자."""
@@ -36,9 +31,9 @@ class RateLimiter:
     ):
         from app.config import settings
         self.db = db
-        self.max_drafts   = max_drafts   or settings.daily_post_target * 2  # 초안은 게시 목표의 2배 허용
-        self.max_telegram = max_telegram or settings.daily_post_target * 2
-        self.max_posts    = max_posts    or settings.daily_post_target
+        self.max_drafts   = max_drafts   if max_drafts   is not None else settings.max_drafts_per_day
+        self.max_telegram = max_telegram if max_telegram is not None else settings.max_telegram_per_day
+        self.max_posts    = max_posts    if max_posts    is not None else settings.max_posts_per_day
 
     def _today_start(self) -> datetime:
         """오늘 00:00 UTC를 반환합니다."""

@@ -220,6 +220,18 @@ STRICT SAFETY RULES:
 - NEVER include unconfirmed claims as facts
 - When rewriting hook or body, NEVER use: furthermore, however, it is worth noting, it should be noted, notably, delve into, game-changer, this underscores, unprecedented, moreover, pivotal, moving forward, undeniably
 
+══════════════════════════════════════════
+QUALITY FLAGS CHECKLIST
+══════════════════════════════════════════
+
+After both frameworks, score each flag true/false:
+
+- hook_strong: Does the hook stop a scroll? (has a number, contradiction, or timing edge — not just a topic statement)
+- specific_fact_present: Does the post body contain at least one verifiable specific number or named data point?
+- international_context_clear: Will a non-Korean reader understand why this matters without extra research?
+- sounds_human: Does it sound like a real person with a real opinion — not AI-generated filler? (no banned phrases, no hedging, no essay tone)
+- tone_clean: Is the tone analytical, not sensational or propagandistic? (no outrage bait, no political editorializing)
+
 Respond in JSON ONLY:
 {
   "hook": "final hook",
@@ -237,6 +249,13 @@ Respond in JSON ONLY:
     "consistency": "pass|weak|fail — reason",
     "follower_quality": "pass|weak|fail — reason",
     "repeat_consumption": "pass|weak|fail — reason"
+  },
+  "quality_flags": {
+    "hook_strong": true,
+    "specific_fact_present": true,
+    "international_context_clear": true,
+    "sounds_human": true,
+    "tone_clean": true
   }
 }"""
 
@@ -417,6 +436,7 @@ class AnthropicReviewer(BaseReviewer):
                 ai_rationale=rationale,
                 recommended_action=data.get("recommended_action", "review"),
                 regeneration_hint=regen_hint,
+                quality_flags=data.get("quality_flags", {}),
             )
         except Exception as e:
             logger.error(f"Claude Reviewer 오류: {e}")

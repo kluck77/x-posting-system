@@ -72,6 +72,11 @@ class Settings(BaseSettings):
 
     # --- 콘텐츠 전략 ---
     daily_post_target: int = Field(default=30, description="하루 목표 게시 수")
+
+    # --- 일일 사용량 제한 ---
+    max_drafts_per_day: int = Field(default=5, description="하루 최대 AI 초안 생성 수")
+    max_telegram_per_day: int = Field(default=5, description="하루 최대 텔레그램 승인 카드 수")
+    max_posts_per_day: int = Field(default=10, description="하루 최대 X 게시 수")
     # 4 필러 비중 (비율은 float, 합계 = 1.0)
     pillar_economy_ratio: float = Field(default=0.35, description="경제/금융 필러 비중")
     pillar_crypto_ratio: float = Field(default=0.30, description="크립토/디파이 필러 비중")

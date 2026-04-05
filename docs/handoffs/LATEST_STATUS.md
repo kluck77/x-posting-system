@@ -1,7 +1,7 @@
 # Latest Status
 
 ## Current Phase
-v9 complete. Reply monitor inline button + /queue view done.
+v10 complete. Internal hardening: rate-limiter externalization, OpenAI prompt refresh, Reviewer quality_flags.
 
 ---
 
@@ -25,6 +25,9 @@ v9 complete. Reply monitor inline button + /queue view done.
 | /status improvements | Locked |
 | Reply monitor inline button (reply_use/reply_skip, _pending_reply_drafts) | Locked |
 | /queue view <n> (get_pending_at, read-only) | Locked |
+| Rate limiter settings externalization (max_drafts/telegram/posts_per_day in Settings + .env.example) | Locked |
+| OpenAI SYSTEM_PROMPT refresh (audience, credibility>virality, expanded bans, no editorializing) | Locked |
+| Reviewer quality_flags (ReviewResult field + REVIEW_SYSTEM_PROMPT checklist + parse) | Locked |
 
 ---
 
@@ -39,15 +42,15 @@ v9 complete. Reply monitor inline button + /queue view done.
 
 ---
 
-## Next Candidates (v9)
+## Next Candidates (v10+)
 
-**Nothing urgent.** System is stable and well-tested (476 tests).
-Operator tools are complete for the current phase.
+**Nothing urgent.** System is stable and well-tested (481 tests).
+Operator tools are complete. Internal hardening pass done.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-05
+- Date: 2026-04-05 (session 2)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`

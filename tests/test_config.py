@@ -139,6 +139,19 @@ class TestSettings:
         s = Settings(_env_file=None, active_factcheck_provider="perplexity")
         assert s.get_effective_factcheck_provider() == "mock"
 
+    def test_rate_limit_defaults(self):
+        """rate limit 기본값 확인"""
+        s = Settings(_env_file=None)
+        assert s.max_drafts_per_day == 5
+        assert s.max_telegram_per_day == 5
+        assert s.max_posts_per_day == 10
+
+    def test_rate_limit_env_override(self):
+        """환경변수로 rate limit 재정의 가능"""
+        s = Settings(_env_file=None, max_drafts_per_day=20, max_posts_per_day=30)
+        assert s.max_drafts_per_day == 20
+        assert s.max_posts_per_day == 30
+
     def test_ai_status_summary_all_providers(self):
         s = Settings(
             _env_file=None,

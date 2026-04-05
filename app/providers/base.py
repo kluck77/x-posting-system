@@ -87,6 +87,8 @@ class ReviewResult:
     recommended_action: str = "review"
     # 재생성 가이드 — Reviewer가 "regenerate" 권고 시 DraftWriter에 전달할 구체적 힌트
     regeneration_hint: str = ""
+    # 구조화된 품질 체크리스트 (선택적, 후방 호환)
+    quality_flags: dict = field(default_factory=dict)
 
 
 @dataclass
