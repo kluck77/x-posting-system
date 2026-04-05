@@ -1,6 +1,6 @@
 # Project Status
 
-## Current Phase: v4 — Quality Framework Complete
+## Current Phase: v6 — Growth Layer & Quality Advisory Complete
 
 ### What Works Now
 
@@ -16,8 +16,12 @@
 **Quality & Safety**
 - [x] 5-Criteria quality scorer (expertise / marketability / consistency / follower_quality / repeat_consumption)
 - [x] Auto-reject + regenerate on quality failure (score < 50/100)
-- [x] Reviewer-triggered regenerate loop (max 1 retry)
+- [x] Reviewer-triggered regenerate loop (max 2 retries, hint-required guard)
 - [x] Interpretation gap injection: Gemini gaps → DraftWriter context
+- [x] criteria_signals → DraftWriter + Reviewer prompt injection (Layer 2)
+- [x] VoiceGuard — AI phrase detection (19 patterns), wired into ContentPack
+- [x] RepetitionGuard — Jaccard similarity check against recent approved drafts
+- [x] Quality advisory — score_draft < 40 → 경고 표시 in approval card (advisory only)
 - [x] Duplicate prevention (URL + text hash)
 - [x] Daily rate limits (5 drafts / 5 telegrams / 3 posts)
 - [x] Community input risk escalation
@@ -31,7 +35,14 @@
 - [x] PostQueue — optimal-slot scheduler (KST: 9:00/10:30/12:00/13:30/15:00/19:00/21:00)
 - [x] CommentHunter — trend detection + reply draft generation
 - [x] ReplyMonitor — mention polling + re-reply drafts
-- [x] WeeklyReporter — 7-day metrics + AI analysis (Monday 9am KST)
+- [x] WeeklyReporter — 7-day metrics + AI analysis + content-mix section (Monday 9am KST)
+- [x] TopicMemory — 30-day tag frequency tracking, overuse detection
+- [x] ContentPack — multi-draft suite (3 mains + short + replies + quote + thread)
+
+**Operator Tools**
+- [x] `/note <draft_id> <메모>` — save manual note to Draft.manual_notes
+- [x] ContentRequest.note validator (500자 max, field_validator)
+- [x] `/start` help text includes all active commands
 
 **Infrastructure**
 - [x] News monitor (Naver API, 1-min interval, cross-verify ≥4 sources)
@@ -80,13 +91,16 @@
 | v4 | Growth pipelines (Queue/Hunter/Monitor) | Done |
 | v4 | ContentPack (multi-draft output suite) | Done |
 | v4 | criteria_signals → DraftWriter + Reviewer prompt injection | Done |
-| v5 | RSS auto-collection & news monitor | In progress |
-| v5 | Topic memory + content-mix advisor | Planned |
-| v5 | Voice guard (anti-AI phrase detection) | Planned |
-| v5 | RepetitionGuard wiring into ContentPack | Planned |
-| v6 | Quality gate advisory (score display in Telegram) | Planned |
-| v6 | Operator manual note capture (reject callback) | Planned |
-| v6 | Prompt quality audit (based on real outputs) | Planned |
+| v5 | RSS auto-collection & news monitor | Done |
+| v5 | Topic memory + content-mix advisor | Done |
+| v5 | Voice guard (anti-AI phrase detection) | Done |
+| v5 | RepetitionGuard wiring into ContentPack | Done |
+| v6 | Quality gate advisory (score display in Telegram) | Done |
+| v6 | Operator manual note capture (/note command) | Done |
+| v6 | Prompt quality audit document | Done |
+| v7 | Content performance feedback loop | Planned |
+| v7 | Operator note → prompt improvement pipeline | Planned |
+| v7 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
 
 ### Permanent Exclusions
 

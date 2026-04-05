@@ -135,8 +135,7 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         if _score < 40:
             card += (
                 f"\n{'─' * 30}\n"
-                f"🚨 <b>품질 경고:</b> 초안 점수 {_score}/100 — 재검토 권장\n"
-                f"(자동 거절 없음 — 최종 판단은 운영자가 합니다)\n"
+                f"🚨 <b>품질 경고 {_score}/100</b> — 승인 전 검토 권장 (참고용)\n"
             )
     except Exception:
         pass

@@ -106,7 +106,7 @@ class TestBuildApprovalCardQualityAdvisory:
         card = build_approval_card(draft)
         assert "품질 경고" in card
         assert "/100" in card
-        assert "자동 거절 없음" in card
+        assert "참고용" in card
 
     def test_high_score_no_warning(self):
         """score_draft >= 40 이면 품질 경고가 카드에 없다."""
