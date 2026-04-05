@@ -4,13 +4,13 @@
 
 - Date: 2026-04-05
 - Branch: claude/extract-prediction-time-n82UK
-- Phase: post-v10 audit (Phase 12)
+- Phase: post-v10 audit (Phase 12, session 2)
 
 ---
 
 ## What This Session Did
 
-Audit-only pass with two tiny doc fixes. No logic changes.
+Two audit passes, three tiny doc fixes total. No logic changes.
 
 ---
 
@@ -30,6 +30,11 @@ test_telegram_commands.py
 ### Fix 1 — reply_monitor.py docstring (line 15)
 - **Was:** "5. 승인 후 자동 게시" — contradicted the system's core no-auto-posting principle
 - **Now:** "5. 운영자가 X에서 직접 답글 입력 (자동 게시 없음)"
+- Risk: zero (comment only)
+
+### Fix 3 — growth/__init__.py Pipeline 1 description
+- **Was:** "최적 시간 자동 게시 큐" — post_queue hasn't auto-posted since v7
+- **Now:** "최적 시간 승인 알림 큐 (자동 게시 없음)"
 - Risk: zero (comment only)
 
 ### Fix 2 — telegram_bot.py /start help text (line 794)
