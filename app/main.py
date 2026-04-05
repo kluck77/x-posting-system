@@ -151,6 +151,10 @@ async def run_all():
     init_db()
     logger.info("데이터베이스 초기화 완료")
 
+    # 영속 상태 파일 자가 진단
+    from app.utils.startup_check import run_startup_check
+    run_startup_check()
+
     # FastAPI를 별도 스레드에서 실행
     api_thread = threading.Thread(target=run_fastapi_server, daemon=True)
     api_thread.start()

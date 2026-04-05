@@ -801,6 +801,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
         "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
+        "/recover — 영속 상태 파일 자가 진단\n"
         "/pending — 대기 초안\n"
         "/cancel — 취소\n",
         parse_mode="HTML",
@@ -858,6 +859,14 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"마지막 활동: {activity_label}\n"
         f"승인 방식: {approval_label}"
     )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def recover_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/recover — 영속 상태 파일 자가 진단."""
+    from app.utils.startup_check import run_startup_check, format_recovery_summary
+    results = run_startup_check()
+    text = format_recovery_summary(results)
     await update.message.reply_text(text, parse_mode="HTML")
 
 
@@ -1852,6 +1861,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("recover", recover_command))
     app.add_handler(CommandHandler("pending", pending_command))
     app.add_handler(CommandHandler("trends", trends_command))
     app.add_handler(CommandHandler("draft", draft_command))

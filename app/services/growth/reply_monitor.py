@@ -108,7 +108,8 @@ class ReplyMonitor:
             return set(ids)
         except FileNotFoundError:
             return set()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[ReplyMonitor] processed_replies 로드 실패, 빈 목록으로 시작: {e}")
             return set()
 
     def _save_processed(self):
