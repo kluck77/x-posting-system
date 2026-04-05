@@ -303,3 +303,83 @@ class TestFormatPerfSummary:
         result = DraftService(db_session).format_perf_summary()
         assert "늘릴 후보" not in result
         assert "줄일 후보" not in result
+
+
+class TestGetRecentOperatorHints:
+    """get_recent_operator_hints() 테스트."""
+
+    def _make_draft_with_note(self, db_session, source_item, hook, body, note,
+                               status=ApprovalStatus.PUBLISHED):
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        draft.manual_notes = note
+        if status == ApprovalStatus.PUBLISHED:
+            draft.approval_status = ApprovalStatus.PUBLISHED
+        elif status == ApprovalStatus.APPROVED:
+            draft.approval_status = ApprovalStatus.APPROVED
+        db_session.commit()
+        return draft
+
+    def test_returns_empty_when_no_notes(self, db_session, source_item):
+        """notes 없으면 빈 리스트 반환."""
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert result == []
+
+    def test_returns_note_from_published_draft(self, db_session, source_item):
+        """published 초안의 manual_notes가 반환된다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "경제 충격 각도로 써줘"
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert "경제 충격 각도로 써줘" in result[0]
+
+    def test_returns_note_from_approved_draft(self, db_session, source_item):
+        """approved 초안의 notes도 포함된다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "approved 힌트",
+            status=ApprovalStatus.APPROVED,
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert any("approved 힌트" in h for h in result)
+
+    def test_excludes_perf_lines(self, db_session, source_item):
+        """[PERF] 접두어 라인은 제외된다."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1", "[PERF] 좋아요 30개"
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert result == []
+
+    def test_mixed_notes_returns_non_perf_only(self, db_session, source_item):
+        """[PERF] 라인과 일반 라인이 섞인 경우 일반 라인만 수집."""
+        self._make_draft_with_note(
+            db_session, source_item, "h1", "b1",
+            "다음엔 통화정책 각도로\n[PERF] 좋아요 10개"
+        )
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert "통화정책" in result[0]
+        assert "[PERF]" not in result[0]
+
+    def test_respects_limit(self, db_session, source_item):
+        """limit 파라미터가 적용된다."""
+        for i in range(5):
+            self._make_draft_with_note(
+                db_session, source_item, f"h{i}", f"b{i}", f"힌트{i}"
+            )
+        result = DraftService(db_session).get_recent_operator_hints(limit=2)
+        assert len(result) <= 2
+
+    def test_truncates_long_notes(self, db_session, source_item):
+        """120자 초과 메모는 잘린다."""
+        long_note = "A" * 200
+        self._make_draft_with_note(db_session, source_item, "h1", "b1", long_note)
+        result = DraftService(db_session).get_recent_operator_hints()
+        assert len(result) == 1
+        assert len(result[0]) <= 120

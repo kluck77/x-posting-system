@@ -185,6 +185,20 @@ class Orchestrator:
             logger.warning(f"[criteria_context] DraftWriter 빌드 실패 (무시): {_ctx_err}")
             draft_criteria_ctx = ""
 
+        # Layer 2: operator hints (manual_notes → DraftWriter advisory, 실패 시 무시)
+        try:
+            hints = self.draft_service.get_recent_operator_hints(limit=3)
+            if hints:
+                hints_block = "[OPERATOR HINTS]\n" + "\n".join(f"- {h}" for h in hints)
+                draft_criteria_ctx = (
+                    (draft_criteria_ctx + "\n\n" + hints_block).strip()
+                    if draft_criteria_ctx
+                    else hints_block
+                )
+                logger.debug(f"[OperatorHints] DraftWriter 주입: {len(hints)}개")
+        except Exception as _hint_err:
+            logger.warning(f"[OperatorHints] 주입 실패 (무시): {_hint_err}")
+
         try:
             # Gemini interpretation_gaps를 source_text에 추가 → DraftWriter가 해석 각도 활용
             enriched_source = data.source_text

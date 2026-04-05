@@ -213,6 +213,44 @@ class DraftService:
         logger.info(f"성과 메모 저장: draft_id={draft_id}, note={note[:60]}")
         return draft
 
+    def get_recent_operator_hints(self, limit: int = 3) -> list[str]:
+        """
+        최근 approved/published 초안의 manual_notes에서 operator hint 추출.
+
+        - [PERF] 접두어 라인은 제외 (성과 기록 전용)
+        - 초안당 첫 번째 유효 라인만 수집 (중복 방지)
+        - DraftWriter criteria_context에 advisory로 주입하는 용도
+        - 빈 결과면 [] 반환 — 실패 시 조용히 처리 (Layer 2 보호)
+        """
+        try:
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status.in_([
+                        ApprovalStatus.APPROVED,
+                        ApprovalStatus.PUBLISHED,
+                    ]),
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+                .order_by(Draft.updated_at.desc())
+                .limit(20)
+                .all()
+            )
+            hints: list[str] = []
+            for d in drafts:
+                for line in (d.manual_notes or "").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("[PERF]"):
+                        hints.append(line[:120])
+                        break  # 초안당 첫 유효 라인만
+                if len(hints) >= limit:
+                    break
+            return hints
+        except Exception as e:
+            logger.warning(f"[OperatorHints] 수집 실패 (무시): {e}")
+            return []
+
     def get_published_with_perf_notes(self, limit: int = 5) -> list[Draft]:
         """
         [PERF] 태그가 있는 최근 게시 초안을 반환합니다.
