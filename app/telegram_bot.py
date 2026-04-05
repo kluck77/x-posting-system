@@ -791,7 +791,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/pack [url/text] — 콘텐츠 팩 직접 생성 📦\n"
         "/thread — 스레드 생성 🧵\n"
         "/trends — 트렌드 탐색\n"
-        "/queue — 게시 큐 · /queue remove &lt;n&gt; · /queue clear\n"
+        "/queue — 게시 큐 · /queue view &lt;n&gt; · /queue remove &lt;n&gt; · /queue clear\n"
         "/monitor [off|on] — 멘션 모니터 제어 · /monitor status\n"
         "/hunt — 댓글 기회 탐색\n"
         "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
