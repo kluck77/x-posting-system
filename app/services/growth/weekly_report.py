@@ -275,9 +275,22 @@ async def run_weekly_report():
         except Exception as _mix_err:
             logger.warning(f"[TopicMemory] 믹스 섹션 생성 실패 (무시): {_mix_err}")
 
+        # Layer 2: 성과 메모 요약 (실패 시 무시)
+        perf_section = ""
+        try:
+            from app.db import get_db as _get_db
+            from app.services.draft_service import DraftService
+            _db = _get_db()
+            perf_section = DraftService(_db).format_perf_summary(days=30)
+            if perf_section:
+                perf_section = f"\n\n{perf_section}"
+        except Exception as _perf_err:
+            logger.warning(f"[PerfSummary] 생성 실패 (무시): {_perf_err}")
+
         full_msg = (
             f"{report_text}"
             f"{mix_section}"
+            f"{perf_section}"
             f"\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
         )
         await tg_send(full_msg)

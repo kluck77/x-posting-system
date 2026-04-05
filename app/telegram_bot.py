@@ -1160,7 +1160,19 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         metrics = await reporter.collect()
         ai_tips = await reporter.analyze_with_ai(metrics)
         report_text = metrics.format_for_telegram()
-        full_msg = f"{report_text}\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+
+        # Layer 2: 성과 메모 요약 (실패 시 무시)
+        perf_section = ""
+        try:
+            db = get_db()
+            from app.services.draft_service import DraftService
+            perf_section = DraftService(db).format_perf_summary(days=30)
+            if perf_section:
+                perf_section = f"\n\n{perf_section}"
+        except Exception:
+            pass
+
+        full_msg = f"{report_text}{perf_section}\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
 
         await msg.delete()
         await update.message.reply_text(full_msg, parse_mode="HTML")

@@ -203,3 +203,59 @@ class TestPerformanceNote:
             service.save_performance_note(d.id, f"메모{i}")
         results = service.get_published_with_perf_notes(limit=2)
         assert len(results) <= 2
+
+
+class TestFormatPerfSummary:
+    """format_perf_summary() 집계 요약 테스트."""
+
+    def _make_published_with_perf(
+        self, db_session, source_item, hook, body, perf_note, tags=None, fmt="single"
+    ):
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        draft.topic_tags = f'["{tags}"]' if tags else None
+        draft.output_format = fmt
+        db_session.commit()
+        service.mark_published(draft.id, f"x{draft.id}", f"https://x.com/x{draft.id}")
+        service.save_performance_note(draft.id, perf_note)
+        return draft
+
+    def test_returns_empty_when_no_perf_notes(self, db_session, source_item):
+        """[PERF] 메모 없으면 빈 문자열 반환."""
+        service = DraftService(db_session)
+        result = service.format_perf_summary()
+        assert result == ""
+
+    def test_includes_category_count(self, db_session, source_item):
+        """카테고리 집계가 요약에 포함된다."""
+        self._make_published_with_perf(db_session, source_item, "h1", "b1", "좋아요 30개")
+        result = DraftService(db_session).format_perf_summary()
+        assert "카테고리" in result
+        assert "economy" in result
+
+    def test_includes_tag_count(self, db_session, source_item):
+        """topic_tags 집계가 포함된다."""
+        self._make_published_with_perf(
+            db_session, source_item, "h1", "b1", "메모", tags="BOK"
+        )
+        result = DraftService(db_session).format_perf_summary()
+        assert "BOK" in result
+
+    def test_includes_recent_note_text(self, db_session, source_item):
+        """최근 PERF 메모 원문이 포함된다."""
+        self._make_published_with_perf(
+            db_session, source_item, "h1", "b1", "팔로워 +5 좋음"
+        )
+        result = DraftService(db_session).format_perf_summary()
+        assert "팔로워 +5 좋음" in result
+
+    def test_days_filter(self, db_session, source_item):
+        """days=0이면 과거 데이터 미포함."""
+        self._make_published_with_perf(db_session, source_item, "h1", "b1", "메모")
+        result = DraftService(db_session).format_perf_summary(days=0)
+        assert result == ""

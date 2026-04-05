@@ -5,8 +5,10 @@ AI가 생성한 포스트 초안을 데이터베이스에 저장하고 관리합
 중복 방지, 버전 관리, 상태 업데이트 등을 처리합니다.
 """
 
+import json
 import logging
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.models.content import (
     Draft, SourceItem, ApprovalStatus, ContentCategory, RiskLevel
@@ -227,3 +229,70 @@ class DraftService:
             .limit(limit)
             .all()
         )
+
+    def format_perf_summary(self, days: int = 30) -> str:
+        """
+        [PERF] 메모 기반 간단 집계 요약 텍스트 반환.
+
+        - 카테고리 / topic_tags / output_format 빈도 집계
+        - 최근 PERF 메모 원문 3개
+        - 분석 엔진 없음 — 운영자가 패턴을 읽는 참고용
+        - 빈 결과면 "" 반환
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        drafts = (
+            self.db.query(Draft)
+            .filter(
+                Draft.approval_status == ApprovalStatus.PUBLISHED,
+                Draft.manual_notes.like("%[PERF]%"),
+                Draft.published_at >= cutoff,
+            )
+            .order_by(Draft.published_at.desc())
+            .limit(30)
+            .all()
+        )
+
+        if not drafts:
+            return ""
+
+        categories: Counter = Counter()
+        tags: Counter = Counter()
+        formats: Counter = Counter()
+        recent_notes: list[str] = []
+
+        for d in drafts:
+            if d.category:
+                categories[d.category.value] += 1
+            if d.topic_tags:
+                try:
+                    for tag in json.loads(d.topic_tags):
+                        tags[tag] += 1
+                except Exception:
+                    pass
+            if d.output_format:
+                formats[d.output_format] += 1
+            for line in (d.manual_notes or "").splitlines():
+                if line.startswith("[PERF]"):
+                    note = line[7:].strip()
+                    if note:
+                        recent_notes.append(note)
+
+        lines = [f"📊 <b>성과 메모 요약 ({days}일 / {len(drafts)}건)</b>"]
+        if categories:
+            lines.append("• 카테고리: " + ", ".join(
+                f"{k}×{v}" for k, v in categories.most_common(4)
+            ))
+        if tags:
+            lines.append("• 태그: " + ", ".join(
+                f"{k}×{v}" for k, v in tags.most_common(5)
+            ))
+        if formats:
+            lines.append("• 형식: " + ", ".join(
+                f"{k}×{v}" for k, v in formats.most_common(3)
+            ))
+        if recent_notes:
+            lines.append("• 최근 메모:")
+            for note in recent_notes[:3]:
+                lines.append(f'  - "{note[:80]}"')
+
+        return "\n".join(lines)
