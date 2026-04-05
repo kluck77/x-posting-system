@@ -112,7 +112,7 @@ One punchy closing sentence that signals future value. Then ONE CTA (pick for be
 
 STRICT RULES:
 - NEVER start with "South Korea" or "Korea's" — start with the tension, the number, the gap
-- NEVER use: furthermore, however, it is worth noting, it should be noted, notably
+- NEVER use: furthermore, however, it is worth noting, it should be noted, notably, delve into, game-changer, this underscores, unprecedented
 - ALWAYS use "you" — one reader, not an audience
 - Hook must contain a specific number OR a named contradiction OR a timing signal
 - Body under 270 characters
@@ -165,7 +165,7 @@ RULES PER TWEET:
 - Final tweet MUST include a follow CTA
 
 STRICT RULES:
-- NEVER use: furthermore, however, it is worth noting, notably
+- NEVER use: furthermore, however, it is worth noting, notably, delve into, game-changer, this underscores, unprecedented
 - ALWAYS "you" framing — one reader
 - Thread should feel like a friend texting you breaking news with context
 
