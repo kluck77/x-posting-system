@@ -1219,6 +1219,46 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     queue = get_post_queue()
 
+    if args_text.lower().startswith("remove "):
+        # /queue remove <n> — 대기 게시물 제거
+        rest = args_text[7:].strip()
+        try:
+            n = int(rest)
+        except ValueError:
+            await update.message.reply_text(
+                "⚠️ <b>잘못된 번호입니다.</b>\n\n"
+                "사용법: <code>/queue remove 1</code>\n"
+                "(번호는 /queue 목록에서 확인)",
+                parse_mode="HTML",
+            )
+            return
+
+        removed = queue.remove_pending(n)
+        if removed is None:
+            pending_count = queue.count_pending()
+            if pending_count == 0:
+                await update.message.reply_text(
+                    "📋 큐가 비어 있습니다. 제거할 항목이 없습니다.",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(
+                    f"⚠️ <b>{n}번 항목이 없습니다.</b>\n\n"
+                    f"현재 대기 항목: {pending_count}개 (1–{pending_count})\n"
+                    f"목록 확인: <code>/queue</code>",
+                    parse_mode="HTML",
+                )
+            return
+
+        preview = removed.text[:80] + ("…" if len(removed.text) > 80 else "")
+        await update.message.reply_text(
+            f"🗑 <b>{n}번 항목 제거 완료</b>\n\n"
+            f"<code>{preview}</code>\n\n"
+            f"📋 잔여 대기: {queue.count_pending()}개",
+            parse_mode="HTML",
+        )
+        return
+
     if args_text:
         # 큐에 추가
         post = queue.add(args_text)
@@ -1255,6 +1295,7 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📋 <b>게시 큐 ({len(pending)}개 대기)</b>\n\n"
         + "\n".join(lines)
         + "\n\n<i>최적 슬롯에 순서대로 승인 알림이 발송됩니다.</i>"
+        + "\n<i>제거: /queue remove &lt;번호&gt;</i>"
     )
     await update.message.reply_text(msg, parse_mode="HTML")
 

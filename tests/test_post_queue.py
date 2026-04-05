@@ -212,3 +212,104 @@ class TestApproveQueuedPost:
             await queue.approve_queued_post(post_key)
 
         assert queue._last_published is not None
+
+
+# ---------------------------------------------------------------------------
+# 4. remove_pending() — 운영자 visible position 기준 제거
+# ---------------------------------------------------------------------------
+
+class TestRemovePending:
+    """/queue remove <n> 의 핵심 로직: remove_pending(position) 검증."""
+
+    def test_removes_correct_item_by_position(self):
+        """position 1은 첫 번째 대기 게시물을 제거한다."""
+        queue = _make_queue()
+        post1 = _add_post(queue, "첫 번째")
+        post2 = _add_post(queue, "두 번째")
+        post3 = _add_post(queue, "세 번째")
+
+        with patch.object(queue, "_save"):
+            removed = queue.remove_pending(1)
+
+        assert removed is post1
+        assert post1 not in queue._queue
+        assert post2 in queue._queue
+        assert post3 in queue._queue
+
+    def test_removes_middle_item(self):
+        """position 2는 두 번째 대기 게시물을 제거한다."""
+        queue = _make_queue()
+        post1 = _add_post(queue, "첫 번째")
+        post2 = _add_post(queue, "두 번째")
+        post3 = _add_post(queue, "세 번째")
+
+        with patch.object(queue, "_save"):
+            removed = queue.remove_pending(2)
+
+        assert removed is post2
+        assert post1 in queue._queue
+        assert post2 not in queue._queue
+        assert post3 in queue._queue
+
+    def test_published_posts_not_counted_in_position(self):
+        """발행 완료된 게시물은 position 카운트에 포함되지 않는다."""
+        queue = _make_queue()
+        published = _add_post(queue, "발행 완료")
+        published.published_at = datetime.now(timezone.utc)
+        pending1 = _add_post(queue, "대기 1")
+        pending2 = _add_post(queue, "대기 2")
+
+        with patch.object(queue, "_save"):
+            removed = queue.remove_pending(1)
+
+        # position 1 = pending1 (발행 완료 게시물은 건너뜀)
+        assert removed is pending1
+        assert published in queue._queue  # 발행 완료 게시물은 그대로
+        assert pending2 in queue._queue
+
+    def test_returns_none_for_empty_queue(self):
+        """큐가 비어 있으면 None을 반환한다."""
+        queue = _make_queue()
+        result = queue.remove_pending(1)
+        assert result is None
+
+    def test_returns_none_for_position_zero(self):
+        """position 0은 유효하지 않다 (1-indexed)."""
+        queue = _make_queue()
+        _add_post(queue)
+        result = queue.remove_pending(0)
+        assert result is None
+
+    def test_returns_none_for_position_out_of_range(self):
+        """position이 대기 개수를 초과하면 None을 반환한다."""
+        queue = _make_queue()
+        _add_post(queue, "하나뿐")
+
+        result = queue.remove_pending(2)
+        assert result is None
+
+    def test_returns_none_for_negative_position(self):
+        """음수 position은 None을 반환한다."""
+        queue = _make_queue()
+        _add_post(queue)
+        result = queue.remove_pending(-1)
+        assert result is None
+
+    def test_save_called_on_successful_remove(self):
+        """제거 성공 시 _save()가 호출된다."""
+        queue = _make_queue()
+        _add_post(queue, "저장 테스트")
+
+        with patch.object(queue, "_save") as mock_save:
+            queue.remove_pending(1)
+
+        mock_save.assert_called_once()
+
+    def test_save_not_called_on_failed_remove(self):
+        """제거 실패 시 _save()가 호출되지 않는다."""
+        queue = _make_queue()
+
+        with patch.object(queue, "_save") as mock_save:
+            queue.remove_pending(1)
+
+        mock_save.assert_not_called()

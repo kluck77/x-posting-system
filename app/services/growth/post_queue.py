@@ -129,6 +129,20 @@ class PostQueue:
             return post
         return None
 
+    def remove_pending(self, position: int) -> QueuedPost | None:
+        """
+        운영자 visible position(1-indexed, list_pending() 기준)으로 대기 게시물 제거.
+        /queue remove <n> 에서 n이 여기서의 position.
+        발행 완료된 게시물은 카운트하지 않음.
+        """
+        pending = self.list_pending()
+        if not pending or not (1 <= position <= len(pending)):
+            return None
+        post = pending[position - 1]
+        self._queue.remove(post)
+        self._save()
+        return post
+
     def list_pending(self) -> list[QueuedPost]:
         """미발행 게시물 목록."""
         return [p for p in self._queue if p.published_at is None]
