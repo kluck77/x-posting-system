@@ -742,14 +742,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/pack [url/text] — 콘텐츠 팩 직접 생성 📦\n"
         "/thread — 스레드 생성 🧵\n"
         "/trends — 트렌드 탐색\n"
-        "/queue — 게시 큐\n"
+        "/queue — 게시 큐 · /queue remove &lt;n&gt; · /queue clear\n"
+        "/monitor [off|on] — 멘션 모니터 제어 · /monitor status\n"
         "/hunt — 댓글 기회 탐색\n"
         "/note &lt;id&gt; &lt;메모&gt; — 초안에 메모 추가 (최대 500자)\n"
         "/hint &lt;id&gt; &lt;메모&gt; — 장기 힌트 저장 · /hint clear &lt;id&gt; 로 제거\n"
         "/hints — 활성 힌트 목록 조회\n"
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
-        "/status — AI 상태\n"
+        "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
         "/pending — 대기 초안\n"
         "/cancel — 취소\n",
         parse_mode="HTML",
@@ -767,13 +768,45 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/status"""
+    """/status — 시스템 상태 요약."""
+    from zoneinfo import ZoneInfo
+    KST = ZoneInfo("Asia/Seoul")
+
     ai_status = settings.ai_status_summary()
-    lines = [f"  {k}: {v}" for k, v in ai_status.items()]
+    ai_lines = "\n".join(f"  {k}: {v}" for k, v in ai_status.items())
+
+    # 멘션 모니터 상태 (Layer 2)
+    try:
+        from app.services.growth.monitor_state import is_paused
+        monitor_label = "🔕 OFF (일시정지)" if is_paused() else "🔔 ON"
+    except Exception:
+        monitor_label = "?"
+
+    # 게시 큐 대기 수 (Layer 2)
+    try:
+        from app.services.growth.post_queue import get_post_queue
+        queue_count = get_post_queue().count_pending()
+        queue_label = f"{queue_count}개 대기"
+    except Exception:
+        queue_label = "?"
+
+    # 마지막 활동 시각 (Layer 2)
+    try:
+        from app.services.growth.activity_tracker import get_last_activity
+        last = get_last_activity()
+        activity_label = last.astimezone(KST).strftime("%m/%d %H:%M KST") if last else "없음"
+    except Exception:
+        activity_label = "?"
+
+    approval_label = "수동 승인 ✅" if not settings.enable_auto_post_low_risk else "자동 게시 ⚠️"
+
     text = (
         "📊 <b>System Status</b>\n\n"
-        + "\n".join(lines)
-        + f"\n\nAuto-post: {'ON ⚠️' if settings.enable_auto_post_low_risk else 'OFF ✅'}"
+        f"<b>AI 프로바이더</b>\n{ai_lines}\n\n"
+        f"멘션 모니터: {monitor_label}\n"
+        f"게시 큐: {queue_label}\n"
+        f"마지막 활동: {activity_label}\n"
+        f"승인 방식: {approval_label}"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -1194,6 +1227,12 @@ async def draft_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await msg.delete()
 
+    try:
+        from app.services.growth.activity_tracker import record_activity
+        record_activity()
+    except Exception:
+        pass
+
     pending = {
         "title": title,
         "text": text,
@@ -1206,6 +1245,49 @@ async def draft_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============================================================================
 # Growth 파이프라인 커맨드
 # =============================================================================
+
+async def monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/monitor [off|on|status] — 멘션 모니터 제어."""
+    from app.services.growth.monitor_state import is_paused, pause, resume
+
+    sub = (context.args[0].lower() if context.args else "status")
+
+    if sub == "off":
+        if is_paused():
+            await update.message.reply_text(
+                "🔕 멘션 모니터가 이미 꺼져 있습니다.\n켜려면: /monitor on"
+            )
+        else:
+            pause()
+            await update.message.reply_text(
+                "🔕 <b>멘션 모니터 OFF</b>\n\n"
+                "새 답글 알림을 보내지 않습니다.\n"
+                "켜려면: <code>/monitor on</code>",
+                parse_mode="HTML",
+            )
+
+    elif sub == "on":
+        if not is_paused():
+            await update.message.reply_text(
+                "🔔 멘션 모니터가 이미 켜져 있습니다."
+            )
+        else:
+            resume()
+            await update.message.reply_text(
+                "🔔 <b>멘션 모니터 ON</b>\n\n"
+                "새 답글이 있으면 5분 내에 알려드립니다.",
+                parse_mode="HTML",
+            )
+
+    else:  # status or unknown subcommand
+        state_label = "🔕 OFF (일시정지)" if is_paused() else "🔔 ON (활성)"
+        await update.message.reply_text(
+            f"📡 <b>멘션 모니터</b>: {state_label}\n\n"
+            "<code>/monitor off</code> — 일시정지\n"
+            "<code>/monitor on</code>  — 재개",
+            parse_mode="HTML",
+        )
+
 
 async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/queue — 게시 큐 현황 조회 또는 항목 추가.
@@ -1259,12 +1341,30 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if args_text.lower() in ("clear", "clear pending"):
+        # /queue clear — 대기 항목 전체 제거
+        removed = queue.clear_pending()
+        if removed == 0:
+            await update.message.reply_text("📋 큐가 이미 비어 있습니다.")
+        else:
+            await update.message.reply_text(
+                f"🗑 <b>대기 항목 {removed}개 모두 제거됐습니다.</b>\n\n"
+                "큐가 비어 있습니다.",
+                parse_mode="HTML",
+            )
+        return
+
     if args_text:
         # 큐에 추가
         post = queue.add(args_text)
         pending_count = queue.count_pending()
         from datetime import datetime, timezone, timedelta
         added_kst = (post.added_at + timedelta(hours=9)).strftime("%H:%M KST")
+        try:
+            from app.services.growth.activity_tracker import record_activity
+            record_activity()
+        except Exception:
+            pass
         await update.message.reply_text(
             f"✅ <b>큐에 추가됨</b>\n\n"
             f"<code>{post.text[:200]}</code>\n\n"
@@ -1289,13 +1389,16 @@ async def queue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = []
     for i, p in enumerate(pending[:10], 1):
         added_kst = (p.added_at + timedelta(hours=9)).strftime("%m/%d %H:%M")
-        lines.append(f"{i}. [{added_kst}] {p.text[:60]}{'…' if len(p.text) > 60 else ''}")
+        notified_mark = " 🔔" if p.notified_at else ""
+        lines.append(
+            f"{i}. [{added_kst}]{notified_mark} {p.text[:60]}{'…' if len(p.text) > 60 else ''}"
+        )
 
     msg = (
         f"📋 <b>게시 큐 ({len(pending)}개 대기)</b>\n\n"
         + "\n".join(lines)
-        + "\n\n<i>최적 슬롯에 순서대로 승인 알림이 발송됩니다.</i>"
-        + "\n<i>제거: /queue remove &lt;번호&gt;</i>"
+        + "\n\n<i>🔔 = 승인 알림 발송됨 · 순서대로 슬롯 알림.</i>"
+        + "\n<i>제거: /queue remove &lt;번호&gt; · 전체 제거: /queue clear</i>"
     )
     await update.message.reply_text(msg, parse_mode="HTML")
 
@@ -1656,6 +1759,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("thread", thread_command))
     app.add_handler(CommandHandler("pack", pack_command))
     app.add_handler(CommandHandler("queue", queue_command))
+    app.add_handler(CommandHandler("monitor", monitor_command))
     app.add_handler(CommandHandler("hunt", hunt_command))
     app.add_handler(CommandHandler("report", report_command))
     app.add_handler(CommandHandler("digest", digest_command))

@@ -286,7 +286,12 @@ async def run_reply_monitor():
     """
     매 5분 실행.
     새 답글 발견 시 Claude 초안 생성 → Telegram 승인 요청.
+    /monitor off 로 일시정지 가능.
     """
+    from app.services.growth.monitor_state import is_paused
+    if is_paused():
+        return
+
     from app.services.growth._tg_helper import tg_send
 
     monitor = ReplyMonitor()

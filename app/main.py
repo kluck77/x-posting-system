@@ -93,7 +93,18 @@ def _start_schedulers():
                 coalesce=True,
             )
 
-            logger.info("✓ Growth 파이프라인: 게시큐(5분), 멘션모니터(5분), 주간리포트(월 09:00 KST)")
+            # 유휴 파이프라인 알림 — 매 60분 체크 (48h 무활동 시 Telegram 알림)
+            from app.services.growth.activity_tracker import check_and_send_idle_reminder
+            scheduler.add_job(
+                check_and_send_idle_reminder,
+                "interval",
+                minutes=60,
+                id="idle_reminder",
+                max_instances=1,
+                coalesce=True,
+            )
+
+            logger.info("✓ Growth 파이프라인: 게시큐(5분), 멘션모니터(5분), 주간리포트(월 09:00 KST), 유휴알림(60분)")
         except Exception as e:
             logger.warning(f"Growth 파이프라인 스케줄러 등록 실패 (무시): {e}")
 

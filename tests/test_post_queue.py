@@ -313,3 +313,64 @@ class TestRemovePending:
             queue.remove_pending(1)
 
         mock_save.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 5. clear_pending() — 대기 항목 전체 제거
+# ---------------------------------------------------------------------------
+
+class TestClearPending:
+    """/queue clear 의 핵심 로직: clear_pending() 검증."""
+
+    def test_clears_all_pending_posts(self):
+        """pending 항목이 모두 제거된다."""
+        queue = _make_queue()
+        _add_post(queue, "첫 번째")
+        _add_post(queue, "두 번째")
+        _add_post(queue, "세 번째")
+
+        with patch.object(queue, "_save"):
+            removed = queue.clear_pending()
+
+        assert removed == 3
+        assert queue.count_pending() == 0
+
+    def test_returns_zero_for_empty_queue(self):
+        """큐가 비어 있으면 0을 반환한다."""
+        queue = _make_queue()
+        result = queue.clear_pending()
+        assert result == 0
+
+    def test_preserves_published_posts(self):
+        """발행 완료된 게시물은 제거하지 않는다."""
+        queue = _make_queue()
+        published = _add_post(queue, "발행 완료")
+        published.published_at = datetime.now(timezone.utc)
+        _add_post(queue, "대기 1")
+        _add_post(queue, "대기 2")
+
+        with patch.object(queue, "_save"):
+            removed = queue.clear_pending()
+
+        assert removed == 2
+        assert published in queue._queue
+        assert queue.count_pending() == 0
+
+    def test_save_called_when_items_removed(self):
+        """항목이 있을 때 _save()가 호출된다."""
+        queue = _make_queue()
+        _add_post(queue, "테스트")
+
+        with patch.object(queue, "_save") as mock_save:
+            queue.clear_pending()
+
+        mock_save.assert_called_once()
+
+    def test_save_not_called_when_empty(self):
+        """큐가 비어 있으면 _save()가 호출되지 않는다."""
+        queue = _make_queue()
+
+        with patch.object(queue, "_save") as mock_save:
+            queue.clear_pending()
+
+        mock_save.assert_not_called()

@@ -143,6 +143,19 @@ class PostQueue:
         self._save()
         return post
 
+    def clear_pending(self) -> int:
+        """
+        미발행 대기 게시물 전체 제거. 발행 완료 항목은 보존.
+        제거된 개수를 반환.
+        """
+        pending = self.list_pending()
+        if not pending:
+            return 0
+        for post in pending:
+            self._queue.remove(post)
+        self._save()
+        return len(pending)
+
     def list_pending(self) -> list[QueuedPost]:
         """미발행 게시물 목록."""
         return [p for p in self._queue if p.published_at is None]
