@@ -96,6 +96,7 @@ API 키 없이도 전체 파이프라인을 테스트할 수 있습니다.
 | `/queue <본문>` | 게시 큐에 추가 (최적 슬롯에 승인 알림 발송) |
 | `/queue remove <n>` | n번 대기 항목 제거 |
 | `/queue clear` | 대기 항목 전체 제거 |
+| `/queue view <n>` | n번 항목 전체 텍스트 + 등록시각 + 알림 여부 확인 |
 | `/monitor` | 멘션 모니터 현재 상태 확인 |
 | `/monitor off` | 멘션 모니터 일시정지 |
 | `/monitor on` | 멘션 모니터 재개 |
@@ -120,7 +121,7 @@ API 키 없이도 전체 파이프라인을 테스트할 수 있습니다.
 - 승인 없이 절대 게시 안 됨
 - politics / policy / economy / society 카테고리는 항상 승인 필요
 - 동일 텍스트 중복 게시 방지
-- 하루 최대 게시 3회
+- 하루 최대 게시 10회 (환경변수로 조정 가능)
 
 ---
 
@@ -220,6 +221,11 @@ x-posting-system/
 | v8 | /monitor off/on/status, 멘션 모니터 일시정지 | 완료 |
 | v8 | 유휴 파이프라인 알림 (48h 무활동 → Telegram 알림) | 완료 |
 | v8 | /status 개선 (모니터·큐·활동 시각 통합) | 완료 |
+| v9 | 멘션 모니터 인라인 버튼 (reply_use/reply_skip) | 완료 |
+| v9 | /queue view <n> — 큐 항목 전체 텍스트 확인 | 완료 |
+| v10 | Rate limiter 설정 외부화 (Settings + .env.example) | 완료 |
+| v10 | OpenAI DraftWriter 프롬프트 갱신 | 완료 |
+| v10 | Reviewer quality_flags 구조화 | 완료 |
 
 ---
 

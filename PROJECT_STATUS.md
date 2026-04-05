@@ -1,6 +1,6 @@
 # Project Status
 
-## Current Phase: v8 — Operator Utility Bundle Complete
+## Current Phase: v10 — Internal Hardening Complete
 
 ### What Works Now
 
@@ -25,7 +25,7 @@
 - [x] Prompt banned list sync — DraftWriter + Reviewer rewrite 금지어 통일 (13개)
 - [x] Claude DraftWriter 5-criteria pre-draft gate (marketability + expertise compact check)
 - [x] Duplicate prevention (URL + text hash)
-- [x] Daily rate limits (5 drafts / 5 telegrams / 3 posts)
+- [x] Daily rate limits (5 drafts / 5 telegrams / 10 posts — configurable via .env)
 - [x] Community input risk escalation
 - [x] No publish without human approval
 
@@ -139,7 +139,12 @@
 | v8 | Idle pipeline reminder (48h threshold, 24h spam guard) | Done |
 | v8 | `/status` improvements (monitor + queue + last activity) | Done |
 | v8 | Queue listing: 🔔 notified marker, improved footer | Done |
-| v9 | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
+| v9 | Reply monitor inline approval button (reply_use/reply_skip) | Done |
+| v9 | `/queue view <n>` — full text + metadata for queued item (read-only) | Done |
+| v10 | Rate limiter settings externalization (max_drafts/telegram/posts_per_day in Settings) | Done |
+| v10 | OpenAI DraftWriter prompt refresh (audience, credibility>virality, expanded bans) | Done |
+| v10 | Reviewer quality_flags (ReviewResult field + checklist in REVIEW_SYSTEM_PROMPT) | Done |
+| — | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
 
 ### Locked Areas — Do Not Reopen
 
@@ -158,24 +163,18 @@ The following are complete and must not be reopened without explicit operator in
 - **`/queue remove <n>` and `/queue clear`** — operator queue management commands
 - **`/monitor off/on/status`** — reply monitor toggle and state persistence
 - **Idle pipeline reminder** — `activity_tracker.py`, 48h threshold, scheduler wired in `main.py`
+- **Reply monitor inline button** — `reply_use`/`reply_skip` callbacks, `_pending_reply_drafts`
+- **`/queue view <n>`** — read-only queue item detail (`get_pending_at`, same 1-indexed mapping)
+- **Rate limiter settings externalization** — `max_drafts/telegram/posts_per_day` in Settings + .env.example
+- **OpenAI DraftWriter prompt refresh** — audience block, credibility>virality, expanded banned phrases
+- **Reviewer quality_flags** — `ReviewResult.quality_flags`, checklist in `REVIEW_SYSTEM_PROMPT`, parser
 
 ### Next Candidates
 
-**Candidate A — Reply monitor inline approval button**
-- `run_reply_monitor()` currently sends re-reply drafts as plain text with no action button
-- All other draft paths (main approval, queue approval) have inline keyboard buttons
-- Value: consistent UX; removes copy-paste step for re-reply drafts
-- Layer 1 risk: none (growth service only; same pattern as queue approval notification)
-- Operator benefit: high — removes friction in the re-reply workflow
-- Recommendation: do next
+**Nothing urgent.** System is stable and well-tested (481 tests, 0 failures).
+Operator tooling is complete. Internal hardening pass done.
 
-**Candidate B — `/queue view <n>` detail command**
-- Queue listing shows only 60-char truncated previews
-- No way to see full text of a queued item without removing it
-- Value: operator can verify a post before the approval notification fires
-- Layer 1 risk: none (read-only)
-- Operator benefit: medium
-- Recommendation: defer until A is confirmed working
+Future work requires explicit operator directive before building. See Permanent Exclusions below.
 
 ### Permanent Exclusions
 

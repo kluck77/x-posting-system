@@ -122,6 +122,11 @@ silently. Layer 1 continues unaffected.
 - /queue remove <n> and /queue clear (operator queue management)
 - /monitor off/on/status (reply monitor toggle, monitor_state.py)
 - idle pipeline reminder (activity_tracker.py, 48h threshold, main.py scheduler)
+- reply monitor inline button (reply_use/reply_skip, _pending_reply_drafts)
+- /queue view <n> (get_pending_at, read-only, same 1-indexed mapping as remove)
+- rate limiter settings externalization (max_drafts/telegram/posts_per_day in Settings + .env.example)
+- OpenAI DraftWriter prompt refresh (audience, credibility>virality, expanded banned phrases)
+- Reviewer quality_flags (ReviewResult field, REVIEW_SYSTEM_PROMPT checklist, parser)
 
 ---
 
@@ -144,20 +149,22 @@ silently. Layer 1 continues unaffected.
 - v8: /monitor off/on/status (monitor_state.py, reply monitor pause guard)
 - v8: idle pipeline reminder (activity_tracker.py, 48h/24h thresholds, main.py scheduler)
 - v8: /status improvements (monitor + queue + last activity + approval mode)
+- v9: reply monitor inline approval button (reply_use/reply_skip, _pending_reply_drafts)
+- v9: /queue view <n> (get_pending_at, read-only queue item detail)
+- v10: rate limiter settings externalization (max_drafts/telegram/posts_per_day in Settings)
+- v10: OpenAI DraftWriter prompt refresh (audience, credibility>virality, expanded bans)
+- v10: Reviewer quality_flags (ReviewResult + REVIEW_SYSTEM_PROMPT + parser)
 
 ### Active
-- None. v8 complete. See PROJECT_STATUS.md Next Candidates for v9 direction.
+- None. v10 complete.
 
 ### Future (requires explicit operator opt-in before building)
 - **Auto-posting of any kind** — permanently deferred; the current direction is manual-posting-first.
   `ENABLE_AUTO_POST_LOW_RISK` flag exists in config but logic will NOT be built without an explicit
   operator directive to reverse the manual-posting-first decision.
 
-### Next Candidates (v9)
-See PROJECT_STATUS.md "Next Candidates" for full descriptions.
-
-- **A — Reply monitor inline approval button**: re-reply drafts currently sent as plain text; add tap-to-use button. Recommended next.
-- **B — `/queue view <n>`**: show full text of a queued item. Defer.
+### Next Candidates
+**Nothing urgent.** System is stable (481 tests). Operator tools complete. Hardening done.
 
 ---
 

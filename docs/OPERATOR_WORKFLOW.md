@@ -1,4 +1,4 @@
-# Operator Workflow — v8
+# Operator Workflow — v10
 
 실운영 기준 명령어 사용 가이드.
 기능 설명이 아니라 "언제 쓰는지" 기준으로 정리.
@@ -26,6 +26,7 @@
 - `/queue` — 현재 대기 목록 확인 (🔔 마크 = 승인 알림 이미 발송됨)
 - `/queue remove 2` — 2번 항목을 큐에서 제거
 - `/queue clear` — 대기 중인 항목 전체 제거 (발행 완료 항목은 보존)
+- `/queue view 2` — 2번 항목의 전체 텍스트 + 등록 시각 + 알림 발송 여부 확인 (읽기 전용)
 
 **쓰지 않는 상황:**
 - 바로 초안 생성이 필요할 때 → `/draft` 쓸 것
@@ -217,6 +218,7 @@ DraftWriter에 주입되지만 `[HINT]`가 있으면 밀린다. fallback으로�
 /queue 포스트 본문 내용     ← 최적 슬롯용으로 등록
 /queue remove 2             ← 2번 항목 제거
 /queue clear                ← 대기 항목 전체 제거
+/queue view 2               ← 2번 항목 전체 텍스트 확인
 
 # 모니터 제어
 /monitor                    ← 현재 상태 확인
