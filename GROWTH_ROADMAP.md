@@ -1,8 +1,11 @@
 # GROWTH_ROADMAP.md
 # X 팔로워 100만 목표 - Claude Code 작업 지시서
-# 작성자: Perplexity Computer (운영자 승인형 인프라 분석)
-# 기준일: 2026-04-05
+# 작성자: Perplexity Computer
+# 업데이트: 2026-04-05 (COMMANDER_BRIEF 반영)
 # 대상: kluck77/x-posting-system
+
+> **이 문서는 COMMANDER_BRIEF.md의 원칙 하에 작동한다.**
+> 충돌 시 COMMANDER_BRIEF.md가 우선한다.
 
 ---
 
@@ -21,14 +24,14 @@
 - **RSS/소스 자동 수집 없음**: 수동 입력만 가능
 - **스레드 게시 없음**: 단일 트윗만 지원
 - **성과 추적 없음**: 조회수/팔로워 변화 모름
-- **이미지 없음**: 텍스트 전용 = 낮은 도달
 - **포스팅 횟수 너무 적음**: 하루 3회는 성장 불가
+- **댓글/인용RT 초안 없음**: 메인 포스트만 생성
 
 ---
 
 ## 우선순위 작업 목록 (ROI 높은 순)
 
-### 🔴 PRIORITY 1 - 지금 바로 구현 (이것 없으면 성장 0)
+### 🔴 PRIORITY 1 - 지금 바로 구현
 
 #### P1-A: 일일 게시 한도 현실화
 **파일**: `app/config.py`, `app/services/rate_limiter.py`
@@ -45,115 +48,96 @@
 - `.env.example`에 `MAX_POSTS_PER_DAY`, `MAX_DRAFTS_PER_DAY` 환경변수 추가
 - `config.py`에 해당 환경변수 필드 추가
 
-**이유**: 하루 3회로는 알고리즘이 계정을 무시한다. X 성장 사례 분석 결과 최소 8-12회/일이 필요.
+**이유**: 하루 3회로는 알고리즘이 계정을 무시한다. 최소 8-12회/일이 필요.
 
 ---
 
 #### P1-B: 콘텐츠 전략 파일 추가
 **새 파일**: `app/content_strategy.py`
 
+Layer 2 성격. Layer 1에 영향 없게 얇게 설계할 것.
+
 ```python
-# 이 파일이 없으면 AI가 뭘 써야 할지 모른다
-# 100만 팔로워 계정은 반드시 명확한 콘텐츠 포뮬러가 있다
+# 이 파일은 advisory 전용이다. 실제 게시 흐름을 막으면 안 된다.
 
 CONTENT_PILLARS = {
-    "korea_vs_world": {  # 비교 콘텐츠 - 가장 공유 잘 됨
+    "korea_vs_world": {
         "ratio": 0.30,
-        "examples": [
-            "Korea's birth rate vs Japan vs Germany",
-            "Korean work hours vs OECD average",
-        ]
+        "description": "비교 콘텐츠 - 가장 공유 잘 됨"
     },
-    "surprising_facts": {  # 놀라운 사실 - 바이럴 확률 높음
+    "surprising_facts": {
         "ratio": 0.25,
-        "examples": [
-            "Things non-Koreans don't know about Korea",
-            "Korean statistics that will shock you",
-        ]
+        "description": "놀라운 사실 - 바이럴 확률 높음"
     },
-    "explainer": {  # 설명 콘텐츠 - 저장/공유율 높음
+    "explainer": {
         "ratio": 0.25,
-        "examples": [
-            "Why Korea's education system works (and doesn't)",
-            "How Korean conglomerates (chaebols) actually work",
-        ]
+        "description": "설명 콘텐츠 - 저장/공유율 높음"
     },
-    "news_context": {  # 뉴스 + 맥락 - 시의성
+    "news_context": {
         "ratio": 0.20,
-        "examples": [
-            "What today's Korea news actually means",
-        ]
+        "description": "뉴스 + 맥락 - 시의성"
     }
 }
 
-BEST_POST_TIMES_KST = [
-    "07:00",  # 한국 출근 전 / 미국 저녁
-    "12:00",  # 점심
-    "19:00",  # 퇴근
-    "22:00",  # 취침 전 / 미국 아침
-]
-
 HOOK_TEMPLATES = [
     "Korea just did something no other country has done:",
-    "What happens when you combine {A} with {B}? Korea found out.",
     "{Number} things about Korea that non-Koreans find shocking:",
     "The real reason Korea {phenomenon}:",
     "Korea's {topic} is unlike anything in the world. Here's why:",
 ]
 ```
 
-**작업 내용**:
-- 위 파일 생성
-- `app/orchestrator.py`에서 `generate_draft` 호출 시 `content_pillar`를 AI 프롬프트에 포함
-- `anthropic_provider.py`와 `openai_provider.py`의 SYSTEM_PROMPT에 콘텐츠 전략 주입
+이 파일은 DraftWriter 프롬프트에 참고용으로만 주입한다.
+이 파일이 없어도 파이프라인은 돌아가야 한다.
 
 ---
 
-#### P1-C: OpenAI 프롬프트 대폭 강화
+#### P1-C: OpenAI 프롬프트 강화
 **파일**: `app/providers/openai_provider.py`
 
 현재 SYSTEM_PROMPT 문제점:
 - 훅 공식이 없다
-- 어떤 포맷이 X에서 잘 먹히는지 모른다
 - 바이럴 요소가 없다
+- 설명형 문장 지침이 약하다
 
 **교체할 SYSTEM_PROMPT**:
 ```python
-SYSTEM_PROMPT = """You are a top 0.1% X (Twitter) content strategist specializing in Korean affairs for international audiences.
+SYSTEM_PROMPT = """You are a top-tier X (Twitter) content writer specializing in Korean affairs for international audiences.
 
-Your posts have driven millions of engagements. You know exactly what makes people stop scrolling.
+Your job is to write FIRST DRAFTS. A reviewer will check and refine after you.
 
-VIRAL FORMULA (follow this strictly):
-1. Hook: Open with a jaw-dropping fact, counterintuitive insight, or strong contrast. First 5 words must stop the scroll.
-2. Body: One clear, specific insight. Concrete numbers beat vague claims. Under 240 chars.
-3. CTA: End with a question or "Thread below 🧵" to drive engagement.
+CONTENT PHILOSOPHY:
+- credibility > virality
+- Explain Korea to people who know nothing about it
+- Use specific numbers, not vague claims
+- Compare to other countries when it adds clarity
+- Avoid AI-sounding phrases and filler sentences
 
-PROVEN HOOK PATTERNS:
+HOOK FORMULA (proven patterns):
 - "Korea just became the first country to..."
-- "{Number} years ago Korea was... Now it's..."
+- "[Number] years ago Korea was X. Now it's Y."
 - "While the West debates X, Korea already..."
-- "Korea's {topic}: the stat that will change how you think about {broader topic}"
-
-CONTENT RULES:
-- Always give non-Koreans context they need
-- Use specific numbers (not "many" or "some")
-- Compare to other countries when possible (makes it shareable)
-- Avoid jargon — if you use a Korean term, explain it immediately
-- No sensationalism, but don't be boring either
+- "The stat about Korea that changes how you think about [broader topic]:"
 
 POST STRUCTURE:
-- Hook line (standalone punch)
-- 1-2 context sentences
-- The key insight or fact
-- Closing question or hook for more
+1. Hook line (standalone, stops scrolling)
+2. 1-2 context sentences (what non-Koreans need to know)
+3. The key insight or fact (specific number preferred)
+4. Closing: question or thread hook
+
+STRICT RULES:
+- Main post body under 240 characters (not counting hook)
+- No sensationalism
+- No propaganda tone
+- No fandom-style language
+- If you use a Korean term, explain it immediately
 
 Respond in JSON ONLY:
 {
   "hook": "first line — must stop scrolling",
-  "body": "full post text under 240 chars (not counting hook)",
-  "thread_continuation": "next tweet if this needs more context, or null",
+  "body": "full post text under 240 chars",
+  "thread_continuation": "next tweet if needed, or null",
   "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
-  "virality_angle": "what makes this shareable",
   "tone_notes": "style notes"
 }"""
 ```
@@ -163,33 +147,124 @@ Respond in JSON ONLY:
 #### P1-D: Anthropic Reviewer 프롬프트 강화
 **파일**: `app/providers/anthropic_provider.py`
 
-**추가할 평가 기준**:
-```python
-REVIEW_SYSTEM_PROMPT에 아래 추가:
+REVIEW_SYSTEM_PROMPT에 아래 평가 기준 추가:
 
-VIRALITY CHECKLIST (score each 1-5, include in response):
-- scroll_stop_score: Does the hook make you stop scrolling?
-- shareability_score: Would a non-Korean share this to explain Korea to friends?
-- clarity_score: Can someone with zero Korea knowledge understand this?
-- factual_density: Does it have at least one specific number/stat?
-
-If any score is below 3, rewrite that element.
+```
+QUALITY CHECKLIST (include in response):
+- Does the hook make you stop scrolling? (yes/no + reason)
+- Would a non-Korean share this to explain Korea to friends? (yes/no)
+- Does it have at least one specific number or stat? (yes/no)
+- Does it sound like AI wrote it? (yes/no — if yes, rewrite)
+- Does it drift toward fandom or propaganda tone? (yes/no — if yes, reject)
 
 JSON에 추가:
-"virality_scores": {
-  "scroll_stop": 1-5,
-  "shareability": 1-5,
-  "clarity": 1-5,
-  "factual_density": 1-5
+"quality_flags": {
+  "scroll_stop": true/false,
+  "shareable": true/false,
+  "has_specific_fact": true/false,
+  "sounds_like_ai": true/false,
+  "tone_drift": true/false
 },
 "improvement_notes": "what was changed and why"
 ```
 
 ---
 
-### 🟡 PRIORITY 2 - 스텁 세팅 (구조만 만들고 나중에 채움)
+#### P1-E: 댓글 / 인용RT 초안 생성 추가
+**COMMANDER_BRIEF 섹션 1 요구사항**
 
-#### P2-A: RSS 소스 자동 수집 스텁
+현재 시스템은 메인 포스트만 생성한다.
+댓글 초안과 인용RT 초안도 생성해야 한다.
+
+**작업 내용**:
+- `app/models/content.py`에 `DraftType` enum 추가
+  ```python
+  class DraftType(str, enum.Enum):
+      MAIN_POST = "main_post"
+      REPLY = "reply"
+      QUOTE_RT = "quote_rt"
+      THREAD = "thread"
+  ```
+- `Draft` 모델에 `draft_type` 필드 추가 (기본값: `main_post`)
+- `draft_type` 필드가 없어도 기존 코드가 작동하게 default 설정
+- Orchestrator에 `generate_reply_draft()`, `generate_quote_draft()` 메서드 추가 (스텁도 무방)
+- Telegram 승인 카드에 draft_type 표시 추가
+
+---
+
+### 🟡 PRIORITY 2 - 스텁 세팅 (구조만, 나중에 채움)
+
+#### P2-A: topic_memory.py (COMMANDER_BRIEF 섹션 5 #1)
+**새 파일**: `app/services/topic_memory.py`
+
+```python
+"""
+토픽 메모리 서비스 (Layer 2)
+이 서비스가 실패해도 Layer 1은 정상 작동해야 함.
+최근 게시된 토픽을 기억해서 반복 방지.
+
+현재: 스텁만 구현
+나중에: 실제 토픽 추출 + 중복 경고
+"""
+
+class TopicMemory:
+    def get_recent_topics(self, days: int = 7) -> list[str]:
+        # TODO: DB에서 최근 게시된 draft의 category + keywords 추출
+        return []
+    
+    def is_topic_repeated(self, topic: str, days: int = 3) -> bool:
+        # TODO: 최근 N일 내 같은 토픽이 게시됐는지 확인
+        return False
+    
+    def get_topic_warning(self, topic: str) -> str | None:
+        # TODO: 반복 토픽이면 경고 메시지 반환
+        return None
+```
+
+---
+
+#### P2-B: voice_guard.py (COMMANDER_BRIEF 섹션 5 #2)
+**새 파일**: `app/services/voice_guard.py`
+
+```python
+"""
+보이스 가드 서비스 (Layer 2)
+이 서비스가 실패해도 Layer 1은 정상 작동해야 함.
+AI 같은 표현, 팬덤 드리프트, propaganda 톤 감지.
+
+현재: 스텁만 구현
+나중에: 실제 텍스트 분석
+"""
+
+AI_SOUNDING_PHRASES = [
+    "it's worth noting",
+    "it's important to",
+    "as we can see",
+    "in conclusion",
+    "furthermore",
+    "it is crucial",
+    "delve into",
+    "tapestry",
+]
+
+FANDOM_DRIFT_SIGNALS = [
+    "stan", "iconic", "slay", "king", "queen",
+    "serving", "ate", "no notes",
+]
+
+class VoiceGuard:
+    def check_draft(self, text: str) -> dict:
+        # TODO: 실제 분석 구현
+        return {
+            "ai_phrases_found": [],
+            "fandom_signals_found": [],
+            "warning": None,
+        }
+```
+
+---
+
+#### P2-C: RSS 소스 자동 수집 스텁
 **새 파일**: `app/services/rss_collector.py`
 
 ```python
@@ -198,54 +273,39 @@ RSS 자동 수집 서비스 (스텁)
 현재: 구조만 정의, 실제 수집은 수동
 나중에: 주기적 자동 수집으로 업그레이드
 
-대상 소스 (검증 필요):
-- Korea JoongAng Daily RSS
-- The Korea Herald RSS  
-- Yonhap News English RSS
-- Korea Times RSS
+대상 소스 (안정성 검증 필요):
+- Korea JoongAng Daily
+- The Korea Herald
+- Yonhap News English
 """
 
 class RSSCollector:
-    SOURCES = [
-        "https://koreajoongangdaily.joins.com/rss/news",
-        "http://www.koreaherald.com/rss/all.xml",
-        "https://en.yna.co.kr/RSS/news.xml",
-    ]
+    SOURCES: list[str] = []  # TODO: 검증된 RSS URL 추가
     
     def collect(self) -> list[dict]:
         # TODO: 구현 예정
-        # 지금은 빈 리스트 반환
         return []
-    
-    def filter_by_relevance(self, items: list[dict]) -> list[dict]:
-        # TODO: 구현 예정
-        return items
 ```
-
-**왜 스텁만**: RSS 수집은 소스 안정성 검증이 필요. 잘못된 소스에서 자동 수집하면 품질 하락.
 
 ---
 
-#### P2-B: 스레드 게시 스텁
+#### P2-D: 스레드 게시 스텁
 **파일**: `app/services/x_publisher.py`
 
 ```python
-# publish() 메서드에 thread_continuation 처리 추가
-
+# publish() 메서드에 thread_continuation 처리 추가 (스텁)
 async def publish_thread(self, draft: Draft) -> PublishResult:
     """
     스레드 게시 (스텁)
     현재: 단일 트윗만 게시
-    나중에: thread_continuation이 있으면 스레드로 게시
+    나중에: thread_continuation 있으면 스레드로 게시
     """
-    # Step 1: 첫 트윗 게시
     first_result = await self.publish(draft)
     if not first_result.success:
         return first_result
     
-    # Step 2: 스레드 연속 (스텁)
     if draft.thread_continuation:
-        # TODO: in_reply_to_tweet_id 파라미터로 첫 트윗에 답글
+        # TODO: X API v2 in_reply_to_tweet_id 파라미터 사용
         pass
     
     return first_result
@@ -253,112 +313,49 @@ async def publish_thread(self, draft: Draft) -> PublishResult:
 
 ---
 
-#### P2-C: 성과 추적 스텁
-**새 파일**: `app/services/analytics_service.py`
-
-```python
-"""
-성과 추적 서비스 (스텁)
-X API v2로 각 게시물의 조회수/좋아요/리트윗 추적
-나중에: 어떤 콘텐츠 타입이 성장에 기여하는지 분석
-"""
-
-class AnalyticsService:
-    def get_tweet_metrics(self, tweet_id: str) -> dict:
-        # TODO: X API v2 GET /2/tweets/:id?tweet.fields=public_metrics
-        return {
-            "impressions": 0,
-            "likes": 0, 
-            "retweets": 0,
-            "replies": 0,
-        }
-    
-    def get_best_performing_category(self) -> str:
-        # TODO: DB에서 성과 높은 카테고리 분석
-        return "unknown"
-```
-
----
-
 ### 🟢 PRIORITY 3 - 나중에 구현
 
-#### P3-A: 스케줄러 (게시 시간 자동화)
-- 지금은 수동 /ingest → 텔레그램 승인 → 게시
-- 나중에: 매일 특정 시간대에 자동으로 큐에서 꺼내 게시
-- **주의**: 완전 자동 게시는 절대 금지. 승인 후 큐에 넣고, 시간만 자동화
-
-#### P3-B: 이미지 자동 생성
-- DALL-E 또는 Stable Diffusion으로 포스트용 카드 이미지
-- 텍스트 전용 대비 인게이지먼트 2-3배 차이
-- 먼저 텍스트 품질 안정화 후 추가
-
-#### P3-C: Gemini 리서치 연동
-- 현재 Researcher 역할이 Mock
-- Gemini로 배경 리서치 자동화
-- 팩트 밀도 높아지면 공유율 상승
+- 스케줄러: 게시 시간 자동화 (승인 후 큐에서 꺼내는 것만, 승인은 여전히 수동)
+- weekly content mix advisory report
+- quality gate advisory (게시 막는 게 아니라 경고만)
+- performance suggestions (X API로 조회수 추적)
 
 ---
 
-### 🔒 지금은 금지
+### 🔒 영구 금지 (COMMANDER_BRIEF 섹션 2, 3)
 
-- `ENABLE_AUTO_POST_LOW_RISK=true` 설정 변경
-- 자동 팔로우/언팔로우 기능
-- 댓글/DM 자동화
-- 여러 계정 동시 운영
-- 게시 후 자동 삭제/수정
-
----
-
-## 즉시 실행 가능한 운영 전략 (코드 수정 없이)
-
-### 콘텐츠 입력 공식
-매일 이 형식으로 /ingest에 입력:
-
-```
-타입 1 (비교): "Korea's [지표] vs [다른나라] - 최신 데이터"
-타입 2 (팩트): "[숫자]년 만에 처음인 [한국 현상]"  
-타입 3 (설명): "비한국인이 모르는 [한국 시스템] 작동 방식"
-```
-
-### 소스 우선순위 (지금 수동으로 쓸 것)
-1. 통계청 영문 보도자료
-2. 한국은행 영문 보고서
-3. Korea JoongAng Daily
-4. Our World in Data (한국 데이터)
+- DALL-E / Stable Diffusion / 이미지 생성 계열 전부
+- 자동 좋아요 / 자동 팔로우 / 자동 리플
+- 승인 없는 자동 게시
+- 구조 전면 재설계
+- dashboard 대형화
+- multi-account 지원
 
 ---
 
 ## 클로드 코드 실행 순서
 
 ```
-1단계: P1-A 먼저 (rate_limiter 한도 현실화)
-2단계: P1-C + P1-D (프롬프트 교체 - 가장 즉각적인 품질 향상)
-3단계: P1-B (content_strategy.py 파일 생성)
-4단계: 실제 API 키로 10개 포스트 생성 → 텔레그램 승인 테스트
-5단계: P2 스텁들 추가
+1단계: P1-A (rate_limiter 한도 현실화) → pytest 확인
+2단계: P1-C + P1-D (프롬프트 교체) → pytest 확인
+3단계: P1-B (content_strategy.py) → pytest 확인
+4단계: P1-E (DraftType 추가, 댓글/인용RT 스텁) → pytest 확인
+5단계: P2 스텁들 추가 → pytest 확인
+6단계: 실제 API 키로 end-to-end 테스트
 ```
 
----
-
-## 현재 시스템에서 팔로워 100만까지의 현실적 경로
-
-| 단계 | 팔로워 | 필요한 것 | 예상 기간 |
-|------|--------|-----------|-----------|
-| 지금 | 0 | API 키 연결, 하루 10회 게시 시작 | 즉시 |
-| Phase 1 | 0 → 1,000 | 고품질 훅, 일관성, 하루 10회 | 2-3개월 |
-| Phase 2 | 1,000 → 10,000 | 바이럴 1-2개, 스레드 추가 | 3-6개월 |
-| Phase 3 | 10,000 → 100,000 | 이미지, 협업, 뉴스 선점 | 6-18개월 |
-| Phase 4 | 100,000 → 1,000,000 | 미디어 언급, 유명인 RT | 1-3년 |
-
-**가장 현실적인 병목**: 콘텐츠 품질과 훅의 힘. 시스템이 아니라 콘텐츠가 팔로워를 만든다.
+**각 단계마다 `pytest tests/ -v` 실행 필수. 기존 76개 테스트 모두 통과해야 다음 단계.**
 
 ---
 
-## 이 파일의 용도
+## 현실적 경로
 
-이 파일은 Claude Code가 다음 작업 시 참조하는 지시서입니다.
-- 작업 순서를 바꾸지 마세요
-- P1을 모두 완료하기 전에 P2로 넘어가지 마세요
-- "지금은 금지" 항목은 운영자가 명시적으로 승인하기 전까지 구현하지 마세요
-- 각 P1 작업 완료 후 `pytest tests/ -v` 실행하여 기존 76개 테스트 통과 확인
+| 단계 | 팔로워 | 핵심 조건 |
+|------|--------|-----------|
+| 지금 | 0 | API 키 연결, 하루 10회 게시 시작 |
+| Phase 1 | → 1,000 | 일관성 + 훅 품질 + 하루 10회 |
+| Phase 2 | → 10,000 | 스레드 추가 + 댓글 참여 |
+| Phase 3 | → 100,000 | topic memory + voice consistency |
+| Phase 4 | → 1,000,000 | 미디어 언급, 자연 바이럴 |
 
+**가장 현실적인 병목: 콘텐츠 품질과 훅의 힘. 시스템이 아니라 콘텐츠가 팔로워를 만든다.**
