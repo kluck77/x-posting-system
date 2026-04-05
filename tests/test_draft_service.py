@@ -598,3 +598,68 @@ class TestClearHintLines:
         assert len(service.get_hint_lines_with_draft_id()) == 1
         service.clear_hint_lines(d.id)
         assert service.get_hint_lines_with_draft_id() == []
+
+
+class TestFormatHintImpactSummary:
+    """format_hint_impact_summary() — [HINT]×[PERF] 공존 집계 테스트."""
+
+    def _make_published(self, db_session, source_item, hook, body, notes):
+        service = DraftService(db_session)
+        draft = service.create_draft(
+            source_item=source_item,
+            hook=hook, body=body,
+            category=ContentCategory.ECONOMY,
+            risk_level=RiskLevel.LOW,
+        )
+        draft.manual_notes = notes
+        db_session.commit()
+        service.mark_published(draft.id, f"x{draft.id}", f"https://x.com/{draft.id}")
+        return draft
+
+    def test_returns_empty_when_no_annotated_drafts(self, db_session, source_item):
+        """notes 없으면 빈 문자열."""
+        result = DraftService(db_session).format_hint_impact_summary()
+        assert result == ""
+
+    def test_counts_both_bucket(self, db_session, source_item):
+        """[HINT]+[PERF] 공존 draft는 '성과 확인 + 힌트화' 버킷에 집계된다."""
+        self._make_published(
+            db_session, source_item, "h1", "b1",
+            "[HINT] 통화정책 각도\n[PERF] 좋아요 30개"
+        )
+        result = DraftService(db_session).format_hint_impact_summary()
+        assert "성과 확인 + 힌트화" in result
+        assert "1건" in result
+
+    def test_counts_perf_only_bucket(self, db_session, source_item):
+        """[PERF]만 있는 draft는 '성과만 기록' 버킷에 집계된다."""
+        self._make_published(
+            db_session, source_item, "h1", "b1", "[PERF] 리트윗 5개"
+        )
+        result = DraftService(db_session).format_hint_impact_summary()
+        assert "성과만 기록" in result
+
+    def test_counts_hint_only_bucket(self, db_session, source_item):
+        """[HINT]만 있는 draft는 '힌트만 있음' 버킷에 집계된다."""
+        self._make_published(
+            db_session, source_item, "h1", "b1", "[HINT] 짧게 써줘"
+        )
+        result = DraftService(db_session).format_hint_impact_summary()
+        assert "힌트만 있음" in result
+
+    def test_plain_notes_excluded_from_all_buckets(self, db_session, source_item):
+        """일반 메모만 있는 draft는 어느 버킷에도 포함되지 않아 빈 문자열 반환."""
+        self._make_published(
+            db_session, source_item, "h1", "b1", "그냥 운영 메모"
+        )
+        result = DraftService(db_session).format_hint_impact_summary()
+        assert result == ""
+
+    def test_days_filter(self, db_session, source_item):
+        """days=0이면 어떤 draft도 포함되지 않아 빈 문자열 반환."""
+        self._make_published(
+            db_session, source_item, "h1", "b1",
+            "[HINT] 힌트\n[PERF] 성과"
+        )
+        result = DraftService(db_session).format_hint_impact_summary(days=0)
+        assert result == ""

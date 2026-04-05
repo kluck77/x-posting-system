@@ -337,6 +337,64 @@ class DraftService:
         logger.info(f"[HINT] 라인 제거: draft_id={draft_id}")
         return draft
 
+    def format_hint_impact_summary(self, days: int = 60) -> str:
+        """
+        [HINT] × [PERF] 공존 기반 힌트 영향 요약 텍스트 반환 (v3 feedback).
+
+        같은 draft에 [HINT]와 [PERF]가 함께 있으면 "성과 확인 + 힌트화" 로 분류.
+        이것이 기존 DB 구조로 가능한 가장 직접적인 연결 고리.
+
+        3버킷:
+        - both    : [HINT] + [PERF] 공존 — 성과 기반 힌트, 가장 신뢰 가능
+        - perf_only : [PERF]만 — 성과 기록했지만 힌트화 안 됨 (/hint 검토 대상)
+        - hint_only : [HINT]만 — 힌트화했지만 성과 미확인
+
+        빈 결과면 "" 반환 (Layer 2 보호).
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        try:
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status == ApprovalStatus.PUBLISHED,
+                    Draft.published_at >= cutoff,
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[HintImpact] 쿼리 실패 (무시): {e}")
+            return ""
+
+        both = perf_only = hint_only = 0
+        for d in drafts:
+            notes = d.manual_notes or ""
+            has_hint = any(l.strip().startswith("[HINT]") for l in notes.splitlines())
+            has_perf = any(l.strip().startswith("[PERF]") for l in notes.splitlines())
+            if has_hint and has_perf:
+                both += 1
+            elif has_perf:
+                perf_only += 1
+            elif has_hint:
+                hint_only += 1
+
+        if both == 0 and perf_only == 0 and hint_only == 0:
+            return ""
+
+        lines = [f"💡 <b>힌트 영향 요약 ({days}일)</b>"]
+        if both:
+            lines.append(f"• 성과 확인 + 힌트화: {both}건  ← 가장 신뢰할 수 있는 힌트")
+        if perf_only:
+            lines.append(
+                f"• 성과만 기록 (힌트 미변환): {perf_only}건"
+                f"  ← /hint 로 힌트화 검토"
+            )
+        if hint_only:
+            lines.append(f"• 힌트만 있음 (성과 미확인): {hint_only}건")
+
+        return "\n".join(lines)
+
     def get_published_with_perf_notes(self, limit: int = 5) -> list[Draft]:
         """
         [PERF] 태그가 있는 최근 게시 초안을 반환합니다.

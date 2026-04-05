@@ -1174,7 +1174,21 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-        full_msg = f"{report_text}{perf_section}\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+        # Layer 2: 힌트 영향 요약 — [HINT]×[PERF] 공존 집계 (실패 시 무시)
+        hint_impact = ""
+        try:
+            db2 = get_db()
+            from app.services.draft_service import DraftService as _DS
+            hint_impact = _DS(db2).format_hint_impact_summary(days=60)
+            if hint_impact:
+                hint_impact = f"\n\n{hint_impact}"
+        except Exception:
+            pass
+
+        full_msg = (
+            f"{report_text}{perf_section}{hint_impact}"
+            f"\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
+        )
 
         await msg.delete()
         await update.message.reply_text(full_msg, parse_mode="HTML")

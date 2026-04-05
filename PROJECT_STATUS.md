@@ -56,6 +56,7 @@
 - [x] `format_perf_summary()` — aggregates `[PERF]` notes by category / topic_tags / output_format; surfaces 3 recent note texts; appended to `/report` and weekly report
 - [x] Pattern analysis (v2) — cross-references `[PERF]` tags vs all published tags → "늘릴 후보 / 줄일 후보" lines in perf summary
 - [x] Hint lifecycle complete: write (`/hint`) → read (`/hints`) → delete (`/hint clear`)
+- [x] `format_hint_impact_summary()` — [HINT]×[PERF] co-occurrence: 3-bucket summary (both / perf-only / hint-only); appended to `/report` and weekly report (Layer 2)
 
 **Infrastructure**
 - [x] News monitor (Naver API, 1-min interval, cross-verify ≥4 sources)
@@ -119,8 +120,8 @@
 | v7 | Operator note → DraftWriter hint pipeline v1 (get_recent_operator_hints) | Done |
 | v7 | Operator hint [HINT] prefix priority over plain notes (v2) | Done |
 | v7 | Hint lifecycle — /hint (write) · /hints (read) · /hint clear (delete) | Done |
+| v7 | Content performance feedback loop v3 ([HINT]×[PERF] co-occurrence summary) | Done |
 | v8 | Low-risk auto-posting (feature flag, explicit opt-in) | Planned |
-| v8 | Content performance feedback loop v3 ([HINT] × [PERF] cross-reference) | Planned |
 
 ### Next Candidates
 
@@ -129,9 +130,10 @@
 - Needs: time-window check + approval bypass guard scoped to low-risk category only
 - Requires explicit operator opt-in; not building without instruction
 
-**v8 — Perf feedback loop v3**
-- Cross-reference: did posts written after a [HINT] was active receive better [PERF] notes?
-- Advisory read-only — no auto-action. Far future, no urgency.
+**v8 — Low-risk auto-posting (feature flag)**
+- `ENABLE_AUTO_POST_LOW_RISK=false` already in config
+- Needs: time-window check + approval bypass guard scoped to low-risk category only
+- Requires explicit operator opt-in; not building without instruction
 
 ### Permanent Exclusions
 

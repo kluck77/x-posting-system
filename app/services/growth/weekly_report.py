@@ -287,10 +287,22 @@ async def run_weekly_report():
         except Exception as _perf_err:
             logger.warning(f"[PerfSummary] 생성 실패 (무시): {_perf_err}")
 
+        # Layer 2: 힌트 영향 요약 — [HINT]×[PERF] 공존 집계 (실패 시 무시)
+        hint_impact = ""
+        try:
+            from app.db import get_db as _get_db2
+            from app.services.draft_service import DraftService
+            hint_impact = DraftService(_get_db2()).format_hint_impact_summary(days=60)
+            if hint_impact:
+                hint_impact = f"\n\n{hint_impact}"
+        except Exception as _hi_err:
+            logger.warning(f"[HintImpact] 생성 실패 (무시): {_hi_err}")
+
         full_msg = (
             f"{report_text}"
             f"{mix_section}"
             f"{perf_section}"
+            f"{hint_impact}"
             f"\n\n<b>🤖 다음 주 개선 포인트</b>\n{ai_tips}"
         )
         await tg_send(full_msg)
