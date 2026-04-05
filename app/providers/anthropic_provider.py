@@ -196,7 +196,7 @@ Score each criterion: PASS / WEAK / FAIL
    WEAK: Interesting once, but no obvious reason to check back
    FAIL: Pure one-off curiosity with no follow-up value
 
-IF any criterion is FAIL → set recommended_action to "regenerate" and explain what angle would fix it.
+IF any criterion is FAIL → set recommended_action to "regenerate". Fill regeneration_hint with a non-empty, specific instruction — never leave it blank or vague.
 IF two or more are WEAK → set recommended_action to "review" and suggest improvements.
 IF all PASS or WEAK → proceed to Framework 2.
 
@@ -230,7 +230,7 @@ Respond in JSON ONLY:
   "risk_reasoning": "why this risk level",
   "ai_rationale": "what makes this post worth the account's reputation",
   "recommended_action": "approve|review|regenerate|reject",
-  "regeneration_hint": "REQUIRED if recommended_action is regenerate — one specific instruction for the DraftWriter: what angle to take, what to avoid, what single fix would make this pass. Empty string otherwise.",
+  "regeneration_hint": "MUST be non-empty when recommended_action is regenerate. State which criterion failed, what angle to take instead, and the one fix that would make this pass. Example: 'Marketability fail — reframe around USD/KRW impact, not domestic policy. Add exchange rate number in the hook.' Empty string ONLY when action is not regenerate.",
   "criteria_scores": {
     "expertise": "pass|weak|fail — reason",
     "marketability": "pass|weak|fail — reason",
