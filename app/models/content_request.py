@@ -13,7 +13,7 @@
 """
 
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 SOURCE_TYPE_MAP: dict[str, str] = {
@@ -38,7 +38,14 @@ class ContentRequest(BaseModel):
 
     # 콘텐츠
     raw_text: Optional[str] = Field(None, description="원문 붙여넣기")
-    note: Optional[str] = Field(None, description="사용자 메모 / 각도 힌트")
+    note: Optional[str] = Field(None, description="사용자 메모 / 각도 힌트 (최대 500자)")
+
+    @field_validator("note")
+    @classmethod
+    def note_max_length(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 500:
+            raise ValueError("note는 500자를 초과할 수 없습니다")
+        return v
     image_path: Optional[str] = Field(None, description="스크린샷 경로 또는 설명 (Phase 1 — 텍스트로만 처리)")
     image_extracted_text: Optional[str] = Field(None, description="스크린샷 OCR 텍스트 (있으면 직접 사용)")
 

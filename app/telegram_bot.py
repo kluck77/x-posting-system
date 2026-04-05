@@ -1181,6 +1181,47 @@ async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(f"❌ 다이제스트 생성 실패: {str(e)[:200]}")
 
 
+async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/note <draft_id> <메모> — 초안에 수동 메모 저장 (최대 500자)."""
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "사용법: <code>/note &lt;draft_id&gt; &lt;메모&gt;</code>\n"
+            "예: <code>/note 42 각도를 경제 충격 쪽으로 바꿔줘</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    try:
+        draft_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ draft_id는 숫자여야 합니다.")
+        return
+
+    note_text = " ".join(args[1:])[:500]
+
+    try:
+        db = get_db()
+        from app.services.draft_service import DraftService
+        draft_service = DraftService(db)
+        draft = draft_service.get_by_id(draft_id)
+        if not draft:
+            await update.message.reply_text(f"❌ 초안 {draft_id}을 찾을 수 없습니다.")
+            return
+
+        draft.manual_notes = note_text
+        db.commit()
+        await update.message.reply_text(
+            f"✅ <b>메모 저장됨</b> (draft #{draft_id})\n"
+            f"<i>{note_text[:200]}</i>",
+            parse_mode="HTML",
+        )
+        logger.info(f"[/note] draft_id={draft_id} 메모 저장: {note_text[:60]}")
+    except Exception as e:
+        logger.error(f"/note 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 메모 저장 실패: {str(e)[:200]}")
+
+
 # =============================================================================
 # 봇 앱 생성 & 실행
 # =============================================================================
@@ -1204,6 +1245,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("hunt", hunt_command))
     app.add_handler(CommandHandler("report", report_command))
     app.add_handler(CommandHandler("digest", digest_command))
+    app.add_handler(CommandHandler("note", note_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))
