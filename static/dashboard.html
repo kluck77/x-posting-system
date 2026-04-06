@@ -8,115 +8,135 @@
 <title>X Control Room</title>
 <style>
 :root {
-  --bg:#0b0d14; --surface:#141720; --surface2:#1a1e2e;
-  --border:rgba(255,255,255,0.07); --txt:#e2e6f0; --txt2:#7b8299; --txt3:#4b5168;
-  --accent:#4f8eff; --green:#22c55e; --amber:#f59e0b; --red:#ef4444;
-  --purple:#a855f7; --cyan:#22d3ee;
-  --header-h:56px; --tab-h:60px;
+  --bg: #0b0d14;
+  --surface: #141720;
+  --surface2: #1a1e2e;
+  --border: rgba(255,255,255,0.07);
+  --txt: #e2e6f0;
+  --txt2: #7b8299;
+  --txt3: #4b5168;
+  --accent: #4f8eff;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --purple: #a855f7;
+  --cyan: #22d3ee;
+  --header-h: 56px;
+  --tab-h: 60px;
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;font-size:15px;overflow:hidden}
-body{height:100dvh;min-height:-webkit-fill-available}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px}
+body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(--bg)}
 
-/* Header */
 .app-header{
   position:fixed;top:0;left:0;right:0;z-index:100;
   padding-top:env(safe-area-inset-top);
   height:calc(var(--header-h) + env(safe-area-inset-top));
-  background:rgba(11,13,20,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:rgba(11,13,20,0.88);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   border-bottom:1px solid var(--border);
-  display:flex;align-items:flex-end;justify-content:space-between;
-  padding-left:16px;padding-right:16px;padding-bottom:10px;
+  display:flex;align-items:flex-end;
 }
-.header-title{font-size:17px;font-weight:700;letter-spacing:-.3px;color:var(--txt)}
-.header-right{display:flex;align-items:center;gap:8px}
+.header-inner{
+  width:100%;padding:0 16px 10px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.header-title{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.header-right{display:flex;align-items:center;gap:10px}
 #last-refresh{font-size:11px;color:var(--txt3)}
 #refresh-btn{
-  background:var(--surface2);border:1px solid var(--border);color:var(--txt2);
-  width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;transition:opacity .15s
+  background:none;border:1px solid var(--border);color:var(--txt2);
+  border-radius:8px;padding:5px 10px;font-size:15px;cursor:pointer;
+  transition:color .2s;
 }
-#refresh-btn.spinning{animation:spin .7s linear infinite}
+#refresh-btn:active{color:var(--accent)}
 @keyframes spin{to{transform:rotate(360deg)}}
+.spinning{animation:spin .7s linear infinite;display:inline-block}
 
-/* Content area */
 .content{
   position:fixed;
   top:calc(var(--header-h) + env(safe-area-inset-top));
   bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));
   left:0;right:0;overflow:hidden;
 }
+
 .page{
-  position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  display:none;flex-direction:column;gap:12px;padding:12px 16px 16px;
+  position:absolute;inset:0;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:none;flex-direction:column;gap:12px;
+  padding:12px 16px 16px;
 }
 .page.active{display:flex}
 
-/* Tab bar */
 .tab-bar{
   position:fixed;bottom:0;left:0;right:0;z-index:100;
   height:calc(var(--tab-h) + env(safe-area-inset-bottom));
   padding-bottom:env(safe-area-inset-bottom);
-  background:rgba(11,13,20,0.9);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:rgba(11,13,20,0.92);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   border-top:1px solid var(--border);
-  display:flex;align-items:stretch;
+  display:flex;align-items:flex-start;
 }
+.tab-bar-inner{display:flex;width:100%;padding-top:4px}
 .tab-btn{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;min-height:56px;background:none;border:none;cursor:pointer;
-  color:var(--txt3);font-size:10px;font-weight:500;transition:color .15s;
-  padding-top:8px;
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  gap:2px;min-height:56px;padding:6px 4px 4px;
+  background:none;border:none;color:var(--txt3);cursor:pointer;
+  transition:color .15s;font-size:10px;letter-spacing:0.2px;
 }
 .tab-btn .tab-icon{font-size:22px;line-height:1}
 .tab-btn.active{color:var(--accent)}
 
-/* Cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;overflow:hidden}
-.card-title{font-size:13px;font-weight:600;color:var(--txt2);margin-bottom:10px;letter-spacing:.2px;text-transform:uppercase}
-.page-title{font-size:20px;font-weight:700;color:var(--txt);padding:4px 0 2px}
-
-/* Alert banner */
-#alert-banner{
-  display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);
-  border-radius:12px;padding:10px 14px;color:var(--red);font-size:13px;font-weight:500;
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:14px 16px;
 }
+.card-title{font-size:13px;font-weight:600;color:var(--txt2);
+  text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px}
+.card-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title-row .card-title{margin-bottom:0}
 
-/* Mascot greeting */
-.greeting-card{background:linear-gradient(135deg,#141720 0%,#1a1e2e 100%);border:1px solid rgba(79,142,255,.15);border-radius:14px;padding:16px}
-.greeting-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.mascot-avatar{font-size:36px;line-height:1}
-.greeting-text h2{font-size:16px;font-weight:700;color:var(--txt);margin-bottom:2px}
-.greeting-text p{font-size:12px;color:var(--txt2)}
-.greeting-stats{display:flex;gap:8px;flex-wrap:wrap}
-.stat-chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--txt2)}
-.stat-chip span{color:var(--txt);font-weight:600}
+.alert-banner{
+  background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);
+  border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;
+  color:var(--red);font-size:13px;font-weight:500;
+}
+.alert-banner.hidden{display:none}
 
-/* Quick stats row */
+.mascot-card{
+  background:linear-gradient(135deg,#141720 0%,#1a1e2e 100%);
+  border:1px solid rgba(79,142,255,0.18);border-radius:14px;padding:16px;
+}
+.mascot-row{display:flex;align-items:center;gap:12px}
+.mascot-emoji{font-size:38px;line-height:1}
+.mascot-text h2{font-size:17px;font-weight:700;margin-bottom:3px}
+.mascot-text p{font-size:12px;color:var(--txt2)}
+
 .quick-stats{display:flex;gap:8px}
-.qs-chip{
-  flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;
-  padding:10px 8px;text-align:center;
+.stat-chip{
+  flex:1;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:10px 8px;text-align:center;
 }
-.qs-chip .qs-val{font-size:20px;font-weight:700;color:var(--txt);line-height:1;margin-bottom:3px}
-.qs-chip .qs-lbl{font-size:10px;color:var(--txt3);font-weight:500}
+.stat-chip .chip-val{font-size:20px;font-weight:700;line-height:1.1}
+.stat-chip .chip-lbl{font-size:10px;color:var(--txt2);margin-top:3px}
 
-/* Health rows */
-.health-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.health-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--border);
+}
 .health-row:last-child{border-bottom:none}
 .health-label{font-size:14px;color:var(--txt)}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
-.dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
-.dot-red{background:var(--red);box-shadow:0 0 6px var(--red)}
-.dot-amber{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block}
+.dot-green{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,0.5)}
+.dot-red{background:var(--red);box-shadow:0 0 6px rgba(239,68,68,0.5)}
+.dot-amber{background:var(--amber);box-shadow:0 0 6px rgba(245,158,11,0.5)}
 .dot-gray{background:var(--txt3)}
 
-/* Gauge bars */
-.gauge-wrap{margin-bottom:10px}
+.gauge-wrap{margin-bottom:12px}
 .gauge-wrap:last-child{margin-bottom:0}
-.gauge-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
-.gauge-label{font-size:13px;color:var(--txt2)}
-.gauge-nums{font-size:12px;color:var(--txt3)}
-.gauge-nums b{color:var(--txt);font-weight:600}
+.gauge-header{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+.gauge-label{color:var(--txt2)}
+.gauge-nums{color:var(--txt)}
 .gauge-track{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
 .gauge-fill{height:100%;border-radius:3px;transition:width .4s ease}
 .gauge-fill.ok{background:var(--green)}
@@ -124,514 +144,533 @@ body{height:100dvh;min-height:-webkit-fill-available}
 .gauge-fill.warning{background:var(--red)}
 .gauge-fill.idle{background:var(--txt3)}
 
-/* Timeline */
-.tl-item{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)}
-.tl-item:last-child{border-bottom:none}
-.tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.timeline-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 0;border-bottom:1px solid var(--border);
+}
+.timeline-item:last-child{border-bottom:none}
+.tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  margin-top:5px;flex-shrink:0}
 .tl-body{flex:1;min-width:0}
-.tl-hook{font-size:13px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl-meta{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap}
+.tl-hook{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.tl-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tl-time{font-size:11px;color:var(--txt3)}
 
-/* Badges */
-.badge{display:inline-block;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.2px}
-.badge-published{background:rgba(34,197,94,.15);color:var(--green)}
-.badge-approved{background:rgba(79,142,255,.15);color:var(--accent)}
-.badge-pending{background:rgba(245,158,11,.15);color:var(--amber)}
-.badge-rejected{background:rgba(239,68,68,.15);color:var(--red)}
-.badge-deferred{background:rgba(123,130,153,.15);color:var(--txt2)}
-.badge-failed{background:rgba(239,68,68,.2);color:var(--red)}
-.badge-regenerate{background:rgba(168,85,247,.15);color:var(--purple)}
-.badge-low{background:rgba(34,197,94,.1);color:var(--green)}
-.badge-medium{background:rgba(245,158,11,.1);color:var(--amber)}
-.badge-high{background:rgba(239,68,68,.1);color:var(--red)}
+.badge{
+  display:inline-block;padding:2px 7px;border-radius:5px;
+  font-size:10px;font-weight:600;letter-spacing:0.3px;white-space:nowrap;
+}
+.badge-pending{background:rgba(245,158,11,0.15);color:var(--amber)}
+.badge-approved{background:rgba(79,142,255,0.15);color:var(--accent)}
+.badge-published{background:rgba(34,197,94,0.15);color:var(--green)}
+.badge-rejected{background:rgba(239,68,68,0.15);color:var(--red)}
+.badge-deferred{background:rgba(123,130,153,0.15);color:var(--txt2)}
+.badge-failed{background:rgba(239,68,68,0.2);color:var(--red)}
+.badge-regenerate{background:rgba(168,85,247,0.15);color:var(--purple)}
+.badge-low{background:rgba(34,197,94,0.12);color:var(--green)}
+.badge-medium{background:rgba(245,158,11,0.12);color:var(--amber)}
+.badge-high{background:rgba(239,68,68,0.12);color:var(--red)}
 
-/* AI tab */
 .provider-card{
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;
-  padding:14px 16px;display:flex;align-items:center;gap:14px;
+  display:flex;align-items:center;gap:14px;
+  padding:14px 0;border-bottom:1px solid var(--border);
 }
-.prov-avatar{
-  width:52px;height:52px;border-radius:14px;font-size:26px;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  border:1.5px solid transparent;
+.provider-card:last-child{border-bottom:none}
+.provider-avatar{
+  width:46px;height:46px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;flex-shrink:0;border:1px solid transparent;
 }
-.prov-info{flex:1;min-width:0}
-.prov-role{font-size:15px;font-weight:700;color:var(--txt)}
-.prov-name{font-size:12px;color:var(--txt2);margin-top:1px}
-.prov-status{display:flex;align-items:center;gap:5px;margin-top:4px}
-.prov-right{text-align:right;flex-shrink:0}
-.prov-count{font-size:28px;font-weight:800;line-height:1}
-.prov-count-lbl{font-size:11px;color:var(--txt3);margin-top:1px}
-.prov-footnote{font-size:11px;color:var(--txt3);padding:6px 4px}
+.provider-info{flex:1;min-width:0}
+.provider-role{font-size:14px;font-weight:600}
+.provider-sub{font-size:12px;color:var(--txt2);margin-top:2px}
+.provider-count{text-align:right;flex-shrink:0}
+.provider-count .cnt{font-size:28px;font-weight:700;line-height:1}
+.provider-count .cnt-lbl{font-size:11px;color:var(--txt2)}
+.footnote{font-size:11px;color:var(--txt3);text-align:center;padding-top:4px}
 
-/* Naver card */
-.naver-big{font-size:36px;font-weight:800;color:var(--txt);line-height:1;margin-bottom:4px}
-.naver-sub{font-size:13px;color:var(--txt2);margin-bottom:12px}
-.naver-status{font-size:13px;margin-top:8px;font-weight:500}
-.naver-ok{color:var(--green)} .naver-caution{color:var(--amber)}
-.naver-warning{color:var(--red)} .naver-idle{color:var(--txt3)}
+.naver-big{display:flex;align-items:baseline;gap:6px;margin-bottom:12px}
+.naver-big .nb-val{font-size:36px;font-weight:700}
+.naver-big .nb-of{font-size:16px;color:var(--txt2)}
+.naver-status{font-size:12px;margin-top:8px}
 
-/* News list */
-.news-item{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--txt);line-height:1.45}
+.news-item{
+  padding:9px 0;border-bottom:1px solid var(--border);
+  font-size:13px;color:var(--txt);line-height:1.4;
+}
 .news-item:last-child{border-bottom:none}
-.empty-state{color:var(--txt3);font-size:13px;padding:8px 0;text-align:center}
+.empty-state{font-size:13px;color:var(--txt3);padding:8px 0;text-align:center}
 
-/* Pipeline */
-.pipeline-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 0 8px}
-.pipeline{display:flex;align-items:center;gap:0;min-width:max-content}
-.pipe-node{display:flex;flex-direction:column;align-items:center;gap:5px;padding:0 4px}
-.pipe-circle{
-  width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:11px;font-weight:700;border:2px solid transparent;
+.pipeline-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.pipeline{display:flex;align-items:center;min-width:max-content;padding:4px 0}
+.pipe-node{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  min-width:64px;padding:8px 4px;
 }
-.pipe-done{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)}
-.pipe-active{background:rgba(79,142,255,.15);border-color:var(--accent);color:var(--accent)}
-.pipe-pending{background:var(--surface2);border-color:var(--border);color:var(--txt3)}
-.pipe-rejected{background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red)}
-.pipe-deferred{background:rgba(123,130,153,.15);border-color:var(--txt2);color:var(--txt2)}
-.pipe-label{font-size:9px;color:var(--txt3);font-weight:500;text-align:center;max-width:44px}
-.pipe-arrow{font-size:12px;color:var(--txt3);padding:0 2px;align-self:flex-end;margin-bottom:18px}
+.pipe-icon{
+  width:34px;height:34px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;border:2px solid transparent;
+}
+.pipe-icon.done{background:rgba(34,197,94,0.15);border-color:var(--green);color:var(--green)}
+.pipe-icon.active{background:rgba(79,142,255,0.15);border-color:var(--accent);color:var(--accent)}
+.pipe-icon.pending{background:rgba(75,81,104,0.15);border-color:var(--txt3);color:var(--txt3)}
+.pipe-icon.fail{background:rgba(239,68,68,0.15);border-color:var(--red);color:var(--red)}
+.pipe-lbl{font-size:10px;color:var(--txt2);white-space:nowrap}
+.pipe-connector{width:16px;height:2px;background:var(--border);flex-shrink:0;align-self:center;margin-bottom:18px}
 
-/* Draft rows */
-.draft-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+.draft-row{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 0;border-bottom:1px solid var(--border);
+}
 .draft-row:last-child{border-bottom:none}
-.draft-hook{flex:1;font-size:13px;color:var(--txt);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.draft-meta{display:flex;gap:5px;align-items:center;flex-shrink:0}
-.draft-time{font-size:10px;color:var(--txt3)}
+.draft-hook{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.draft-badges{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.draft-time{font-size:11px;color:var(--txt3);flex-shrink:0}
 
-/* Ops tab */
-.queue-item{padding:8px 0;border-bottom:1px solid var(--border)}
+.queue-item{padding:10px 0;border-bottom:1px solid var(--border)}
 .queue-item:last-child{border-bottom:none}
-.queue-text{font-size:13px;color:var(--txt);margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.queue-meta{display:flex;align-items:center;gap:6px}
+.queue-text{font-size:13px;line-height:1.4;margin-bottom:5px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.queue-meta{display:flex;align-items:center;gap:8px}
 .queue-time{font-size:11px;color:var(--txt3)}
-.tag-notified{background:rgba(34,197,94,.1);color:var(--green);border-radius:5px;padding:1px 6px;font-size:10px;font-weight:600}
-.tag-pending-notify{background:rgba(245,158,11,.1);color:var(--amber);border-radius:5px;padding:1px 6px;font-size:10px;font-weight:600}
-.ops-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)}
-.ops-row:last-child{border-bottom:none}
-.ops-label{font-size:14px;color:var(--txt2)}
-.ops-val{font-size:14px;font-weight:600;color:var(--txt)}
+.notified-tag{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(79,142,255,0.12);color:var(--accent)}
 
-/* Responsive desktop */
+.ops-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--border);font-size:14px;
+}
+.ops-row:last-child{border-bottom:none}
+.ops-val{font-weight:600;color:var(--txt)}
+.ops-lbl{color:var(--txt2)}
+
+.page-title{font-size:22px;font-weight:700;padding:4px 0 4px}
+
 @media(min-width:640px){
-  .tab-bar{justify-content:center}
-  .tab-btn{max-width:120px}
-  .content{max-width:640px;left:50%;transform:translateX(-50%)}
-  .app-header{justify-content:center}
-  .header-inner{width:100%;max-width:640px;display:flex;align-items:center;justify-content:space-between}
+  .tab-bar-inner,.header-inner{max-width:640px;margin:0 auto}
+  .page{max-width:640px;left:50%;right:auto;width:640px;transform:translateX(-50%)}
 }
 </style>
 </head>
 <body>
 
 <header class="app-header">
-  <div class="header-title">🛰️ Control Room</div>
-  <div class="header-right">
-    <span id="last-refresh">—</span>
-    <button id="refresh-btn" onclick="loadAll()" aria-label="새로고침">↻</button>
+  <div class="header-inner">
+    <span class="header-title">🛰️ X Control Room</span>
+    <div class="header-right">
+      <span id="last-refresh">—</span>
+      <button id="refresh-btn" onclick="loadAll()">↻</button>
+    </div>
   </div>
 </header>
 
 <div class="content">
+
   <!-- TAB 1: STATUS -->
   <div class="page active" id="page-home">
-    <div id="alert-banner"></div>
-
-    <div class="greeting-card">
-      <div class="greeting-top">
-        <div class="mascot-avatar">👩‍💻</div>
-        <div class="greeting-text">
-          <h2 id="greeting-status">시스템 정상 운영 중</h2>
-          <p id="greeting-date">로딩 중…</p>
+    <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
+    <div class="mascot-card">
+      <div class="mascot-row">
+        <div class="mascot-emoji">👩‍💻</div>
+        <div class="mascot-text">
+          <h2 id="mascot-headline">시스템 정상 운영 중</h2>
+          <p id="mascot-sub">데이터 로딩 중…</p>
         </div>
       </div>
-      <div class="greeting-stats">
-        <div class="stat-chip">초안 <span id="gs-drafts">—</span></div>
-        <div class="stat-chip">텔레그램 <span id="gs-tg">—</span></div>
-        <div class="stat-chip">포스트 <span id="gs-posts">—</span></div>
+    </div>
+    <div class="quick-stats">
+      <div class="stat-chip">
+        <div class="chip-val" id="qs-queue">—</div>
+        <div class="chip-lbl">Queue</div>
+      </div>
+      <div class="stat-chip">
+        <div class="chip-val" id="qs-monitor">—</div>
+        <div class="chip-lbl">Monitor</div>
+      </div>
+      <div class="stat-chip">
+        <div class="chip-val" id="qs-naver">—</div>
+        <div class="chip-lbl">Naver %</div>
       </div>
     </div>
-
-    <div class="quick-stats">
-      <div class="qs-chip"><div class="qs-val" id="qs-queue">—</div><div class="qs-lbl">큐 대기</div></div>
-      <div class="qs-chip"><div class="qs-val" id="qs-monitor">—</div><div class="qs-lbl">모니터</div></div>
-      <div class="qs-chip"><div class="qs-val" id="qs-naver">—</div><div class="qs-lbl">네이버 %</div></div>
-    </div>
-
     <div class="card">
-      <div class="card-title">시스템 헬스</div>
+      <div class="card-title">System Health</div>
       <div id="health-rows"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">일일 할당량</div>
-      <div id="quota-bars"></div>
+      <div class="card-title">Daily Quota</div>
+      <div id="quota-gauges"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">최근 활동</div>
+      <div class="card-title">Recent Activity</div>
       <div id="home-timeline"></div>
     </div>
   </div>
 
   <!-- TAB 2: AI -->
   <div class="page" id="page-ai">
-    <div class="page-title">AI 현황 🤖</div>
-    <div id="provider-list"></div>
-    <div class="prov-footnote">※ 실행 횟수는 오늘 생성된 초안 수 기준</div>
+    <div class="page-title">🤖 AI 현황</div>
+    <div class="card">
+      <div id="provider-list"></div>
+    </div>
+    <p class="footnote">※ 실행 횟수는 오늘 생성된 초안 수 기준</p>
   </div>
 
   <!-- TAB 3: INTAKE -->
   <div class="page" id="page-intake">
-    <div class="page-title">인풋 &amp; 플로우 📰</div>
-
+    <div class="page-title">📰 인풋 &amp; 플로우</div>
     <div class="card">
-      <div class="card-title">네이버 뉴스 API</div>
-      <div id="naver-content"></div>
+      <div class="card-title">Naver API</div>
+      <div class="naver-big">
+        <span class="nb-val" id="naver-used">—</span>
+        <span class="nb-of">/ 25,000</span>
+      </div>
+      <div id="naver-gauge"></div>
+      <div class="naver-status" id="naver-note"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">최근 뉴스</div>
+      <div class="card-title">Recent News</div>
       <div id="news-list"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">파이프라인 플로우</div>
-      <div class="pipeline-scroll"><div class="pipeline" id="pipeline-flow"></div></div>
+      <div class="card-title">Pipeline Flow</div>
+      <div class="pipeline-scroll">
+        <div class="pipeline" id="pipeline-flow"></div>
+      </div>
     </div>
-
     <div class="card">
-      <div class="card-title">최근 초안</div>
-      <div id="intake-drafts"></div>
+      <div class="card-title">Recent Drafts</div>
+      <div id="draft-rows"></div>
     </div>
   </div>
 
   <!-- TAB 4: OPS -->
   <div class="page" id="page-ops">
-    <div class="page-title">운영 현황 ⚙️</div>
-
+    <div class="page-title">⚙️ 운영 현황</div>
     <div class="card">
-      <div class="card-title" id="queue-card-title">큐 대기</div>
-      <div id="queue-items"></div>
+      <div class="card-title-row">
+        <span class="card-title">Queue</span>
+        <span id="queue-count-badge" class="badge badge-pending">0 pending</span>
+      </div>
+      <div id="queue-list"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">리플라이 모니터</div>
+      <div class="card-title">Reply Monitor</div>
       <div id="monitor-rows"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">뉴스 모니터</div>
+      <div class="card-title">News Monitor</div>
       <div id="news-monitor-rows"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">활동 현황</div>
+      <div class="card-title">Activity</div>
       <div id="activity-rows"></div>
     </div>
   </div>
+
 </div>
 
 <nav class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('home')" data-tab="home">
-    <span class="tab-icon">🏠</span>Status
-  </button>
-  <button class="tab-btn" onclick="switchTab('ai')" data-tab="ai">
-    <span class="tab-icon">🤖</span>AI
-  </button>
-  <button class="tab-btn" onclick="switchTab('intake')" data-tab="intake">
-    <span class="tab-icon">📰</span>Intake
-  </button>
-  <button class="tab-btn" onclick="switchTab('ops')" data-tab="ops">
-    <span class="tab-icon">⚙️</span>Ops
-  </button>
+  <div class="tab-bar-inner">
+    <button class="tab-btn active" onclick="switchTab('home')">
+      <span class="tab-icon">🏠</span>Status
+    </button>
+    <button class="tab-btn" onclick="switchTab('ai')">
+      <span class="tab-icon">🤖</span>AI
+    </button>
+    <button class="tab-btn" onclick="switchTab('intake')">
+      <span class="tab-icon">📰</span>Intake
+    </button>
+    <button class="tab-btn" onclick="switchTab('ops')">
+      <span class="tab-icon">⚙️</span>Ops
+    </button>
+  </div>
 </nav>
 
 <script>
 'use strict';
 const D = {};
 
-function esc(s){
-  if(s==null)return '';
+function esc(s) {
+  if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function kstFmt(iso){
-  if(!iso)return '—';
-  try{return new Date(iso).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return iso}
+function kstFmt(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+  } catch(e) { return String(iso); }
 }
-function badge(status){
-  const map={published:'published',approved:'approved',pending:'pending',rejected:'rejected',deferred:'deferred',failed:'failed',regenerate:'regenerate'};
-  const cls=map[status]||'pending';
-  return `<span class="badge badge-${cls}">${esc(status)}</span>`;
+function badge(status) {
+  const labels = {pending:'대기', approved:'승인', published:'게시', rejected:'거절', deferred:'보류', failed:'실패', regenerate:'재생성'};
+  const cls = labels[status] ? status : 'deferred';
+  return `<span class="badge badge-${esc(cls)}">${esc(labels[status] || status)}</span>`;
 }
-function riskBadge(risk){
-  if(!risk)return '';
+function riskBadge(risk) {
+  if (!risk) return '';
   return `<span class="badge badge-${esc(risk)}">${esc(risk)}</span>`;
 }
-function dot(ok){
-  if(ok===true) return '<span class="dot dot-green"></span>';
-  if(ok===false) return '<span class="dot dot-red"></span>';
-  return '<span class="dot dot-gray"></span>';
+function dot(ok) {
+  return `<span class="dot ${ok ? 'dot-green' : 'dot-red'}"></span>`;
 }
-function gaugeClass(pct){
-  if(pct>=90)return 'warning';
-  if(pct>=70)return 'caution';
-  if(pct>0)return 'ok';
-  return 'idle';
+function dotAmber(on) {
+  return `<span class="dot ${on ? 'dot-amber' : 'dot-green'}"></span>`;
 }
-function gaugeBar(used,limit,label){
-  const pct=limit>0?Math.min(100,Math.round(used/limit*100)):0;
-  const cls=gaugeClass(pct);
+function gaugeClass(pct) {
+  if (pct < 50) return 'ok';
+  if (pct < 75) return 'caution';
+  return 'warning';
+}
+function gaugeBar(used, limit, label) {
+  if (!limit) return '';
+  const pct = Math.min(100, Math.round(used / limit * 100));
+  const cls = gaugeClass(pct);
+  const labelHtml = label ? `<span class="gauge-label">${esc(label)}</span>` : '<span></span>';
   return `<div class="gauge-wrap">
-    <div class="gauge-top">
-      <span class="gauge-label">${esc(label)}</span>
-      <span class="gauge-nums"><b>${used}</b> / ${limit}</span>
-    </div>
+    <div class="gauge-header">${labelHtml}<span class="gauge-nums">${used} / ${limit}</span></div>
     <div class="gauge-track"><div class="gauge-fill ${cls}" style="width:${pct}%"></div></div>
   </div>`;
 }
-function dotForStatus(status){
-  const colors={published:'#22c55e',approved:'#4f8eff',pending:'#f59e0b',rejected:'#ef4444',deferred:'#7b8299',failed:'#ef4444',regenerate:'#a855f7'};
-  return colors[status]||'#4b5168';
+
+function switchTab(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  const idx = {home:0, ai:1, intake:2, ops:3}[id] ?? 0;
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
 }
 
-function switchTab(id){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('page-'+id).classList.add('active');
-  document.querySelector('[data-tab="'+id+'"]').classList.add('active');
-}
-
-async function loadAll(){
-  const btn=document.getElementById('refresh-btn');
+async function loadAll() {
+  const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
-  const [r1,r2,r3,r4,r5]=await Promise.allSettled([
-    fetch('/control/status').then(r=>r.json()),
-    fetch('/control/providers').then(r=>r.json()),
-    fetch('/control/flow-trace?limit=15').then(r=>r.json()),
-    fetch('/control/naver').then(r=>r.json()),
-    fetch('/control/recent-news?limit=8').then(r=>r.json()),
+  const [r1,r2,r3,r4,r5] = await Promise.allSettled([
+    fetch('/control/status').then(r => r.json()),
+    fetch('/control/providers').then(r => r.json()),
+    fetch('/control/flow-trace?limit=15').then(r => r.json()),
+    fetch('/control/naver').then(r => r.json()),
+    fetch('/control/recent-news?limit=8').then(r => r.json()),
   ]);
-  D.status    = r1.status==='fulfilled'?r1.value:null;
-  D.providers = r2.status==='fulfilled'?r2.value:null;
-  D.trace     = r3.status==='fulfilled'?r3.value:[];
-  D.naver     = r4.status==='fulfilled'?r4.value:null;
-  D.news      = r5.status==='fulfilled'?r5.value:[];
+  D.status    = r1.status === 'fulfilled' ? r1.value : null;
+  D.providers = r2.status === 'fulfilled' ? r2.value : null;
+  D.trace     = r3.status === 'fulfilled' ? r3.value : [];
+  D.naver     = r4.status === 'fulfilled' ? r4.value : null;
+  D.news      = r5.status === 'fulfilled' ? r5.value : [];
   renderAll();
   btn.classList.remove('spinning');
-  const kst=D.status?.generated_at_kst||new Date().toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul'});
-  document.getElementById('last-refresh').textContent=kst;
+  const kst = D.status?.generated_at_kst || new Date().toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul'});
+  document.getElementById('last-refresh').textContent = kst;
 }
 
-function renderAll(){renderHome();renderAI();renderIntake();renderOps();}
+function renderAll() { renderHome(); renderAI(); renderIntake(); renderOps(); }
 
-function renderHome(){
-  const s=D.status;
-  if(!s){document.getElementById('alert-banner').style.display='block';document.getElementById('alert-banner').textContent='⚠️ 상태 데이터를 불러올 수 없습니다.';return;}
-  // Alert banner
-  const banner=document.getElementById('alert-banner');
-  const isIdle=s.activity?.is_idle;
-  const dbBad=s.health?.db_ok===false;
-  if(isIdle||dbBad){
-    banner.style.display='block';
-    banner.textContent=dbBad?'⚠️ DB 연결 오류':'⏰ 파이프라인이 48시간 이상 유휴 상태입니다';
-  } else {banner.style.display='none';}
+function renderHome() {
+  const s = D.status;
+  const banner = document.getElementById('alert-banner');
+  let alertMsg = '';
+  if (s?.activity?.is_idle) alertMsg = `48시간 이상 비활성 (${s.activity.hours_idle?.toFixed(1)}h 경과)`;
+  else if (s && !s.health?.db_ok) alertMsg = 'DB 연결 오류 — 확인 필요';
+  else if (s && !s.health?.x_configured) alertMsg = 'X API 미설정';
+  if (alertMsg) {
+    banner.classList.remove('hidden');
+    document.getElementById('alert-text').textContent = alertMsg;
+  } else {
+    banner.classList.add('hidden');
+  }
 
-  // Greeting
-  const grStatus=document.getElementById('greeting-status');
-  grStatus.textContent=dbBad?'⚠️ 시스템 오류 감지':(isIdle?'⏰ 유휴 상태':'시스템 정상 운영 중');
-  document.getElementById('greeting-date').textContent=s.generated_at_kst||'—';
-  const u=s.usage||{};
-  document.getElementById('gs-drafts').textContent=`${u.drafts?.used??'—'}/${u.drafts?.limit??'—'}`;
-  document.getElementById('gs-tg').textContent=`${u.telegram?.used??'—'}/${u.telegram?.limit??'—'}`;
-  document.getElementById('gs-posts').textContent=`${u.posts?.used??'—'}/${u.posts?.limit??'—'}`;
+  const u = s?.usage;
+  document.getElementById('mascot-headline').textContent =
+    s ? (s.activity?.is_idle ? '⚠️ 장시간 비활성' : '시스템 정상 운영 중') : '데이터 없음';
+  document.getElementById('mascot-sub').textContent =
+    u ? `초안 ${u.drafts.used}/${u.drafts.limit} · 게시 ${u.posts.used}/${u.posts.limit} · 오늘` : '연결 확인 중…';
 
-  // Quick stats
-  document.getElementById('qs-queue').textContent=s.queue?.pending_count??'—';
-  const paused=s.monitor?.reply_monitor_paused;
-  document.getElementById('qs-monitor').textContent=paused?'⏸':'▶';
-  const naverPct=D.naver?.pct_used;
-  document.getElementById('qs-naver').textContent=naverPct!=null?Math.round(naverPct)+'%':'—';
+  const qc = s?.queue?.pending_count ?? '—';
+  const qEl = document.getElementById('qs-queue');
+  qEl.textContent = qc;
+  qEl.style.color = (typeof qc === 'number' && qc > 0) ? 'var(--amber)' : 'var(--green)';
 
-  // Health
-  const h=s.health||{};
-  const healthItems=[
-    ['DB',h.db_ok],['Telegram',h.telegram_configured],['X (Twitter)',h.x_configured],
-    ['Mock Mode',h.mock_mode===false,h.mock_mode],['Auto-post',h.auto_post_enabled],
-  ];
-  document.getElementById('health-rows').innerHTML=healthItems.map(([lbl,ok,invert])=>{
-    const d=invert!=null?(invert?'<span class="dot dot-amber"></span>':dot(true)):dot(ok);
-    const valTxt=ok===true?'정상':ok===false?'미설정':'—';
-    return `<div class="health-row"><span class="health-label">${esc(lbl)}</span><div style="display:flex;align-items:center;gap:6px">${d}<span style="font-size:12px;color:var(--txt2)">${valTxt}</span></div></div>`;
+  const mon = s?.monitor;
+  const monEl = document.getElementById('qs-monitor');
+  if (mon) {
+    monEl.textContent = mon.reply_monitor_paused ? 'OFF' : 'ON';
+    monEl.style.color = mon.reply_monitor_paused ? 'var(--amber)' : 'var(--green)';
+  } else { monEl.textContent = '—'; monEl.style.color = ''; }
+
+  const nEl = document.getElementById('qs-naver');
+  if (D.naver) {
+    nEl.textContent = (D.naver.pct_used?.toFixed(1) ?? '—') + '%';
+    nEl.style.color = D.naver.level === 'warning' ? 'var(--red)' : D.naver.level === 'caution' ? 'var(--amber)' : 'var(--green)';
+  } else { nEl.textContent = '—'; nEl.style.color = ''; }
+
+  const h = s?.health;
+  document.getElementById('health-rows').innerHTML = !h ? '<div class="empty-state">연결 실패</div>' : [
+    ['DB', h.db_ok, false],
+    ['Telegram', h.telegram_configured, false],
+    ['X API', h.x_configured, false],
+    ['Mock Mode', h.mock_mode, true],
+    ['Auto-Post', h.auto_post_enabled, true],
+  ].map(([lbl, val, isWarningOn]) => {
+    const dotHtml = isWarningOn
+      ? `<span class="dot ${val ? 'dot-amber' : 'dot-green'}"></span>`
+      : dot(val);
+    return `<div class="health-row"><span class="health-label">${esc(lbl)}</span>${dotHtml}</div>`;
   }).join('');
 
-  // Quota bars
-  document.getElementById('quota-bars').innerHTML=
-    gaugeBar(u.drafts?.used??0,u.drafts?.limit??10,'초안 (Drafts)')+
-    gaugeBar(u.telegram?.used??0,u.telegram?.limit??50,'텔레그램 (Telegram)')+
-    gaugeBar(u.posts?.used??0,u.posts?.limit??10,'포스트 (Posts)');
+  const ug = s?.usage;
+  document.getElementById('quota-gauges').innerHTML = !ug ? '<div class="empty-state">—</div>' : [
+    gaugeBar(ug.drafts.used, ug.drafts.limit, 'Drafts'),
+    gaugeBar(ug.telegram.used, ug.telegram.limit, 'Telegram'),
+    gaugeBar(ug.posts.used, ug.posts.limit, 'Posts'),
+  ].join('');
 
-  // Timeline (last 6)
-  const trace=(D.trace||[]).slice(0,6);
-  if(!trace.length){document.getElementById('home-timeline').innerHTML='<div class="empty-state">활동 없음</div>';return;}
-  document.getElementById('home-timeline').innerHTML=trace.map(t=>`
-    <div class="tl-item">
-      <div class="tl-dot" style="background:${dotForStatus(t.status)}"></div>
+  const trace = (D.trace || []).slice(0, 6);
+  document.getElementById('home-timeline').innerHTML = !trace.length ? '<div class="empty-state">없음</div>' :
+    trace.map(t => `<div class="timeline-item">
+      <div class="tl-dot"></div>
       <div class="tl-body">
-        <div class="tl-hook">${esc(t.hook||'(no hook)')}</div>
-        <div class="tl-meta">${badge(t.status)}${riskBadge(t.risk_level)}<span class="tl-time">${esc(t.created_kst||'')}</span></div>
+        <div class="tl-hook">${esc(t.hook)}</div>
+        <div class="tl-meta">${badge(t.status)}${riskBadge(t.risk_level)}<span class="tl-time">${esc(t.created_kst)}</span></div>
       </div>
     </div>`).join('');
 }
 
-function renderAI(){
-  const p=D.providers;
-  const configs=[
-    {role:'DraftWriter',emoji:'✍️',color:'#19c37d',glow:'rgba(25,195,125,.25)'},
-    {role:'Reviewer',emoji:'🔍',color:'#cc785c',glow:'rgba(204,120,92,.25)'},
-    {role:'Researcher',emoji:'🦊',color:'#4f8eff',glow:'rgba(79,142,255,.25)'},
-    {role:'FactChecker',emoji:'🧩',color:'#a855f7',glow:'rgba(168,85,247,.25)'},
-    {role:'TrendHunter',emoji:'📡',color:'#22d3ee',glow:'rgba(34,211,238,.25)'},
-  ];
-  if(!p){document.getElementById('provider-list').innerHTML='<div class="empty-state">데이터 없음</div>';return;}
-  const roleMap={};(p.roles||[]).forEach(r=>{roleMap[r.role]=r;});
-  document.getElementById('provider-list').innerHTML=configs.map(cfg=>{
-    const r=roleMap[cfg.role]||{};
-    const count=r.runs_today??'—';
-    const cfgd=r.configured!==false;
+function renderAI() {
+  const p = D.providers;
+  if (!p) { document.getElementById('provider-list').innerHTML = '<div class="empty-state">연결 실패</div>'; return; }
+  const meta = {
+    DraftWriter: {emoji:'✍️', color:'#19c37d', glow:'rgba(25,195,125,0.2)'},
+    Reviewer:    {emoji:'🔍', color:'#cc785c', glow:'rgba(204,120,92,0.2)'},
+    Researcher:  {emoji:'🦊', color:'#4f8eff', glow:'rgba(79,142,255,0.2)'},
+    FactChecker: {emoji:'🧩', color:'#a855f7', glow:'rgba(168,85,247,0.2)'},
+    TrendHunter: {emoji:'📡', color:'#22d3ee', glow:'rgba(34,211,238,0.2)'},
+  };
+  document.getElementById('provider-list').innerHTML = (p.roles || []).map(r => {
+    const m = meta[r.role] || {emoji:'🤖', color:'var(--txt2)', glow:'rgba(123,130,153,0.12)'};
+    const cfgHtml = r.configured
+      ? `<span style="color:var(--green);font-size:11px">● 연결됨</span>`
+      : `<span style="color:var(--red);font-size:11px">● 미설정</span>`;
+    const cnt = r.runs_today ?? '—';
+    const noteHtml = r.note ? `<div style="font-size:11px;color:var(--txt3);margin-top:2px">${esc(r.note)}</div>` : '';
     return `<div class="provider-card">
-      <div class="prov-avatar" style="background:${cfg.glow};border-color:${cfg.color}">${cfg.emoji}</div>
-      <div class="prov-info">
-        <div class="prov-role">${esc(cfg.role)}</div>
-        <div class="prov-name">${esc(r.provider||'—')}</div>
-        <div class="prov-status">${dot(cfgd)}<span style="font-size:11px;color:var(--txt3)">${cfgd?'연결됨':'미설정'}</span></div>
+      <div class="provider-avatar" style="background:${m.glow};border-color:${m.color};box-shadow:0 0 10px ${m.glow}">${m.emoji}</div>
+      <div class="provider-info">
+        <div class="provider-role" style="color:${m.color}">${esc(r.role)}</div>
+        <div class="provider-sub">${esc(r.provider)} ${cfgHtml}</div>
+        ${noteHtml}
       </div>
-      <div class="prov-right">
-        <div class="prov-count" style="color:${cfg.color}">${count}</div>
-        <div class="prov-count-lbl">오늘</div>
+      <div class="provider-count">
+        <div class="cnt" style="color:${m.color}">${cnt}</div>
+        <div class="cnt-lbl">오늘</div>
       </div>
     </div>`;
   }).join('');
 }
 
-function pipelineStages(status){
-  // returns array of {label, cls}
-  const stages=['Source','Research','Draft','Review','Approval'];
-  const maps={
-    published:['done','done','done','done','done'],
-    approved:['done','done','done','done','active'],
-    pending:['done','done','done','active','pending'],
-    rejected:['done','done','done','done','rejected'],
-    deferred:['done','done','done','done','deferred'],
-    failed:['done','done','done','done','failed'],
-    regenerate:['done','done','active','pending','pending'],
+function pipelineHTML(status) {
+  const stages = [
+    {label:'Source',  icon:'📥'},
+    {label:'Research',icon:'🔭'},
+    {label:'Draft',   icon:'✍️'},
+    {label:'Review',  icon:'🔍'},
+    {label:'Approval',icon:'✅'},
+  ];
+  const stateMap = {
+    pending:    ['done','done','done','active','pending'],
+    approved:   ['done','done','done','done','active'],
+    published:  ['done','done','done','done','done'],
+    rejected:   ['done','done','done','done','fail'],
+    deferred:   ['done','done','done','done','fail'],
+    failed:     ['done','done','done','done','fail'],
+    regenerate: ['done','done','active','pending','pending'],
   };
-  const clses=maps[status]||maps['pending'];
-  return stages.map((lbl,i)=>({label:lbl,cls:'pipe-'+clses[i]}));
+  const states = stateMap[status] || ['done','done','done','active','pending'];
+  return stages.map((st, i) =>
+    (i > 0 ? '<div class="pipe-connector"></div>' : '') +
+    `<div class="pipe-node">
+      <div class="pipe-icon ${states[i]}">${st.icon}</div>
+      <div class="pipe-lbl">${st.label}</div>
+    </div>`
+  ).join('');
 }
 
-function renderIntake(){
-  // Naver
-  const nv=D.naver;
-  if(nv){
-    const pct=Math.min(100,Math.round(nv.pct_used||0));
-    const cls=gaugeClass(pct);
-    const lvlCls='naver-'+((nv.level)||'ok');
-    document.getElementById('naver-content').innerHTML=`
-      <div class="naver-big">${(nv.used_today||0).toLocaleString()}</div>
-      <div class="naver-sub">/ 25,000 일일 한도</div>
-      <div class="gauge-track" style="margin-bottom:8px"><div class="gauge-fill ${cls}" style="width:${pct}%"></div></div>
-      <div class="naver-status ${lvlCls}">${esc(nv.note||nv.level||'')}</div>`;
-  } else {document.getElementById('naver-content').innerHTML='<div class="empty-state">데이터 없음</div>';}
+function renderIntake() {
+  const nv = D.naver;
+  document.getElementById('naver-used').textContent = nv ? (nv.used_today || 0).toLocaleString() : '—';
+  document.getElementById('naver-gauge').innerHTML = nv ? gaugeBar(nv.used_today, nv.daily_limit, '') : '';
+  const lvlColor = {idle:'var(--txt3)', ok:'var(--green)', caution:'var(--amber)', warning:'var(--red)'};
+  document.getElementById('naver-note').innerHTML = nv
+    ? `<span style="color:${lvlColor[nv.level] || 'var(--txt2)'}">${esc(nv.note)}</span>` : '';
 
-  // Recent News
-  const news=D.news||[];
-  document.getElementById('news-list').innerHTML=news.length
-    ?news.map(n=>`<div class="news-item">${esc(n.title||'')}</div>`).join('')
-    :'<div class="empty-state">최근 뉴스 없음</div>';
+  const news = D.news || [];
+  document.getElementById('news-list').innerHTML = !news.length
+    ? '<div class="empty-state">최근 뉴스 없음</div>'
+    : news.map(n => `<div class="news-item">${esc(n.title)}</div>`).join('');
 
-  // Pipeline
-  const latest=(D.trace||[])[0];
-  const ps=pipelineStages(latest?.status||'pending');
-  document.getElementById('pipeline-flow').innerHTML=ps.map((s,i)=>`
-    ${i>0?'<span class="pipe-arrow">›</span>':''}
-    <div class="pipe-node">
-      <div class="pipe-circle ${s.cls}">${s.cls.includes('done')?'✓':s.cls.includes('rejected')?'✕':s.cls.includes('deferred')?'⏸':'•'}</div>
-      <div class="pipe-label">${esc(s.label)}</div>
-    </div>`).join('');
+  const latest = (D.trace || [])[0];
+  document.getElementById('pipeline-flow').innerHTML = pipelineHTML(latest?.status || 'pending');
 
-  // Recent Drafts (last 8)
-  const trace=(D.trace||[]).slice(0,8);
-  document.getElementById('intake-drafts').innerHTML=trace.length
-    ?trace.map(t=>`
-      <div class="draft-row">
-        <div class="draft-hook">${esc(t.hook||'(no hook)')}</div>
-        <div class="draft-meta">${badge(t.status)}${riskBadge(t.risk_level)}<span class="draft-time">${esc(t.created_kst||'')}</span></div>
-      </div>`).join('')
-    :'<div class="empty-state">초안 없음</div>';
+  const trace = (D.trace || []).slice(0, 8);
+  document.getElementById('draft-rows').innerHTML = !trace.length
+    ? '<div class="empty-state">초안 없음</div>'
+    : trace.map(t => `<div class="draft-row">
+        <span class="draft-hook">${esc(t.hook)}</span>
+        <div class="draft-badges">${badge(t.status)}${riskBadge(t.risk_level)}</div>
+        <span class="draft-time">${esc(t.created_kst)}</span>
+      </div>`).join('');
 }
 
-function renderOps(){
-  const s=D.status;
-  if(!s)return;
-
-  // Queue
-  const qi=s.queue?.pending_items||[];
-  const pc=s.queue?.pending_count??0;
-  document.getElementById('queue-card-title').textContent=`큐 대기 (${pc})`;
-  document.getElementById('queue-items').innerHTML=qi.length
-    ?qi.map(item=>`
-      <div class="queue-item">
-        <div class="queue-text">${esc(item.text||'')}</div>
+function renderOps() {
+  const s = D.status;
+  const qItems = s?.queue?.pending_items || [];
+  const qTotal = s?.queue?.pending_count ?? 0;
+  document.getElementById('queue-count-badge').textContent = `${qTotal} pending`;
+  document.getElementById('queue-list').innerHTML = !qItems.length
+    ? '<div class="empty-state">큐 비어 있음</div>'
+    : qItems.map(item => `<div class="queue-item">
+        <div class="queue-text">${esc(item.text)}</div>
         <div class="queue-meta">
           <span class="queue-time">${kstFmt(item.added_at)}</span>
-          <span class="${item.notified?'tag-notified':'tag-pending-notify'}">${item.notified?'알림완료':'알림대기'}</span>
+          ${item.notified ? '<span class="notified-tag">알림 완료</span>' : ''}
         </div>
-      </div>`).join('')
-    :'<div class="empty-state">대기 항목 없음</div>';
+      </div>`).join('');
 
-  // Reply Monitor
-  const mon=s.monitor||{};
-  const paused=mon.reply_monitor_paused;
-  document.getElementById('monitor-rows').innerHTML=`
+  const mon = s?.monitor;
+  document.getElementById('monitor-rows').innerHTML = !mon ? '<div class="empty-state">—</div>' : `
     <div class="ops-row">
-      <span class="ops-label">상태</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        ${paused?'<span class="dot dot-amber"></span>':'<span class="dot dot-green"></span>'}
-        <span class="ops-val">${paused?'일시정지':'활성'}</span>
-      </div>
+      <span class="ops-lbl">상태</span>
+      <span class="ops-val" style="color:${mon.reply_monitor_paused ? 'var(--amber)' : 'var(--green)'}">
+        ${mon.reply_monitor_paused ? '⏸ 일시정지' : '▶ 활성'}
+      </span>
     </div>
     <div class="ops-row">
-      <span class="ops-label">대기 리플라이 초안</span>
-      <span class="ops-val">${mon.pending_reply_drafts??0}</span>
+      <span class="ops-lbl">대기 중 답글 초안</span>
+      <span class="ops-val">${mon.pending_reply_drafts ?? 0}</span>
     </div>`;
 
-  // News Monitor
-  const nw=s.news||{};
-  document.getElementById('news-monitor-rows').innerHTML=`
-    <div class="ops-row"><span class="ops-label">대기 기사</span><span class="ops-val">${nw.pending_articles??0}</span></div>
-    <div class="ops-row"><span class="ops-label">스토리 클러스터</span><span class="ops-val">${nw.story_clusters??0}</span></div>
-    <div class="ops-row"><span class="ops-label">알림 스토리</span><span class="ops-val">${nw.alerted_stories??0}</span></div>
-    <div class="ops-row"><span class="ops-label">야간 버퍼</span><span class="ops-val">${nw.overnight_buffer??0}</span></div>`;
+  const nm = s?.news;
+  document.getElementById('news-monitor-rows').innerHTML = !nm ? '<div class="empty-state">—</div>' : `
+    <div class="ops-row"><span class="ops-lbl">대기 기사</span><span class="ops-val">${nm.pending_articles ?? 0}</span></div>
+    <div class="ops-row"><span class="ops-lbl">스토리 클러스터</span><span class="ops-val">${nm.story_clusters ?? 0}</span></div>
+    <div class="ops-row"><span class="ops-lbl">알림 발송 스토리</span><span class="ops-val">${nm.alerted_stories ?? 0}</span></div>
+    <div class="ops-row"><span class="ops-lbl">야간 버퍼</span><span class="ops-val">${nm.overnight_buffer ?? 0}</span></div>`;
 
-  // Activity
-  const act=s.activity||{};
-  const idleH=act.hours_idle!=null?act.hours_idle.toFixed(1)+'h':'—';
-  document.getElementById('activity-rows').innerHTML=`
-    <div class="ops-row"><span class="ops-label">마지막 활동</span><span class="ops-val">${esc(act.last_activity_kst||'—')}</span></div>
-    <div class="ops-row"><span class="ops-label">유휴 시간</span><span class="ops-val">${idleH}</span></div>
+  const act = s?.activity;
+  const lastPub = s?.queue?.last_published_at;
+  document.getElementById('activity-rows').innerHTML = !act ? '<div class="empty-state">—</div>' : `
     <div class="ops-row">
-      <span class="ops-label">유휴 상태</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        ${act.is_idle?'<span class="dot dot-amber"></span>':'<span class="dot dot-green"></span>'}
-        <span class="ops-val">${act.is_idle?'예':'아니오'}</span>
-      </div>
+      <span class="ops-lbl">마지막 활동</span>
+      <span class="ops-val">${esc(act.last_activity_kst || '—')}</span>
     </div>
-    <div class="ops-row"><span class="ops-label">마지막 발행</span><span class="ops-val">${kstFmt(s.queue?.last_published_at)}</span></div>`;
+    <div class="ops-row">
+      <span class="ops-lbl">비활성 시간</span>
+      <span class="ops-val" style="color:${act.is_idle ? 'var(--red)' : 'var(--txt)'}">
+        ${act.hours_idle != null ? act.hours_idle.toFixed(1) + 'h' : '—'}${act.is_idle ? ' ⚠️' : ''}
+      </span>
+    </div>
+    <div class="ops-row">
+      <span class="ops-lbl">마지막 게시</span>
+      <span class="ops-val" style="font-size:13px">${kstFmt(lastPub)}</span>
+    </div>`;
 }
 
-// Init
 loadAll();
 setInterval(loadAll, 30000);
 </script>
