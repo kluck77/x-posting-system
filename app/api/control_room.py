@@ -68,6 +68,180 @@ async def upload_asset(file: UploadFile = File(...)):
     return {"ok": True, "filename": file.filename, "size": len(content)}
 
 
+# ── 비즈니스 스택 단일 집계 ──────────────────────────────────────────────────
+
+@router.get("/business-summary")
+async def get_business_summary():
+    """
+    완성된 비즈니스 운영 레이어를 단일 JSON으로 반환합니다.
+    Premium / Brief / B2B / Newsletter / Lead / Weekly highlights / CTA performance.
+    각 섹션은 독립적으로 실패할 수 있으며, 실패 시 빈 값으로 대체됩니다.
+    """
+    db = get_db()
+    try:
+        result = {
+            "premium": _safe_premium(db),
+            "brief": _safe_brief(db),
+            "b2b": _safe_b2b(db),
+            "newsletter": _safe_newsletter(db),
+            "weekly": _safe_weekly_compact(db),
+            "cta_perf": _safe_cta_perf(db),
+        }
+        return result
+    finally:
+        db.close()
+
+
+def _safe_premium(db) -> dict:
+    try:
+        from app.services.premium_candidate_service import PremiumCandidateService
+        svc = PremiumCandidateService(db)
+        counts = svc.count_by_status()
+        top = svc.get_candidates(limit=3)
+        return {
+            "total": sum(counts.values()),
+            "status": counts,
+            "top": [
+                {
+                    "id": d.id,
+                    "hook": (d.hook or "")[:70],
+                    "status": d.premium_status or "new",
+                    "score": d.monetization_score,
+                }
+                for d in top
+            ],
+        }
+    except Exception as e:
+        logger.warning(f"business-summary premium 오류: {e}")
+        return {"total": 0, "status": {}, "top": []}
+
+
+def _safe_brief(db) -> dict:
+    try:
+        from app.services.brief_offer_service import BriefOfferService
+        svc = BriefOfferService(db)
+        counts = svc.count_by_status()
+        briefs = svc.get_briefs(limit=20)
+        types: dict[str, int] = {}
+        tiers: dict[str, int] = {}
+        for d in briefs:
+            if d.brief_type:
+                types[d.brief_type] = types.get(d.brief_type, 0) + 1
+            if d.brief_price_tier:
+                tiers[d.brief_price_tier] = tiers.get(d.brief_price_tier, 0) + 1
+        ready = [d for d in briefs if (d.premium_status or "") == "ready"]
+        return {
+            "total": sum(counts.values()),
+            "status": counts,
+            "types": types,
+            "tiers": tiers,
+            "ready_count": len(ready),
+        }
+    except Exception as e:
+        logger.warning(f"business-summary brief 오류: {e}")
+        return {"total": 0, "status": {}, "types": {}, "tiers": {}, "ready_count": 0}
+
+
+def _safe_b2b(db) -> dict:
+    try:
+        from app.services.b2b_candidate_service import B2BCandidateService
+        svc = B2BCandidateService(db)
+        counts = svc.count_by_status()
+        return {
+            "total": sum(counts.values()),
+            "status": counts,
+            "audience": svc.group_by_audience(),
+            "use_case": svc.group_by_use_case(),
+        }
+    except Exception as e:
+        logger.warning(f"business-summary b2b 오류: {e}")
+        return {"total": 0, "status": {}, "audience": {}, "use_case": {}}
+
+
+def _safe_newsletter(db) -> dict:
+    try:
+        from app.services.newsletter_routine_service import NewsletterRoutineService
+        svc = NewsletterRoutineService(db)
+        bk = svc.count_by_bucket()
+        leads = svc.count_lead_assets()
+        return {
+            "newsletter_total": sum(bk.values()),
+            "lead_total": sum(leads.values()),
+            "bucket": bk,
+            "lead_types": leads,
+        }
+    except Exception as e:
+        logger.warning(f"business-summary newsletter 오류: {e}")
+        return {"newsletter_total": 0, "lead_total": 0, "bucket": {}, "lead_types": {}}
+
+
+def _safe_weekly_compact(db) -> dict:
+    try:
+        from app.services.weekly_report_service import WeeklyReportService
+        svc = WeeklyReportService(db)
+        rep = svc.generate_report(days=7)
+        cs = rep.get("content_summary", {})
+        return {
+            "period_days": rep.get("period_days", 7),
+            "total_drafts": cs.get("total_drafts", 0),
+            "published": cs.get("published", 0),
+            "approved": cs.get("approved", 0),
+            "rejected": cs.get("rejected", 0),
+            "pending": cs.get("pending", 0),
+            "highlights": rep.get("highlights", [])[:3],
+            "followup_count": len(rep.get("followup_items", [])),
+        }
+    except Exception as e:
+        logger.warning(f"business-summary weekly 오류: {e}")
+        return {
+            "period_days": 7, "total_drafts": 0, "published": 0,
+            "approved": 0, "rejected": 0, "pending": 0,
+            "highlights": [], "followup_count": 0,
+        }
+
+
+def _safe_cta_perf(db) -> dict:
+    try:
+        from app.services.cta_copy_service import CtaCopyService
+        svc = CtaCopyService(db)
+        all_perf = svc.get_all_perf()
+        linked = [p for p in all_perf if p["total_linked"] > 0]
+        notable = [
+            p for p in linked
+            if (
+                p["avg_monetization"] >= 70
+                or (p["total_linked"] >= 2 and p["published"] / p["total_linked"] >= 0.5)
+            )
+        ]
+        return {
+            "total_copies": len(all_perf),
+            "linked_copies": len(linked),
+            "unlinked_copies": len(all_perf) - len(linked),
+            "total_linked_drafts": sum(p["total_linked"] for p in all_perf),
+            "total_published": sum(p["published"] for p in all_perf),
+            "top": [
+                {
+                    "id": p["copy_id"],
+                    "type": p["cta_type"],
+                    "text": p["copy_text"][:80],
+                    "linked": p["total_linked"],
+                    "published": p["published"],
+                    "score": p["avg_monetization"],
+                    "active": p["is_active"],
+                }
+                for p in linked[:3]
+            ],
+            "notable_count": len(notable),
+        }
+    except Exception as e:
+        logger.warning(f"business-summary cta 오류: {e}")
+        return {
+            "total_copies": 0, "linked_copies": 0, "unlinked_copies": 0,
+            "total_linked_drafts": 0, "total_published": 0,
+            "top": [], "notable_count": 0,
+        }
+
+
 # ── 시스템 상태 스냅샷 ────────────────────────────────────────────────────────
 
 @router.get("/status")
