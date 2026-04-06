@@ -151,6 +151,27 @@ def _run_schema_migrations():
             "column": "b2b_use_case",
             "ddl": "ALTER TABLE drafts ADD COLUMN b2b_use_case VARCHAR(200)",
         },
+        # Phase 5-3: 프리미엄 후보 파이프라인
+        {
+            "table": "drafts",
+            "column": "premium_status",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_status VARCHAR(20)",
+        },
+        {
+            "table": "drafts",
+            "column": "premium_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_note TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "premium_updated_at",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_updated_at DATETIME",
+        },
+        {
+            "table": "drafts",
+            "column": "target_reader_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN target_reader_type VARCHAR(100)",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")

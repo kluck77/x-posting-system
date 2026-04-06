@@ -839,6 +839,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
         "/biz — 비즈니스 분류 요약 (premium/b2b/newsletter 후보)\n"
+        "/premium — 프리미엄 Korea Brief 후보 관리\n"
         "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
         "/recover — 영속 상태 파일 자가 진단\n"
         "/pending — 대기 초안\n"
@@ -1739,6 +1740,196 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /premium — 프리미엄 Korea Brief 후보 관리.
+
+    사용법:
+      /premium              — 전체 요약
+      /premium list [상태]  — 후보 목록 (상태 필터 가능)
+      /premium view <id>    — 후보 상세 보기
+      /premium status <id> <상태> — 상태 변경
+      /premium note <id> <메모>   — 운영자 메모 저장
+      /premium reader <id> <유형> — 대상 독자 설정
+      /premium init         — 미초기화 후보 일괄 'new' 설정
+      /premium export [상태] — 후보 내보내기 (텍스트)
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    db = get_db()
+    try:
+        from app.services.premium_candidate_service import PremiumCandidateService
+        svc = PremiumCandidateService(db)
+
+        # /premium (요약)
+        if subcmd == "summary" or not args:
+            text = svc.format_summary()
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /premium list [상태]
+        elif subcmd == "list":
+            status_filter = args[1].lower() if len(args) > 1 else None
+            candidates = svc.get_candidates(status=status_filter, limit=10)
+            if not candidates:
+                await update.message.reply_text(
+                    f"⭐ 프리미엄 후보 없음" + (f" (상태: {status_filter})" if status_filter else "")
+                )
+                return
+            lines = [f"⭐ <b>프리미엄 후보</b>" + (f" [{status_filter}]" if status_filter else "") + "\n"]
+            for d in candidates:
+                score = d.monetization_score or 0
+                status = d.premium_status or "new"
+                note_marker = " 📝" if d.premium_note else ""
+                lines.append(
+                    f"• ID {d.id} [{status}] 💰{score}{note_marker}\n"
+                    f"  {(d.hook or '')[:50]}…"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /premium view <id>
+        elif subcmd == "view":
+            if len(args) < 2:
+                await update.message.reply_text("사용법: <code>/premium view &lt;id&gt;</code>", parse_mode="HTML")
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            draft = svc.get_candidate_by_id(draft_id)
+            if not draft:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+                return
+            text = svc.format_candidate_detail(draft)
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /premium status <id> <상태>
+        elif subcmd == "status":
+            if len(args) < 3:
+                from app.services.premium_candidate_service import PREMIUM_STATUSES
+                statuses = " | ".join(PREMIUM_STATUSES)
+                await update.message.reply_text(
+                    f"사용법: <code>/premium status &lt;id&gt; &lt;상태&gt;</code>\n"
+                    f"상태: {statuses}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            new_status = args[2].lower()
+            result = svc.update_status(draft_id, new_status)
+            if result:
+                await update.message.reply_text(
+                    f"✅ #{draft_id} 프리미엄 상태 → <b>{new_status}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                from app.services.premium_candidate_service import PREMIUM_STATUSES
+                await update.message.reply_text(
+                    f"❌ 상태 변경 실패. 유효한 상태: {', '.join(PREMIUM_STATUSES)}"
+                )
+
+        # /premium note <id> <메모>
+        elif subcmd == "note":
+            if len(args) < 3:
+                await update.message.reply_text(
+                    "사용법: <code>/premium note &lt;id&gt; &lt;메모&gt;</code>\n"
+                    "예: <code>/premium note 42 expat 노동 이슈 브리프에 적합</code>",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            note = " ".join(args[2:])[:500]
+            result = svc.set_note(draft_id, note)
+            if result:
+                await update.message.reply_text(
+                    f"📝 #{draft_id} 프리미엄 메모 저장:\n<i>{note[:200]}</i>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+
+        # /premium reader <id> <유형>
+        elif subcmd == "reader":
+            if len(args) < 3:
+                from app.services.premium_candidate_service import TARGET_READER_TYPES
+                types = "\n".join(f"  • {t}" for t in TARGET_READER_TYPES)
+                await update.message.reply_text(
+                    f"사용법: <code>/premium reader &lt;id&gt; &lt;유형&gt;</code>\n\n"
+                    f"추천 유형:\n{types}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            reader_type = args[2].lower()
+            result = svc.set_target_reader(draft_id, reader_type)
+            if result:
+                await update.message.reply_text(
+                    f"👤 #{draft_id} 대상 독자 → <b>{reader_type}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+
+        # /premium init
+        elif subcmd == "init":
+            count = svc.init_new_candidates()
+            await update.message.reply_text(f"✅ {count}개 프리미엄 후보 'new' 상태 초기화됨")
+
+        # /premium export [상태]
+        elif subcmd == "export":
+            status_filter = args[1].lower() if len(args) > 1 else None
+            items = svc.export_candidates(status=status_filter, limit=10)
+            if not items:
+                await update.message.reply_text("⭐ 내보낼 프리미엄 후보 없음")
+                return
+            lines = [f"⭐ <b>프리미엄 후보 내보내기</b> ({len(items)}건)\n"]
+            for item in items:
+                lines.append(
+                    f"──────────────\n"
+                    f"ID: {item['draft_id']} | 💰{item['monetization_score'] or 0} | "
+                    f"[{item['premium_status']}]\n"
+                    f"Hook: {item['hook'][:60]}…\n"
+                    f"Category: {item['category']} | Risk: {item['risk_level']}\n"
+                    f"Reason: {item['premium_reason'] or '—'}\n"
+                    f"Note: {item['premium_note'] or '—'}\n"
+                    f"Reader: {item['target_reader_type'] or '—'}\n"
+                    f"Source: {item['source_title'] or '—'}"
+                )
+            # 텔레그램 메시지 길이 제한 (4096자)
+            text = "\n".join(lines)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/premium</code> — 요약\n"
+                "<code>/premium list [상태]</code> — 목록\n"
+                "<code>/premium view &lt;id&gt;</code> — 상세\n"
+                "<code>/premium status &lt;id&gt; &lt;상태&gt;</code> — 상태 변경\n"
+                "<code>/premium note &lt;id&gt; &lt;메모&gt;</code> — 메모\n"
+                "<code>/premium reader &lt;id&gt; &lt;유형&gt;</code> — 독자 설정\n"
+                "<code>/premium init</code> — 미초기화 후보 설정\n"
+                "<code>/premium export [상태]</code> — 내보내기",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/premium 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 프리미엄 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
 async def biz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /biz [summary|premium|b2b|newsletter] — 비즈니스 분류 요약/후보 조회.
@@ -2007,6 +2198,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("hints", hints_command))
     app.add_handler(CommandHandler("perf", perf_command))
     app.add_handler(CommandHandler("biz", biz_command))
+    app.add_handler(CommandHandler("premium", premium_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))

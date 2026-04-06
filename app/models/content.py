@@ -197,6 +197,24 @@ class Draft(Base):
         comment="B2B 활용 사례 (예: market_entry, regulation_monitor, risk_assessment)"
     )
 
+    # ── Phase 5-3: 프리미엄 후보 파이프라인 ─────────────────────────────────
+    premium_status = Column(
+        String(20), nullable=True,
+        comment="프리미엄 후보 상태: new/reviewing/shortlisted/postponed/rejected/promoted"
+    )
+    premium_note = Column(
+        Text, nullable=True,
+        comment="프리미엄 후보에 대한 운영자 판단 메모"
+    )
+    premium_updated_at = Column(
+        DateTime, nullable=True,
+        comment="프리미엄 상태 마지막 변경 시간"
+    )
+    target_reader_type = Column(
+        String(100), nullable=True,
+        comment="대상 독자 유형 (예: expat_workers, foreign_investors, korea_watchers)"
+    )
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 
