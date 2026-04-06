@@ -6,6 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>X Control Room</title>
+<!-- Live2D CDN -->
+<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.2/dist/browser/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js"></script>
 <style>
 :root {
   --bg: #0b0d14;
@@ -239,6 +244,19 @@ body::before{
   80%  {transform:translateY(-3px) translateX(0.4px) rotate(-0.25deg)}
   100% {transform:translateY(0) translateX(0) rotate(0deg)}
 }
+/* Live2D 캔버스 */
+#live2dCanvas{
+  position:absolute;bottom:0;left:0;width:100%;height:100%;
+  z-index:2;
+}
+/* 터치 힌트 */
+.tap-hint{
+  position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
+  font-size:11px;color:rgba(165,180,252,0.7);
+  pointer-events:none;z-index:15;
+  transition:opacity 0.6s ease;white-space:nowrap;
+}
+
 @keyframes portrait-glow{
   0%,100%{opacity:0.6}50%{opacity:1}
 }
@@ -656,14 +674,21 @@ body::before{
     <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
     <div class="hero-card">
       <!-- Unified dark scene: character + info share same space -->
-      <div class="hero-main">
-        <!-- Character: absolute, masked, emerges from dark bg -->
+      <div class="hero-main" id="heroScene">
+        <!-- Live2D 캔버스 — 씬 전체를 채움 -->
+        <canvas id="live2dCanvas" style="
+          position:absolute;bottom:0;left:0;width:100%;height:100%;
+          pointer-events:none;z-index:2;
+        "></canvas>
+        <!-- 정적 이미지 폴백 (Live2D 로드 전/실패 시 표시) -->
         <div class="hero-emoji" id="mascot-emoji">
           <img class="hero-char-img" id="hero-char-img"
                src="/static/hero_blonde_assistant.png"
                alt=""
                onerror="this.outerHTML='<div class=\'hero-emoji-fallback\'>👩‍💻</div>'">
         </div>
+        <!-- 터치 힌트 -->
+        <div class="tap-hint" id="tapHint">캐릭터를 터치해보세요 ✨</div>
         <!-- Info panel: right-side overlay within the same scene -->
         <div class="hero-info">
           <div>
@@ -1274,5 +1299,7 @@ renderUploadSlots();
 loadAll();
 setInterval(loadAll, 30000);
 </script>
+<!-- Live2D 초기화 (가장 마지막) -->
+<script src="/static/live2d.js"></script>
 </body>
 </html>
