@@ -1,66 +1,54 @@
-# Current Session — 2026-04-06 (Session 14)
+# Current Session — 2026-04-06 (Session 15)
 
 ## What Was Done This Session
 
-### Phase 18-G: Visual Reconstruction (commit `d5e906a`)
-- Hero card: portrait-stage left column (110px), `char-live` animation (translateY+rotate+scale)
-  gradient headline, hero-mini-stats row, worker pills strip
-- AI tab: workstation cards — `worker-portrait` left column (currentColor bg + dark overlay + glow)
-- Atmosphere: 4-layer `body::before` radial gradients; deeper card glass (`blur(16px)`)
-- Pipeline: larger nodes (48px), stronger pulse animation, wider connectors
-- Naver card: status strip banner (ok/caution/warning/idle color coding)
-- News items: arrow bullet prefix
-- Ops: section group headers, accent color on non-zero values
-- Safari fix: hero-ring-pulse keyframes include `translateX(-50%)`
+### B2B Sample Report Generation (commit `1563849`)
+- `generate_sample_report()` — structured report from B2B candidate
+- Audience-specific framing (7 audiences) + use-case next-actions (8 cases)
+- `/b2b report <id> [save|export]` subcommand
+- 20 tests added
 
-### Phase 18-H: Real Character Image Assets (commit `3d93b96`)
-- `POST /control/upload-asset` endpoint — whitelist-only PNG upload (5 slots, 10MB limit)
-- Ops tab: "캐릭터 이미지 업로드" card — tap-to-upload from phone, instant reload after upload
-- `<img>` tags replace emoji in hero and AI worker cards
-- `mix-blend-mode: multiply` wires white-bg hero image into dark portrait column
-- Worker portraits: per-role image paths in WORKER_META, onerror emoji fallback
-- `requirements.txt`: added `python-multipart`
+### Premium Korea Brief Offer Layer (commit `22e242a`)
+- 3 new columns: `brief_type`, `brief_price_tier`, `brief_summary_note`
+- `BriefOfferService` — status/type/reader/tier/note/export/format
+- `/brief` command with 8 subcommands
+- Extended statuses: `drafted`, `ready` added
+- 38 tests added
 
-### Phase 18-I: Material Dashboard Rebuild (commit `291fc3c`)
-- **Hero — split-stage layout:**
-  - White character stage (160px wide) — `mix-blend-mode: multiply` on white bg
-    preserves character colors perfectly, white areas blend away
-  - Strong right-fade gradient: portrait stage → dark info panel
-  - Dark info panel with radial texture overlays
-  - min-height 230px for real screen presence
-  - 3-stat grid tiles (큐/모니터/Naver) as individual mini-boxes
-  - Removed ring decorations (not suitable for white stage)
-  - `char-live` 7s breathing+sway animation on image container
-- **AI page — standalone profile cards:**
-  - Removed flat-list outer `.card` wrapper entirely
-  - Each worker-card is an independent profile card (border-radius 18px, own shadow, glass bg)
-  - Portrait column widened to 100px
-  - Left role-color accent bar (3px `::before`) + inner glow (`currentColor` radial at 6%)
-  - Card entrance animation: `card-in` with stagger delay
-  - AI tab header: "AI 워크스테이션" + "오늘 초안 기준"
-- **Naver arc gauge:**
-  - Enlarged to 130×130px SVG (r=52, circ=326.7)
-  - Centered column layout (was side-by-side)
-- **Asset paths wired into dashboard:**
-  - `/static/hero_blonde_assistant.png` — Home hero
-  - `/static/draftwriter.png` — AI DraftWriter
-  - `/static/reviewer.png` — AI Reviewer
-  - `/static/researcher.png` — AI Researcher
-  - `/static/trendhunter_black.png` — AI TrendHunter
-  - All have `onerror` emoji fallbacks
+### Newsletter/Lead Magnet Operating Routine (commit `da09c92`)
+- `NewsletterRoutineService` — bucket-based views, lead magnet views, export
+- `/newsletter` command with 7 subcommands (list/view/leads/export)
+- `/lead export` subcommand added to existing `/lead`
+- No schema change (read-only query layer)
+- 29 tests added
+
+### Weekly Operating Report (commit `70a186f`)
+- `WeeklyReportService` — aggregates all existing layers
+- Sections: content/newsletter/premium/brief/B2B/highlights/followups
+- `/weekly` (compact), `/weekly view` (full), `/weekly export` (JSON)
+- Custom period: `/weekly <N>` up to 90 days
+- No schema change (read-only aggregation)
+- 26 tests added
 
 ## Current State
-- 579 tests passing (no regressions)
+- 831 tests passing (no regressions)
 - Branch: `claude/extract-prediction-time-n82UK`
-- Character images uploaded to VPS via Ops tab upload UI
-- Key commits: `291fc3c` (18-I rebuild), `3d93b96` (18-H assets), `d5e906a` (18-G visual)
+- Key commits: `70a186f`, `da09c92`, `22e242a`, `1563849`
 
 ## Files Changed This Session
 
 | File | Change |
 |------|--------|
-| `static/dashboard.html` | Phases 18-G / 18-H / 18-I — full visual rebuild |
-| `app/api/control_room.py` | `POST /control/upload-asset` endpoint |
-| `requirements.txt` | Added `python-multipart` |
+| `app/services/b2b_candidate_service.py` | Added `generate_sample_report`, `format_sample_report`, `save_report_to_note` |
+| `app/services/brief_offer_service.py` | NEW — BriefOfferService (280 lines) |
+| `app/services/newsletter_routine_service.py` | NEW — NewsletterRoutineService (250 lines) |
+| `app/services/weekly_report_service.py` | NEW — WeeklyReportService (320 lines) |
+| `app/models/content.py` | Added `brief_type`, `brief_price_tier`, `brief_summary_note` |
+| `app/db.py` | 3 migration entries for brief columns |
+| `app/telegram_bot.py` | `/b2b report`, `/brief`, `/newsletter`, `/weekly`, `/lead export` |
+| `tests/test_b2b_candidate.py` | +20 report tests |
+| `tests/test_brief_offer.py` | NEW — 38 tests |
+| `tests/test_newsletter_routine.py` | NEW — 29 tests |
+| `tests/test_weekly_report.py` | NEW — 26 tests |
 | `docs/handoffs/LATEST_STATUS.md` | Updated |
 | `docs/handoffs/CURRENT_SESSION.md` | This file |

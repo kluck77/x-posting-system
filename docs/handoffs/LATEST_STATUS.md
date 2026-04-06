@@ -1,41 +1,32 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: 18-I (material dashboard rebuild + real character assets)
+## ⚠️ LAST COMPLETED PHASE: Business Operating Layers (B2B report + Brief + Newsletter + Weekly)
 
 **DO NOT re-implement the dashboard or control room. It is already built and locked.**
+**DO NOT re-implement premium/b2b/email/lead base services. They are built and tested.**
 
-Phase 18-I complete:
-- **Hero — split-stage layout:** white character stage (160px) + dark info panel
-  `mix-blend-mode: multiply` on white bg = character colors preserved, white areas disappear
-  Strong right-fade gradient bridges portrait→panel. min-height 230px. 3-stat grid tiles.
-- **AI page — standalone profile cards:** outer `.card` wrapper removed entirely.
-  Each worker is an independent card (border-radius 18px, own shadow, own glass bg, own glow).
-  Portrait 100px wide. Left role-color accent bar. Card entrance animation with stagger.
-- **Naver arc gauge:** enlarged to 130×130px (r=52, circ=326.7), centered column layout.
-- **In-dashboard asset upload:** `POST /control/upload-asset` (Ops tab) — operator uploads
-  character PNGs from phone without SSH. Whitelist enforced. 10MB limit.
-- **Real image paths wired:**
-  `/static/hero_blonde_assistant.png`, `draftwriter.png`, `reviewer.png`,
-  `researcher.png`, `trendhunter_black.png` — all with onerror emoji fallbacks.
-- 579 tests passing, 23 critical flows protected
-- Commits: `291fc3c` (18-I), `3d93b96` (18-H assets+upload), `d5e906a` (18-G)
+Business operating layers complete:
+- **B2B sample report** — `generate_sample_report()`, `/b2b report <id> [save|export]`
+- **Brief offer layer** — `BriefOfferService`, `/brief` (8 subcommands), 3 new columns
+- **Newsletter routine** — `NewsletterRoutineService`, `/newsletter` (7 subcommands)
+- **Weekly report** — `WeeklyReportService`, `/weekly` (summary/view/export)
+- 831 tests passing, all flows protected
 
 ---
 
 ## Current Phase Detail
 
-**Phase 18 — Mobile Control Room Bundle** (complete + production-deployed)
+**Session 15 — Business Operating Layers** (complete)
 
-What was built in Phase 18 through 18-I:
-1. `app/services/naver_usage.py` — Naver API daily call counter
-2. `app/api/control_room.py` — `/control/status`, `/control/providers`, `/control/flow-trace`,
-   `/control/naver`, `/control/recent-news`, `POST /control/upload-asset`
-3. `static/dashboard.html` — mobile-first 4-tab dashboard, Safari-optimized, split-stage hero,
-   standalone AI profile cards, real character image assets, 30s auto-refresh
-4. `app/telegram_bot.py` — `/menu` command with InlineKeyboard
-5. `tests/test_control_room.py` — 37 tests
-6. `tests/test_critical_flows.py` — 6 critical tests
-7. `deploy_dashboard.sh` — VPS deployment script
+What was built:
+1. `app/services/b2b_candidate_service.py` — `generate_sample_report`, `format_sample_report`, `save_report_to_note`
+2. `app/services/brief_offer_service.py` — NEW (BriefOfferService: status/type/reader/tier/note/export)
+3. `app/services/newsletter_routine_service.py` — NEW (bucket views, lead magnet views, export)
+4. `app/services/weekly_report_service.py` — NEW (aggregates all layers, highlights, followup items)
+5. `app/telegram_bot.py` — `/b2b report`, `/brief`, `/newsletter`, `/weekly`, `/lead export`
+6. `app/models/content.py` — 3 columns: `brief_type`, `brief_price_tier`, `brief_summary_note`
+7. `app/db.py` — 3 migration entries
+8. Tests: `test_brief_offer.py` (38), `test_newsletter_routine.py` (29), `test_weekly_report.py` (26), `test_b2b_candidate.py` (+20)
 
 ---
 
@@ -66,45 +57,44 @@ What was built in Phase 18 through 18-I:
 | 15 | Ops recovery bundle (startup_check, /recover, recovery_playbook.md) | Locked |
 | 16 | Critical flows regression bundle (test_critical_flows.py, pytest -m critical) | Locked |
 | 17 | Release gate bundle (go_live_checklist.md, pre_run_guide.md, release_readiness.md) | Locked |
-| **18** | **Control Room dashboard (naver_usage, control_room.py, dashboard.html, 37 tests)** | **Locked** |
-| **18** | **Telegram /menu quick-action buttons (_handle_quick_callback, 6 critical tests)** | **Locked** |
-| **18-C** | **Premium Polish: card shadows, mascot animations, role taglines, Naver context** | **Locked** |
-| **18-C fix** | **Safari transform conflict fix (mascot-idle keyframe), deploy_dashboard.sh** | **Locked** |
-| **18-G** | **Visual reconstruction (portrait hero, workstation AI cards, atmosphere, pipeline)** | **Locked** |
-| **18-H** | **Real character image assets + in-dashboard upload UI (POST /control/upload-asset)** | **Locked** |
+| **18** | **Control Room dashboard (naver_usage, control_room.py, dashboard.html)** | **Locked** |
+| **18** | **Telegram /menu quick-action buttons** | **Locked** |
 | **18-I** | **Material rebuild: split-stage hero, standalone AI cards, large Naver gauge** | **Locked** |
+| **S15** | **B2B sample report generation (/b2b report)** | **Locked** |
+| **S15** | **Brief offer layer (/brief, BriefOfferService)** | **Locked** |
+| **S15** | **Newsletter routine (/newsletter, NewsletterRoutineService)** | **Locked** |
+| **S15** | **Weekly report (/weekly, WeeklyReportService)** | **Locked** |
 
 ---
 
 ## Deferred (Do Not Build Without Explicit Operator Directive)
 
-- Auto-posting of any kind — permanently excluded; `ENABLE_AUTO_POST_LOW_RISK` flag exists but logic not built
+- Auto-posting of any kind — permanently excluded
 - Image / video generation
 - ML fine-tuning / embedding store / RAG
 - Multi-user support
 - Redis / task queue / Postgres migration
+- Payment flow / checkout
+- Full email sender
+- Dashboard analytics / BI charts
 
 ---
 
 ## Next Candidates
 
 **System is fully operator-ready. Nothing urgent is missing.**
-579 tests passing, 23 critical flows protected, go-live docs in place.
-VPS deployed at 107.191.61.190:8000/control/ via deploy_dashboard.sh.
-
-Character images on VPS: hero_blonde_assistant.png, draftwriter.png, reviewer.png,
-researcher.png, trendhunter_black.png — uploaded via Ops tab upload UI.
+831 tests passing, all flows protected.
+Operating layers (premium, B2B, brief, newsletter, lead, weekly report) are all in place.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 14 — Phases 18-G / 18-H / 18-I)
+- Date: 2026-04-06 (session 15 — Business Operating Layers)
 - Branch: claude/extract-prediction-time-n82UK
 - Key commits:
-  - `291fc3c` — Phase 18-I (split-stage hero, standalone AI cards, large Naver gauge)
-  - `3d93b96` — Phase 18-H (real character assets + upload UI)
-  - `d5e906a` — Phase 18-G (portrait hero, workstation cards, atmosphere)
-  - `f1304e5` — Phase 18-C fix (Safari animation)
-  - `776dd92` — deploy_dashboard.sh
+  - `70a186f` — Weekly operating report (/weekly)
+  - `da09c92` — Newsletter/lead routine (/newsletter, /lead export)
+  - `22e242a` — Brief offer layer (/brief)
+  - `1563849` — B2B sample report (/b2b report)
 - Run `git log --oneline -8` to see recent commits
