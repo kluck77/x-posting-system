@@ -1,12 +1,16 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: 18
+## ⚠️ LAST COMPLETED PHASE: 18-C
 
 **DO NOT re-implement the dashboard or control room. It is already built and locked.**
 
-Phase 18 is complete:
+Phase 18-C is complete:
 - Mobile-first 4-tab Control Room dashboard → `http://localhost:8000/control/`
-- Telegram `/menu` command with 5 quick-action inline buttons
+- Premium visual polish: card shadows, mascot float/breathe animation, dot pulse-glow, gauge glow
+- Role-specific AI avatar animations (typing/breathe/float/radar per provider)
+- Naver intake context: remaining API calls + lead-to-draft hint
+- AI role taglines with 5-criteria contribution per provider
+- Telegram `/menu` polished: "오퍼레이터 메뉴", cleaner button labels
 - 579 tests passing, 23 critical flows protected
 
 ---
@@ -54,6 +58,7 @@ What was built in Phase 18:
 | 17 | Release gate bundle (go_live_checklist.md, pre_run_guide.md, release_readiness.md) | Locked |
 | **18** | **Control Room dashboard (naver_usage, control_room.py, dashboard.html, 37 tests, docs/control_room.md)** | **Locked** |
 | **18** | **Telegram /menu quick-action buttons (_handle_quick_callback, 6 critical tests)** | **Locked** |
+| **18-C** | **Premium Polish: card shadows, mascot/dot animations, role taglines, Naver context, Telegram UX** | **Locked** |
 
 ---
 
@@ -80,7 +85,7 @@ If the operator wants to proceed, the next area would be:
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 11 — Phase 18 complete)
+- Date: 2026-04-06 (session 12 — Phase 18-C complete)
 - Branch: claude/extract-prediction-time-n82UK
-- Commits: `73403c7` (Control Room), `36b3b3b` (Mobile dashboard), `dba4204` (Quick menu)
+- Commits: `73403c7` (Control Room), `36b3b3b` (Mobile dashboard), `dba4204` (Quick menu), `3ffc011` (Premium polish)
 - Run `git log --oneline -5` to see recent commits
