@@ -509,15 +509,30 @@ body::before{
 /* Worker card entrance */
 #provider-list{display:flex;flex-direction:column;gap:14px}
 @keyframes card-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-/* Naver arc gauge — large centered layout */
-.naver-arc-section{
-  display:flex;flex-direction:column;align-items:center;
-  gap:14px;margin-bottom:16px;
+/* ===== NAVER CONSOLE — immersive intake centerpiece ===== */
+.naver-console{
+  margin:0 0 16px;padding:20px 16px;border-radius:20px;
+  background:linear-gradient(145deg,#080d1e 0%,#0c1228 55%,#080c1a 100%);
+  border:1px solid rgba(34,197,94,0.2);
+  box-shadow:0 0 60px rgba(34,197,94,0.07),0 8px 32px rgba(0,0,0,0.7),
+    inset 0 1px 0 rgba(34,197,94,0.1);
+  position:relative;overflow:hidden;
+}
+.naver-console::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(34,197,94,0.08) 0%,transparent 60%);
+}
+.naver-console-title{
+  font-size:9.5px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;
+  color:rgba(34,197,94,0.6);margin-bottom:6px;
+}
+.naver-gauge-row{
+  display:flex;align-items:center;gap:20px;justify-content:center;
+  margin-bottom:12px;
 }
 .naver-arc-wrap{
-  position:relative;width:130px;height:130px;
-  filter:drop-shadow(0 0 14px rgba(34,197,94,0.2));
-  flex-shrink:0;
+  position:relative;width:130px;height:130px;flex-shrink:0;
+  filter:drop-shadow(0 0 16px rgba(34,197,94,0.22));
 }
 .naver-arc-center{
   position:absolute;inset:0;display:flex;flex-direction:column;
@@ -525,21 +540,16 @@ body::before{
 }
 .naver-arc-pct{font-size:24px;font-weight:900;line-height:1.1;letter-spacing:-0.5px}
 .naver-arc-lbl{font-size:9px;color:var(--txt3);letter-spacing:1px;text-transform:uppercase;margin-top:3px}
-.naver-arc-detail{
-  display:flex;align-items:center;justify-content:center;gap:16px;
-  width:100%;padding:0 4px;
-}
+.naver-detail{display:flex;flex-direction:column;gap:6px}
 .naver-arc-used{font-size:26px;font-weight:700;line-height:1}
-.naver-arc-of{font-size:13px;color:var(--txt2)}
-.naver-arc-note{font-size:12.5px;margin-top:4px;text-align:center}
-/* Naver intake context */
-.naver-context{font-size:11px;color:var(--txt3);margin-top:6px;letter-spacing:0.1px}
+.naver-arc-of{font-size:12px;color:var(--txt2)}
+.naver-arc-note{font-size:12px;margin-top:4px}
+.naver-context{font-size:11px;color:var(--txt3);margin-top:4px;letter-spacing:0.1px}
 .naver-intake-hint{
-  font-size:12px;color:var(--txt2);margin-top:10px;padding:8px 10px;
-  background:rgba(79,142,255,0.06);border-left:2px solid rgba(79,142,255,0.3);border-radius:4px;
-  line-height:1.5;
+  font-size:12px;color:var(--txt2);margin-top:12px;padding:8px 10px;
+  background:rgba(79,142,255,0.06);border-left:2px solid rgba(79,142,255,0.3);
+  border-radius:4px;line-height:1.5;
 }
-/* Naver status badge strip */
 .naver-status-strip{
   display:flex;align-items:center;gap:6px;
   margin-bottom:14px;padding:6px 10px;border-radius:8px;
@@ -549,6 +559,20 @@ body::before{
 .naver-status-strip.caution{background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.2)}
 .naver-status-strip.warning{background:rgba(239,68,68,0.08);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
 .naver-status-strip.idle{background:rgba(75,81,104,0.1);color:var(--txt3);border:1px solid rgba(75,81,104,0.2)}
+/* Intake sections */
+.intake-section{margin:0 0 16px}
+.section-label{
+  font-size:9.5px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--txt3);margin-bottom:10px;display:flex;align-items:center;gap:8px;
+}
+.section-label::after{
+  content:'';flex:1;height:1px;
+  background:linear-gradient(to right,rgba(255,255,255,0.06),transparent);
+}
+.terminal-feed{
+  background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);
+  border-radius:12px;overflow:hidden;
+}
 @media(prefers-reduced-motion:reduce){
   .hero-emoji,.hero-ring,.hero-ring-ok,.pipe-connector,
   .station-img,.station-avatar-emoji
@@ -566,11 +590,11 @@ body::before{
 
 .news-item{
   display:flex;align-items:flex-start;gap:8px;
-  padding:9px 0;border-bottom:1px solid var(--border);
-  font-size:13px;color:var(--txt);line-height:1.45;
+  padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.04);
+  font-size:12.5px;color:var(--txt);line-height:1.45;
 }
 .news-item::before{
-  content:'▸';color:var(--accent);flex-shrink:0;font-size:11px;margin-top:2px;opacity:0.75;
+  content:'▸';color:var(--accent);flex-shrink:0;font-size:10px;margin-top:2px;opacity:0.65;
 }
 .news-item:last-child{border-bottom:none}
 .empty-state{
@@ -616,7 +640,7 @@ body::before{
 
 .draft-row{
   display:flex;align-items:center;gap:8px;
-  padding:9px 0;border-bottom:1px solid var(--border);
+  padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.04);
 }
 .draft-row:last-child{border-bottom:none}
 .draft-hook{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -776,10 +800,11 @@ body::before{
       <span class="ai-tab-title">인풋 &amp; 플로우</span>
       <span class="ai-tab-sub">뉴스 수집 · 초안 흐름</span>
     </div>
-    <div class="card">
-      <div class="card-title">Naver API</div>
+    <!-- Naver console — immersive intake centerpiece -->
+    <div class="naver-console">
+      <div class="naver-console-title">NAVER API</div>
       <div class="naver-status-strip idle" id="naver-status-strip">● 연결 대기 중</div>
-      <div class="naver-arc-section">
+      <div class="naver-gauge-row">
         <div class="naver-arc-wrap">
           <svg viewBox="0 0 130 130" style="width:100%;height:100%;transform:rotate(-90deg)">
             <circle cx="65" cy="65" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="9"/>
@@ -792,30 +817,33 @@ body::before{
             <div class="naver-arc-lbl">사용률</div>
           </div>
         </div>
-        <div class="naver-arc-detail">
-          <div style="text-align:center">
+        <div class="naver-detail">
+          <div>
             <span class="naver-arc-used" id="naver-used">—</span>
             <span class="naver-arc-of"> / 25,000</span>
           </div>
           <div class="naver-arc-note" id="naver-note"></div>
+          <div class="naver-context" id="naver-context"></div>
         </div>
       </div>
-      <div class="naver-context" id="naver-context"></div>
       <div class="naver-intake-hint" id="naver-intake-hint" style="display:none"></div>
     </div>
-    <div class="card">
-      <div class="card-title">Recent News</div>
-      <div id="news-list"></div>
+    <!-- News terminal feed -->
+    <div class="intake-section">
+      <div class="section-label">Recent News</div>
+      <div class="terminal-feed" id="news-list"></div>
     </div>
-    <div class="card">
-      <div class="card-title">Pipeline Flow</div>
+    <!-- Pipeline -->
+    <div class="intake-section">
+      <div class="section-label">Pipeline Flow</div>
       <div class="pipeline-scroll">
         <div class="pipeline" id="pipeline-flow"></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">Recent Drafts</div>
-      <div id="draft-rows"></div>
+    <!-- Drafts -->
+    <div class="intake-section">
+      <div class="section-label">Recent Drafts</div>
+      <div class="terminal-feed" id="draft-rows"></div>
     </div>
   </div>
 
