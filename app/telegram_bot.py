@@ -843,7 +843,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/brief — Premium Brief 오퍼 준비 관리\n"
         "/b2b — B2B 리서치 후보 관리 (상태/메모/대상/활용/그룹핑)\n"
         "/cta <id> <type> — CTA 유형 설정/조회\n"
-        "/lead — 리드 자산 관리 (이름/유형/메모)\n"
+        "/newsletter — 뉴스레터/리드자석 운영 루틴\n"
+        "/lead — 리드 자산 관리 (이름/유형/메모/내보내기)\n"
         "/email — 이메일 버킷/목표 관리\n"
         "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
         "/recover — 영속 상태 파일 자가 진단\n"
@@ -2240,6 +2241,7 @@ async def lead_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
       /lead asset <id> <이름> — 리드 자산 이름 설정
       /lead type <id> <유형>  — 리드 자산 유형 설정
       /lead note <id> <메모>  — 리드 자산 메모
+      /lead export            — 리드자석 후보 내보내기
     """
     args = context.args or []
     subcmd = args[0].lower() if args else "list"
@@ -2354,6 +2356,30 @@ async def lead_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text(f"❌ #{draft_id} 드래프트 없음")
 
+        # /lead export
+        elif subcmd == "export":
+            from app.services.newsletter_routine_service import NewsletterRoutineService
+            routine = NewsletterRoutineService(db)
+            items = routine.export_lead_magnets(limit=10)
+            if not items:
+                await update.message.reply_text("📄 내보낼 리드자석 없음")
+                return
+            lines = [f"📄 <b>리드자석 내보내기</b> ({len(items)}건)\n"]
+            for item in items:
+                lines.append(
+                    f"──────────────\n"
+                    f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
+                    f"💰{item['monetization_score'] or 0}\n"
+                    f"Hook: {item['hook'][:60]}…\n"
+                    f"Asset: {item['lead_asset_name'] or '—'} "
+                    f"({item['lead_asset_type'] or '—'})\n"
+                    f"Note: {item['lead_asset_note'] or '—'}"
+                )
+            text = "\n".join(lines)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
         else:
             await update.message.reply_text(
                 "사용법:\n"
@@ -2361,7 +2387,8 @@ async def lead_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "<code>/lead view &lt;id&gt;</code> — 상세\n"
                 "<code>/lead asset &lt;id&gt; &lt;이름&gt;</code> — 자산 이름\n"
                 "<code>/lead type &lt;id&gt; &lt;유형&gt;</code> — 자산 유형\n"
-                "<code>/lead note &lt;id&gt; &lt;메모&gt;</code> — 자산 메모",
+                "<code>/lead note &lt;id&gt; &lt;메모&gt;</code> — 자산 메모\n"
+                "<code>/lead export</code> — 내보내기",
                 parse_mode="HTML",
             )
     except Exception as e:
@@ -2538,6 +2565,184 @@ async def email_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"/email 오류: {e}", exc_info=True)
         await update.message.reply_text(f"❌ 이메일 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
+async def newsletter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /newsletter — 뉴스레터/리드자석 운영 루틴.
+
+    사용법:
+      /newsletter                     — 운영 현황 요약
+      /newsletter list [bucket]       — 후보 목록 (버킷별 필터)
+      /newsletter view <id>           — 후보 상세
+      /newsletter leads               — 리드자석 후보 목록
+      /newsletter leads view <id>     — 리드자석 상세
+      /newsletter export [bucket]     — 뉴스레터 후보 내보내기
+      /newsletter leads export        — 리드자석 후보 내보내기
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.newsletter_routine_service import (
+            NewsletterRoutineService, NEWSLETTER_BUCKETS,
+        )
+        svc = NewsletterRoutineService(db)
+
+        # /newsletter (요약)
+        if subcmd == "summary" or not args:
+            text = svc.format_newsletter_summary()
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /newsletter list [bucket]
+        elif subcmd == "list":
+            bucket = args[1].lower() if len(args) > 1 else None
+            if bucket:
+                drafts = svc.get_by_bucket(bucket, limit=10)
+                label = bucket
+            else:
+                drafts = svc.get_all_newsletter_candidates(limit=10)
+                label = "전체"
+            if not drafts:
+                await update.message.reply_text(f"📰 뉴스레터 후보 없음 ({label})")
+                return
+            lines = [f"📰 <b>뉴스레터 후보</b> [{label}] ({len(drafts)}건)\n"]
+            for d in drafts:
+                bucket_v = d.email_bucket or "—"
+                goal = d.email_goal or "—"
+                cta = d.cta_type or "—"
+                lines.append(
+                    f"• ID {d.id} [{bucket_v}] CTA:{cta} 🎯{goal}\n"
+                    f"  {(d.hook or '')[:50]}…"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /newsletter view <id>
+        elif subcmd == "view":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "사용법: <code>/newsletter view &lt;id&gt;</code>",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            draft = svc.get_draft_by_id(draft_id)
+            if not draft:
+                await update.message.reply_text(f"❌ #{draft_id} 드래프트 없음")
+                return
+            text = svc.format_newsletter_detail(draft)
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /newsletter leads [view <id> | export]
+        elif subcmd == "leads":
+            lead_sub = args[1].lower() if len(args) > 1 else "list"
+
+            if lead_sub == "view":
+                if len(args) < 3:
+                    await update.message.reply_text(
+                        "사용법: <code>/newsletter leads view &lt;id&gt;</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                draft_id, err = _parse_draft_id(args, 2)
+                if draft_id is None:
+                    await update.message.reply_text(err)
+                    return
+                draft = svc.get_draft_by_id(draft_id)
+                if not draft:
+                    await update.message.reply_text(f"❌ #{draft_id} 드래프트 없음")
+                    return
+                text = svc.format_lead_detail(draft)
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            elif lead_sub == "export":
+                items = svc.export_lead_magnets(limit=10)
+                if not items:
+                    await update.message.reply_text("📄 내보낼 리드자석 없음")
+                    return
+                lines = [f"📄 <b>리드자석 내보내기</b> ({len(items)}건)\n"]
+                for item in items:
+                    lines.append(
+                        f"──────────────\n"
+                        f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
+                        f"💰{item['monetization_score'] or 0}\n"
+                        f"Hook: {item['hook'][:60]}…\n"
+                        f"Asset: {item['lead_asset_name'] or '—'} "
+                        f"({item['lead_asset_type'] or '—'})\n"
+                        f"Note: {item['lead_asset_note'] or '—'}\n"
+                        f"Bucket: {item['email_bucket'] or '—'} | "
+                        f"Goal: {item['email_goal'] or '—'}"
+                    )
+                text = "\n".join(lines)
+                if len(text) > 4000:
+                    text = text[:4000] + "\n\n… (잘림)"
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            else:
+                # /newsletter leads (목록)
+                drafts = svc.get_lead_magnet_candidates(limit=10)
+                if not drafts:
+                    await update.message.reply_text("📄 리드자석 후보 없음")
+                    return
+                lines = [f"📄 <b>리드자석 후보</b> ({len(drafts)}건)\n"]
+                for d in drafts:
+                    asset = d.lead_asset_name or "—"
+                    atype = d.lead_asset_type or "—"
+                    cta = d.cta_type or "—"
+                    lines.append(
+                        f"• ID {d.id} [{cta}] 📄{atype}\n"
+                        f"  {(d.hook or '')[:50]}…\n"
+                        f"  └ {asset[:60]}"
+                    )
+                await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /newsletter export [bucket]
+        elif subcmd == "export":
+            bucket = args[1].lower() if len(args) > 1 else None
+            items = svc.export_newsletter(bucket=bucket, limit=10)
+            if not items:
+                await update.message.reply_text("📰 내보낼 뉴스레터 후보 없음")
+                return
+            label = bucket or "전체"
+            lines = [f"📰 <b>뉴스레터 내보내기</b> [{label}] ({len(items)}건)\n"]
+            for item in items:
+                lines.append(
+                    f"──────────────\n"
+                    f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
+                    f"💰{item['monetization_score'] or 0}\n"
+                    f"Hook: {item['hook'][:60]}…\n"
+                    f"Bucket: {item['email_bucket'] or '—'} | "
+                    f"Goal: {item['email_goal'] or '—'}\n"
+                    f"Asset: {item['lead_asset_name'] or '—'}"
+                )
+            text = "\n".join(lines)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/newsletter</code> — 현황 요약\n"
+                "<code>/newsletter list [bucket]</code> — 후보 목록\n"
+                "<code>/newsletter view &lt;id&gt;</code> — 상세\n"
+                "<code>/newsletter leads</code> — 리드자석 목록\n"
+                "<code>/newsletter leads view &lt;id&gt;</code> — 리드자석 상세\n"
+                "<code>/newsletter export [bucket]</code> — 내보내기\n"
+                "<code>/newsletter leads export</code> — 리드자석 내보내기\n\n"
+                f"버킷: {' | '.join(NEWSLETTER_BUCKETS)}",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/newsletter 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 뉴스레터 명령 실패: {str(e)[:200]}")
     finally:
         db.close()
 
@@ -3142,6 +3347,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("cta", cta_command))
     app.add_handler(CommandHandler("lead", lead_command))
     app.add_handler(CommandHandler("email", email_command))
+    app.add_handler(CommandHandler("newsletter", newsletter_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))
