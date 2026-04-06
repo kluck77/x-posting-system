@@ -677,6 +677,47 @@ body::before{
 .ai-tab-title{font-size:18px;font-weight:800;letter-spacing:-0.4px;color:var(--txt)}
 .ai-tab-sub{font-size:11px;color:var(--txt3)}
 
+/* ===== OPS PANEL SYSTEM ===== */
+.ops-panel{
+  background:rgba(14,18,30,0.90);
+  border:1px solid rgba(255,255,255,0.09);
+  border-radius:16px;overflow:hidden;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:0 4px 40px rgba(0,0,0,0.65),0 1px 0 rgba(255,255,255,0.09) inset,0 0 0 1px rgba(255,255,255,0.05) inset;
+  position:relative;z-index:1;
+}
+.ops-panel-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 16px;
+  background:rgba(255,255,255,0.03);
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.ops-panel-hdr-left{display:flex;align-items:center;gap:8px}
+.ops-panel-icon{font-size:14px;opacity:0.7}
+.ops-panel-label{
+  font-size:11px;font-weight:700;color:var(--txt2);
+  text-transform:uppercase;letter-spacing:1.2px;
+}
+.ops-panel-badge{
+  font-size:10px;padding:2px 8px;border-radius:6px;
+  font-weight:600;letter-spacing:0.5px;
+}
+.ops-panel-body{padding:10px 16px 14px}
+
+.monitor-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;
+}
+@media(max-width:480px){
+  .monitor-grid{grid-template-columns:1fr}
+}
+.monitor-grid .ops-panel{
+  box-shadow:0 2px 16px rgba(0,0,0,0.4),0 1px 0 rgba(255,255,255,0.06) inset;
+}
+.monitor-grid .ops-panel-hdr{padding:8px 12px}
+.monitor-grid .ops-panel-body{padding:8px 12px 12px}
+.monitor-grid .ops-row{font-size:12.5px;padding:7px 0}
+.monitor-grid .ops-val{font-size:13px}
+
 /* ===== UPLOAD SLOTS ===== */
 .upload-slot{
   display:flex;align-items:center;gap:10px;
@@ -851,33 +892,66 @@ body::before{
   <div class="page" id="page-ops">
     <div class="ai-tab-header">
       <span class="ai-tab-title">운영 현황</span>
-      <span class="ai-tab-sub">큐 · 모니터 · 활동</span>
+      <span class="ai-tab-sub">MONITORING DECK</span>
     </div>
-    <div class="card">
-      <div class="card-title-row">
-        <span class="card-title">Queue</span>
-        <span id="queue-count-badge" class="badge badge-pending">0 pending</span>
+
+    <!-- Queue Panel -->
+    <div class="ops-panel">
+      <div class="ops-panel-hdr">
+        <div class="ops-panel-hdr-left">
+          <span class="ops-panel-icon">📋</span>
+          <span class="ops-panel-label">Queue</span>
+        </div>
+        <span id="queue-count-badge" class="ops-panel-badge" style="background:rgba(79,142,255,0.12);color:var(--accent)">0 pending</span>
       </div>
-      <div id="queue-list"></div>
+      <div class="ops-panel-body" id="queue-list"></div>
     </div>
-    <div class="card">
-      <div class="card-title">Reply Monitor</div>
-      <div id="monitor-rows"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">News Monitor</div>
-      <div id="news-monitor-rows"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Activity</div>
-      <div id="activity-rows"></div>
-    </div>
-    <div class="card">
-      <div class="card-title-row">
-        <span class="card-title">캐릭터 이미지 업로드</span>
-        <span id="upload-status" style="font-size:11px;color:var(--txt3)"></span>
+
+    <!-- Monitor Grid: Reply + News side by side -->
+    <div class="monitor-grid">
+      <div class="ops-panel">
+        <div class="ops-panel-hdr">
+          <div class="ops-panel-hdr-left">
+            <span class="ops-panel-icon">💬</span>
+            <span class="ops-panel-label">Reply Monitor</span>
+          </div>
+        </div>
+        <div class="ops-panel-body" id="monitor-rows"></div>
       </div>
-      <div id="upload-slots" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="ops-panel">
+        <div class="ops-panel-hdr">
+          <div class="ops-panel-hdr-left">
+            <span class="ops-panel-icon">📰</span>
+            <span class="ops-panel-label">News Monitor</span>
+          </div>
+        </div>
+        <div class="ops-panel-body" id="news-monitor-rows"></div>
+      </div>
+    </div>
+
+    <!-- Activity Panel -->
+    <div class="ops-panel">
+      <div class="ops-panel-hdr">
+        <div class="ops-panel-hdr-left">
+          <span class="ops-panel-icon">📊</span>
+          <span class="ops-panel-label">Activity</span>
+        </div>
+      </div>
+      <div class="ops-panel-body" id="activity-rows"></div>
+    </div>
+
+    <!-- Upload Panel -->
+    <div class="ops-panel">
+      <div class="ops-panel-hdr">
+        <div class="ops-panel-hdr-left">
+          <span class="ops-panel-icon">🖼️</span>
+          <span class="ops-panel-label">캐릭터 이미지 업로드</span>
+        </div>
+        <span id="upload-status" style="font-size:10px;color:var(--txt3)"></span>
+      </div>
+      <div class="ops-panel-body">
+        <div id="upload-slots" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
     </div>
   </div>
 
