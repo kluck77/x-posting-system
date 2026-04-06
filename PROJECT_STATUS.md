@@ -158,6 +158,7 @@
 | v11 | Business classification layer (Phase 1-2): auto-tagging, CTA, monetization score | Done |
 | v11 | Premium/B2B/Newsletter candidate detection + `/biz` command | Done |
 | v11 | Business tags in Telegram approval cards | Done |
+| v11 | Premium Korea Brief candidate pipeline (Phase 3): status/note/reader/export + `/premium` | Done |
 | — | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
 
 ### Locked Areas — Do Not Reopen
