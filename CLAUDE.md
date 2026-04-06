@@ -189,3 +189,42 @@ Rules:
 - `pytest tests/ -q --tb=short` must pass before any commit
 - No scope creep, no "nice to have" extras
 - No new abstractions for one-time operations
+
+---
+
+## Coding Standards (Python)
+
+### Style
+- Python 3.11+ type hints (use `str | None` not `Optional[str]`)
+- f-strings over `.format()` or `%`
+- snake_case for functions/variables, PascalCase for classes
+- Constants as UPPER_SNAKE_CASE module-level tuples
+- Max function length: ~40 lines. Split if longer.
+- Imports: stdlib → third-party → local, each group alphabetized
+
+### Patterns
+- Service classes take `db: Session` in `__init__`
+- All Layer 2 service methods wrapped in `try/except` with logging
+- DB mutations: `commit()` + `refresh()` on success, `rollback()` on error
+- Telegram commands: `from app.db import get_db` inside function (lazy import)
+- Validation: check input at service boundary, not deep inside helpers
+- Use `_parse_draft_id(args, pos)` for all Telegram command ID parsing
+
+### Testing
+- Use `db_session` fixture from conftest.py (NOT `get_test_db`)
+- Each test class: one feature area. Each test method: one behavior.
+- Helpers: `_make_source(db)`, `_make_*_draft(db, source, **kwargs)` pattern
+- Assert specific values, not just `is not None`
+- Test both success and failure paths
+
+### Security
+- Never log secrets, API keys, or tokens
+- Truncate user input: `note[:500]`, `name[:200]`
+- SQL via SQLAlchemy ORM only — no raw SQL strings with user input
+- Validate enum values against constant tuples before DB write
+
+### DB Migrations
+- Only nullable columns via ALTER TABLE (SQLite constraint)
+- Add migration entry to `_run_schema_migrations()` in `db.py`
+- Check with PRAGMA table_info before ALTER (idempotent)
+- Pattern: `{"table": "drafts", "column": "...", "ddl": "ALTER TABLE ..."}`
