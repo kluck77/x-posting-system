@@ -1,34 +1,35 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Business Operating Layers + CTA Copy Library
+## ⚠️ LAST COMPLETED PHASE: Business Operating Layers + CTA Copy Library + Perf Tracking
 
 **DO NOT re-implement the dashboard or control room. It is already built and locked.**
 **DO NOT re-implement premium/b2b/email/lead base services. They are built and tested.**
 
-Session 15 complete:
+Session 15–16 complete:
 - **B2B sample report** — `generate_sample_report()`, `/b2b report <id> [save|export]`
 - **Brief offer layer** — `BriefOfferService`, `/brief` (8 subcommands), 3 new columns
 - **Newsletter routine** — `NewsletterRoutineService`, `/newsletter` (7 subcommands)
 - **Weekly report** — `WeeklyReportService`, `/weekly` (summary/view/export)
 - **CTA copy library** — `CtaCopyService`, `CtaCopy` model, `/cta copy` (9 subcommands), draft linking
-- 868 tests passing, all flows protected
+- **CTA copy perf tracking** — `get_copy_perf`, `get_all_perf`, `/cta perf` (3 subcommands)
+- 883 tests passing, all flows protected
 
 ---
 
 ## Current Phase Detail
 
-**Session 15 — Business Operating Layers + CTA Copy** (complete)
+**Session 15–16 — Business Operating Layers + CTA Copy + Perf** (complete)
 
 What was built:
 1. `app/services/b2b_candidate_service.py` — `generate_sample_report`, `format_sample_report`, `save_report_to_note`
 2. `app/services/brief_offer_service.py` — NEW (BriefOfferService)
 3. `app/services/newsletter_routine_service.py` — NEW (NewsletterRoutineService)
 4. `app/services/weekly_report_service.py` — NEW (WeeklyReportService)
-5. `app/services/cta_copy_service.py` — NEW (CtaCopyService)
+5. `app/services/cta_copy_service.py` — NEW (CtaCopyService + perf tracking)
 6. `app/models/content.py` — `CtaCopy` model + 4 columns (`brief_type`, `brief_price_tier`, `brief_summary_note`, `cta_copy_id`)
 7. `app/db.py` — 4 migration entries
-8. `app/telegram_bot.py` — `/b2b report`, `/brief`, `/newsletter`, `/weekly`, `/lead export`, `/cta copy`, `/cta link/unlink`
-9. Tests: `test_cta_copy.py` (37), `test_brief_offer.py` (38), `test_newsletter_routine.py` (29), `test_weekly_report.py` (26), `test_b2b_candidate.py` (+20)
+8. `app/telegram_bot.py` — `/b2b report`, `/brief`, `/newsletter`, `/weekly`, `/lead export`, `/cta copy`, `/cta link/unlink`, `/cta perf`
+9. Tests: `test_cta_copy.py` (52), `test_brief_offer.py` (38), `test_newsletter_routine.py` (29), `test_weekly_report.py` (26), `test_b2b_candidate.py` (+20)
 
 ---
 
@@ -62,6 +63,7 @@ What was built:
 | **S15** | **Newsletter routine (/newsletter, NewsletterRoutineService)** | **Locked** |
 | **S15** | **Weekly report (/weekly, WeeklyReportService)** | **Locked** |
 | **S15** | **CTA copy library (/cta copy, CtaCopyService, CtaCopy model)** | **Locked** |
+| **S16** | **CTA copy perf tracking (/cta perf)** | **Locked** |
 
 ---
 
@@ -82,16 +84,17 @@ What was built:
 ## Next Candidates
 
 **System is fully operator-ready. Nothing urgent is missing.**
-868 tests passing, all flows protected.
-Full operating layer stack: premium, B2B, brief, newsletter, lead, weekly report, CTA copy library.
+883 tests passing, all flows protected.
+Full operating layer stack: premium, B2B, brief, newsletter, lead, weekly report, CTA copy library + perf.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 15 — Business Operating Layers + CTA Copy)
-- Branch: claude/extract-prediction-time-n82UK
+- Date: 2026-04-06 (session 16 — CTA Copy Performance Tracking)
+- Branch: claude/premium-control-room-ui-LJFba
 - Key commits:
+  - CTA copy perf tracking (/cta perf + tests)
   - `9e541e5` — CTA copy library (/cta copy + draft linking)
   - `70a186f` — Weekly operating report (/weekly)
   - `da09c92` — Newsletter/lead routine (/newsletter, /lead export)

@@ -16,7 +16,7 @@ Layer 2 원칙: 실패해도 Layer 1 파이프라인에 영향 없음.
 import logging
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from app.models.content import CtaCopy, Draft
+from app.models.content import ApprovalStatus, CtaCopy, Draft
 
 logger = logging.getLogger(__name__)
 
@@ -296,3 +296,179 @@ class CtaCopyService:
             return "\n".join(lines)
         except Exception as e:
             return f"📋 카피 상세 실패: {e}"
+
+    # ── 성과 추적 ─────────────────────────────────────────────────
+
+    def get_linked_drafts(self, copy_id: int, limit: int = 20) -> list[Draft]:
+        """특정 카피에 연결된 드래프트 목록."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(Draft.cta_copy_id == copy_id)
+                .order_by(Draft.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[CtaCopy] 연결 조회 실패: {e}")
+            return []
+
+    def get_copy_perf(self, copy_id: int) -> dict | None:
+        """단일 카피의 성과 요약."""
+        try:
+            copy = self.get_by_id(copy_id)
+            if not copy:
+                return None
+            drafts = self.get_linked_drafts(copy_id, limit=50)
+            total = len(drafts)
+            published = sum(
+                1 for d in drafts
+                if d.approval_status == ApprovalStatus.PUBLISHED
+            )
+            approved = sum(
+                1 for d in drafts
+                if d.approval_status == ApprovalStatus.APPROVED
+            )
+            rejected = sum(
+                1 for d in drafts
+                if d.approval_status == ApprovalStatus.REJECTED
+            )
+            posted = sum(1 for d in drafts if d.x_post_id)
+            scores = [d.monetization_score for d in drafts if d.monetization_score]
+            avg_score = round(sum(scores) / len(scores)) if scores else 0
+            high_value = sum(1 for s in scores if s >= 70)
+
+            return {
+                "copy_id": copy.id,
+                "cta_type": copy.cta_type,
+                "copy_text": copy.copy_text,
+                "is_active": copy.is_active,
+                "note": copy.note,
+                "total_linked": total,
+                "published": published,
+                "approved": approved,
+                "rejected": rejected,
+                "posted_to_x": posted,
+                "avg_monetization": avg_score,
+                "high_value_count": high_value,
+                "recent_drafts": [
+                    {
+                        "draft_id": d.id,
+                        "hook": (d.hook or "")[:80],
+                        "approval_status": d.approval_status.value if d.approval_status else "",
+                        "monetization_score": d.monetization_score,
+                        "x_post_id": d.x_post_id,
+                    }
+                    for d in drafts[:5]
+                ],
+            }
+        except Exception as e:
+            logger.warning(f"[CtaCopy] 성과 조회 실패: {e}")
+            return None
+
+    def get_all_perf(self) -> list[dict]:
+        """전체 카피 성과 요약 (활성 카피만)."""
+        try:
+            copies = self.get_all(active_only=False)
+            results = []
+            for c in copies:
+                perf = self.get_copy_perf(c.id)
+                if perf:
+                    results.append(perf)
+            # 연결 수 내림차순 정렬
+            results.sort(key=lambda x: x["total_linked"], reverse=True)
+            return results
+        except Exception as e:
+            logger.warning(f"[CtaCopy] 전체 성과 실패: {e}")
+            return []
+
+    def export_perf(self) -> list[dict]:
+        """성과 데이터 구조화 내보내기."""
+        return self.get_all_perf()
+
+    def format_perf_summary(self) -> str:
+        """전체 CTA 카피 성과 요약 텔레그램 포맷."""
+        try:
+            all_perf = self.get_all_perf()
+            if not all_perf:
+                return "📈 CTA 카피 성과 데이터 없음"
+
+            lines = [
+                "📈 <b>CTA 카피 성과 요약</b>",
+                f"{'━' * 30}",
+                "",
+            ]
+
+            for p in all_perf:
+                if p["total_linked"] == 0:
+                    continue
+                status = "✅" if p["is_active"] else "⏸️"
+                pub_rate = (
+                    f"{round(p['published'] / p['total_linked'] * 100)}%"
+                    if p["total_linked"] > 0 else "—"
+                )
+                lines.append(
+                    f"#{p['copy_id']} [{p['cta_type']}] {status}\n"
+                    f"  📎 연결 {p['total_linked']} | "
+                    f"게시 {p['published']} ({pub_rate}) | "
+                    f"💰 평균 {p['avg_monetization']}\n"
+                    f"  {p['copy_text'][:50]}…"
+                )
+                lines.append("")
+
+            # 연결 없는 카피 수
+            unlinked = sum(1 for p in all_perf if p["total_linked"] == 0)
+            if unlinked:
+                lines.append(f"📋 미연결 카피: {unlinked}건")
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"📈 성과 요약 실패: {e}"
+
+    def format_perf_detail(self, perf: dict) -> str:
+        """단일 카피 성과 상세 포맷."""
+        try:
+            status = "✅ 활성" if perf["is_active"] else "⏸️ 비활성"
+            pub_rate = (
+                f"{round(perf['published'] / perf['total_linked'] * 100)}%"
+                if perf["total_linked"] > 0 else "—"
+            )
+
+            lines = [
+                f"📈 <b>CTA 카피 #{perf['copy_id']} 성과</b>",
+                f"{'━' * 30}",
+                "",
+                f"📢 유형: {perf['cta_type']}",
+                f"📊 상태: {status}",
+                "",
+                f"📝 <b>카피:</b> {perf['copy_text'][:200]}",
+                "",
+                f"<b>성과 지표:</b>",
+                f"  📎 연결 드래프트: {perf['total_linked']}건",
+                f"  ✅ 게시: {perf['published']}건 ({pub_rate})",
+                f"  👍 승인: {perf['approved']}건",
+                f"  ❌ 거절: {perf['rejected']}건",
+                f"  🐦 X 게시: {perf['posted_to_x']}건",
+                f"  💰 평균 수익화: {perf['avg_monetization']}",
+                f"  🌟 고가치(70+): {perf['high_value_count']}건",
+            ]
+
+            if perf.get("note"):
+                lines.append(f"  📌 메모: {perf['note']}")
+
+            recent = perf.get("recent_drafts", [])
+            if recent:
+                lines.append("")
+                lines.append("<b>최근 연결:</b>")
+                for d in recent[:3]:
+                    score = d["monetization_score"] or 0
+                    posted = " 🐦" if d["x_post_id"] else ""
+                    lines.append(
+                        f"  • #{d['draft_id']} [{d['approval_status']}] "
+                        f"💰{score}{posted}\n"
+                        f"    {d['hook'][:45]}…"
+                    )
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"📈 성과 상세 실패: {e}"

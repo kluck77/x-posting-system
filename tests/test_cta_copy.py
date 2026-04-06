@@ -7,7 +7,7 @@ CtaCopyService CRUD, 활성/비활성, 연결, 내보내기, 포맷 검증.
 import pytest
 from datetime import datetime, timezone
 from app.models.content import (
-    Base, Draft, SourceItem, CtaCopy,
+    Base, Draft, SourceItem, CtaCopy, PostLog,
     ContentCategory, RiskLevel, ApprovalStatus,
 )
 from app.services.cta_copy_service import (
@@ -331,3 +331,171 @@ class TestFormat:
         copy = svc.get_by_id(copy.id)
         text = svc.format_copy_detail(copy)
         assert "비활성" in text
+
+
+# ─── 성과 추적 ──────────────────────────────────────────────
+
+def _make_linked_draft(db, source, copy, hook="Linked Hook",
+                       approval_status=ApprovalStatus.PUBLISHED,
+                       monetization_score=None, x_post_id=None):
+    draft = Draft(
+        source_item_id=source.id, hook=hook,
+        body="Test body", category=ContentCategory.ECONOMY,
+        risk_level=RiskLevel.LOW,
+        approval_status=approval_status,
+        monetization_score=monetization_score,
+        x_post_id=x_post_id,
+        cta_copy_id=copy.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+class TestGetLinkedDrafts:
+    def test_no_linked(self, db):
+        svc = CtaCopyService(db)
+        copy = svc.add_copy("newsletter_signup", "Copy text")
+        assert svc.get_linked_drafts(copy.id) == []
+
+    def test_with_linked(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("newsletter_signup", "Copy text")
+        _make_linked_draft(db, src, copy, hook="Draft 1")
+        _make_linked_draft(db, src, copy, hook="Draft 2")
+        result = svc.get_linked_drafts(copy.id)
+        assert len(result) == 2
+
+    def test_limit(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("newsletter_signup", "Copy text")
+        for i in range(5):
+            _make_linked_draft(db, src, copy, hook=f"Draft {i}")
+        result = svc.get_linked_drafts(copy.id, limit=3)
+        assert len(result) == 3
+
+
+class TestGetCopyPerf:
+    def test_nonexistent(self, db):
+        svc = CtaCopyService(db)
+        assert svc.get_copy_perf(9999) is None
+
+    def test_no_drafts(self, db):
+        svc = CtaCopyService(db)
+        copy = svc.add_copy("newsletter_signup", "Copy text")
+        perf = svc.get_copy_perf(copy.id)
+        assert perf is not None
+        assert perf["total_linked"] == 0
+        assert perf["published"] == 0
+        assert perf["avg_monetization"] == 0
+
+    def test_with_drafts(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("newsletter_signup", "Copy text")
+        _make_linked_draft(db, src, copy, approval_status=ApprovalStatus.PUBLISHED,
+                           monetization_score=80, x_post_id="123")
+        _make_linked_draft(db, src, copy, approval_status=ApprovalStatus.APPROVED,
+                           monetization_score=60)
+        _make_linked_draft(db, src, copy, approval_status=ApprovalStatus.REJECTED,
+                           monetization_score=40)
+        perf = svc.get_copy_perf(copy.id)
+        assert perf["total_linked"] == 3
+        assert perf["published"] == 1
+        assert perf["approved"] == 1
+        assert perf["rejected"] == 1
+        assert perf["posted_to_x"] == 1
+        assert perf["avg_monetization"] == 60
+        assert perf["high_value_count"] == 1
+
+    def test_perf_structure(self, db):
+        svc = CtaCopyService(db)
+        copy = svc.add_copy("lead_magnet", "Download now")
+        perf = svc.get_copy_perf(copy.id)
+        expected_keys = {
+            "copy_id", "cta_type", "copy_text", "is_active", "note",
+            "total_linked", "published", "approved", "rejected",
+            "posted_to_x", "avg_monetization", "high_value_count",
+            "recent_drafts",
+        }
+        assert set(perf.keys()) == expected_keys
+
+    def test_recent_drafts_limit(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("newsletter_signup", "Copy")
+        for i in range(8):
+            _make_linked_draft(db, src, copy, hook=f"Draft {i}")
+        perf = svc.get_copy_perf(copy.id)
+        assert len(perf["recent_drafts"]) <= 5
+
+
+class TestGetAllPerf:
+    def test_empty(self, db):
+        svc = CtaCopyService(db)
+        assert svc.get_all_perf() == []
+
+    def test_multiple_copies(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        c1 = svc.add_copy("newsletter_signup", "NL copy")
+        c2 = svc.add_copy("lead_magnet", "LM copy")
+        _make_linked_draft(db, src, c1)
+        _make_linked_draft(db, src, c1)
+        _make_linked_draft(db, src, c2)
+        result = svc.get_all_perf()
+        assert len(result) == 2
+        # sorted by total_linked desc
+        assert result[0]["copy_id"] == c1.id
+        assert result[0]["total_linked"] == 2
+
+
+class TestExportPerf:
+    def test_export_matches_all_perf(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("newsletter_signup", "Copy")
+        _make_linked_draft(db, src, copy)
+        export = svc.export_perf()
+        all_perf = svc.get_all_perf()
+        assert len(export) == len(all_perf)
+
+
+class TestFormatPerf:
+    def test_summary_empty(self, db):
+        svc = CtaCopyService(db)
+        text = svc.format_perf_summary()
+        assert "없음" in text
+
+    def test_summary_with_data(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("newsletter_signup", "NL copy text")
+        _make_linked_draft(db, src, copy, monetization_score=75)
+        text = svc.format_perf_summary()
+        assert "성과 요약" in text
+        assert "연결" in text
+
+    def test_detail(self, db):
+        svc = CtaCopyService(db)
+        src = _make_source(db)
+        copy = svc.add_copy("premium_teaser", "Unlock insights")
+        _make_linked_draft(db, src, copy, approval_status=ApprovalStatus.PUBLISHED,
+                           monetization_score=85, x_post_id="abc123")
+        perf = svc.get_copy_perf(copy.id)
+        text = svc.format_perf_detail(perf)
+        assert str(copy.id) in text
+        assert "premium_teaser" in text
+        assert "게시" in text
+        assert "수익화" in text
+
+    def test_detail_no_linked(self, db):
+        svc = CtaCopyService(db)
+        copy = svc.add_copy("newsletter_signup", "Text")
+        perf = svc.get_copy_perf(copy.id)
+        text = svc.format_perf_detail(perf)
+        assert "0건" in text

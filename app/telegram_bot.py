@@ -2168,6 +2168,9 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     /cta list <type>         — CTA별 드래프트 목록
     /cta                     — CTA 분포 요약
     /cta copy                — CTA 카피 라이브러리 관리
+    /cta perf                — CTA 카피 성과 요약
+    /cta perf <id>           — 단일 카피 성과 상세
+    /cta perf export         — 성과 내보내기
     /cta link <draft_id> <copy_id>  — 드래프트에 카피 연결
     /cta unlink <draft_id>          — 카피 연결 해제
     """
@@ -2372,6 +2375,56 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"유형: {types}",
                     parse_mode="HTML",
                 )
+            return
+
+        # /cta perf — CTA 카피 성과 추적
+        if subcmd == "perf":
+            from app.services.cta_copy_service import CtaCopyService
+            csvc = CtaCopyService(db)
+            perf_sub = args[1].lower() if len(args) > 1 else "summary"
+
+            # /cta perf (요약)
+            if perf_sub == "summary" or len(args) == 1:
+                text = csvc.format_perf_summary()
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            # /cta perf export
+            elif perf_sub == "export":
+                items = csvc.export_perf()
+                if not items:
+                    await update.message.reply_text("📈 내보낼 성과 데이터 없음")
+                    return
+                lines = [f"📈 <b>CTA 카피 성과 내보내기</b> ({len(items)}건)\n"]
+                for item in items:
+                    status = "✅" if item["is_active"] else "⏸️"
+                    pub_rate = (
+                        f"{round(item['published'] / item['total_linked'] * 100)}%"
+                        if item["total_linked"] > 0 else "—"
+                    )
+                    lines.append(
+                        f"──────────────\n"
+                        f"#{item['copy_id']} [{item['cta_type']}] {status}\n"
+                        f"연결: {item['total_linked']} | 게시: {item['published']} ({pub_rate})\n"
+                        f"평균 수익화: {item['avg_monetization']} | 고가치: {item['high_value_count']}\n"
+                        f"Copy: {item['copy_text'][:60]}…"
+                    )
+                text = "\n".join(lines)
+                if len(text) > 4000:
+                    text = text[:4000] + "\n\n… (잘림)"
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            # /cta perf <id>
+            else:
+                copy_id, err = _parse_draft_id(args, 1)
+                if copy_id is None:
+                    await update.message.reply_text(err)
+                    return
+                perf = csvc.get_copy_perf(copy_id)
+                if not perf:
+                    await update.message.reply_text(f"❌ 카피 #{copy_id} 성과 없음")
+                    return
+                text = csvc.format_perf_detail(perf)
+                await update.message.reply_text(text, parse_mode="HTML")
             return
 
         # /cta link <draft_id> <copy_id>
