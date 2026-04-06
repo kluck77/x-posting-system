@@ -167,131 +167,132 @@ body::before{
 }
 .alert-banner.hidden{display:none}
 
-/* ===== HERO CARD — SPLIT STAGE LAYOUT ===== */
+/* ===== HERO CARD — IMMERSIVE SCENE LAYOUT ===== */
 .hero-card{
-  border:1px solid rgba(79,142,255,0.3);border-radius:22px;overflow:hidden;
-  box-shadow:0 0 120px rgba(79,142,255,0.18),0 20px 60px rgba(0,0,0,0.85),inset 0 1px 0 rgba(255,255,255,0.08);
+  /* Unified dark background — ONE scene, not two boxes */
+  background:linear-gradient(140deg,#07091a 0%,#0c1030 55%,#080c1e 100%);
+  border:1px solid rgba(79,142,255,0.28);border-radius:22px;overflow:hidden;
+  box-shadow:0 0 100px rgba(79,142,255,0.15),0 20px 60px rgba(0,0,0,0.9),
+             inset 0 1px 0 rgba(79,142,255,0.18);
   position:relative;z-index:1;
+  display:flex;flex-direction:column;
+}
+/* Subtle atmosphere inside card */
+.hero-card::before{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 70% 80% at 5% 60%,rgba(79,142,255,0.12) 0%,transparent 55%),
+    radial-gradient(ellipse 50% 50% at 90% 10%,rgba(168,85,247,0.07) 0%,transparent 50%),
+    radial-gradient(ellipse 60% 40% at 60% 100%,rgba(34,197,94,0.06) 0%,transparent 55%);
 }
 /* Bottom accent line */
 .hero-card::after{
   content:'';position:absolute;bottom:0;left:0;right:0;height:2px;z-index:10;pointer-events:none;
-  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.6) 35%,rgba(168,85,247,0.5) 65%,transparent);
+  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.55) 35%,rgba(168,85,247,0.45) 65%,transparent);
 }
 
-.hero-main{display:flex;align-items:stretch;min-height:230px;position:relative;}
+/* Hero scene — character + info in same unified space */
+.hero-main{
+  position:relative;min-height:235px;overflow:hidden;z-index:1;flex:1;
+}
 
-/* ── WHITE STAGE — left character column ── */
-.hero-portrait{
-  width:160px;flex-shrink:0;
-  position:relative;overflow:hidden;
-  /* Cool white bg — matches hero image's white background perfectly */
-  background:linear-gradient(170deg,#f0f5ff 0%,#e8f0ff 60%,#dce8ff 100%);
-}
-/* Floor glow at the bottom of the stage */
-.hero-portrait::before{
-  content:'';position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);
-  width:180px;height:60px;
-  background:radial-gradient(ellipse,rgba(79,142,255,0.35) 0%,transparent 70%);
-  z-index:3;pointer-events:none;
-  animation:portrait-glow 4s ease-in-out infinite;
-}
-/* Stage→dark transition — strong right gradient */
-.hero-portrait::after{
-  content:'';position:absolute;top:0;right:0;height:100%;width:90px;
-  background:linear-gradient(to right,transparent 0%,rgba(10,14,32,0.96) 100%);
-  z-index:3;pointer-events:none;
-}
-@keyframes portrait-glow{
-  0%,100%{opacity:0.6;transform:translateX(-50%) scaleX(0.85)}
-  50%{opacity:1;transform:translateX(-50%) scaleX(1.15)}
-}
-/* Character wrapper — animated */
+/* CHARACTER — absolute, emerges from the scene via CSS radial mask */
 .hero-emoji{
-  display:block;position:relative;z-index:1;
-  width:100%;height:100%;
+  position:absolute;left:-8px;top:0;bottom:0;width:210px;
+  z-index:2;will-change:transform;
   animation:char-live 7s ease-in-out infinite;
-  transform-origin:bottom center;will-change:transform;
+  transform-origin:bottom center;
 }
-/* Real image — multiply works perfectly on white bg (white×white=white, colors stay) */
+/* Real image with radial mask — white bg fades into dark, character emerges */
 .hero-char-img{
   display:block;width:100%;height:100%;
-  object-fit:cover;object-position:50% 5%;
-  mix-blend-mode:multiply;
-  filter:brightness(0.97) saturate(1.15) contrast(1.08);
+  object-fit:cover;object-position:50% 6%;
+  /* Radial mask: character visible at center-left, white bg edges fade to transparent */
+  -webkit-mask-image:
+    radial-gradient(ellipse 88% 82% at 44% 52%, black 22%, rgba(0,0,0,0.85) 48%, transparent 72%);
+  mask-image:
+    radial-gradient(ellipse 88% 82% at 44% 52%, black 22%, rgba(0,0,0,0.85) 48%, transparent 72%);
+  filter:brightness(1.05) saturate(1.1) contrast(1.06);
   transition:filter .6s ease;
 }
-.hero-emoji.idle .hero-char-img{filter:brightness(0.5) saturate(0.15) sepia(0.3);}
-.hero-emoji.disconnected .hero-char-img{filter:brightness(0.25) saturate(0);}
+.hero-emoji.idle .hero-char-img{
+  filter:brightness(0.45) saturate(0.1) sepia(0.3);
+}
+.hero-emoji.disconnected .hero-char-img{
+  filter:brightness(0.2) saturate(0);
+}
 .hero-emoji-fallback{
-  font-size:80px;display:flex;align-items:flex-end;justify-content:center;
-  height:100%;padding-bottom:10px;
+  font-size:88px;display:flex;align-items:flex-end;justify-content:center;
+  height:100%;padding-bottom:12px;
+  filter:drop-shadow(0 0 20px rgba(79,142,255,0.4));
 }
 @keyframes char-live{
-  0%   {transform:translateY(0) rotate(0deg) scale(1)}
-  15%  {transform:translateY(-3px) rotate(-0.4deg) scale(1.006)}
-  32%  {transform:translateY(-5px) rotate(0.35deg) scale(1.012)}
-  50%  {transform:translateY(-4px) rotate(-0.2deg) scale(1.009)}
-  68%  {transform:translateY(-2px) rotate(0.3deg) scale(1.005)}
-  85%  {transform:translateY(-4px) rotate(-0.35deg) scale(1.01)}
-  100% {transform:translateY(0) rotate(0deg) scale(1)}
+  0%   {transform:translateY(0) translateX(0) rotate(0deg)}
+  12%  {transform:translateY(-2px) translateX(0.5px) rotate(-0.3deg)}
+  28%  {transform:translateY(-4px) translateX(-0.5px) rotate(0.25deg)}
+  45%  {transform:translateY(-3px) translateX(0.3px) rotate(-0.15deg)}
+  62%  {transform:translateY(-2px) translateX(-0.3px) rotate(0.2deg)}
+  80%  {transform:translateY(-3px) translateX(0.4px) rotate(-0.25deg)}
+  100% {transform:translateY(0) translateX(0) rotate(0deg)}
+}
+@keyframes portrait-glow{
+  0%,100%{opacity:0.6}50%{opacity:1}
 }
 
-/* ── DARK PANEL — right info column ── */
+/* INFO PANEL — overlaid on right side of the unified dark scene */
 .hero-info{
-  flex:1;min-width:0;
-  background:linear-gradient(160deg,rgba(10,14,32,0.99) 0%,rgba(14,20,46,0.98) 100%);
-  padding:16px 14px 14px 12px;
-  position:relative;z-index:1;
+  position:absolute;right:0;top:0;bottom:0;width:60%;
+  /* Gradient bg: solid dark on right, fades to transparent on left (over character) */
+  background:linear-gradient(to left,
+    rgba(7,9,26,0.97) 0%,
+    rgba(7,9,26,0.93) 50%,
+    rgba(7,9,26,0.55) 75%,
+    transparent 100%
+  );
+  padding:18px 16px 14px 32px;
+  z-index:3;
   display:flex;flex-direction:column;justify-content:space-between;
-}
-/* Subtle grid texture on dark panel */
-.hero-info::before{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background:
-    radial-gradient(ellipse 100% 80% at 80% 20%,rgba(168,85,247,0.07) 0%,transparent 60%),
-    radial-gradient(ellipse 80% 60% at 20% 80%,rgba(34,197,94,0.05) 0%,transparent 60%);
 }
 .hero-badge{
   display:inline-flex;align-items:center;gap:6px;
   font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
-  color:var(--green);margin-bottom:10px;position:relative;
+  color:var(--green);margin-bottom:10px;
 }
 .hero-badge-dot{
   width:7px;height:7px;border-radius:50%;background:var(--green);
   animation:pulse-glow-green 2s ease-in-out infinite;flex-shrink:0;
 }
 .hero-headline{
-  font-size:19px;font-weight:900;margin-bottom:4px;letter-spacing:-0.6px;
-  background:linear-gradient(135deg,#ffffff 0%,#b8c8e8 100%);
+  font-size:19px;font-weight:900;margin-bottom:5px;letter-spacing:-0.5px;
+  background:linear-gradient(135deg,#ffffff 0%,#aabedd 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  line-height:1.2;position:relative;
+  line-height:1.2;
 }
-.hero-sub{font-size:11px;color:var(--txt2);line-height:1.5;margin-bottom:12px;position:relative;}
+.hero-sub{font-size:11px;color:var(--txt2);line-height:1.55;margin-bottom:12px}
 
-/* 3-stat grid */
-.hero-mini-stats{display:flex;gap:0;flex-wrap:nowrap;position:relative;margin-top:auto}
+/* 3-stat tiles */
+.hero-mini-stats{display:flex;gap:4px;flex-wrap:nowrap;margin-top:auto}
 .hero-mini-stat{
   flex:1;display:flex;flex-direction:column;align-items:center;
-  padding:6px 4px;background:rgba(255,255,255,0.04);
-  border:1px solid rgba(255,255,255,0.06);border-radius:8px;
-  margin-right:4px;
+  padding:6px 4px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:8px;
 }
-.hero-mini-stat:last-child{margin-right:0}
-.hero-mini-val{font-size:20px;font-weight:800;line-height:1;color:var(--accent)}
+.hero-mini-val{font-size:18px;font-weight:800;line-height:1;color:var(--accent)}
 .hero-mini-lbl{font-size:8px;color:var(--txt3);letter-spacing:0.8px;text-transform:uppercase;margin-top:3px}
 
-/* Worker pill strip */
+/* Team roster strip */
 .hero-workers{
   display:flex;flex-wrap:wrap;gap:4px;
-  padding:8px 14px 10px;
+  padding:7px 14px 10px;
   border-top:1px solid rgba(255,255,255,0.05);
-  position:relative;z-index:1;min-height:38px;
-  background:rgba(0,0,0,0.2);
+  position:relative;z-index:4;min-height:36px;
+  background:rgba(0,0,0,0.25);
 }
 .worker-pill{
   display:inline-flex;align-items:center;gap:4px;
-  padding:3px 8px 3px 5px;border-radius:20px;
+  padding:2px 8px 2px 5px;border-radius:20px;
   font-size:10px;font-weight:600;border:1px solid;
   animation:worker-pill-in .35s ease both;
 }
@@ -347,72 +348,76 @@ body::before{
 .badge-medium{background:rgba(245,158,11,0.12);color:var(--amber)}
 .badge-high{background:rgba(239,68,68,0.12);color:var(--red)}
 
-/* ===== AI WORKSTATION CARDS — STANDALONE PROFILE CARDS ===== */
+/* ===== AI WORKSTATION CARDS ===== */
 .worker-card{
   display:flex;align-items:stretch;
-  border-radius:18px;overflow:hidden;
-  border:1px solid rgba(255,255,255,0.09);
-  box-shadow:0 6px 32px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.07);
-  background:rgba(12,16,30,0.95);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  position:relative;min-height:110px;
-  /* Color comes from currentColor via JS style */
+  border-radius:16px;overflow:hidden;
+  border:1px solid rgba(255,255,255,0.08);
+  /* Role-color atmosphere: gradient from currentColor side */
+  background:linear-gradient(105deg,rgba(0,0,0,0) 0%,rgba(12,15,28,0.96) 35%,rgba(10,13,24,0.98) 100%);
+  position:relative;min-height:108px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.06);
 }
-/* Left accent bar */
+/* Role-color left atmosphere — bleeds from portrait into card */
+.worker-card::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:130px;pointer-events:none;z-index:0;
+  background:linear-gradient(to right,currentColor,transparent);
+  opacity:0.07;
+}
+/* Left role-color accent line */
 .worker-card::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:currentColor;z-index:4;
+  background:currentColor;opacity:0.75;z-index:4;
 }
-/* Subtle inner glow from role color */
-.worker-card::after{
-  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
-  background:radial-gradient(ellipse 60% 80% at 15% 50%,currentColor 0%,transparent 60%);
-  opacity:0.06;
-}
-/* Portrait column */
+/* Portrait area — seamlessly part of the card scene */
 .worker-portrait{
-  width:100px;flex-shrink:0;
-  display:flex;align-items:stretch;justify-content:center;
+  width:96px;flex-shrink:0;
   position:relative;overflow:hidden;
-  background:#090c18;
+  background:#070914;z-index:1;
 }
-/* Right fade: portrait → dark card body */
+/* Right fade: wide, soft — portrait bleeds into card info area */
 .worker-portrait::after{
-  content:'';position:absolute;top:0;right:0;width:36px;height:100%;
-  background:linear-gradient(to right,transparent,rgba(12,16,30,0.98));
-  z-index:2;pointer-events:none;
+  content:'';position:absolute;top:0;right:0;width:52px;height:100%;
+  background:linear-gradient(to right,transparent,rgba(10,13,24,0.97));
+  z-index:3;pointer-events:none;
 }
-/* Bottom glow */
+/* Bottom scene darkening */
 .worker-portrait::before{
-  content:'';position:absolute;bottom:0;left:0;right:0;height:40px;
-  background:linear-gradient(to top,rgba(9,12,24,0.8),transparent);
-  z-index:2;pointer-events:none;
+  content:'';position:absolute;bottom:0;left:0;right:0;height:36px;
+  background:linear-gradient(to top,rgba(7,9,20,0.85),transparent);
+  z-index:3;pointer-events:none;
 }
-/* Real character image */
+/* Character portrait image */
 .worker-char-img{
   width:100%;height:100%;
-  object-fit:cover;object-position:50% 8%;
+  object-fit:cover;object-position:50% 10%;
   position:relative;z-index:1;display:block;
+  /* Right-fade mask — character flows into card, no hard edge */
+  -webkit-mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
+  mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
 }
-/* Fallback avatar */
+/* Fallback emoji avatar */
 .worker-avatar{
-  width:56px;height:56px;border-radius:14px;
+  width:54px;height:54px;border-radius:13px;
   display:flex;align-items:center;justify-content:center;
-  font-size:28px;flex-shrink:0;border:1.5px solid;
-  position:relative;z-index:1;margin:auto;
+  font-size:27px;border:1.5px solid;
+  position:relative;z-index:2;margin:auto;
 }
 /* Info section */
-.worker-info{flex:1;min-width:0;padding:14px 10px 14px 14px;position:relative;z-index:1}
-.worker-role{font-size:15px;font-weight:800;letter-spacing:-0.3px;margin-bottom:3px}
-.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:6px;display:flex;align-items:center;gap:6px}
-.worker-tagline{font-size:10.5px;color:var(--txt3);line-height:1.5}
-/* Right stat */
-.worker-right{
-  flex-shrink:0;padding:14px 16px 14px 0;
-  display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
-  position:relative;z-index:1;
+.worker-info{flex:1;min-width:0;padding:13px 10px 13px 12px;position:relative;z-index:2}
+.worker-role{
+  font-size:14.5px;font-weight:800;letter-spacing:-0.3px;margin-bottom:2px;
+  text-shadow:0 0 20px currentColor;
 }
-.worker-count{font-size:32px;font-weight:900;line-height:1}
+.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:5px;display:flex;align-items:center;gap:5px}
+.worker-tagline{font-size:10px;color:var(--txt3);line-height:1.55}
+/* Right stat column */
+.worker-right{
+  flex-shrink:0;padding:13px 15px 13px 0;
+  display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
+  position:relative;z-index:2;min-width:52px;
+}
+.worker-count{font-size:30px;font-weight:900;line-height:1}
 .worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;display:flex;align-items:center;gap:3px}
 .worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);flex-shrink:0}
 .worker-status-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
@@ -516,7 +521,12 @@ body::before{
   content:'▸';color:var(--accent);flex-shrink:0;font-size:11px;margin-top:2px;opacity:0.75;
 }
 .news-item:last-child{border-bottom:none}
-.empty-state{font-size:13px;color:var(--txt3);padding:10px 0;text-align:center;opacity:0.7}
+.empty-state{
+  font-size:12.5px;color:var(--txt3);padding:16px 0;text-align:center;
+  letter-spacing:0.2px;
+}
+.empty-state::before{content:'—  ';opacity:0.4}
+.empty-state::after{content:'  —';opacity:0.4}
 
 .pipeline-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
 .pipeline{display:flex;align-items:center;min-width:max-content;padding:6px 0}
@@ -639,24 +649,25 @@ body::before{
   <div class="page active" id="page-home">
     <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
     <div class="hero-card">
+      <!-- Unified dark scene: character + info share same space -->
       <div class="hero-main">
-        <!-- Character portrait stage — white-stage layout -->
-        <div class="hero-portrait">
-          <div class="hero-emoji" id="mascot-emoji">
-            <img class="hero-char-img" id="hero-char-img"
-                 src="/static/hero_blonde_assistant.png"
-                 alt=""
-                 onerror="this.outerHTML='<div class=\'hero-emoji-fallback\'>👩‍💻</div>'">
-          </div>
+        <!-- Character: absolute, masked, emerges from dark bg -->
+        <div class="hero-emoji" id="mascot-emoji">
+          <img class="hero-char-img" id="hero-char-img"
+               src="/static/hero_blonde_assistant.png"
+               alt=""
+               onerror="this.outerHTML='<div class=\'hero-emoji-fallback\'>👩‍💻</div>'">
         </div>
-        <!-- System info -->
+        <!-- Info panel: right-side overlay within the same scene -->
         <div class="hero-info">
-          <div class="hero-badge" id="mascot-live">
-            <span class="hero-badge-dot" id="hero-badge-dot"></span>
-            <span id="hero-badge-txt">LIVE</span>
+          <div>
+            <div class="hero-badge" id="mascot-live">
+              <span class="hero-badge-dot" id="hero-badge-dot"></span>
+              <span id="hero-badge-txt">LIVE</span>
+            </div>
+            <div class="hero-headline" id="mascot-headline">시스템 정상 운영 중</div>
+            <div class="hero-sub" id="mascot-sub">데이터 로딩 중…</div>
           </div>
-          <div class="hero-headline" id="mascot-headline">시스템 정상 운영 중</div>
-          <div class="hero-sub" id="mascot-sub">데이터 로딩 중…</div>
           <div class="hero-mini-stats">
             <div class="hero-mini-stat">
               <div class="hero-mini-val" id="qs-queue">—</div>
@@ -673,6 +684,7 @@ body::before{
           </div>
         </div>
       </div>
+      <!-- Team roster -->
       <div class="hero-workers" id="hero-workers"></div>
     </div>
     <div class="card">
@@ -701,7 +713,10 @@ body::before{
 
   <!-- TAB 3: INTAKE -->
   <div class="page" id="page-intake">
-    <div class="page-title">📰 인풋 &amp; 플로우</div>
+    <div class="ai-tab-header">
+      <span class="ai-tab-title">인풋 &amp; 플로우</span>
+      <span class="ai-tab-sub">뉴스 수집 · 초안 흐름</span>
+    </div>
     <div class="card">
       <div class="card-title">Naver API</div>
       <div class="naver-status-strip idle" id="naver-status-strip">● 연결 대기 중</div>
@@ -747,7 +762,10 @@ body::before{
 
   <!-- TAB 4: OPS -->
   <div class="page" id="page-ops">
-    <div class="page-title">⚙️ 운영 현황</div>
+    <div class="ai-tab-header">
+      <span class="ai-tab-title">운영 현황</span>
+      <span class="ai-tab-sub">큐 · 모니터 · 활동</span>
+    </div>
     <div class="card">
       <div class="card-title-row">
         <span class="card-title">Queue</span>
@@ -875,7 +893,7 @@ const WORKER_META = {
   DraftWriter: {img:'draftwriter.png',     emoji:'✍️',color:'#19c37d',glow:'rgba(25,195,125,0.18)', tagline:'초안 작성 · 5-criteria 자가검증',           anim:'role-draft'},
   Reviewer:    {img:'reviewer.png',        emoji:'🔍',color:'#cc785c',glow:'rgba(204,120,92,0.18)', tagline:'품질 검토 · PASS/WEAK/FAIL 최종 판정',       anim:'role-review'},
   Researcher:  {img:'researcher.png',      emoji:'🦊',color:'#4f8eff',glow:'rgba(79,142,255,0.18)',tagline:'맥락 리서치 · 해석 갭 발굴',                  anim:'role-research'},
-  FactChecker: {img:'',                    emoji:'🧩',color:'#a855f7',glow:'rgba(168,85,247,0.18)',tagline:'팩트체크 · 글로벌 관련성 평가',                anim:'role-fact'},
+  FactChecker: {img:'factchecker.png',     emoji:'🧩',color:'#a855f7',glow:'rgba(168,85,247,0.18)',tagline:'팩트체크 · 글로벌 관련성 평가',                anim:'role-fact'},
   TrendHunter: {img:'trendhunter_black.png',emoji:'📡',color:'#22d3ee',glow:'rgba(34,211,238,0.18)',tagline:'트렌드 탐지 · 시장성 필터링',                 anim:'role-trend'},
 };
 
@@ -984,31 +1002,35 @@ function renderAI() {
   document.getElementById('provider-list').innerHTML = (p.roles || []).map((r, idx) => {
     const m = WORKER_META[r.role] || {img:'',emoji:'🤖',color:'var(--txt2)',glow:'rgba(123,130,153,0.12)',tagline:'',anim:''};
     const cfgBadge = r.configured
-      ? `<span style="color:var(--green)">● 연결됨</span>`
-      : `<span style="color:var(--red)">● 미설정</span>`;
-    const cnt = r.runs_today ?? '—';
-    const isActive = cnt !== '—' && cnt > 0;
-    const noteHtml = r.note ? `<div style="font-size:11px;color:var(--txt3);margin-top:4px;line-height:1.4">${esc(r.note)}</div>` : '';
-    // Role-specific portrait animation class
-    const animCls = m.anim ? `${m.anim}` : '';
-    // Portrait: real image with clean emoji fallback
+      ? `<span style="color:var(--green);font-size:10px">● 연결됨</span>`
+      : `<span style="color:var(--red);font-size:10px">● 미설정</span>`;
+    const cnt = r.runs_today ?? 0;
+    const isActive = typeof cnt === 'number' && cnt > 0;
+    const cntDisplay = cnt === 0 ? '0' : cnt;
+    const noteHtml = r.note ? `<div style="font-size:10px;color:var(--txt3);margin-top:4px;line-height:1.4;opacity:0.8">${esc(r.note)}</div>` : '';
+    const animCls = m.anim || '';
+    // Portrait — real image; alt="" prevents filename text; onerror shows emoji
     const fallbackStyle = `background:${m.glow};border-color:${m.color}55`;
     const portraitHtml = m.img
       ? `<img class="worker-char-img" src="/static/${m.img}" alt=""
-              onerror="this.outerHTML='<div class=\\'worker-avatar\\'style=\\'${fallbackStyle}\\'>${m.emoji}</div>'">`
-      : `<div class="worker-avatar" style="${fallbackStyle};box-shadow:0 0 18px ${m.color}22">${m.emoji}</div>`;
-    return `<div class="worker-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.06}s">
+              onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\\'worker-avatar\\'style=\\'${fallbackStyle};box-shadow:0 0 16px ${m.color}18\\'>${m.emoji}</div>'">`
+      : `<div class="worker-avatar" style="${fallbackStyle};box-shadow:0 0 16px ${m.color}18">${m.emoji}</div>`;
+    // Active state: highlight count and status
+    const countStyle = isActive
+      ? `color:${m.color};text-shadow:0 0 20px ${m.color}60`
+      : `color:var(--txt3)`;
+    return `<div class="worker-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.07}s">
       <div class="worker-portrait">
         ${portraitHtml}
       </div>
       <div class="worker-info">
         <div class="worker-role" style="color:${m.color}">${esc(r.role)}</div>
-        <div class="worker-provider">${esc(r.provider)} ${cfgBadge}</div>
+        <div class="worker-provider">${esc(r.provider)}&nbsp;${cfgBadge}</div>
         <div class="worker-tagline">${esc(m.tagline)}</div>
         ${noteHtml}
       </div>
       <div class="worker-right">
-        <div class="worker-count" style="color:${m.color}">${cnt}</div>
+        <div class="worker-count" style="${countStyle}">${cntDisplay}</div>
         <div class="worker-count-lbl">
           <span class="worker-status-dot${isActive?' active':''}"></span>
           ${isActive?'실행중':'대기'}
@@ -1171,6 +1193,7 @@ const UPLOAD_SLOTS = [
   {file:'draftwriter.png',           label:'DraftWriter',                  icon:'✍️'},
   {file:'reviewer.png',              label:'Reviewer',                     icon:'🔍'},
   {file:'researcher.png',            label:'Researcher',                   icon:'🦊'},
+  {file:'factchecker.png',           label:'FactChecker',                  icon:'🧩'},
   {file:'trendhunter_black.png',     label:'TrendHunter',                  icon:'📡'},
 ];
 
