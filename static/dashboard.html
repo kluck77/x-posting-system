@@ -592,6 +592,27 @@ body::before{
 
 .page-title{font-size:22px;font-weight:700;padding:4px 0 4px}
 
+/* ===== UPLOAD SLOTS ===== */
+.upload-slot{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:10px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+  cursor:pointer;transition:background .2s;
+}
+.upload-slot:active{background:rgba(79,142,255,0.08)}
+.upload-slot-icon{font-size:22px;flex-shrink:0;width:36px;text-align:center}
+.upload-slot-info{flex:1;min-width:0}
+.upload-slot-name{font-size:12.5px;font-weight:600;color:var(--txt)}
+.upload-slot-status{font-size:11px;margin-top:1px}
+.upload-slot-status.ok{color:var(--green)}
+.upload-slot-status.missing{color:var(--txt3)}
+.upload-slot-status.uploading{color:var(--accent)}
+.upload-slot-status.error{color:var(--red)}
+.upload-slot-btn{
+  font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+  background:rgba(79,142,255,0.08);color:var(--accent);cursor:pointer;white-space:nowrap;
+}
+
 @media(min-width:640px){
   .tab-bar-inner,.header-inner{max-width:640px;margin:0 auto}
   .page{max-width:640px;left:50%;right:auto;width:640px;transform:translateX(-50%)}
@@ -744,6 +765,13 @@ body::before{
     <div class="card">
       <div class="card-title">Activity</div>
       <div id="activity-rows"></div>
+    </div>
+    <div class="card">
+      <div class="card-title-row">
+        <span class="card-title">캐릭터 이미지 업로드</span>
+        <span id="upload-status" style="font-size:11px;color:var(--txt3)"></span>
+      </div>
+      <div id="upload-slots" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
   </div>
 
@@ -1135,6 +1163,86 @@ function renderOps() {
       <span class="ops-val" style="font-size:13px">${kstFmt(lastPub)}</span>
     </div>`;
 }
+
+// ── Asset upload UI ────────────────────────────────────────────────────────
+const UPLOAD_SLOTS = [
+  {file:'hero_blonde_assistant.png', label:'홈 히어로 — 금발 어시스턴트', icon:'👩‍💻'},
+  {file:'draftwriter.png',           label:'DraftWriter',                  icon:'✍️'},
+  {file:'reviewer.png',              label:'Reviewer',                     icon:'🔍'},
+  {file:'researcher.png',            label:'Researcher',                   icon:'🦊'},
+  {file:'trendhunter_black.png',     label:'TrendHunter',                  icon:'📡'},
+];
+
+function renderUploadSlots() {
+  const wrap = document.getElementById('upload-slots');
+  if (!wrap) return;
+  wrap.innerHTML = UPLOAD_SLOTS.map(s => {
+    const img = new Image();
+    img.src = '/static/' + s.file + '?t=' + Date.now();
+    img.onload  = () => _setSlotStatus(s.file, 'ok',      '✓ 업로드됨');
+    img.onerror = () => _setSlotStatus(s.file, 'missing', '미업로드');
+    const safeId = s.file.replace(/\./g, '_');
+    return `<div class="upload-slot" onclick="triggerUpload('${s.file}')">
+      <div class="upload-slot-icon">${s.icon}</div>
+      <div class="upload-slot-info">
+        <div class="upload-slot-name">${s.label}</div>
+        <div class="upload-slot-status missing" id="ustat_${safeId}">확인 중…</div>
+      </div>
+      <div class="upload-slot-btn">업로드</div>
+      <input type="file" accept="image/png,image/jpeg,image/webp"
+             id="uinput_${safeId}" style="display:none"
+             onchange="doUpload(this,'${s.file}')">
+    </div>`;
+  }).join('');
+}
+
+function _setSlotStatus(filename, cls, msg) {
+  const el = document.getElementById('ustat_' + filename.replace(/\./g,'_'));
+  if (!el) return;
+  el.className = 'upload-slot-status ' + cls;
+  el.textContent = msg;
+}
+
+function triggerUpload(filename) {
+  document.getElementById('uinput_' + filename.replace(/\./g,'_')).click();
+}
+
+async function doUpload(input, targetFilename) {
+  const file = input.files[0];
+  if (!file) return;
+  _setSlotStatus(targetFilename, 'uploading', '업로드 중…');
+  const fd = new FormData();
+  // rename the file to the expected target filename before sending
+  const renamed = new File([file], targetFilename, {type: file.type});
+  fd.append('file', renamed);
+  try {
+    const res = await fetch('/control/upload-asset', {method:'POST', body:fd});
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      _setSlotStatus(targetFilename, 'ok', `✓ 완료 (${(data.size/1024).toFixed(0)}KB)`);
+      document.getElementById('upload-status').textContent = `마지막 업로드: ${targetFilename}`;
+      // Reload the image in hero/AI cards
+      if (targetFilename === 'hero_blonde_assistant.png') {
+        const img = document.getElementById('hero-char-img');
+        if (img) img.src = '/static/' + targetFilename + '?t=' + Date.now();
+      }
+      // Reload AI worker images
+      document.querySelectorAll('.worker-char-img').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        if (src.includes(targetFilename.replace('?t=','').split('?')[0]))
+          img.src = '/static/' + targetFilename + '?t=' + Date.now();
+      });
+      renderAI(); // re-render AI cards with fresh image
+    } else {
+      _setSlotStatus(targetFilename, 'error', data.detail || '업로드 실패');
+    }
+  } catch(e) {
+    _setSlotStatus(targetFilename, 'error', '네트워크 오류');
+  }
+  input.value = '';
+}
+
+renderUploadSlots();
 
 loadAll();
 setInterval(loadAll, 30000);

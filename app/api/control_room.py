@@ -10,7 +10,9 @@ import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter
+from pathlib import Path
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings
@@ -27,11 +29,43 @@ router = APIRouter(prefix="/control", tags=["control-room"])
 @router.get("/", include_in_schema=False)
 async def dashboard_page():
     """Control Room HTML 대시보드를 반환합니다."""
-    from pathlib import Path
     html_path = Path("static/dashboard.html")
     if not html_path.exists():
         return {"error": "대시보드 파일이 없습니다. static/dashboard.html 을 확인하세요."}
     return FileResponse(html_path, media_type="text/html")
+
+
+# ── 에셋 업로드 (캐릭터 이미지) ────────────────────────────────────────────────
+
+_ALLOWED_ASSETS = {
+    "hero_blonde_assistant.png",
+    "draftwriter.png",
+    "reviewer.png",
+    "researcher.png",
+    "factchecker.png",
+    "trendhunter_black.png",
+}
+
+@router.post("/upload-asset", include_in_schema=False)
+async def upload_asset(file: UploadFile = File(...)):
+    """
+    대시보드 캐릭터 이미지 업로드.
+    허용된 파일명만 수락합니다 (화이트리스트).
+    """
+    if file.filename not in _ALLOWED_ASSETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"허용되지 않은 파일명입니다. 허용 목록: {sorted(_ALLOWED_ASSETS)}",
+        )
+    static_dir = Path("static")
+    static_dir.mkdir(exist_ok=True)
+    dest = static_dir / file.filename
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB 제한
+        raise HTTPException(status_code=400, detail="파일 크기가 10MB를 초과합니다.")
+    dest.write_bytes(content)
+    logger.info("asset uploaded: %s (%d bytes)", file.filename, len(content))
+    return {"ok": True, "filename": file.filename, "size": len(content)}
 
 
 # ── 시스템 상태 스냅샷 ────────────────────────────────────────────────────────

@@ -38,3 +38,4 @@ apscheduler>=3.10.0
 
 # Utilities
 python-dateutil>=2.9.0
+python-multipart>=0.0.9
