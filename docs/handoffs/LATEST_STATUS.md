@@ -1,7 +1,7 @@
 # Latest Status
 
 ## Current Phase
-Phase 18 Mobile Control Room Bundle complete. Mobile-first 4-tab dashboard (Status/AI/Intake/Ops) built for iPhone 17 Pro Max Safari. Control room available at `http://localhost:8000/control/`. 573 tests passing.
+Phase 18 complete (Mobile Control Room + Telegram Quick Menu). 4-tab mobile dashboard at `http://localhost:8000/control/`. `/menu` command added with 5 quick-action inline buttons. 579 tests passing.
 
 ---
 
@@ -36,6 +36,7 @@ Phase 18 Mobile Control Room Bundle complete. Mobile-first 4-tab dashboard (Stat
 | Phase 17 release gate bundle (go_live_checklist.md, pre_run_guide.md, release_readiness.md, README links fixed) | Locked |
 | Phase 17 Control Room Bundle (naver_usage.py, control_room.py, dashboard.html, test_control_room.py, docs/control_room.md) | Locked |
 | Phase 18 Mobile Control Room Bundle (mobile-first 4-tab dashboard rewrite, /control/recent-news endpoint) | Locked |
+| Phase 18 Telegram Quick Menu (/menu command, _handle_quick_callback, 5 quick-action buttons, 6 critical tests) | Locked |
 
 ---
 
@@ -51,14 +52,15 @@ Phase 18 Mobile Control Room Bundle complete. Mobile-first 4-tab dashboard (Stat
 
 ## Next Candidates
 
-**System is operator-ready.** 573 tests passing, 17 critical flows protected, go-live docs in place.
-Control Room dashboard available at `http://localhost:8000/control/` — mobile-first, 4-tab, Safari-optimized.
+**System is operator-ready.** 579 tests passing, 23 critical flows protected, go-live docs in place.
+Control Room dashboard: `http://localhost:8000/control/` — mobile-first, 4-tab, Safari-optimized.
+Telegram quick menu: `/menu` → 5 inline buttons (초안/큐/상태/모니터/복구).
 No open feature gaps. Next actions are entirely operator-driven.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 10 — Phase 18 Mobile Control Room Bundle)
+- Date: 2026-04-06 (session 11 — Phase 18 Telegram Quick Menu)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`

@@ -4,53 +4,45 @@
 
 - Date: 2026-04-06
 - Branch: claude/extract-prediction-time-n82UK
-- Phase: Phase 18 — Mobile Control Room Bundle
+- Phase: Phase 18 — Telegram Quick Menu
 
 ---
 
 ## What This Session Did
 
-Complete mobile-first rewrite of the Control Room dashboard. The existing desktop-grid dashboard
-was replaced with a 4-tab iOS-style control room optimized for iPhone 17 Pro Max Safari.
-One new backend endpoint added. 7 new tests added. 573 tests passing.
+Added `/menu` command to Telegram bot — 5 inline quick-action buttons that let the operator
+trigger the most common commands without typing. Builds on Phase 18 Mobile Control Room.
 
 ---
 
 ## Bundle Items Implemented
 
-### 1. `static/dashboard.html` — Complete mobile-first rewrite (639 lines)
+### `app/telegram_bot.py` — 4 changes
 
-4-tab iOS-style navigation:
-- **Tab 1 — Status 🏠**: Alert banner, mascot greeting, quick-stats row (queue/monitor/naver%), system health dots, daily quota gauges, recent activity timeline
-- **Tab 2 — AI 🤖**: 5 provider cards with emoji avatars + colored glow borders, counts, configured status
-- **Tab 3 — Intake 📰**: Naver big-number gauge, recent news buffer, pipeline flow visualization (Source→Research→Draft→Review→Approval), recent drafts list
-- **Tab 4 — Ops ⚙️**: Queue preview, reply monitor, news monitor stats, activity/idle card
+**1. `menu_command` (신규 함수)**
+- `/menu` 입력 시 InlineKeyboard 5버튼 메시지 전송
+- 버튼: ✍️초안 만들기 / 📋큐 보기 / 📊오늘 상태 / 👀모니터 상태 / 🛟복구 체크
 
-Safari-specific:
-- `viewport-fit=cover` for Dynamic Island
-- `env(safe-area-inset-top/bottom)` for notch + home indicator
-- `-webkit-fill-available` body height fallback
-- `-webkit-overflow-scrolling: touch` on scroll areas
-- `backdrop-filter: blur()` for translucent header/tab bar
-- Large tap targets (56px+ tab bar buttons)
+**2. `_handle_quick_callback` (신규 헬퍼)**
+- `quick_*` callback_data 처리
+- 기존 커맨드 핸들러(`queue_command`, `status_command`, `monitor_command`, `recover_command`) 재사용
+- `_U` 래퍼: `query.message`를 `update.message`로 전달 (기존 핸들러 무수정)
+- `quick_draft`는 URL/텍스트 입력 안내 메시지 전송
 
-Design:
-- bg `#0b0d14`, surface `#141720`, accent `#4f8eff`
-- Provider colors: OpenAI green, Claude orange, Gemini blue, Perplexity purple, Grok cyan
-- All API field names verified against actual endpoint responses
-- 30-second auto-refresh
+**3. `callback_handler` 라우팅 추가**
+- `if callback_data.startswith("quick_"): await _handle_quick_callback(query, context); return`
 
-### 2. `app/api/control_room.py` — New `/control/recent-news` endpoint
+**4. `CommandHandler("menu", menu_command)` 등록**
 
-Returns recent article titles from `news_monitor._pending_articles` and `overnight_buffer`.
-Handles both dict and object article formats. Empty list on failure (graceful degradation).
+### `tests/test_critical_flows.py` — `TestTelegramQuickMenu` 클래스 추가
 
-### 3. `tests/test_control_room.py` — 7 new tests
-
-- `TestDashboardPage`: 2 new tests (mobile viewport meta tags, recent-news endpoint reference)
-- `TestRecentNews`: 5 tests (200 response, list type, limit param, title field schema, graceful empty)
-
-Total: 37 control room tests. Full suite: 573 passed.
+6개 `@pytest.mark.critical` 테스트 (텍스트 분석 방식 — telegram 라이브러리 임포트 없음):
+- `menu_command` 함수 정의 확인
+- `CommandHandler("menu")` 등록 확인
+- `quick_draft/queue/status/monitor/recover` 5개 callback_data 존재 확인
+- `quick_` 라우팅이 callback_handler에 있는지 확인
+- `_handle_quick_callback`이 기존 커맨드 재사용하는지 확인
+- 5개 버튼 텍스트 존재 확인
 
 ---
 
@@ -58,42 +50,42 @@ Total: 37 control room tests. Full suite: 573 passed.
 
 | File | Change |
 |------|--------|
-| `static/dashboard.html` | Complete rewrite — mobile-first 4-tab dashboard (639 lines) |
-| `app/api/control_room.py` | New `GET /control/recent-news` endpoint (~30 lines) |
-| `tests/test_control_room.py` | 7 new tests for mobile meta + recent-news endpoint |
-| `docs/handoffs/LATEST_STATUS.md` | Phase 17 Control Room + Phase 18 added, test count updated |
-| `docs/handoffs/CURRENT_SESSION.md` | This file |
-
----
-
-## API Field Names Verified
-
-The JS in dashboard.html uses exact field names from the API:
-- `status.queue.pending_count` (not `pending`)
-- `status.monitor.reply_monitor_paused` (not `is_paused`)
-- `status.activity.hours_idle` (not `idle_hours`)
-- `status.health.telegram_configured` (not `telegram_ok`)
-- `status.usage.drafts.{used,limit}` (nested object)
+| `app/telegram_bot.py` | `menu_command` + `_handle_quick_callback` + 라우팅 + 핸들러 등록 |
+| `tests/test_critical_flows.py` | `TestTelegramQuickMenu` — 6개 critical 테스트 추가 |
+| `docs/handoffs/LATEST_STATUS.md` | 상태 업데이트 |
+| `docs/handoffs/CURRENT_SESSION.md` | 이 파일 |
 
 ---
 
 ## Tests Run
 
 ```
-pytest tests/test_control_room.py -q --tb=short
-37 passed, 4 warnings
+pytest tests/test_critical_flows.py -q --tb=short
+23 passed, 2 warnings
 
 pytest tests/ -q --tb=short
-573 passed, 4 warnings
+579 passed, 4 warnings
 ```
 
 ---
 
-## Architecture Preserved
+## Architecture Notes
 
-- Layer 1 (approval flow) unchanged
-- No auto-posting added
-- Dashboard is read-only observability layer
-- All endpoint helpers wrapped in try/except
-- Naver quota: in-memory counter (추정치 — resets on restart, noted in UI)
-- Grok visibility: shown in AI tab with "수동 실행 (/trends 명령으로만)" honest note
+- 기존 커맨드 핸들러 무수정 (locked areas 보존)
+- `_U` 래퍼는 `query.message`를 `update.message`로 전달하는 최소 객체
+- `monitor_command`는 `context.args`가 None일 때 이미 "status"로 기본 처리됨 — 별도 패치 불필요
+- Layer 1 승인 플로우 미변경
+- 자동 포스팅 없음
+
+---
+
+## Cumulative Phase 18 Summary
+
+Phase 18은 두 커밋으로 완료:
+
+| 커밋 | 내용 |
+|------|------|
+| `36b3b3b` | Mobile 4-tab dashboard + /control/recent-news |
+| `dba4204` | Telegram /menu quick-action buttons |
+
+전체: 579 tests passing, 23 critical flows.
