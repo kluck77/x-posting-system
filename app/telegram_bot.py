@@ -838,6 +838,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/hints — 활성 힌트 목록 조회\n"
         "/perf &lt;id&gt; &lt;메모&gt; — 게시 후 성과 메모 기록\n"
         "/perf — 최근 성과 메모 목록\n"
+        "/biz — 비즈니스 분류 요약 (premium/b2b/newsletter 후보)\n"
         "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
         "/recover — 영속 상태 파일 자가 진단\n"
         "/pending — 대기 초안\n"
@@ -1738,6 +1739,80 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def biz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /biz [summary|premium|b2b|newsletter] — 비즈니스 분류 요약/후보 조회.
+    인수 없으면 7일 요약 표시.
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    db = get_db()
+    try:
+        from app.services.draft_service import DraftService
+        svc = DraftService(db)
+
+        if subcmd == "summary":
+            text = svc.format_business_summary(days=7)
+            await update.message.reply_text(text, parse_mode=None)
+
+        elif subcmd == "premium":
+            drafts = svc.get_premium_candidates(limit=5)
+            if not drafts:
+                await update.message.reply_text("⭐ 프리미엄 후보 없음")
+                return
+            lines = ["⭐ <b>프리미엄 브리프 후보</b>\n"]
+            for d in drafts:
+                score = d.monetization_score or 0
+                reason = (d.premium_reason or "—")[:80]
+                lines.append(
+                    f"• ID {d.id} [{d.category.value}] 💰{score}\n"
+                    f"  {(d.hook or '')[:50]}…\n"
+                    f"  └ {reason}"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        elif subcmd == "b2b":
+            drafts = svc.get_b2b_candidates(limit=5)
+            if not drafts:
+                await update.message.reply_text("🏢 B2B 후보 없음")
+                return
+            lines = ["🏢 <b>B2B 리서치 후보</b>\n"]
+            for d in drafts:
+                aud = d.b2b_target_audience or "—"
+                use = d.b2b_use_case or "—"
+                lines.append(
+                    f"• ID {d.id} [{d.category.value}] 🎯{aud}/{use}\n"
+                    f"  {(d.hook or '')[:50]}…"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        elif subcmd == "newsletter":
+            drafts = svc.get_newsletter_candidates(limit=5)
+            if not drafts:
+                await update.message.reply_text("📧 뉴스레터 후보 없음")
+                return
+            lines = ["📧 <b>뉴스레터 후보</b>\n"]
+            for d in drafts:
+                cta = d.cta_type or "—"
+                lines.append(
+                    f"• ID {d.id} [{d.category.value}] 📢{cta}\n"
+                    f"  {(d.hook or '')[:50]}…"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        else:
+            await update.message.reply_text(
+                "사용법: <code>/biz [summary|premium|b2b|newsletter]</code>",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/biz 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 비즈니스 조회 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/note <draft_id> <메모> — 초안에 수동 메모 저장 (최대 500자)."""
     args = context.args or []
@@ -1931,6 +2006,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("hint", hint_command))
     app.add_handler(CommandHandler("hints", hints_command))
     app.add_handler(CommandHandler("perf", perf_command))
+    app.add_handler(CommandHandler("biz", biz_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))

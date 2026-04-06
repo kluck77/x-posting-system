@@ -518,3 +518,132 @@ class DraftService:
                 lines.append("→ 줄일 후보: " + ", ".join(decrease[:3]))
 
         return "\n".join(lines)
+
+    # ── Phase 5: 비즈니스 분류 조회 ────────────────────────────────────────
+
+    def get_premium_candidates(self, limit: int = 20) -> list[Draft]:
+        """프리미엄 브리프 후보 드래프트 조회 (monetization_score 내림차순)."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(
+                    Draft.business_tags.isnot(None),
+                    Draft.business_tags.contains("premium_candidate"),
+                )
+                .order_by(Draft.monetization_score.desc().nullslast())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessQuery] premium_candidates 조회 실패: {e}")
+            return []
+
+    def get_b2b_candidates(self, limit: int = 20) -> list[Draft]:
+        """B2B 리서치 후보 드래프트 조회."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(Draft.b2b_candidate == True)
+                .order_by(Draft.monetization_score.desc().nullslast())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessQuery] b2b_candidates 조회 실패: {e}")
+            return []
+
+    def get_newsletter_candidates(self, limit: int = 20) -> list[Draft]:
+        """뉴스레터 푸시 후보 드래프트 조회."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(
+                    Draft.business_tags.isnot(None),
+                    Draft.business_tags.contains("newsletter"),
+                    Draft.approval_status.in_([
+                        ApprovalStatus.PUBLISHED,
+                        ApprovalStatus.APPROVED,
+                        ApprovalStatus.PENDING,
+                    ]),
+                )
+                .order_by(Draft.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessQuery] newsletter_candidates 조회 실패: {e}")
+            return []
+
+    def format_business_summary(self, days: int = 7) -> str:
+        """
+        최근 N일간 비즈니스 분류 요약 리포트.
+        텔레그램 /report 등에서 사용.
+        """
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.created_at >= cutoff,
+                    Draft.business_tags.isnot(None),
+                )
+                .all()
+            )
+
+            if not drafts:
+                return f"📊 비즈니스 분류 요약 ({days}일): 데이터 없음"
+
+            # 태그 카운트
+            tag_counter: Counter = Counter()
+            cta_counter: Counter = Counter()
+            asset_counter: Counter = Counter()
+            total_score = 0
+            premium_count = 0
+            b2b_count = 0
+
+            for d in drafts:
+                try:
+                    tags = json.loads(d.business_tags)
+                    for t in tags:
+                        tag_counter[t] += 1
+                except Exception:
+                    pass
+                if d.cta_type:
+                    cta_counter[d.cta_type] += 1
+                if d.asset_goal:
+                    asset_counter[d.asset_goal] += 1
+                if d.monetization_score:
+                    total_score += d.monetization_score
+                if d.business_tags and "premium_candidate" in d.business_tags:
+                    premium_count += 1
+                if d.b2b_candidate:
+                    b2b_count += 1
+
+            avg_score = total_score // len(drafts) if drafts else 0
+
+            lines = [
+                f"📊 비즈니스 분류 요약 ({days}일, {len(drafts)}건)",
+                f"",
+                f"💰 평균 수익화 점수: {avg_score}/100",
+                f"⭐ 프리미엄 후보: {premium_count}건",
+                f"🏢 B2B 후보: {b2b_count}건",
+                f"",
+                f"🏷 비즈니스 태그:",
+            ]
+            for tag, count in tag_counter.most_common(8):
+                lines.append(f"  {tag}: {count}")
+
+            lines.append(f"")
+            lines.append(f"📢 CTA 분포:")
+            for cta, count in cta_counter.most_common(5):
+                lines.append(f"  {cta}: {count}")
+
+            lines.append(f"")
+            lines.append(f"🎯 자산 목표:")
+            for goal, count in asset_counter.most_common(5):
+                lines.append(f"  {goal}: {count}")
+
+            return "\n".join(lines)
+        except Exception as e:
+            logger.warning(f"[BusinessSummary] 요약 생성 실패: {e}")
+            return f"📊 비즈니스 요약 생성 실패: {e}"

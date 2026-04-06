@@ -163,6 +163,40 @@ class Draft(Base):
         comment="사용자 수동 메모 (선택)"
     )
 
+    # ── Phase 5: 비즈니스 분류 + 수익화 메타데이터 ──────────────────────────
+    business_tags = Column(
+        String(500), nullable=True,
+        comment="비즈니스 태그 JSON 배열 — 예: '[\"growth\",\"newsletter\",\"premium_candidate\"]'"
+    )
+    cta_type = Column(
+        String(50), nullable=True,
+        comment="CTA 유형: follow/reply/newsletter_signup/lead_magnet/premium_waitlist/b2b_inquiry"
+    )
+    monetization_score = Column(
+        Integer, nullable=True,
+        comment="수익화 잠재력 점수 (0-100)"
+    )
+    asset_goal = Column(
+        String(50), nullable=True,
+        comment="자산 목표: x_only/newsletter_push/lead_magnet_push/premium_teaser/b2b_asset"
+    )
+    premium_reason = Column(
+        Text, nullable=True,
+        comment="프리미엄 브리프 후보 사유"
+    )
+    b2b_candidate = Column(
+        Boolean, nullable=True, default=False,
+        comment="B2B 리서치/리포트 후보 여부"
+    )
+    b2b_target_audience = Column(
+        String(200), nullable=True,
+        comment="B2B 대상 독자층 (예: foreign_investors, policy_makers, supply_chain)"
+    )
+    b2b_use_case = Column(
+        String(200), nullable=True,
+        comment="B2B 활용 사례 (예: market_entry, regulation_monitor, risk_assessment)"
+    )
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 

@@ -110,6 +110,47 @@ def _run_schema_migrations():
             "column": "manual_notes",
             "ddl": "ALTER TABLE drafts ADD COLUMN manual_notes TEXT",
         },
+        # Phase 5: 비즈니스 분류 + 수익화 메타데이터
+        {
+            "table": "drafts",
+            "column": "business_tags",
+            "ddl": "ALTER TABLE drafts ADD COLUMN business_tags VARCHAR(500)",
+        },
+        {
+            "table": "drafts",
+            "column": "cta_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN cta_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "monetization_score",
+            "ddl": "ALTER TABLE drafts ADD COLUMN monetization_score INTEGER",
+        },
+        {
+            "table": "drafts",
+            "column": "asset_goal",
+            "ddl": "ALTER TABLE drafts ADD COLUMN asset_goal VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "premium_reason",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_reason TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_candidate",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_candidate BOOLEAN DEFAULT 0",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_target_audience",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_target_audience VARCHAR(200)",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_use_case",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_use_case VARCHAR(200)",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")

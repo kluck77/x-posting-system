@@ -407,6 +407,46 @@ class Orchestrator:
             self.db.commit()
             logger.info(f"커뮤니티 경고 저장: draft_id={draft.id}")
 
+        # Phase 5: 비즈니스 분류 (Layer 2 — 실패해도 파이프라인 영향 없음)
+        try:
+            from app.services.business_classifier import (
+                classify_business, business_tags_to_json,
+            )
+            import json as _json
+
+            # topic_tags 파싱
+            _topic_tags = None
+            if draft.topic_tags:
+                try:
+                    _topic_tags = _json.loads(draft.topic_tags)
+                except Exception:
+                    pass
+
+            biz = classify_business(
+                title=data.title,
+                body=review.body,
+                category=category.value,
+                risk_level=risk_level.value,
+                topic_tags=_topic_tags,
+            )
+            draft.business_tags = business_tags_to_json(biz.business_tags)
+            draft.cta_type = biz.cta_type
+            draft.monetization_score = biz.monetization_score
+            draft.asset_goal = biz.asset_goal
+            draft.premium_reason = biz.premium_reason
+            draft.b2b_candidate = biz.b2b_candidate
+            draft.b2b_target_audience = biz.b2b_target_audience
+            draft.b2b_use_case = biz.b2b_use_case
+            self.db.commit()
+            logger.info(
+                f"[BusinessClassifier] draft_id={draft.id} "
+                f"tags={biz.business_tags} cta={biz.cta_type} "
+                f"score={biz.monetization_score} asset={biz.asset_goal} "
+                f"b2b={biz.b2b_candidate}"
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessClassifier] 분류 실패 (무시): {e}")
+
         # 예측 게시 시간 계산
         try:
             pred_time, pred_reason = predict_publish_time(

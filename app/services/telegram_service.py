@@ -161,6 +161,27 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         pass
 
+    # Phase 5: 비즈니스 분류 표시 (Layer 2, advisory only)
+    try:
+        _biz_tags_raw = getattr(draft, "business_tags", None)
+        if _biz_tags_raw:
+            _biz_tags = json.loads(_biz_tags_raw)
+            if _biz_tags and _biz_tags != ["growth"]:
+                _mon_score = getattr(draft, "monetization_score", None) or 0
+                _cta = getattr(draft, "cta_type", None) or "—"
+                _asset = getattr(draft, "asset_goal", None) or "—"
+                card += f"\n{'─' * 30}\n"
+                card += f"💼 <b>비즈니스:</b> {' '.join(_biz_tags)}\n"
+                card += f"   💰 수익화: {_mon_score}/100 | 🎯 CTA: {_cta} | 📦 자산: {_asset}\n"
+                if getattr(draft, "b2b_candidate", False):
+                    _b2b_aud = getattr(draft, "b2b_target_audience", None) or "—"
+                    _b2b_use = getattr(draft, "b2b_use_case", None) or "—"
+                    card += f"   🏢 B2B: {_b2b_aud} / {_b2b_use}\n"
+                if getattr(draft, "premium_reason", None):
+                    card += f"   ⭐ 프리미엄: {draft.premium_reason[:100]}\n"
+    except Exception:
+        pass
+
     char_info = f"Characters: {draft.text_length}"
     if draft.text_length > 280:
         char_info += " ⚠️ X 한도 초과 — 편집 필요"
