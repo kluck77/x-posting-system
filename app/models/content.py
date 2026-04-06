@@ -231,6 +231,20 @@ class Draft(Base):
         comment="이메일 목표: signup/nurture/convert/tease/retain"
     )
 
+    # ── Brief Offer 메타데이터 (프리미엄 후보 → 오퍼 준비) ───────────────────
+    brief_type = Column(
+        String(50), nullable=True,
+        comment="브리프 유형: weekly_brief/policy_brief/market_brief/issue_brief/explainer_pack/special_report"
+    )
+    brief_price_tier = Column(
+        String(20), nullable=True,
+        comment="가격 티어: low/mid/premium"
+    )
+    brief_summary_note = Column(
+        Text, nullable=True,
+        comment="브리프 오퍼 요약/피치 메모 (운영자 작성)"
+    )
+
     # ── Phase 5-3: 프리미엄 후보 파이프라인 ─────────────────────────────────
     premium_status = Column(
         String(20), nullable=True,

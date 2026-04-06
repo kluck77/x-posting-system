@@ -840,6 +840,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/perf — 최근 성과 메모 목록\n"
         "/biz — 비즈니스 분류 요약 (premium/b2b/newsletter 후보)\n"
         "/premium — 프리미엄 Korea Brief 후보 관리\n"
+        "/brief — Premium Brief 오퍼 준비 관리\n"
         "/b2b — B2B 리서치 후보 관리 (상태/메모/대상/활용/그룹핑)\n"
         "/cta <id> <type> — CTA 유형 설정/조회\n"
         "/lead — 리드 자산 관리 (이름/유형/메모)\n"
@@ -1934,6 +1935,230 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def brief_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /brief — Premium Korea Brief 오퍼 준비 관리.
+
+    사용법:
+      /brief                          — 오퍼 현황 요약
+      /brief view <id>                — 브리프 상세
+      /brief status <id> <상태>       — 상태 변경
+      /brief type <id> <유형>         — 브리프 유형 설정
+      /brief reader <id> <독자>       — 대상 독자 설정
+      /brief tier <id> <티어>         — 가격 티어 설정
+      /brief note <id> <메모>         — 요약 메모 저장
+      /brief export [상태]            — 내보내기
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.brief_offer_service import BriefOfferService
+        svc = BriefOfferService(db)
+
+        # /brief (요약)
+        if subcmd == "summary" or not args:
+            text = svc.format_summary()
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /brief view <id>
+        elif subcmd == "view":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "사용법: <code>/brief view &lt;id&gt;</code>", parse_mode="HTML"
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            draft = svc.get_brief_by_id(draft_id)
+            if not draft:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+                return
+            text = svc.format_brief_detail(draft)
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /brief status <id> <상태>
+        elif subcmd == "status":
+            if len(args) < 3:
+                from app.services.brief_offer_service import BRIEF_STATUSES
+                statuses = " | ".join(BRIEF_STATUSES)
+                await update.message.reply_text(
+                    f"사용법: <code>/brief status &lt;id&gt; &lt;상태&gt;</code>\n"
+                    f"상태: {statuses}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            new_status = args[2].lower()
+            result = svc.set_status(draft_id, new_status)
+            if result:
+                await update.message.reply_text(
+                    f"📋 #{draft_id} Brief 상태 → <b>{new_status}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                from app.services.brief_offer_service import BRIEF_STATUSES
+                await update.message.reply_text(
+                    f"❌ 상태 변경 실패. 유효한 상태: {', '.join(BRIEF_STATUSES)}"
+                )
+
+        # /brief type <id> <유형>
+        elif subcmd == "type":
+            if len(args) < 3:
+                from app.services.brief_offer_service import BRIEF_TYPES
+                types = "\n".join(f"  • {t}" for t in BRIEF_TYPES)
+                await update.message.reply_text(
+                    f"사용법: <code>/brief type &lt;id&gt; &lt;유형&gt;</code>\n\n"
+                    f"추천 유형:\n{types}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            brief_type = args[2].lower()
+            result = svc.set_brief_type(draft_id, brief_type)
+            if result:
+                await update.message.reply_text(
+                    f"📄 #{draft_id} Brief 유형 → <b>{brief_type}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+
+        # /brief reader <id> <독자>
+        elif subcmd == "reader":
+            if len(args) < 3:
+                from app.services.brief_offer_service import BRIEF_TARGET_READERS
+                readers = "\n".join(f"  • {r}" for r in BRIEF_TARGET_READERS)
+                await update.message.reply_text(
+                    f"사용법: <code>/brief reader &lt;id&gt; &lt;독자&gt;</code>\n\n"
+                    f"추천 독자:\n{readers}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            reader = args[2].lower()
+            result = svc.set_target_reader(draft_id, reader)
+            if result:
+                await update.message.reply_text(
+                    f"👥 #{draft_id} Brief 대상 → <b>{reader}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+
+        # /brief tier <id> <티어>
+        elif subcmd == "tier":
+            if len(args) < 3:
+                from app.services.brief_offer_service import BRIEF_PRICE_TIERS
+                tiers = " | ".join(BRIEF_PRICE_TIERS)
+                await update.message.reply_text(
+                    f"사용법: <code>/brief tier &lt;id&gt; &lt;티어&gt;</code>\n"
+                    f"티어: {tiers}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            tier = args[2].lower()
+            result = svc.set_price_tier(draft_id, tier)
+            if result:
+                tier_labels = {"low": "💚 Low", "mid": "💛 Mid", "premium": "💎 Premium"}
+                label = tier_labels.get(tier, tier)
+                await update.message.reply_text(
+                    f"💰 #{draft_id} Brief 티어 → <b>{label}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                from app.services.brief_offer_service import BRIEF_PRICE_TIERS
+                await update.message.reply_text(
+                    f"❌ 티어 변경 실패. 유효한 티어: {', '.join(BRIEF_PRICE_TIERS)}"
+                )
+
+        # /brief note <id> <메모>
+        elif subcmd == "note":
+            if len(args) < 3:
+                await update.message.reply_text(
+                    "사용법: <code>/brief note &lt;id&gt; &lt;메모&gt;</code>\n"
+                    "예: <code>/brief note 42 Weekly Korea labor market brief for investors</code>",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            note = " ".join(args[2:])[:500]
+            result = svc.set_summary_note(draft_id, note)
+            if result:
+                await update.message.reply_text(
+                    f"📝 #{draft_id} Brief 메모 저장:\n<i>{note[:200]}</i>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 프리미엄 후보가 아닙니다.")
+
+        # /brief export [상태]
+        elif subcmd == "export":
+            status_filter = args[1].lower() if len(args) > 1 else None
+            items = svc.export_briefs(status=status_filter, limit=10)
+            if not items:
+                await update.message.reply_text("📋 내보낼 Brief 없음")
+                return
+            lines = [f"📋 <b>Brief 내보내기</b> ({len(items)}건)\n"]
+            for item in items:
+                tier = item.get("brief_price_tier") or "—"
+                tier_labels = {"low": "💚", "mid": "💛", "premium": "💎"}
+                tier_icon = tier_labels.get(tier, "")
+                lines.append(
+                    f"──────────────\n"
+                    f"ID: {item['draft_id']} | 💰{item['monetization_score'] or 0} | "
+                    f"[{item['premium_status']}]\n"
+                    f"Hook: {item['hook'][:60]}…\n"
+                    f"Type: {item['brief_type'] or '—'} | "
+                    f"Tier: {tier_icon}{tier} | "
+                    f"Reader: {item['target_reader_type'] or '—'}\n"
+                    f"Note: {item['brief_summary_note'] or '—'}"
+                )
+            text = "\n".join(lines)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/brief</code> — 요약\n"
+                "<code>/brief view &lt;id&gt;</code> — 상세\n"
+                "<code>/brief status &lt;id&gt; &lt;상태&gt;</code> — 상태 변경\n"
+                "<code>/brief type &lt;id&gt; &lt;유형&gt;</code> — 브리프 유형\n"
+                "<code>/brief reader &lt;id&gt; &lt;독자&gt;</code> — 대상 독자\n"
+                "<code>/brief tier &lt;id&gt; &lt;티어&gt;</code> — 가격 티어\n"
+                "<code>/brief note &lt;id&gt; &lt;메모&gt;</code> — 요약 메모\n"
+                "<code>/brief export [상태]</code> — 내보내기",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/brief 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Brief 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
 async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /cta — CTA 유형 관리.
@@ -2912,6 +3137,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("perf", perf_command))
     app.add_handler(CommandHandler("biz", biz_command))
     app.add_handler(CommandHandler("premium", premium_command))
+    app.add_handler(CommandHandler("brief", brief_command))
     app.add_handler(CommandHandler("b2b", b2b_command))
     app.add_handler(CommandHandler("cta", cta_command))
     app.add_handler(CommandHandler("lead", lead_command))

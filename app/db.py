@@ -214,6 +214,22 @@ def _run_schema_migrations():
             "column": "target_reader_type",
             "ddl": "ALTER TABLE drafts ADD COLUMN target_reader_type VARCHAR(100)",
         },
+        # Brief Offer 메타데이터
+        {
+            "table": "drafts",
+            "column": "brief_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN brief_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "brief_price_tier",
+            "ddl": "ALTER TABLE drafts ADD COLUMN brief_price_tier VARCHAR(20)",
+        },
+        {
+            "table": "drafts",
+            "column": "brief_summary_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN brief_summary_note TEXT",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")
