@@ -7,6 +7,17 @@ async function initLive2D() {
 
   if (!canvas || !heroScene) return;
 
+  // PIXI, Cubism이 로드될 때까지 대기 (async defer로 인해 순서 보장 안 될 수 있음)
+  let retries = 0;
+  while ((!window.PIXI || !window.Live2DCubismCore) && retries < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    retries++;
+  }
+  if (!window.PIXI || !window.Live2DCubismCore) {
+    console.warn('Live2D: PIXI 또는 Cubism 로드 실패. Hero 모델 스킵.');
+    return;
+  }
+
   // PixiJS 앱 생성
   const app = new PIXI.Application({
     view: canvas,
