@@ -370,116 +370,115 @@ body::before{
 .badge-medium{background:rgba(245,158,11,0.12);color:var(--amber)}
 .badge-high{background:rgba(239,68,68,0.12);color:var(--red)}
 
-/* ===== AI WORKSTATION CARDS ===== */
-.worker-card{
-  display:flex;align-items:stretch;
-  border-radius:16px;overflow:hidden;
-  border:1px solid rgba(255,255,255,0.08);
-  /* Role-color atmosphere: gradient from currentColor side */
-  background:linear-gradient(105deg,rgba(0,0,0,0) 0%,rgba(12,15,28,0.96) 35%,rgba(10,13,24,0.98) 100%);
-  position:relative;min-height:108px;
-  box-shadow:0 4px 24px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.06);
+/* ===== AI STATION CARDS — vertical cinematic layout ===== */
+.station-card{
+  border-radius:18px;overflow:hidden;
+  border:1px solid rgba(255,255,255,0.07);
+  background:linear-gradient(180deg,rgba(0,0,0,0) 0%,var(--surface) 50%);
+  box-shadow:0 6px 32px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.06);
+  position:relative;
+  animation:card-in .4s ease both;
 }
-/* Role-color left atmosphere — bleeds from portrait into card */
-.worker-card::after{
-  content:'';position:absolute;left:0;top:0;bottom:0;width:130px;pointer-events:none;z-index:0;
-  background:linear-gradient(to right,currentColor,transparent);
-  opacity:0.07;
-}
-/* Left role-color accent line */
-.worker-card::before{
+/* Role-color left accent bar */
+.station-card::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:currentColor;opacity:0.75;z-index:4;
+  background:currentColor;opacity:0.8;z-index:5;
 }
-/* Portrait area — seamlessly part of the card scene */
-.worker-portrait{
-  width:96px;flex-shrink:0;
-  position:relative;overflow:hidden;
-  background:#070914;z-index:1;
+/* Role-color top glow */
+.station-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:110px;
+  background:linear-gradient(to bottom,currentColor,transparent);
+  opacity:0.055;z-index:0;pointer-events:none;
 }
-/* Right fade: wide, soft — portrait bleeds into card info area */
-.worker-portrait::after{
-  content:'';position:absolute;top:0;right:0;width:52px;height:100%;
-  background:linear-gradient(to right,transparent,rgba(10,13,24,0.97));
-  z-index:3;pointer-events:none;
+/* Portrait zone — full-width cinematic, tall */
+.station-portrait{
+  position:relative;width:100%;height:155px;
+  overflow:hidden;background:#060810;
 }
-/* Bottom scene darkening */
-.worker-portrait::before{
-  content:'';position:absolute;bottom:0;left:0;right:0;height:36px;
-  background:linear-gradient(to top,rgba(7,9,20,0.85),transparent);
-  z-index:3;pointer-events:none;
-}
-/* Character portrait image */
-.worker-char-img{
-  width:100%;height:100%;
-  object-fit:cover;object-position:50% 10%;
-  position:relative;z-index:1;display:block;
-  /* Suppress any browser-rendered filename/alt text */
+.station-img{
+  display:block;width:100%;height:100%;
+  object-fit:cover;object-position:50% 12%;
   font-size:0;color:transparent;
-  /* Right-fade mask — character flows into card, no hard edge */
-  -webkit-mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
-  mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,0.5) 14%,black 28%,black 65%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,0.5) 14%,black 28%,black 65%,transparent 100%);
+  filter:brightness(0.88) saturate(1.15) contrast(1.05);
+  transition:filter .5s ease;
 }
-/* Fallback emoji avatar */
-.worker-avatar{
-  width:54px;height:54px;border-radius:13px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:27px;border:1.5px solid;
-  position:relative;z-index:2;margin:auto;
+/* Role-color glow from bottom of portrait */
+.station-portrait-glow{
+  position:absolute;bottom:0;left:0;right:0;height:60px;
+  background:linear-gradient(to top,currentColor,transparent);
+  opacity:0.1;z-index:2;pointer-events:none;
 }
-/* Info section */
-.worker-info{flex:1;min-width:0;padding:13px 10px 13px 12px;position:relative;z-index:2}
-.worker-role{
-  font-size:14.5px;font-weight:800;letter-spacing:-0.3px;margin-bottom:2px;
-  text-shadow:0 0 20px currentColor;
+/* Badge overlaid on portrait bottom-right */
+.station-portrait-badge{
+  position:absolute;bottom:10px;right:12px;z-index:3;
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:20px;
+  background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.1);
 }
-.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:5px;display:flex;align-items:center;gap:5px}
-.worker-tagline{font-size:10px;color:var(--txt3);line-height:1.55}
-/* Right stat column */
-.worker-right{
-  flex-shrink:0;padding:13px 15px 13px 0;
-  display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
-  position:relative;z-index:2;min-width:52px;
+.station-portrait-name{
+  font-size:13px;font-weight:800;letter-spacing:-0.2px;color:currentColor;
 }
-.worker-count{font-size:30px;font-weight:900;line-height:1}
-.worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;display:flex;align-items:center;gap:3px}
-.worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);flex-shrink:0}
-.worker-status-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
-/* Role animations — applied to both real image and fallback avatar */
-/* Use subtle transform-only animations for image; keep emoji animations for fallback */
-.role-draft .worker-char-img{animation:char-work 3.5s ease-in-out infinite}
-.role-review .worker-char-img{animation:char-breathe 4s ease-in-out infinite}
-.role-research .worker-char-img{animation:char-lean 5s ease-in-out infinite}
-.role-fact .worker-char-img{animation:char-breathe 3.5s ease-in-out infinite}
-.role-trend .worker-char-img{animation:char-scan 6s ease-in-out infinite}
-.role-draft .worker-avatar{animation:dot-blink 1.4s ease-in-out infinite}
-.role-review .worker-avatar{animation:avatar-breathe 3s ease-in-out infinite}
-.role-research .worker-avatar{animation:avatar-bob 4s ease-in-out infinite}
-.role-fact .worker-avatar{animation:avatar-breathe 2.2s ease-in-out infinite}
-.role-trend .worker-avatar{animation:avatar-spin 5s linear infinite}
+/* Fallback emoji for missing portrait */
+.station-avatar{
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  font-size:52px;
+  background:radial-gradient(ellipse 70% 60% at 50% 60%,currentColor,transparent);
+  opacity:0.15;
+}
+.station-avatar-emoji{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:52px;z-index:2;
+  filter:drop-shadow(0 0 20px currentColor);
+}
+/* Station body — info below portrait */
+.station-body{
+  padding:12px 14px 14px 16px;position:relative;z-index:3;
+  display:flex;align-items:flex-end;justify-content:space-between;
+}
+.station-info{flex:1;min-width:0}
+.station-provider{font-size:10.5px;color:var(--txt2);margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.station-tagline{font-size:10px;color:var(--txt3);line-height:1.5}
+.station-note{font-size:10px;color:var(--txt3);margin-top:3px;line-height:1.4;opacity:0.8}
+.station-right{flex-shrink:0;text-align:right;padding-left:12px}
+.station-count{font-size:32px;font-weight:900;line-height:1;color:var(--txt3)}
+.station-count.active{color:currentColor;text-shadow:0 0 24px currentColor}
+.station-count-lbl{
+  font-size:8.5px;color:var(--txt3);text-transform:uppercase;letter-spacing:0.5px;
+  margin-top:3px;display:flex;align-items:center;justify-content:flex-end;gap:3px;
+}
+.station-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3)}
+.station-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
+/* Role state animations on station portrait */
+.role-draft .station-img{animation:char-work 3.5s ease-in-out infinite}
+.role-review .station-img{animation:char-breathe 4s ease-in-out infinite}
+.role-research .station-img{animation:char-lean 5s ease-in-out infinite}
+.role-fact .station-img{animation:char-breathe 3.5s ease-in-out infinite}
+.role-trend .station-img{animation:char-scan 6s ease-in-out infinite}
 @keyframes char-work{
   0%,100%{transform:scale(1) translateY(0)}
-  30%{transform:scale(1.01) translateY(-1px)}
-  60%{transform:scale(1.005) translateY(-2px)}
+  30%{transform:scale(1.012) translateY(-1px)}
+  60%{transform:scale(1.006) translateY(-2px)}
 }
 @keyframes char-breathe{
   0%,100%{transform:scale(1)}
-  50%{transform:scale(1.015)}
+  50%{transform:scale(1.018)}
 }
 @keyframes char-lean{
   0%,100%{transform:translateX(0) scale(1)}
-  40%{transform:translateX(1px) scale(1.01)}
+  40%{transform:translateX(1.5px) scale(1.012)}
   70%{transform:translateX(-1px) scale(1.008)}
 }
 @keyframes char-scan{
   0%,100%{transform:scale(1) translateY(0)}
-  25%{transform:scale(1.01) translateY(-1px)}
-  75%{transform:scale(1.005) translateY(-2px)}
+  25%{transform:scale(1.012) translateY(-1px)}
+  75%{transform:scale(1.006) translateY(-2px)}
 }
 /* Worker card entrance */
-#provider-list{display:flex;flex-direction:column;gap:10px}
-@keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.worker-card{animation:card-in .4s ease both}
+#provider-list{display:flex;flex-direction:column;gap:14px}
+@keyframes card-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 /* Naver arc gauge — large centered layout */
 .naver-arc-section{
   display:flex;flex-direction:column;align-items:center;
@@ -522,8 +521,7 @@ body::before{
 .naver-status-strip.idle{background:rgba(75,81,104,0.1);color:var(--txt3);border:1px solid rgba(75,81,104,0.2)}
 @media(prefers-reduced-motion:reduce){
   .hero-emoji,.hero-ring,.hero-ring-ok,.pipe-connector,
-  .role-draft .worker-avatar,.role-review .worker-avatar,
-  .role-research .worker-avatar,.role-fact .worker-avatar,.role-trend .worker-avatar
+  .station-img,.station-avatar-emoji
   {animation:none!important;transform:none!important}
   .dot-green,.dot-red,.dot-amber,.hero-badge-dot{animation:none!important;
     box-shadow:0 0 6px rgba(34,197,94,0.5)}
@@ -1037,34 +1035,37 @@ function renderAI() {
       : `<span style="color:var(--red);font-size:10px">● 미설정</span>`;
     const cnt = r.runs_today ?? 0;
     const isActive = typeof cnt === 'number' && cnt > 0;
-    const cntDisplay = cnt === 0 ? '0' : cnt;
-    const noteHtml = r.note ? `<div style="font-size:10px;color:var(--txt3);margin-top:4px;line-height:1.4;opacity:0.8">${esc(r.note)}</div>` : '';
+    const noteHtml = r.note ? `<div class="station-note">${esc(r.note)}</div>` : '';
     const animCls = m.anim || '';
-    // Portrait — real image; alt="" prevents filename text; onerror shows emoji
-    const fallbackStyle = `background:${m.glow};border-color:${m.color}55`;
-    const portraitHtml = m.img
-      ? `<img class="worker-char-img" src="/static/${m.img}" alt=""
-              onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\\'worker-avatar\\'style=\\'${fallbackStyle};box-shadow:0 0 16px ${m.color}18\\'>${m.emoji}</div>'">`
-      : `<div class="worker-avatar" style="${fallbackStyle};box-shadow:0 0 16px ${m.color}18">${m.emoji}</div>`;
-    // Active state: highlight count and status
-    const countStyle = isActive
-      ? `color:${m.color};text-shadow:0 0 20px ${m.color}60`
-      : `color:var(--txt3)`;
-    return `<div class="worker-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.07}s">
-      <div class="worker-portrait">
-        ${portraitHtml}
+    // Portrait — full-width cinematic zone at top of station card
+    let portraitInner;
+    if (m.img) {
+      portraitInner = `<img class="station-img" src="/static/${m.img}" alt=""
+        onerror="this.style.display='none'">`;
+    } else {
+      portraitInner = `<div class="station-avatar-emoji">${m.emoji}</div>`;
+    }
+    return `<div class="station-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.08}s">
+      <div class="station-portrait">
+        ${portraitInner}
+        <div class="station-portrait-glow"></div>
+        <div class="station-portrait-badge">
+          <span class="station-portrait-name">${esc(r.role)}</span>
+          ${cfgBadge}
+        </div>
       </div>
-      <div class="worker-info">
-        <div class="worker-role" style="color:${m.color}">${esc(r.role)}</div>
-        <div class="worker-provider">${esc(r.provider)}&nbsp;${cfgBadge}</div>
-        <div class="worker-tagline">${esc(m.tagline)}</div>
-        ${noteHtml}
-      </div>
-      <div class="worker-right">
-        <div class="worker-count" style="${countStyle}">${cntDisplay}</div>
-        <div class="worker-count-lbl">
-          <span class="worker-status-dot${isActive?' active':''}"></span>
-          ${isActive?'실행중':'대기'}
+      <div class="station-body">
+        <div class="station-info">
+          <div class="station-provider">${esc(r.provider)}</div>
+          <div class="station-tagline">${esc(m.tagline)}</div>
+          ${noteHtml}
+        </div>
+        <div class="station-right">
+          <div class="station-count${isActive ? ' active' : ''}">${cnt}</div>
+          <div class="station-count-lbl">
+            <span class="station-dot${isActive ? ' active' : ''}"></span>
+            ${isActive ? '실행중' : '대기'}
+          </div>
         </div>
       </div>
     </div>`;
@@ -1279,7 +1280,7 @@ async function doUpload(input, targetFilename) {
         if (img) img.src = '/static/' + targetFilename + '?t=' + Date.now();
       }
       // Reload AI worker images
-      document.querySelectorAll('.worker-char-img').forEach(img => {
+      document.querySelectorAll('.station-img').forEach(img => {
         const src = img.getAttribute('src') || '';
         if (src.includes(targetFilename.replace('?t=','').split('?')[0]))
           img.src = '/static/' + targetFilename + '?t=' + Date.now();
