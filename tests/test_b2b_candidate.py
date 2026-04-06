@@ -433,3 +433,206 @@ class TestFormatCandidateDetail:
         assert "검토중" in text
         assert "80" in text
         assert "프리미엄" in text
+
+
+# ─── 샘플 리포트 생성 테스트 ──────────────────────────────────
+
+class TestGenerateSampleReport:
+    def test_report_returns_none_for_nonexistent(self, db):
+        svc = B2BCandidateService(db)
+        assert svc.generate_sample_report(9999) is None
+
+    def test_report_returns_none_for_non_b2b(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, b2b_candidate=False)
+        svc = B2BCandidateService(db)
+        assert svc.generate_sample_report(draft.id) is None
+
+    def test_report_basic_structure(self, db):
+        src = _make_source(db, title="Korea BOK Rate Decision")
+        draft = _make_b2b_draft(
+            db, src, hook="BOK holds rate steady",
+            audience="investors", use_case="regulation_brief",
+            status="shortlisted", note="High value for Q2",
+            score=85,
+        )
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+
+        assert report is not None
+        assert report["draft_id"] == draft.id
+        assert "BOK holds rate steady" in report["title"]
+        assert report["target_audience"] == "investors"
+        assert report["use_case"] == "regulation_brief"
+        assert "Investment decision" in report["why_it_matters"]
+        assert report["operator_note"] == "High value for Q2"
+        assert report["b2b_status"] == "shortlisted"
+        assert report["next_action"] == "Draft a 1-page regulation impact brief."
+        assert report["source_ref"]["source_title"] == "Korea BOK Rate Decision"
+        assert report["source_ref"]["monetization_score"] == 85
+        assert "generated_at" in report
+
+    def test_report_default_audience_framing(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, audience="custom_group")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert "Korea-focused stakeholders" in report["why_it_matters"]
+
+    def test_report_default_usecase_action(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, use_case="custom_case")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert "Review and decide" in report["next_action"]
+
+    def test_report_missing_audience_uses_general(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src)
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert report["target_audience"] == "general"
+
+    def test_report_missing_usecase_uses_briefing(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src)
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert report["use_case"] == "briefing"
+
+    def test_report_implications_contain_audience_and_usecase(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(
+            db, src, audience="journalists", use_case="election_context",
+        )
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert "journalists" in report["implications"]
+        assert "election context" in report["implications"]
+
+    def test_report_premium_linkage(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, premium_status="reviewing")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert report["premium_linkage"] == "reviewing"
+
+    def test_report_no_premium_linkage(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src)
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert report["premium_linkage"] is None
+
+    def test_report_body_truncated_at_500(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, hook="Long body test")
+        draft.body = "A" * 1000
+        db.commit()
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        assert len(report["situation_summary"]) == 500
+
+    def test_report_all_audience_framings(self, db):
+        src = _make_source(db)
+        from app.services.b2b_candidate_service import B2B_TARGET_AUDIENCES
+        svc = B2BCandidateService(db)
+        for aud in B2B_TARGET_AUDIENCES:
+            draft = _make_b2b_draft(db, src, hook=f"Test {aud}", audience=aud)
+            report = svc.generate_sample_report(draft.id)
+            assert report is not None
+            assert len(report["why_it_matters"]) > 10
+
+    def test_report_all_usecase_actions(self, db):
+        src = _make_source(db)
+        from app.services.b2b_candidate_service import B2B_USE_CASES
+        svc = B2BCandidateService(db)
+        for uc in B2B_USE_CASES:
+            draft = _make_b2b_draft(db, src, hook=f"Test {uc}", use_case=uc)
+            report = svc.generate_sample_report(draft.id)
+            assert report is not None
+            assert len(report["next_action"]) > 10
+
+
+class TestFormatSampleReport:
+    def test_format_contains_key_sections(self, db):
+        src = _make_source(db, title="Test Source")
+        draft = _make_b2b_draft(
+            db, src, hook="Format Test Hook",
+            audience="investors", use_case="regulation_brief",
+            note="Check this", score=70, status="reviewing",
+        )
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        text = svc.format_sample_report(report)
+
+        assert "Sample Report" in text
+        assert "Target Audience" in text
+        assert "investors" in text
+        assert "Use Case" in text
+        assert "regulation_brief" in text
+        assert "Why It Matters" in text
+        assert "Situation Summary" in text
+        assert "Implications" in text
+        assert "Operator Note" in text
+        assert "Check this" in text
+        assert "Next Action" in text
+        assert "Test Source" in text
+        assert "70" in text
+
+    def test_format_without_operator_note(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, hook="No note test")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        text = svc.format_sample_report(report)
+        assert "Operator Note" not in text
+
+    def test_format_with_premium_linkage(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, premium_status="shortlisted")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        text = svc.format_sample_report(report)
+        assert "Premium" in text
+        assert "shortlisted" in text
+
+
+class TestSaveReportToNote:
+    def test_save_report_updates_note(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, hook="Save test")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        result = svc.save_report_to_note(draft.id, report)
+
+        assert result is not None
+        assert "[Report]" in result.b2b_note
+        assert "Save test" in result.b2b_note
+        assert result.b2b_updated_at is not None
+
+    def test_save_report_overwrites_existing_note(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, hook="Overwrite test", note="old note")
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        result = svc.save_report_to_note(draft.id, report)
+
+        assert result is not None
+        assert "old note" not in result.b2b_note
+        assert "[Report]" in result.b2b_note
+
+    def test_save_report_nonexistent_returns_none(self, db):
+        svc = B2BCandidateService(db)
+        report = {"title": "test", "target_audience": "x", "use_case": "y", "next_action": "z"}
+        assert svc.save_report_to_note(9999, report) is None
+
+    def test_save_report_truncates_to_500(self, db):
+        src = _make_source(db)
+        draft = _make_b2b_draft(db, src, hook="A" * 300)
+        svc = B2BCandidateService(db)
+        report = svc.generate_sample_report(draft.id)
+        report["title"] = "X" * 400
+        result = svc.save_report_to_note(draft.id, report)
+        assert result is not None
+        assert len(result.b2b_note) <= 500

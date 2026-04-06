@@ -2330,6 +2330,7 @@ async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
       /b2b audience <id> <대상>     — 대상 독자 설정
       /b2b usecase <id> <사례>      — 활용 사례 설정
       /b2b group [audience|usecase] [값] — 그룹핑/필터링
+      /b2b report <id> [save|export]— 샘플 리포트 생성
       /b2b init                     — 미초기화 후보 일괄 'new'
       /b2b export [상태]            — 내보내기
     """
@@ -2538,6 +2539,54 @@ async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
+        # /b2b report <id> [save|export]
+        elif subcmd == "report":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "사용법:\n"
+                    "<code>/b2b report &lt;id&gt;</code> — 샘플 리포트 생성\n"
+                    "<code>/b2b report &lt;id&gt; save</code> — 리포트 → 메모 저장\n"
+                    "<code>/b2b report &lt;id&gt; export</code> — JSON 내보내기",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            action = args[2].lower() if len(args) > 2 else "view"
+
+            report = svc.generate_sample_report(draft_id)
+            if not report:
+                await update.message.reply_text(
+                    f"❌ #{draft_id}는 B2B 후보가 아니거나 리포트 생성 실패"
+                )
+                return
+
+            if action == "save":
+                result = svc.save_report_to_note(draft_id, report)
+                if result:
+                    await update.message.reply_text(
+                        f"💾 #{draft_id} 리포트 → b2b_note 저장 완료",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text(f"❌ 리포트 저장 실패")
+            elif action == "export":
+                import json as _json
+                text = _json.dumps(report, ensure_ascii=False, indent=2)
+                if len(text) > 4000:
+                    text = text[:4000] + "\n\n… (잘림)"
+                await update.message.reply_text(
+                    f"📄 <b>B2B 샘플 리포트 (JSON)</b>\n\n<pre>{text}</pre>",
+                    parse_mode="HTML",
+                )
+            else:
+                text = svc.format_sample_report(report)
+                if len(text) > 4000:
+                    text = text[:4000] + "\n\n… (잘림)"
+                await update.message.reply_text(text, parse_mode="HTML")
+
         # /b2b init
         elif subcmd == "init":
             count = svc.init_new_candidates()
@@ -2582,6 +2631,7 @@ async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "<code>/b2b audience &lt;id&gt; &lt;대상&gt;</code> — 대상 독자\n"
                 "<code>/b2b usecase &lt;id&gt; &lt;사례&gt;</code> — 활용 사례\n"
                 "<code>/b2b group [audience|usecase] [값]</code> — 그룹핑\n"
+                "<code>/b2b report &lt;id&gt; [save|export]</code> — 샘플 리포트\n"
                 "<code>/b2b init</code> — 미초기화 후보 설정\n"
                 "<code>/b2b export [상태]</code> — 내보내기",
                 parse_mode="HTML",

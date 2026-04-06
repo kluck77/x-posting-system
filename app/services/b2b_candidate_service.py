@@ -262,6 +262,154 @@ class B2BCandidateService:
             self.db.rollback()
             return 0
 
+    # ── 샘플 리포트 생성 ────────────────────────────────────────────
+
+    def generate_sample_report(self, draft_id: int) -> dict | None:
+        """B2B 후보에서 구조화된 샘플 리포트 생성.
+
+        리포트 구조:
+        - title, target_audience, use_case, why_it_matters
+        - situation_summary, implications, operator_note
+        - source_ref, next_action
+        """
+        try:
+            draft = self.get_candidate_by_id(draft_id)
+            if not draft:
+                return None
+
+            hook = draft.hook or ""
+            body = draft.body or ""
+            audience = draft.b2b_target_audience or "general"
+            use_case = draft.b2b_use_case or "briefing"
+
+            # 대상별 why-it-matters 프레이밍
+            audience_framing = {
+                "investors": "Investment decision-makers need this context to assess Korea exposure.",
+                "journalists": "This provides essential background for Korea-related reporting.",
+                "policy_teams": "Policy teams should monitor this for regulatory implications.",
+                "researchers": "This data point enriches Korea-focused academic/research work.",
+                "market_entry": "Companies entering the Korean market need to factor this in.",
+                "korea_watchers": "This is a key signal for Korea watchers tracking developments.",
+                "sponsors": "Sponsors targeting Korea audiences should note this trend.",
+            }
+
+            # 활용사례별 next-action 제안
+            usecase_actions = {
+                "regulation_brief": "Draft a 1-page regulation impact brief.",
+                "election_context": "Prepare an election context briefing note.",
+                "labor_market_snapshot": "Compile a labor market snapshot with key metrics.",
+                "housing_risk_note": "Produce a housing risk assessment note.",
+                "demographic_trend": "Write a demographic trend analysis brief.",
+                "trade_supply_chain": "Create a trade/supply-chain advisory note.",
+                "policy_explainer": "Draft a policy explainer for non-specialist readers.",
+                "market_entry_context": "Assemble a market entry context package.",
+            }
+
+            source_title = draft.source_item.title if draft.source_item else "N/A"
+
+            report = {
+                "draft_id": draft.id,
+                "title": f"[Sample Report] {hook[:120]}",
+                "target_audience": audience,
+                "use_case": use_case,
+                "why_it_matters": audience_framing.get(
+                    audience, "This is relevant context for Korea-focused stakeholders."
+                ),
+                "situation_summary": body[:500],
+                "implications": (
+                    f"Based on the {use_case.replace('_', ' ')} angle, "
+                    f"this development may affect {audience.replace('_', ' ')} "
+                    f"decision-making on Korea-related matters."
+                ),
+                "operator_note": draft.b2b_note or "",
+                "source_ref": {
+                    "source_title": source_title,
+                    "draft_id": draft.id,
+                    "category": draft.category.value if draft.category else "",
+                    "risk_level": draft.risk_level.value if draft.risk_level else "",
+                    "monetization_score": draft.monetization_score,
+                },
+                "next_action": usecase_actions.get(
+                    use_case, "Review and decide on further B2B packaging."
+                ),
+                "b2b_status": draft.b2b_status or "new",
+                "premium_linkage": draft.premium_status or None,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            logger.info(f"[B2B] 샘플 리포트 생성: #{draft_id}")
+            return report
+        except Exception as e:
+            logger.error(f"[B2B] 리포트 생성 실패: {e}")
+            return None
+
+    def format_sample_report(self, report: dict) -> str:
+        """샘플 리포트를 텔레그램 메시지로 포맷."""
+        try:
+            src = report.get("source_ref", {})
+            lines = [
+                f"📄 <b>{report['title']}</b>",
+                f"{'─' * 30}",
+                "",
+                f"👥 <b>Target Audience:</b> {report['target_audience']}",
+                f"📋 <b>Use Case:</b> {report['use_case']}",
+                "",
+                f"💡 <b>Why It Matters:</b>",
+                f"{report['why_it_matters']}",
+                "",
+                f"📝 <b>Situation Summary:</b>",
+                f"{report['situation_summary'][:400]}",
+                "",
+                f"🔮 <b>Implications:</b>",
+                f"{report['implications']}",
+            ]
+
+            if report.get("operator_note"):
+                lines.append("")
+                lines.append(f"📌 <b>Operator Note:</b> {report['operator_note']}")
+
+            lines.append("")
+            lines.append(f"📂 Source: {src.get('source_title', 'N/A')}")
+            lines.append(
+                f"   Draft #{src.get('draft_id', '?')} | "
+                f"{src.get('category', '?')} | "
+                f"Risk: {src.get('risk_level', '?')} | "
+                f"💰 {src.get('monetization_score') or 0}"
+            )
+
+            if report.get("premium_linkage"):
+                lines.append(f"   ⭐ Premium: {report['premium_linkage']}")
+
+            lines.append("")
+            lines.append(f"➡️ <b>Next Action:</b> {report['next_action']}")
+            lines.append(f"📊 Status: {report['b2b_status']}")
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"📄 리포트 포맷 실패: {e}"
+
+    def save_report_to_note(self, draft_id: int, report: dict) -> Draft | None:
+        """리포트 요약을 b2b_note에 저장 (기존 메모 보존하지 않고 덮어쓰기)."""
+        try:
+            draft = self.get_candidate_by_id(draft_id)
+            if not draft:
+                return None
+            summary = (
+                f"[Report] {report['title'][:100]}\n"
+                f"Audience: {report['target_audience']}\n"
+                f"Use Case: {report['use_case']}\n"
+                f"Next: {report['next_action'][:100]}"
+            )
+            draft.b2b_note = summary[:500]
+            draft.b2b_updated_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(draft)
+            logger.info(f"[B2B] 리포트 → 메모 저장: #{draft_id}")
+            return draft
+        except Exception as e:
+            logger.error(f"[B2B] 리포트 메모 저장 실패: {e}")
+            self.db.rollback()
+            return None
+
     # ── 내보내기 ──────────────────────────────────────────────────
 
     def export_candidates(
