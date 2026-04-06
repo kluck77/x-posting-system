@@ -34,6 +34,8 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 | Phase 15 ops recovery bundle (startup_check, /recover command, corrupt-file warning, recovery_playbook.md) | Locked |
 | Phase 16 critical flows regression bundle (test_critical_flows.py, pytest -m critical, regression_guide.md) | Locked |
 | Phase 17 release gate bundle (go_live_checklist.md, pre_run_guide.md, release_readiness.md, README links fixed) | Locked |
+| Phase 17 Control Room Bundle (naver_usage.py, control_room.py, dashboard.html, test_control_room.py, docs/control_room.md) | Locked |
+| Phase 18 Mobile Control Room Bundle (mobile-first 4-tab dashboard rewrite, /control/recent-news endpoint) | Locked |
 
 ---
 
@@ -41,7 +43,6 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 
 - Auto-posting of any kind — permanently excluded; `ENABLE_AUTO_POST_LOW_RISK` flag exists but logic not built
 - Image / video generation
-- Web dashboard / analytics UI
 - ML fine-tuning / embedding store / RAG
 - Multi-user support
 - Redis / task queue / Postgres migration
@@ -50,13 +51,14 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 
 ## Next Candidates
 
-**System is operator-ready.** 536 tests passing, 17 critical flows protected, go-live docs in place.
-No open feature gaps. Next actions are entirely operator-driven (go live, observe, refine).
+**System is operator-ready.** 573 tests passing, 17 critical flows protected, go-live docs in place.
+Control Room dashboard available at `http://localhost:8000/control/` — mobile-first, 4-tab, Safari-optimized.
+No open feature gaps. Next actions are entirely operator-driven.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 9 — Phase 17 Release Gate Bundle)
+- Date: 2026-04-06 (session 10 — Phase 18 Mobile Control Room Bundle)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`

@@ -230,3 +230,53 @@ class TestDashboardPage:
         assert "/control/status" in body
         assert "/control/providers" in body
         assert "/control/flow-trace" in body
+
+    def test_dashboard_has_mobile_viewport(self, client):
+        from pathlib import Path
+        if not Path("static/dashboard.html").exists():
+            pytest.skip("static/dashboard.html 없음 — 환경 미설정")
+        resp = client.get("/control/")
+        body = resp.text
+        assert "viewport-fit=cover" in body
+        assert "apple-mobile-web-app-capable" in body
+
+    def test_dashboard_has_recent_news_endpoint(self, client):
+        from pathlib import Path
+        if not Path("static/dashboard.html").exists():
+            pytest.skip("static/dashboard.html 없음 — 환경 미설정")
+        resp = client.get("/control/")
+        body = resp.text
+        assert "/control/recent-news" in body
+
+
+# ── /control/recent-news ──────────────────────────────────────────────────────
+
+class TestRecentNews:
+    def test_recent_news_returns_200(self, client):
+        resp = client.get("/control/recent-news")
+        assert resp.status_code == 200
+
+    def test_recent_news_is_list(self, client):
+        resp = client.get("/control/recent-news")
+        assert isinstance(resp.json(), list)
+
+    def test_recent_news_limit_param(self, client):
+        resp = client.get("/control/recent-news?limit=3")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) <= 3
+
+    def test_recent_news_item_has_title(self, client):
+        """항목이 있다면 title 필드가 있어야 한다."""
+        resp = client.get("/control/recent-news")
+        items = resp.json()
+        for item in items:
+            assert "title" in item
+            assert isinstance(item["title"], str)
+
+    def test_recent_news_graceful_on_empty_buffer(self, client):
+        """뉴스 버퍼가 비어 있어도 빈 배열을 반환한다 (500 없음)."""
+        resp = client.get("/control/recent-news")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
