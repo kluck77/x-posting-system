@@ -8,7 +8,8 @@ import json
 import pytest
 from datetime import datetime, timezone, timedelta
 from app.models.content import (
-    Base, Draft, SourceItem, ContentCategory, RiskLevel, ApprovalStatus,
+    Base, Draft, SourceItem, CtaCopy,
+    ContentCategory, RiskLevel, ApprovalStatus,
 )
 from app.services.weekly_report_service import WeeklyReportService
 
@@ -345,3 +346,155 @@ class TestExport:
         exported = svc.export_report()
         text = json.dumps(exported, ensure_ascii=False)
         assert len(text) > 0
+
+
+# ─── CTA 카피 성과 섹션 ─────────────────────────────────────
+
+def _make_cta_copy(db, cta_type="newsletter_signup", copy_text="Test CTA"):
+    copy = CtaCopy(
+        cta_type=cta_type, copy_text=copy_text, is_active=True,
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return copy
+
+
+def _make_linked_draft(db, source, cta_copy, hook="Linked Draft",
+                       approval_status=ApprovalStatus.PUBLISHED,
+                       monetization_score=None, x_post_id=None):
+    draft = Draft(
+        source_item_id=source.id, hook=hook,
+        body="Test body", category=ContentCategory.ECONOMY,
+        risk_level=RiskLevel.LOW,
+        approval_status=approval_status,
+        monetization_score=monetization_score,
+        x_post_id=x_post_id,
+        cta_copy_id=cta_copy.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+class TestCtaPerfSummary:
+    def test_report_has_cta_perf_section(self, db):
+        svc = WeeklyReportService(db)
+        report = svc.generate_report()
+        assert "cta_perf_summary" in report
+
+    def test_empty_when_no_copies(self, db):
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert cta["total_copies"] == 0
+        assert cta["linked_copies"] == 0
+
+    def test_counts_copies(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "NL CTA")
+        c2 = _make_cta_copy(db, "lead_magnet", "LM CTA")
+        _make_linked_draft(db, src, c1)
+        _make_linked_draft(db, src, c1)
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert cta["total_copies"] == 2
+        assert cta["linked_copies"] == 1
+        assert cta["unlinked_copies"] == 1
+        assert cta["total_linked_drafts"] == 2
+
+    def test_published_and_posted(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "NL CTA")
+        _make_linked_draft(db, src, c1, approval_status=ApprovalStatus.PUBLISHED,
+                           x_post_id="tweet123")
+        _make_linked_draft(db, src, c1, approval_status=ApprovalStatus.REJECTED)
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert cta["total_published"] == 1
+        assert cta["total_posted_to_x"] == 1
+
+    def test_type_usage(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "NL")
+        c2 = _make_cta_copy(db, "premium_teaser", "PT")
+        _make_linked_draft(db, src, c1)
+        _make_linked_draft(db, src, c1)
+        _make_linked_draft(db, src, c2)
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert cta["type_usage"]["newsletter_signup"] == 2
+        assert cta["type_usage"]["premium_teaser"] == 1
+
+    def test_top_copies(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "Top CTA")
+        _make_linked_draft(db, src, c1)
+        _make_linked_draft(db, src, c1)
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert len(cta["top_copies"]) == 1
+        assert cta["top_copies"][0]["copy_id"] == c1.id
+        assert cta["top_copies"][0]["total_linked"] == 2
+
+    def test_notable_high_monetization(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "premium_teaser", "Premium CTA")
+        _make_linked_draft(db, src, c1, monetization_score=85)
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert len(cta["notable_copies"]) == 1
+        assert cta["notable_copies"][0]["avg_monetization"] >= 70
+
+    def test_notable_high_pub_rate(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "Good CTA")
+        _make_linked_draft(db, src, c1, approval_status=ApprovalStatus.PUBLISHED)
+        _make_linked_draft(db, src, c1, approval_status=ApprovalStatus.PUBLISHED)
+        svc = WeeklyReportService(db)
+        cta = svc.generate_report()["cta_perf_summary"]
+        assert len(cta["notable_copies"]) == 1
+
+    def test_export_includes_cta_perf(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "Export CTA")
+        _make_linked_draft(db, src, c1)
+        svc = WeeklyReportService(db)
+        exported = svc.export_report()
+        assert "cta_perf_summary" in exported
+        text = json.dumps(exported, ensure_ascii=False)
+        assert "cta_perf_summary" in text
+
+
+class TestCtaPerfFormat:
+    def test_format_report_includes_cta(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "NL CTA for format")
+        _make_linked_draft(db, src, c1)
+        svc = WeeklyReportService(db)
+        report = svc.generate_report()
+        text = svc.format_report(report)
+        assert "CTA 카피 성과" in text
+
+    def test_format_report_skips_when_empty(self, db):
+        svc = WeeklyReportService(db)
+        report = svc.generate_report()
+        text = svc.format_report(report)
+        assert "CTA 카피 성과" not in text
+
+    def test_compact_includes_cta(self, db):
+        src = _make_source(db)
+        c1 = _make_cta_copy(db, "newsletter_signup", "NL CTA compact")
+        _make_linked_draft(db, src, c1)
+        svc = WeeklyReportService(db)
+        report = svc.generate_report()
+        text = svc.format_compact(report)
+        assert "CTA 카피" in text
+
+    def test_compact_skips_when_no_linked(self, db):
+        _make_cta_copy(db, "newsletter_signup", "Unlinked CTA")
+        svc = WeeklyReportService(db)
+        report = svc.generate_report()
+        text = svc.format_compact(report)
+        assert "CTA 카피" not in text

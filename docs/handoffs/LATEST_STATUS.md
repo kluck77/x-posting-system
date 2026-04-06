@@ -5,14 +5,15 @@
 **DO NOT re-implement the dashboard or control room. It is already built and locked.**
 **DO NOT re-implement premium/b2b/email/lead base services. They are built and tested.**
 
-Session 15–16 complete:
+Session 15–17 complete:
 - **B2B sample report** — `generate_sample_report()`, `/b2b report <id> [save|export]`
 - **Brief offer layer** — `BriefOfferService`, `/brief` (8 subcommands), 3 new columns
 - **Newsletter routine** — `NewsletterRoutineService`, `/newsletter` (7 subcommands)
 - **Weekly report** — `WeeklyReportService`, `/weekly` (summary/view/export)
 - **CTA copy library** — `CtaCopyService`, `CtaCopy` model, `/cta copy` (9 subcommands), draft linking
 - **CTA copy perf tracking** — `get_copy_perf`, `get_all_perf`, `/cta perf` (3 subcommands)
-- 883 tests passing, all flows protected
+- **Weekly CTA perf section** — `_cta_perf_summary()`, `/weekly view`·`/weekly export` 통합
+- 896 tests passing, all flows protected
 
 ---
 
@@ -64,6 +65,7 @@ What was built:
 | **S15** | **Weekly report (/weekly, WeeklyReportService)** | **Locked** |
 | **S15** | **CTA copy library (/cta copy, CtaCopyService, CtaCopy model)** | **Locked** |
 | **S16** | **CTA copy perf tracking (/cta perf)** | **Locked** |
+| **S17** | **Weekly CTA perf section (/weekly view·export)** | **Locked** |
 
 ---
 
@@ -84,17 +86,18 @@ What was built:
 ## Next Candidates
 
 **System is fully operator-ready. Nothing urgent is missing.**
-883 tests passing, all flows protected.
+896 tests passing, all flows protected.
 Full operating layer stack: premium, B2B, brief, newsletter, lead, weekly report, CTA copy library + perf.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 16 — CTA Copy Performance Tracking)
-- Branch: claude/premium-control-room-ui-LJFba
+- Date: 2026-04-06 (session 17 — Weekly CTA Perf Section)
+- Branch: claude/extract-prediction-time-n82UK (aligned to claude/premium-control-room-ui-LJFba)
 - Key commits:
-  - CTA copy perf tracking (/cta perf + tests)
+  - Weekly CTA perf section (_cta_perf_summary + /weekly 통합)
+  - `7cb6e21` — CTA copy perf tracking (/cta perf + tests)
   - `9e541e5` — CTA copy library (/cta copy + draft linking)
   - `70a186f` — Weekly operating report (/weekly)
   - `da09c92` — Newsletter/lead routine (/newsletter, /lead export)

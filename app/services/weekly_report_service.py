@@ -51,6 +51,7 @@ class WeeklyReportService:
             "premium_summary": self._premium_summary(),
             "brief_summary": self._brief_summary(),
             "b2b_summary": self._b2b_summary(),
+            "cta_perf_summary": self._cta_perf_summary(),
             "highlights": self._highlights(cutoff),
             "followup_items": self._followup_items(),
         }
@@ -255,6 +256,78 @@ class WeeklyReportService:
                 "audience_distribution": {}, "usecase_distribution": {},
             }
 
+    def _cta_perf_summary(self) -> dict:
+        """CTA 카피 블록 성과 요약."""
+        try:
+            from app.services.cta_copy_service import CtaCopyService
+            csvc = CtaCopyService(self.db)
+            all_perf = csvc.get_all_perf()
+
+            total_copies = len(all_perf)
+            linked_copies = [p for p in all_perf if p["total_linked"] > 0]
+            unlinked = total_copies - len(linked_copies)
+
+            total_linked_drafts = sum(p["total_linked"] for p in all_perf)
+            total_published = sum(p["published"] for p in all_perf)
+            total_posted = sum(p["posted_to_x"] for p in all_perf)
+
+            # 유형별 집계
+            type_usage: dict[str, int] = {}
+            for p in all_perf:
+                ct = p["cta_type"]
+                type_usage[ct] = type_usage.get(ct, 0) + p["total_linked"]
+
+            # 상위 카피 (연결 수 기준 상위 3)
+            top_copies = [
+                {
+                    "copy_id": p["copy_id"],
+                    "cta_type": p["cta_type"],
+                    "copy_text": p["copy_text"][:80],
+                    "total_linked": p["total_linked"],
+                    "published": p["published"],
+                    "avg_monetization": p["avg_monetization"],
+                    "is_active": p["is_active"],
+                }
+                for p in linked_copies[:3]
+            ]
+
+            # 강한 성과 카피 (게시율 50%+ 또는 평균 수익화 70+)
+            notable = [
+                {
+                    "copy_id": p["copy_id"],
+                    "cta_type": p["cta_type"],
+                    "copy_text": p["copy_text"][:80],
+                    "total_linked": p["total_linked"],
+                    "published": p["published"],
+                    "avg_monetization": p["avg_monetization"],
+                }
+                for p in linked_copies
+                if (
+                    p["avg_monetization"] >= 70
+                    or (p["total_linked"] >= 2 and p["published"] / p["total_linked"] >= 0.5)
+                )
+            ]
+
+            return {
+                "total_copies": total_copies,
+                "linked_copies": len(linked_copies),
+                "unlinked_copies": unlinked,
+                "total_linked_drafts": total_linked_drafts,
+                "total_published": total_published,
+                "total_posted_to_x": total_posted,
+                "type_usage": type_usage,
+                "top_copies": top_copies,
+                "notable_copies": notable,
+            }
+        except Exception as e:
+            logger.warning(f"[WeeklyReport] CTA 성과 요약 실패: {e}")
+            return {
+                "total_copies": 0, "linked_copies": 0, "unlinked_copies": 0,
+                "total_linked_drafts": 0, "total_published": 0,
+                "total_posted_to_x": 0,
+                "type_usage": {}, "top_copies": [], "notable_copies": [],
+            }
+
     def _highlights(self, cutoff: datetime) -> list[dict]:
         """주요 하이라이트 (높은 수익화 점수, 게시 완료 등)."""
         try:
@@ -386,6 +459,7 @@ class WeeklyReportService:
             ps = report["premium_summary"]
             brs = report["brief_summary"]
             b2b = report["b2b_summary"]
+            cta = report.get("cta_perf_summary", {})
             highlights = report["highlights"]
             followups = report["followup_items"]
 
@@ -486,6 +560,39 @@ class WeeklyReportService:
                     lines.append(f"  대상: {aud_str}")
                 lines.append("")
 
+            # CTA 카피 성과
+            if cta.get("total_copies", 0) > 0:
+                lines.append(f"📢 <b>CTA 카피 성과</b> (총 {cta['total_copies']}건)")
+                lines.append(
+                    f"  연결 {cta['linked_copies']}건 | "
+                    f"미연결 {cta['unlinked_copies']}건 | "
+                    f"연결 드래프트 {cta['total_linked_drafts']}건"
+                )
+                if cta.get("total_published"):
+                    lines.append(
+                        f"  게시 {cta['total_published']}건 | "
+                        f"X 게시 {cta['total_posted_to_x']}건"
+                    )
+                if cta.get("type_usage"):
+                    usage_str = ", ".join(
+                        f"{t}({n})"
+                        for t, n in sorted(cta["type_usage"].items(), key=lambda x: -x[1])
+                    )
+                    lines.append(f"  유형별: {usage_str}")
+                if cta.get("top_copies"):
+                    lines.append("  <b>상위 카피:</b>")
+                    for tc in cta["top_copies"][:3]:
+                        status = "✅" if tc["is_active"] else "⏸️"
+                        lines.append(
+                            f"    • #{tc['copy_id']} [{tc['cta_type']}] {status} "
+                            f"연결 {tc['total_linked']} 게시 {tc['published']} "
+                            f"💰{tc['avg_monetization']}"
+                        )
+                if cta.get("notable_copies"):
+                    lines.append(f"  🌟 주목: {len(cta['notable_copies'])}건 "
+                                 f"(게시율 50%+ 또는 수익화 70+)")
+                lines.append("")
+
             # 하이라이트
             if highlights:
                 lines.append(f"🌟 <b>하이라이트</b> (수익화 70+)")
@@ -519,6 +626,7 @@ class WeeklyReportService:
             ps = report["premium_summary"]
             b2b = report["b2b_summary"]
             ns = report["newsletter_summary"]
+            cta = report.get("cta_perf_summary", {})
             followups = report["followup_items"]
             days = report["period_days"]
 
@@ -529,6 +637,11 @@ class WeeklyReportService:
                 f"📰 뉴스레터 {ns['total_newsletter']}건 | "
                 f"📄 리드자석 {ns['total_lead_assets']}건",
             ]
+            if cta.get("linked_copies", 0) > 0:
+                lines.append(
+                    f"📢 CTA 카피 {cta['linked_copies']}건 활용 | "
+                    f"게시 {cta.get('total_published', 0)}"
+                )
             if followups:
                 lines.append(f"➡️ 후속 조치 {len(followups)}항목")
             return "\n".join(lines)
