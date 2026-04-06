@@ -1,7 +1,7 @@
 # Latest Status
 
 ## Current Phase
-Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보류) wired into news alerts and draft approval cards. Weekly report upgraded with patterns + angles + source directions.
+Phase 18 Mobile Control Room Bundle complete. Mobile-first 4-tab dashboard (Status/AI/Intake/Ops) built for iPhone 17 Pro Max Safari. Control room available at `http://localhost:8000/control/`. 573 tests passing.
 
 ---
 
