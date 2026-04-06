@@ -1,91 +1,49 @@
-# Current Session
+# Current Session — 2026-04-06 (Session 13)
 
-## Session Info
+## What Was Done This Session
 
-- Date: 2026-04-06
-- Branch: claude/extract-prediction-time-n82UK
-- Phase: Phase 18 — Telegram Quick Menu
+### 1. Phase 18-C Safari Animation Fix (commit `f1304e5`)
+- **Problem:** Two separate CSS animations (`float` translateY + `breathe` scale) both targeting `transform` — Safari silently drops one, so mascot appeared static.
+- **Fix:** Combined into single `@keyframes mascot-idle` keyframe (translateY + scale in same keyframe). No more Safari conflict.
+- **Problem 2:** Card shadows (`rgba(0,0,0,0.45)`) invisible on `#0b0d14` dark bg.
+- **Fix:** Added `inset 0 1px 0 rgba(255,255,255,0.06)` top-edge highlight to all `.card`. Creates perceived glass depth.
 
----
+### 2. VPS Deployment (commit `776dd92`)
+- Added `deploy_dashboard.sh` — one-command server deploy script
+- Creates systemd service `xdashboard`, pulls from branch, installs deps, opens port 8000
+- Tested on VPS 107.191.61.190 — dashboard running at `http://107.191.61.190:8000/control/`
+- **pydantic-settings note:** `MOCK_MODE=true` in `.env` causes `ValidationError: Extra inputs are not permitted` (pydantic v2 strict mode). Fix: keep `.env` empty or omit unknown fields.
 
-## What This Session Did
-
-Added `/menu` command to Telegram bot — 5 inline quick-action buttons that let the operator
-trigger the most common commands without typing. Builds on Phase 18 Mobile Control Room.
-
----
-
-## Bundle Items Implemented
-
-### `app/telegram_bot.py` — 4 changes
-
-**1. `menu_command` (신규 함수)**
-- `/menu` 입력 시 InlineKeyboard 5버튼 메시지 전송
-- 버튼: ✍️초안 만들기 / 📋큐 보기 / 📊오늘 상태 / 👀모니터 상태 / 🛟복구 체크
-
-**2. `_handle_quick_callback` (신규 헬퍼)**
-- `quick_*` callback_data 처리
-- 기존 커맨드 핸들러(`queue_command`, `status_command`, `monitor_command`, `recover_command`) 재사용
-- `_U` 래퍼: `query.message`를 `update.message`로 전달 (기존 핸들러 무수정)
-- `quick_draft`는 URL/텍스트 입력 안내 메시지 전송
-
-**3. `callback_handler` 라우팅 추가**
-- `if callback_data.startswith("quick_"): await _handle_quick_callback(query, context); return`
-
-**4. `CommandHandler("menu", menu_command)` 등록**
-
-### `tests/test_critical_flows.py` — `TestTelegramQuickMenu` 클래스 추가
-
-6개 `@pytest.mark.critical` 테스트 (텍스트 분석 방식 — telegram 라이브러리 임포트 없음):
-- `menu_command` 함수 정의 확인
-- `CommandHandler("menu")` 등록 확인
-- `quick_draft/queue/status/monitor/recover` 5개 callback_data 존재 확인
-- `quick_` 라우팅이 callback_handler에 있는지 확인
-- `_handle_quick_callback`이 기존 커맨드 재사용하는지 확인
-- 5개 버튼 텍스트 존재 확인
+## Current State
+- 579 tests passing (no regressions)
+- Branch: `claude/extract-prediction-time-n82UK`
+- Dashboard accessible at `/control/` on VPS
+- Key commits: `f1304e5` (Safari fix), `776dd92` (deploy script), `3ffc011` (18-C polish), `dba4204` (quick menu)
 
 ---
 
-## Files Changed
+## Scoped But NOT Built: Phase 18-E Premium Visual Pass
+
+A full cinematic premium redesign was scoped but NOT written to disk this session.
+Purely visual — no API/logic/test changes required. Operator can request explicitly.
+
+Planned changes for `static/dashboard.html` only:
+1. `body::before` radial gradient atmospheric bg (3 layered light spots)
+2. Glass card morphism: `backdrop-filter: blur(12px)` + `rgba(14,18,30,0.88)` surface + inset highlight
+3. Hero card recomposition: 74px mascot + pulsing ring + LIVE badge + stat strip + worker pills row
+4. AI worker cards: left `::before` accent bar (3px, role color), 50px avatar, role-specific animations
+5. Naver SVG circular arc gauge: `<circle r="32" stroke-dasharray="201.1">` with JS `stroke-dashoffset`
+6. Flowing pipeline connector: animated gradient `background-size:200%`
+7. Header: "CONTROL ROOM" pill badge
+8. Tab: icon scale(1.15) on active + 2px bottom accent line
+
+---
+
+## Files Changed This Session
 
 | File | Change |
 |------|--------|
-| `app/telegram_bot.py` | `menu_command` + `_handle_quick_callback` + 라우팅 + 핸들러 등록 |
-| `tests/test_critical_flows.py` | `TestTelegramQuickMenu` — 6개 critical 테스트 추가 |
-| `docs/handoffs/LATEST_STATUS.md` | 상태 업데이트 |
-| `docs/handoffs/CURRENT_SESSION.md` | 이 파일 |
-
----
-
-## Tests Run
-
-```
-pytest tests/test_critical_flows.py -q --tb=short
-23 passed, 2 warnings
-
-pytest tests/ -q --tb=short
-579 passed, 4 warnings
-```
-
----
-
-## Architecture Notes
-
-- 기존 커맨드 핸들러 무수정 (locked areas 보존)
-- `_U` 래퍼는 `query.message`를 `update.message`로 전달하는 최소 객체
-- `monitor_command`는 `context.args`가 None일 때 이미 "status"로 기본 처리됨 — 별도 패치 불필요
-- Layer 1 승인 플로우 미변경
-- 자동 포스팅 없음
-
----
-
-## Cumulative Phase 18 Summary
-
-Phase 18은 두 커밋으로 완료:
-
-| 커밋 | 내용 |
-|------|------|
-| `36b3b3b` | Mobile 4-tab dashboard + /control/recent-news |
-| `dba4204` | Telegram /menu quick-action buttons |
-
-전체: 579 tests passing, 23 critical flows.
+| `static/dashboard.html` | Safari animation fix + card depth fix |
+| `deploy_dashboard.sh` | New VPS deployment script |
+| `docs/handoffs/LATEST_STATUS.md` | Updated to session 13 state |
+| `docs/handoffs/CURRENT_SESSION.md` | This file |
