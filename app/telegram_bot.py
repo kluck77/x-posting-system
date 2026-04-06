@@ -849,14 +849,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/menu — 퀵 액션 인라인 버튼 메뉴."""
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✍️ 초안 만들기", callback_data="quick_draft")],
-        [InlineKeyboardButton("📋 큐 보기",     callback_data="quick_queue")],
-        [InlineKeyboardButton("📊 오늘 상태",   callback_data="quick_status")],
-        [InlineKeyboardButton("👀 모니터 상태", callback_data="quick_monitor")],
-        [InlineKeyboardButton("🛟 복구 체크",   callback_data="quick_recover")],
+        [InlineKeyboardButton("✍️ 초안 요청",   callback_data="quick_draft")],
+        [InlineKeyboardButton("📋 대기 큐",      callback_data="quick_queue")],
+        [InlineKeyboardButton("📊 오늘 현황",    callback_data="quick_status")],
+        [InlineKeyboardButton("👀 모니터 확인",  callback_data="quick_monitor")],
+        [InlineKeyboardButton("🛟 복구 점검",    callback_data="quick_recover")],
     ])
     await update.message.reply_text(
-        "⚡ <b>퀵 액션</b>\n원하는 작업을 탭하세요.",
+        "⚡ <b>오퍼레이터 메뉴</b>\n무엇을 할까요?",
         reply_markup=keyboard,
         parse_mode="HTML",
     )

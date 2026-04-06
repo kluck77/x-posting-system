@@ -439,5 +439,5 @@ class TestTelegramQuickMenu:
     @pytest.mark.critical
     def test_five_inline_buttons_present(self):
         """5개 인라인 버튼 텍스트가 menu_command에 있어야 한다."""
-        for label in ("초안 만들기", "큐 보기", "오늘 상태", "모니터 상태", "복구 체크"):
+        for label in ("초안 요청", "대기 큐", "오늘 현황", "모니터 확인", "복구 점검"):
             assert label in self.src, f"Missing button label: {label}"
