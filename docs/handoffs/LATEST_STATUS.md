@@ -1,19 +1,20 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: 18-C (+ deploy script + Safari fix)
+## ⚠️ LAST COMPLETED PHASE: 18-G (premium visual reconstruction)
 
 **DO NOT re-implement the dashboard or control room. It is already built and locked.**
 
-Phase 18-C is complete and polished:
-- Mobile-first 4-tab Control Room dashboard → `http://localhost:8000/control/`
-- Premium visual polish: card shadows, mascot float/breathe animation, dot pulse-glow, gauge glow
-- Role-specific AI avatar animations (typing/breathe/float/radar per provider)
-- Naver intake context: remaining API calls + lead-to-draft hint
-- AI role taglines with 5-criteria contribution per provider
-- Telegram `/menu` polished: "오퍼레이터 메뉴", cleaner button labels
-- **Safari fix (f1304e5):** Combined mascot float+breathe into single `@keyframes mascot-idle` to resolve Safari transform conflict. Cards now show `inset 0 1px 0 rgba(255,255,255,0.06)` highlight for visible glass depth on dark bg.
-- **Deploy script (776dd92):** `deploy_dashboard.sh` — pulls branch, creates systemd service `xdashboard`, opens port 8000. Tested on VPS 107.191.61.190.
+Phase 18-G (visual reconstruction) complete:
+- **Hero card:** portrait-stage left column, `char-live` animation (translateY+rotate+scale), gradient headline, mini-stat row, worker pills strip
+- **AI tab:** workstation cards — `worker-portrait` left column (currentColor bg + dark overlay + glow), each AI role has visual desk presence
+- **Atmosphere:** 4-layer `body::before` radial gradients; deeper card glass (`backdrop-filter:blur(16px)`)
+- **Pipeline:** larger nodes (48px), stronger pulse (scale + glow), wider connectors, faster flow animation
+- **Naver card:** status strip banner with level color coding (ok/caution/warning/idle)
+- **News items:** arrow bullet prefix
+- **Ops:** section group headers, accent color on non-zero values
+- **Safari fix:** hero-ring-pulse keyframes include `translateX(-50%)` to prevent centering regression
 - 579 tests passing, 23 critical flows protected
+- Commit: `d5e906a`
 
 ---
 
@@ -63,6 +64,7 @@ What was built in Phase 18:
 | **18** | **Telegram /menu quick-action buttons (_handle_quick_callback, 6 critical tests)** | **Locked** |
 | **18-C** | **Premium Polish: card shadows, mascot/dot animations, role taglines, Naver context, Telegram UX** | **Locked** |
 | **18-C fix** | **Safari transform conflict fix (mascot-idle keyframe), deploy_dashboard.sh** | **Locked** |
+| **18-G** | **Premium visual reconstruction (portrait hero, workstation AI cards, atmosphere, pipeline, Naver status strip)** | **Locked** |
 
 ---
 
@@ -96,13 +98,12 @@ This is purely visual — no API or logic changes required. Operator can request
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 13 — Phase 18-C fix + deploy script)
+- Date: 2026-04-06 (session 14 — Phase 18-G visual reconstruction)
 - Branch: claude/extract-prediction-time-n82UK
 - Key commits:
+  - `d5e906a` — Phase 18-G (portrait hero, workstation AI cards, atmosphere, pipeline, Naver strip)
+  - `0979853` — Phase 18-F (visual reconstruction base)
+  - `b04da8e` — Phase 18-E (cinematic premium pass)
   - `f1304e5` — Phase 18-C fix (Safari mascot animation + card depth)
   - `776dd92` — deploy_dashboard.sh
-  - `3ffc011` — Phase 18-C premium polish
-  - `dba4204` — Phase 18 Telegram quick menu
-  - `36b3b3b` — Mobile dashboard
-  - `73403c7` — Control Room API
 - Run `git log --oneline -8` to see recent commits
