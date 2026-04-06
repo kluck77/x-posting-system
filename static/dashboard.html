@@ -59,13 +59,31 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
 #refresh-btn:active{color:var(--accent)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinning{animation:spin .7s linear infinite;display:inline-block}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
-@keyframes typing-pulse{0%{opacity:.3}25%{opacity:1}50%{opacity:.5}75%{opacity:.9}100%{opacity:.3}}
+/* Combined mascot idle: float + breathe in one keyframe to avoid Safari transform conflict */
+@keyframes mascot-idle{
+  0%  {transform:translateY(0) scale(1)}
+  20% {transform:translateY(-3px) scale(1.04)}
+  50% {transform:translateY(-6px) scale(1.08)}
+  80% {transform:translateY(-3px) scale(1.04)}
+  100%{transform:translateY(0) scale(1)}
+}
+@keyframes ring-pulse{
+  0%,100%{opacity:0.25;transform:scale(0.94)}
+  50%{opacity:0.9;transform:scale(1.06);box-shadow:0 0 22px rgba(79,142,255,0.55)}
+}
+@keyframes ring-pulse-green{
+  0%,100%{opacity:0.2;transform:scale(0.94)}
+  50%{opacity:0.85;transform:scale(1.06);box-shadow:0 0 22px rgba(34,197,94,0.55)}
+}
 @keyframes radar-sweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-@keyframes pulse-glow-green{0%,100%{box-shadow:0 0 6px rgba(34,197,94,0.5)}50%{box-shadow:0 0 14px rgba(34,197,94,0.9),0 0 24px rgba(34,197,94,0.35)}}
-@keyframes pulse-glow-red{0%,100%{box-shadow:0 0 6px rgba(239,68,68,0.5)}50%{box-shadow:0 0 14px rgba(239,68,68,0.9),0 0 24px rgba(239,68,68,0.35)}}
-@keyframes pulse-glow-amber{0%,100%{box-shadow:0 0 6px rgba(245,158,11,0.5)}50%{box-shadow:0 0 14px rgba(245,158,11,0.9),0 0 24px rgba(245,158,11,0.35)}}
+@keyframes avatar-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+@keyframes avatar-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes avatar-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:0.35}}
+@keyframes pulse-glow-green{0%,100%{box-shadow:0 0 6px rgba(34,197,94,0.5)}50%{box-shadow:0 0 16px rgba(34,197,94,1),0 0 28px rgba(34,197,94,0.4)}}
+@keyframes pulse-glow-red{0%,100%{box-shadow:0 0 6px rgba(239,68,68,0.5)}50%{box-shadow:0 0 16px rgba(239,68,68,1),0 0 28px rgba(239,68,68,0.4)}}
+@keyframes pulse-glow-amber{0%,100%{box-shadow:0 0 6px rgba(245,158,11,0.5)}50%{box-shadow:0 0 16px rgba(245,158,11,1),0 0 28px rgba(245,158,11,0.4)}}
+@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
 
 .content{
   position:fixed;
@@ -96,15 +114,24 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
   flex:1;display:flex;flex-direction:column;align-items:center;
   gap:2px;min-height:56px;padding:6px 4px 4px;
   background:none;border:none;color:var(--txt3);cursor:pointer;
-  transition:color .15s;font-size:10px;letter-spacing:0.2px;
+  transition:color .2s;font-size:10px;letter-spacing:0.3px;
+  position:relative;
 }
-.tab-btn .tab-icon{font-size:22px;line-height:1}
+.tab-btn::after{
+  content:'';position:absolute;top:0;left:25%;right:25%;
+  height:2px;background:var(--accent);border-radius:0 0 3px 3px;
+  opacity:0;transition:opacity .2s;
+}
+.tab-btn .tab-icon{font-size:24px;line-height:1;transition:transform .2s}
 .tab-btn.active{color:var(--accent)}
+.tab-btn.active::after{opacity:1}
+.tab-btn.active .tab-icon{transform:scale(1.1)}
 
 .card{
-  background:var(--surface);border:1px solid var(--border);
+  background:var(--surface);
+  border:1px solid rgba(255,255,255,0.09);
   border-radius:14px;padding:14px 16px;
-  box-shadow:var(--shadow-card);
+  box-shadow:0 4px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .card-title{font-size:11px;font-weight:700;color:var(--txt3);
   text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px}
@@ -119,26 +146,60 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
 .alert-banner.hidden{display:none}
 
 .mascot-card{
-  background:linear-gradient(135deg,#141720 0%,#1c2035 55%,#141b2e 100%);
-  border:1px solid rgba(79,142,255,0.28);border-radius:16px;padding:16px;
-  box-shadow:0 0 32px rgba(79,142,255,0.07), var(--shadow-card);
+  background:linear-gradient(140deg,#131620 0%,#1a2040 50%,#131a2e 100%);
+  border:1px solid rgba(79,142,255,0.35);border-radius:18px;padding:20px 16px;
+  box-shadow:0 0 40px rgba(79,142,255,0.12), 0 4px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(79,142,255,0.15);
 }
-.mascot-row{display:flex;align-items:center;gap:12px}
+.mascot-row{display:flex;align-items:center;gap:16px}
+/* Mascot avatar wrapper with pulsing ring */
+.mascot-avatar-wrap{
+  position:relative;width:68px;height:68px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.mascot-ring{
+  position:absolute;inset:-8px;border-radius:50%;
+  border:2px solid rgba(79,142,255,0.5);
+  animation:ring-pulse 3s ease-in-out infinite;
+  pointer-events:none;
+}
+.mascot-ring-ok{
+  position:absolute;inset:-8px;border-radius:50%;
+  border:2px solid rgba(34,197,94,0.5);
+  animation:ring-pulse-green 3s ease-in-out infinite;
+  pointer-events:none;
+  display:none;
+}
 .mascot-emoji{
-  font-size:40px;line-height:1;display:inline-block;
-  animation:float 4s ease-in-out infinite, breathe 6s ease-in-out infinite;
+  font-size:52px;line-height:1;display:inline-block;
+  animation:mascot-idle 5s ease-in-out infinite;
   transform-origin:center;will-change:transform;
+  position:relative;z-index:1;
 }
-.mascot-text h2{font-size:17px;font-weight:700;margin-bottom:3px}
-.mascot-text p{font-size:12px;color:var(--txt2)}
+.mascot-text{flex:1;min-width:0}
+.mascot-text h2{font-size:19px;font-weight:800;margin-bottom:4px;letter-spacing:-0.3px}
+.mascot-text p{font-size:12px;color:var(--txt2);line-height:1.4}
+/* Live status badge */
+.mascot-live{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;
+  color:var(--green);margin-bottom:6px;
+}
+.mascot-live-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--green);
+  animation:pulse-glow-green 2s ease-in-out infinite;
+  flex-shrink:0;
+}
 
 .quick-stats{display:flex;gap:8px}
 .stat-chip{
-  flex:1;background:var(--surface2);border:1px solid var(--border);
-  border-radius:10px;padding:10px 8px;text-align:center;
+  flex:1;
+  background:linear-gradient(145deg,#1a1e2e,#1e2438);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:13px;padding:13px 8px;text-align:center;
+  box-shadow:0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.07);
 }
-.stat-chip .chip-val{font-size:20px;font-weight:700;line-height:1.1}
-.stat-chip .chip-lbl{font-size:10px;color:var(--txt2);margin-top:3px}
+.stat-chip .chip-val{font-size:26px;font-weight:800;line-height:1.1}
+.stat-chip .chip-lbl{font-size:10px;color:var(--txt3);margin-top:4px;letter-spacing:0.5px;text-transform:uppercase}
 
 .health-row{
   display:flex;align-items:center;justify-content:space-between;
@@ -209,12 +270,12 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
 .provider-count{text-align:right;flex-shrink:0}
 .provider-count .cnt{font-size:28px;font-weight:700;line-height:1}
 .provider-count .cnt-lbl{font-size:10px;color:var(--txt3);margin-top:2px}
-/* Role-specific mascot animations */
-.role-draft .provider-avatar{animation:typing-pulse 1.8s ease-in-out infinite}
-.role-review .provider-avatar{animation:breathe 3.5s ease-in-out infinite}
-.role-research .provider-avatar{animation:float 4.5s ease-in-out infinite}
-.role-fact .provider-avatar{animation:breathe 2.8s ease-in-out infinite}
-.role-trend .provider-avatar{animation:radar-sweep 4s linear infinite}
+/* Role-specific avatar animations — single transform each to avoid Safari conflict */
+.role-draft .provider-avatar{animation:dot-blink 1.2s ease-in-out infinite}
+.role-review .provider-avatar{animation:avatar-breathe 3s ease-in-out infinite}
+.role-research .provider-avatar{animation:avatar-bob 4s ease-in-out infinite}
+.role-fact .provider-avatar{animation:avatar-breathe 2.2s ease-in-out infinite}
+.role-trend .provider-avatar{animation:avatar-spin 5s linear infinite}
 /* Naver intake context */
 .naver-context{font-size:11px;color:var(--txt3);margin-top:6px;letter-spacing:0.1px}
 .naver-intake-hint{
@@ -222,10 +283,11 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
   background:rgba(79,142,255,0.06);border-left:2px solid rgba(79,142,255,0.3);border-radius:4px;
 }
 @media(prefers-reduced-motion:reduce){
-  .mascot-emoji,.role-draft .provider-avatar,.role-review .provider-avatar,
+  .mascot-emoji,.mascot-ring,.mascot-ring-ok,
+  .role-draft .provider-avatar,.role-review .provider-avatar,
   .role-research .provider-avatar,.role-fact .provider-avatar,.role-trend .provider-avatar
-  {animation:none!important}
-  .dot-green,.dot-red,.dot-amber{animation:none!important;
+  {animation:none!important;transform:none!important}
+  .dot-green,.dot-red,.dot-amber,.mascot-live-dot{animation:none!important;
     box-shadow:0 0 6px rgba(34,197,94,0.5)}
 }
 .footnote{font-size:11px;color:var(--txt3);text-align:center;padding-top:4px}
@@ -312,8 +374,13 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
     <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
     <div class="mascot-card">
       <div class="mascot-row">
-        <div class="mascot-emoji">👩‍💻</div>
+        <div class="mascot-avatar-wrap">
+          <div class="mascot-ring" id="mascot-ring"></div>
+          <div class="mascot-ring-ok" id="mascot-ring-ok"></div>
+          <div class="mascot-emoji" id="mascot-emoji">👩‍💻</div>
+        </div>
         <div class="mascot-text">
+          <div class="mascot-live" id="mascot-live"><span class="mascot-live-dot"></span>LIVE</div>
           <h2 id="mascot-headline">시스템 정상 운영 중</h2>
           <p id="mascot-sub">데이터 로딩 중…</p>
         </div>
@@ -520,10 +587,26 @@ function renderHome() {
   }
 
   const u = s?.usage;
+  const isIdle = s?.activity?.is_idle;
+  const isOk = s && !isIdle && s.health?.db_ok;
+  // Mascot emoji + headline
+  document.getElementById('mascot-emoji').textContent = isIdle ? '😴' : (s ? '👩‍💻' : '🔌');
   document.getElementById('mascot-headline').textContent =
-    s ? (s.activity?.is_idle ? '⚠️ 장시간 비활성' : '시스템 정상 운영 중') : '데이터 없음';
+    s ? (isIdle ? '장시간 비활성 상태' : '시스템 정상 운영 중') : '연결 없음';
   document.getElementById('mascot-sub').textContent =
     u ? `초안 ${u.drafts.used}/${u.drafts.limit} · 게시 ${u.posts.used}/${u.posts.limit} · 오늘` : '연결 확인 중…';
+  // Live badge + ring color: blue (loading/idle) vs green (ok)
+  const liveEl = document.getElementById('mascot-live');
+  const ringEl = document.getElementById('mascot-ring');
+  const ringOkEl = document.getElementById('mascot-ring-ok');
+  if (liveEl) {
+    liveEl.style.color = isIdle ? 'var(--amber)' : isOk ? 'var(--green)' : 'var(--txt2)';
+    liveEl.innerHTML = `<span class="mascot-live-dot" style="background:${isIdle?'var(--amber)':isOk?'var(--green)':'var(--txt2)'}"></span>${isIdle?'IDLE':isOk?'LIVE':'—'}`;
+  }
+  if (ringEl && ringOkEl) {
+    ringEl.style.display = isOk ? 'none' : '';
+    ringOkEl.style.display = isOk ? '' : 'none';
+  }
 
   const qc = s?.queue?.pending_count ?? '—';
   const qEl = document.getElementById('qs-queue');
