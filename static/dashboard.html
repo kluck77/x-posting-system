@@ -196,23 +196,27 @@ body::before{
   position:relative;min-height:235px;overflow:hidden;z-index:1;flex:1;
 }
 
-/* CHARACTER — absolute, emerges from the scene via CSS radial mask */
+/* CHARACTER — absolute, emerges from the scene via isolation+multiply */
 .hero-emoji{
   position:absolute;left:-8px;top:0;bottom:0;width:210px;
   z-index:2;will-change:transform;
   animation:char-live 7s ease-in-out infinite;
   transform-origin:bottom center;
+  /* isolation+white bg: multiply(white_img_bg, white)=white(gone), multiply(color, white)=color */
+  isolation:isolate;
+  background:#ffffff;
+  /* Mask the wrapper itself to fade character into dark card at edges */
+  -webkit-mask-image:
+    radial-gradient(ellipse 85% 90% at 42% 52%, black 18%, rgba(0,0,0,0.88) 48%, transparent 73%);
+  mask-image:
+    radial-gradient(ellipse 85% 90% at 42% 52%, black 18%, rgba(0,0,0,0.88) 48%, transparent 73%);
 }
-/* Real image with radial mask — white bg fades into dark, character emerges */
+/* multiply removes white bg perfectly within isolation context */
 .hero-char-img{
   display:block;width:100%;height:100%;
   object-fit:cover;object-position:50% 6%;
-  /* Radial mask: character visible at center-left, white bg edges fade to transparent */
-  -webkit-mask-image:
-    radial-gradient(ellipse 88% 82% at 44% 52%, black 22%, rgba(0,0,0,0.85) 48%, transparent 72%);
-  mask-image:
-    radial-gradient(ellipse 88% 82% at 44% 52%, black 22%, rgba(0,0,0,0.85) 48%, transparent 72%);
-  filter:brightness(1.05) saturate(1.1) contrast(1.06);
+  mix-blend-mode:multiply;
+  filter:brightness(0.96) saturate(1.15) contrast(1.06);
   transition:filter .6s ease;
 }
 .hero-emoji.idle .hero-char-img{
