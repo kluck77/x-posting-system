@@ -1,0 +1,322 @@
+"""
+Control Room API
+================
+대시보드에서 소비하는 집계 엔드포인트.
+기존 데이터(queue, rate-limiter, activity, drafts)를 하나의 뷰로 합칩니다.
+새 데이터 구조는 추가하지 않습니다.
+"""
+
+import logging
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter
+from fastapi.responses import FileResponse
+
+from app.config import settings
+from app.db import get_db
+
+logger = logging.getLogger(__name__)
+KST = ZoneInfo("Asia/Seoul")
+
+router = APIRouter(prefix="/control", tags=["control-room"])
+
+
+# ── 대시보드 HTML 페이지 ──────────────────────────────────────────────────────
+
+@router.get("/", include_in_schema=False)
+async def dashboard_page():
+    """Control Room HTML 대시보드를 반환합니다."""
+    from pathlib import Path
+    html_path = Path("static/dashboard.html")
+    if not html_path.exists():
+        return {"error": "대시보드 파일이 없습니다. static/dashboard.html 을 확인하세요."}
+    return FileResponse(html_path, media_type="text/html")
+
+
+# ── 시스템 상태 스냅샷 ────────────────────────────────────────────────────────
+
+@router.get("/status")
+async def get_control_status():
+    """
+    Control Room 메인 패널 데이터.
+    시스템 전반 상태를 단일 JSON으로 반환합니다.
+    """
+    now_utc = datetime.now(timezone.utc)
+    now_kst = now_utc.astimezone(KST)
+
+    # --- 큐 ---
+    queue_data = _get_queue_status()
+
+    # --- 일일 사용량 ---
+    usage_data = _get_usage()
+
+    # --- 활동 추적 ---
+    activity_data = _get_activity(now_utc)
+
+    # --- 멘션 모니터 ---
+    monitor_data = _get_monitor_status()
+
+    # --- 뉴스 모니터 ---
+    news_data = _get_news_monitor_status()
+
+    # --- 헬스 ---
+    health_data = _get_health()
+
+    return {
+        "generated_at": now_utc.isoformat(),
+        "generated_at_kst": now_kst.strftime("%Y-%m-%d %H:%M KST"),
+        "health": health_data,
+        "queue": queue_data,
+        "usage": usage_data,
+        "activity": activity_data,
+        "monitor": monitor_data,
+        "news": news_data,
+    }
+
+
+# ── 최근 플로우 트레이스 ──────────────────────────────────────────────────────
+
+@router.get("/flow-trace")
+async def get_flow_trace(limit: int = 20):
+    """
+    최근 초안 N개의 플로우 상태를 반환합니다.
+    소스 입력 → 초안 생성 → 검토 → 승인/거절/발행 흐름을 보여줍니다.
+    """
+    db = get_db()
+    try:
+        from app.models.content import Draft
+        rows = (
+            db.query(Draft)
+            .order_by(Draft.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [_format_draft_trace(d) for d in rows]
+    except Exception as e:
+        logger.warning(f"flow-trace 오류: {e}")
+        return []
+    finally:
+        db.close()
+
+
+# ── AI 프로바이더 현황 ────────────────────────────────────────────────────────
+
+@router.get("/providers")
+async def get_providers():
+    """
+    AI 역할별 프로바이더 현황을 반환합니다.
+    실제 구성 정보 + 오늘 생성된 초안 수를 기반으로 활동 여부를 추정합니다.
+    개별 API 호출 횟수는 추적되지 않으므로 초안 수로 대리 지표를 사용합니다.
+    """
+    ai_status = settings.ai_status_summary()
+    effective = {
+        "draft_writer":  settings.get_effective_draft_provider(),
+        "reviewer":      "anthropic",
+        "researcher":    settings.get_effective_research_provider(),
+        "fact_checker":  settings.get_effective_factcheck_provider(),
+        "trend_hunter":  settings.get_effective_trend_provider(),
+    }
+    configured = {
+        "openai":      bool(settings.openai_api_key),
+        "anthropic":   bool(settings.anthropic_api_key),
+        "gemini":      bool(settings.gemini_api_key),
+        "grok":        bool(settings.grok_api_key),
+        "perplexity":  bool(settings.perplexity_api_key),
+        "naver":       bool(settings.naver_client_id and settings.naver_client_secret),
+    }
+
+    # 오늘 초안 수 → 모든 파이프라인 역할이 최소 이만큼 실행됐음을 의미
+    today_drafts = _today_draft_count()
+
+    roles = [
+        {
+            "role": "DraftWriter",
+            "provider": effective["draft_writer"],
+            "configured": configured.get(effective["draft_writer"], False),
+            "runs_today": today_drafts,
+            "note": "초안 1개 = 1 실행" if today_drafts else "오늘 활동 없음",
+        },
+        {
+            "role": "Reviewer",
+            "provider": "anthropic (Claude)",
+            "configured": configured["anthropic"],
+            "runs_today": today_drafts,
+            "note": "초안 1개 = 1 리뷰" if today_drafts else "오늘 활동 없음",
+        },
+        {
+            "role": "Researcher",
+            "provider": effective["researcher"],
+            "configured": configured.get(effective["researcher"], False),
+            "runs_today": today_drafts,
+            "note": "초안 1개 = 1 리서치" if today_drafts else "오늘 활동 없음",
+        },
+        {
+            "role": "FactChecker",
+            "provider": effective["fact_checker"],
+            "configured": configured.get(effective["fact_checker"], False),
+            "runs_today": today_drafts,
+            "note": "초안 1개 = 1 팩트체크" if today_drafts else "오늘 활동 없음",
+        },
+        {
+            "role": "TrendHunter",
+            "provider": "grok",
+            "configured": configured["grok"],
+            "runs_today": None,
+            "note": "/trends 명령으로만 실행됨 — 자동 카운트 없음",
+        },
+    ]
+
+    return {
+        "roles": roles,
+        "ai_status_summary": ai_status,
+        "mock_mode": settings.is_full_mock_mode,
+        "today_draft_count": today_drafts,
+    }
+
+
+# ── Naver 할당량 ──────────────────────────────────────────────────────────────
+
+@router.get("/naver")
+async def get_naver_quota():
+    """오늘의 Naver API 사용량 현황을 반환합니다."""
+    from app.services.naver_usage import get_status
+    return get_status()
+
+
+# ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
+
+def _get_queue_status() -> dict:
+    try:
+        from app.services.growth.post_queue import get_post_queue
+        q = get_post_queue()
+        pending = q.list_pending()
+        all_posts = q.list_all()
+        last_pub = q._last_published
+        return {
+            "pending_count": len(pending),
+            "total_count": len(all_posts),
+            "last_published_at": last_pub.isoformat() if last_pub else None,
+            "pending_items": [
+                {
+                    "text": p.text[:80] + ("…" if len(p.text) > 80 else ""),
+                    "added_at": p.added_at.isoformat(),
+                    "notified": p.notified_at is not None,
+                }
+                for p in pending[:5]
+            ],
+        }
+    except Exception as e:
+        logger.warning(f"queue status 오류: {e}")
+        return {"error": str(e)}
+
+
+def _get_usage() -> dict:
+    db = get_db()
+    try:
+        from app.services.rate_limiter import RateLimiter
+        limiter = RateLimiter(db)
+        return limiter.get_daily_summary()
+    except Exception as e:
+        logger.warning(f"usage 오류: {e}")
+        return {"error": str(e)}
+    finally:
+        db.close()
+
+
+def _get_activity(now_utc: datetime) -> dict:
+    try:
+        from app.services.growth.activity_tracker import get_last_activity, IDLE_HOURS
+        last = get_last_activity()
+        if last is None:
+            return {"last_activity_at": None, "hours_idle": None, "is_idle": False}
+        elapsed_h = (now_utc - last).total_seconds() / 3600
+        last_kst = last.astimezone(KST)
+        return {
+            "last_activity_at": last.isoformat(),
+            "last_activity_kst": last_kst.strftime("%m/%d %H:%M KST"),
+            "hours_idle": round(elapsed_h, 1),
+            "is_idle": elapsed_h >= IDLE_HOURS,
+        }
+    except Exception as e:
+        logger.warning(f"activity 오류: {e}")
+        return {"error": str(e)}
+
+
+def _get_monitor_status() -> dict:
+    try:
+        from app.services.growth.monitor_state import is_paused
+        from app.services.growth.reply_monitor import _pending_reply_drafts
+        return {
+            "reply_monitor_paused": is_paused(),
+            "pending_reply_drafts": len(_pending_reply_drafts),
+        }
+    except Exception as e:
+        logger.warning(f"monitor status 오류: {e}")
+        return {"error": str(e)}
+
+
+def _get_news_monitor_status() -> dict:
+    try:
+        from app.services.news_monitor import (
+            _pending_articles, _story_clusters, _alerted_stories, overnight_buffer
+        )
+        return {
+            "pending_articles": len(_pending_articles),
+            "story_clusters": len(_story_clusters),
+            "alerted_stories": len(_alerted_stories),
+            "overnight_buffer": len(overnight_buffer),
+        }
+    except Exception as e:
+        logger.warning(f"news monitor status 오류: {e}")
+        return {"error": str(e)}
+
+
+def _get_health() -> dict:
+    try:
+        db_ok = False
+        try:
+            db = get_db()
+            db.execute("SELECT 1")
+            db_ok = True
+            db.close()
+        except Exception:
+            pass
+        return {
+            "db_ok": db_ok,
+            "telegram_configured": settings.has_telegram_config,
+            "x_configured": settings.has_x_credentials,
+            "mock_mode": settings.is_full_mock_mode,
+            "auto_post_enabled": settings.enable_auto_post_low_risk,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _today_draft_count() -> int:
+    db = get_db()
+    try:
+        from app.services.rate_limiter import RateLimiter
+        return RateLimiter(db).get_today_draft_count()
+    except Exception:
+        return 0
+    finally:
+        db.close()
+
+
+def _format_draft_trace(d) -> dict:
+    """Draft DB 행을 플로우 트레이스 항목으로 변환."""
+    kst_created = d.created_at.astimezone(KST).strftime("%m/%d %H:%M") if d.created_at else None
+    kst_published = d.published_at.astimezone(KST).strftime("%m/%d %H:%M") if d.published_at else None
+    return {
+        "id": d.id,
+        "hook": (d.hook or "")[:80],
+        "category": d.category.value if d.category else None,
+        "risk_level": d.risk_level.value if d.risk_level else None,
+        "status": d.approval_status.value if d.approval_status else None,
+        "version": d.version,
+        "created_kst": kst_created,
+        "published_kst": kst_published,
+        "has_x_post": bool(d.x_post_id),
+        "x_post_id": d.x_post_id,
+    }

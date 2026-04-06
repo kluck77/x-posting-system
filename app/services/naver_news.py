@@ -20,6 +20,7 @@ import httpx
 
 from app.config import settings
 from app.services.rss_fetcher import RssArticle
+from app.services.naver_usage import record_call
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ async def search_keyword(keyword: str, category: str, display: int = 5) -> list[
             )
             resp.raise_for_status()
             data = resp.json()
+            record_call(1)
 
         articles = []
         for item in data.get("items", []):

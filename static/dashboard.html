@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>X Posting — Control Room</title>
+<style>
+  :root {
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --border:   #2a2d3a;
+    --text:     #e2e8f0;
+    --muted:    #6b7280;
+    --green:    #22c55e;
+    --yellow:   #facc15;
+    --red:      #ef4444;
+    --blue:     #60a5fa;
+    --orange:   #fb923c;
+    --purple:   #a78bfa;
+    --teal:     #2dd4bf;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 16px;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: -.3px; }
+  header h1 span { color: var(--blue); }
+  #refresh-info { color: var(--muted); font-size: 12px; text-align: right; }
+  #refresh-info button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 4px 10px;
+    cursor: pointer; font-size: 12px; margin-top: 4px; display: block;
+  }
+  #refresh-info button:hover { border-color: var(--blue); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--muted); margin-bottom: 12px;
+  }
+  .card.full-width { grid-column: 1 / -1; }
+
+  /* Status dot */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot-green  { background: var(--green); }
+  .dot-yellow { background: var(--yellow); }
+  .dot-red    { background: var(--red); }
+  .dot-grey   { background: var(--muted); }
+  .dot-blue   { background: var(--blue); }
+
+  /* Gauge bar */
+  .gauge { margin: 8px 0; }
+  .gauge-label {
+    display: flex; justify-content: space-between;
+    font-size: 13px; margin-bottom: 4px;
+  }
+  .gauge-label .right { color: var(--muted); font-size: 12px; }
+  .bar-bg { background: var(--border); border-radius: 4px; height: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+  .bar-ok      { background: var(--green); }
+  .bar-caution { background: var(--yellow); }
+  .bar-warn    { background: var(--orange); }
+  .bar-crit    { background: var(--red); }
+
+  /* KV list */
+  .kv { display: flex; justify-content: space-between; padding: 5px 0;
+        border-bottom: 1px solid var(--border); font-size: 13px; }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-weight: 500; }
+
+  /* Flow trace table */
+  .trace-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .trace-table th {
+    text-align: left; color: var(--muted); font-weight: 500;
+    border-bottom: 1px solid var(--border); padding: 4px 6px;
+  }
+  .trace-table td { padding: 6px 6px; border-bottom: 1px solid #1e2130; vertical-align: middle; }
+  .trace-table tr:last-child td { border-bottom: none; }
+  .trace-table tr:hover td { background: #20243a; }
+  .status-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  }
+  .s-pending   { background: #1e3a5f; color: var(--blue); }
+  .s-approved  { background: #14532d; color: var(--green); }
+  .s-published { background: #064e3b; color: var(--teal); }
+  .s-rejected  { background: #450a0a; color: var(--red); }
+  .s-deferred  { background: #1c1917; color: var(--yellow); }
+  .s-failed    { background: #3b0000; color: var(--orange); }
+  .s-regenerate { background: #2d1b69; color: var(--purple); }
+  .s-other     { background: var(--border); color: var(--text); }
+
+  /* Provider cards */
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .provider-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .provider-card .p-name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .provider-card .p-role { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+  .provider-card .p-stat { display: flex; justify-content: space-between; }
+
+  /* Queue list */
+  .queue-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .queue-item .q-text { color: var(--text); margin-bottom: 3px; }
+  .queue-item .q-meta { color: var(--muted); }
+  .tag { display: inline-block; background: var(--border); border-radius: 3px;
+         padding: 1px 5px; font-size: 10px; margin-right: 4px; }
+  .tag-notified { background: #1e3a5f; color: var(--blue); }
+
+  /* Idle warning */
+  .idle-banner {
+    background: #3b1c00; border: 1px solid var(--orange); border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--orange);
+  }
+
+  /* Error state */
+  .error-text { color: var(--red); font-size: 12px; }
+
+  #spinner { text-align: center; color: var(--muted); padding: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>X Posting <span>Control Room</span></h1>
+  <div id="refresh-info">
+    <div id="last-refresh">로딩 중…</div>
+    <button onclick="loadAll()">↻ 새로고침</button>
+  </div>
+</header>
+
+<div id="idle-banner" style="display:none" class="idle-banner">
+  ⏰ 파이프라인 유휴 중 — 마지막 활동으로부터 <span id="idle-hours">?</span>시간 경과
+</div>
+
+<div id="spinner">데이터 로딩 중…</div>
+<div id="main" style="display:none">
+
+<!-- ── Row 1: Health + Queue + Usage ── -->
+<div class="grid" id="row1"></div>
+
+<!-- ── Row 2: Providers ── -->
+<div class="card full-width" style="margin-top:12px" id="providers-card">
+  <h2>AI 프로바이더</h2>
+  <div id="providers-body">—</div>
+</div>
+
+<!-- ── Row 3: News + Monitor ── -->
+<div class="grid" style="margin-top:12px" id="row3"></div>
+
+<!-- ── Row 4: Flow Trace ── -->
+<div class="card full-width" style="margin-top:12px" id="trace-card">
+  <h2>최근 플로우 트레이스</h2>
+  <div id="trace-body">—</div>
+</div>
+
+</div><!-- #main -->
+
+<script>
+const BASE = window.location.origin;
+
+// ── Fetch helpers ────────────────────────────────────────────────────────────
+async function fetchJSON(path) {
+  try {
+    const r = await fetch(BASE + path);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch (e) {
+    return { _error: String(e) };
+  }
+}
+
+// ── Gauge builder ────────────────────────────────────────────────────────────
+function gauge(label, used, limit) {
+  const pct = limit ? Math.min(100, Math.round(used / limit * 100)) : 0;
+  const cls = pct >= 90 ? 'bar-crit' : pct >= 70 ? 'bar-warn' : pct >= 40 ? 'bar-caution' : 'bar-ok';
+  return `<div class="gauge">
+    <div class="gauge-label"><span>${label}</span><span class="right">${used} / ${limit}</span></div>
+    <div class="bar-bg"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+// ── Status dot ───────────────────────────────────────────────────────────────
+function dot(ok, label) {
+  const cls = ok === true ? 'dot-green' : ok === false ? 'dot-red' : 'dot-grey';
+  return `<span class="dot ${cls}"></span>${label}`;
+}
+
+// ── Status badge ─────────────────────────────────────────────────────────────
+function badge(status) {
+  const map = {
+    pending:'s-pending', approved:'s-approved', published:'s-published',
+    rejected:'s-rejected', deferred:'s-deferred', failed:'s-failed',
+    regenerate:'s-regenerate',
+  };
+  const cls = map[status] || 's-other';
+  return `<span class="status-badge ${cls}">${status}</span>`;
+}
+
+// ── kv row ───────────────────────────────────────────────────────────────────
+function kv(k, v) { return `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
+
+// ── Health card ──────────────────────────────────────────────────────────────
+function renderHealth(h) {
+  if (h._error) return `<div class="error-text">오류: ${h._error}</div>`;
+  const dbOk  = h.db_ok;
+  const tgOk  = h.telegram_configured;
+  const xOk   = h.x_configured;
+  const mock  = h.mock_mode;
+  const auto  = h.auto_post_enabled;
+  return `
+    ${kv('데이터베이스', dot(dbOk, dbOk ? '정상' : '오류'))}
+    ${kv('텔레그램', dot(tgOk, tgOk ? '설정됨' : '미설정'))}
+    ${kv('X API', dot(xOk, xOk ? '설정됨' : '미설정'))}
+    ${kv('모드', mock ? `<span style="color:var(--yellow)">Mock 모드</span>` : `<span style="color:var(--green)">Live 모드</span>`)}
+    ${kv('자동 게시', auto
+      ? `<span style="color:var(--red)">⚠️ 활성 (주의)</span>`
+      : `<span style="color:var(--green)">비활성 ✓</span>`)}
+  `;
+}
+
+// ── Queue card ───────────────────────────────────────────────────────────────
+function renderQueue(q) {
+  if (q._error) return `<div class="error-text">오류: ${q._error}</div>`;
+  let html = `
+    ${kv('대기 중', q.pending_count)}
+    ${kv('전체', q.total_count)}
+    ${kv('마지막 게시', q.last_published_at ? formatKST(q.last_published_at) : '없음')}
+  `;
+  if (q.pending_items && q.pending_items.length) {
+    html += '<div style="margin-top:10px">';
+    for (const p of q.pending_items) {
+      const tag = p.notified ? '<span class="tag tag-notified">알림발송</span>' : '<span class="tag">대기</span>';
+      html += `<div class="queue-item">
+        <div class="q-text">${esc(p.text)}</div>
+        <div class="q-meta">${tag} ${formatKST(p.added_at)}</div>
+      </div>`;
+    }
+    html += '</div>';
+  } else {
+    html += '<div style="color:var(--muted);margin-top:8px;font-size:12px">대기 항목 없음</div>';
+  }
+  return html;
+}
+
+// ── Usage card ───────────────────────────────────────────────────────────────
+function renderUsage(u) {
+  if (u._error) return `<div class="error-text">오류: ${u._error}</div>`;
+  const d = u.drafts || {};
+  const t = u.telegram || {};
+  const p = u.posts || {};
+  let html = gauge('초안 생성', d.used ?? 0, d.limit ?? 5);
+  html += gauge('텔레그램 카드', t.used ?? 0, t.limit ?? 5);
+  html += gauge('X 게시', p.used ?? 0, p.limit ?? 10);
+  return html;
+}
+
+// ── Monitor card ─────────────────────────────────────────────────────────────
+function renderMonitor(m, n) {
+  if (m._error) return `<div class="error-text">오류: ${m._error}</div>`;
+  const paused = m.reply_monitor_paused;
+  let html = `
+    ${kv('답글 모니터', dot(!paused, paused ? '⏸ 일시정지' : '▶ 실행 중'))}
+    ${kv('답글 초안 대기', m.pending_reply_drafts ?? 0)}
+  `;
+  if (!n._error) {
+    html += `
+      ${kv('뉴스 대기 기사', n.pending_articles ?? 0)}
+      ${kv('스토리 클러스터', n.story_clusters ?? 0)}
+      ${kv('알림 발송됨', n.alerted_stories ?? 0)}
+      ${kv('야간 버퍼', n.overnight_buffer ?? 0)}
+    `;
+  }
+  return html;
+}
+
+// ── Naver card ───────────────────────────────────────────────────────────────
+function renderNaver(nv) {
+  if (nv._error) return `<div class="error-text">오류: ${nv._error}</div>`;
+  const pct = nv.pct_used ?? 0;
+  const cls = nv.level === 'warning' ? 'bar-warn' : nv.level === 'caution' ? 'bar-caution' : 'bar-ok';
+  return `
+    <div class="gauge">
+      <div class="gauge-label">
+        <span>오늘 사용량</span>
+        <span class="right">${nv.used_today} / ${nv.daily_limit?.toLocaleString()}</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+    </div>
+    ${kv('남은 횟수', (nv.remaining ?? 0).toLocaleString())}
+    ${kv('사용률', pct + '%')}
+    <div style="color:var(--muted);font-size:11px;margin-top:8px">${nv.note ?? ''}</div>
+  `;
+}
+
+// ── Providers ────────────────────────────────────────────────────────────────
+function renderProviders(p) {
+  if (p._error) return `<div class="error-text">오류: ${p._error}</div>`;
+  const mockBadge = p.mock_mode
+    ? `<span style="color:var(--yellow);font-size:11px">⚠ Mock 모드 — 실제 API 호출 없음</span>`
+    : `<span style="color:var(--green);font-size:11px">▶ Live 모드</span>`;
+
+  let html = `<div style="margin-bottom:8px">${mockBadge}
+    <span style="color:var(--muted);font-size:11px;margin-left:12px">오늘 초안: ${p.today_draft_count}개</span>
+  </div><div class="provider-grid">`;
+
+  for (const r of (p.roles || [])) {
+    const cfgDot = r.configured ? 'dot-green' : 'dot-grey';
+    const cfgLabel = r.configured ? 'Key 설정됨' : 'Key 없음 (Mock)';
+    const runsLabel = r.runs_today !== null
+      ? (r.runs_today > 0 ? `오늘 ${r.runs_today}회` : '오늘 활동 없음')
+      : '수동 실행';
+    html += `<div class="provider-card">
+      <div class="p-name">${r.role}</div>
+      <div class="p-role">${r.provider}</div>
+      <div class="p-stat"><span class="dot ${cfgDot}" style="margin-top:3px"></span><span>${cfgLabel}</span></div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px">${runsLabel}</div>
+      <div style="color:var(--muted);font-size:10px;margin-top:2px">${r.note ?? ''}</div>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+// ── Flow trace ───────────────────────────────────────────────────────────────
+function renderTrace(rows) {
+  if (!rows || rows._error) return `<div class="error-text">오류</div>`;
+  if (!rows.length) return '<div style="color:var(--muted)">초안이 없습니다</div>';
+  let html = `<div style="overflow-x:auto"><table class="trace-table">
+    <thead><tr>
+      <th>ID</th><th>훅</th><th>카테고리</th><th>위험</th><th>상태</th><th>버전</th><th>생성(KST)</th><th>게시(KST)</th>
+    </tr></thead><tbody>`;
+  for (const r of rows) {
+    const risk_color = r.risk_level === 'high' ? 'var(--red)' : r.risk_level === 'medium' ? 'var(--yellow)' : 'var(--green)';
+    const xLink = r.has_x_post
+      ? `<a href="https://x.com/i/web/status/${r.x_post_id}" target="_blank" style="color:var(--blue);font-size:11px">🔗</a>`
+      : '';
+    html += `<tr>
+      <td style="color:var(--muted)">#${r.id}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.hook)}</td>
+      <td><span class="tag">${r.category ?? '—'}</span></td>
+      <td style="color:${risk_color}">${r.risk_level ?? '—'}</td>
+      <td>${badge(r.status)}</td>
+      <td style="color:var(--muted)">${r.version ?? '—'}</td>
+      <td style="color:var(--muted);white-space:nowrap">${r.created_kst ?? '—'}</td>
+      <td style="color:var(--muted);white-space:nowrap">${r.published_kst ?? '—'} ${xLink}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function formatKST(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    });
+  } catch { return iso.slice(0, 16); }
+}
+
+// ── Card builder ─────────────────────────────────────────────────────────────
+function card(title, content, id) {
+  return `<div class="card" id="${id}"><h2>${title}</h2>${content}</div>`;
+}
+
+// ── Main loader ───────────────────────────────────────────────────────────────
+async function loadAll() {
+  document.getElementById('last-refresh').textContent = '로딩 중…';
+
+  const [status, trace, providers, naver] = await Promise.all([
+    fetchJSON('/control/status'),
+    fetchJSON('/control/flow-trace'),
+    fetchJSON('/control/providers'),
+    fetchJSON('/control/naver'),
+  ]);
+
+  // Idle banner
+  const act = status.activity || {};
+  if (act.is_idle) {
+    document.getElementById('idle-hours').textContent = act.hours_idle ?? '?';
+    document.getElementById('idle-banner').style.display = 'flex';
+  } else {
+    document.getElementById('idle-banner').style.display = 'none';
+  }
+
+  // Row 1: Health, Queue, Usage
+  document.getElementById('row1').innerHTML = `
+    ${card('시스템 상태', renderHealth(status.health || {}), 'health-card')}
+    ${card('게시 큐', renderQueue(status.queue || {}), 'queue-card')}
+    ${card('일일 할당량', renderUsage(status.usage || {}), 'usage-card')}
+  `;
+
+  // Providers
+  document.getElementById('providers-body').innerHTML = renderProviders(providers);
+
+  // Row 3: Monitor + News + Naver
+  document.getElementById('row3').innerHTML = `
+    ${card('모니터 / 뉴스', renderMonitor(status.monitor || {}, status.news || {}), 'monitor-card')}
+    ${card('Naver API 할당량', renderNaver(naver), 'naver-card')}
+  `;
+
+  // Flow trace
+  document.getElementById('trace-body').innerHTML = renderTrace(trace);
+
+  // Last refresh time
+  const kst = status.generated_at_kst || new Date().toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul'});
+  document.getElementById('last-refresh').textContent = `갱신: ${kst}`;
+
+  document.getElementById('spinner').style.display = 'none';
+  document.getElementById('main').style.display = 'block';
+}
+
+// Auto-refresh every 30 seconds
+loadAll();
+setInterval(loadAll, 30_000);
+</script>
+</body>
+</html>
