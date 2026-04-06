@@ -843,6 +843,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/brief — Premium Brief 오퍼 준비 관리\n"
         "/b2b — B2B 리서치 후보 관리 (상태/메모/대상/활용/그룹핑)\n"
         "/cta <id> <type> — CTA 유형 설정/조회\n"
+        "/weekly — 주간 운영 리포트 (콘텐츠/프리미엄/B2B/뉴스레터)\n"
         "/newsletter — 뉴스레터/리드자석 운영 루틴\n"
         "/lead — 리드 자산 관리 (이름/유형/메모/내보내기)\n"
         "/email — 이메일 버킷/목표 관리\n"
@@ -2569,6 +2570,78 @@ async def email_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /weekly — 주간 운영 리포트.
+
+    사용법:
+      /weekly          — 주간 리포트 (7일)
+      /weekly view     — 상세 리포트 (7일)
+      /weekly export   — JSON 내보내기
+      /weekly <N>      — 최근 N일 리포트
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.weekly_report_service import WeeklyReportService
+        svc = WeeklyReportService(db)
+
+        # /weekly <N> — 숫자면 기간 지정
+        days = 7
+        if subcmd.isdigit():
+            days = max(1, min(int(subcmd), 90))
+            subcmd = "summary"
+
+        # /weekly (간략 요약)
+        if subcmd == "summary" or not args:
+            report = svc.generate_report(days)
+            text = svc.format_compact(report)
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /weekly view [N]
+        elif subcmd == "view":
+            if len(args) > 1 and args[1].isdigit():
+                days = max(1, min(int(args[1]), 90))
+            report = svc.generate_report(days)
+            text = svc.format_report(report)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /weekly export [N]
+        elif subcmd == "export":
+            if len(args) > 1 and args[1].isdigit():
+                days = max(1, min(int(args[1]), 90))
+            report = svc.export_report(days)
+            import json as _json
+            text = _json.dumps(report, ensure_ascii=False, indent=2)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(
+                f"📊 <b>주간 리포트 (JSON)</b>\n\n<pre>{text}</pre>",
+                parse_mode="HTML",
+            )
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/weekly</code> — 간략 요약 (7일)\n"
+                "<code>/weekly view</code> — 상세 리포트\n"
+                "<code>/weekly export</code> — JSON 내보내기\n"
+                "<code>/weekly &lt;N&gt;</code> — 최근 N일 요약\n"
+                "<code>/weekly view &lt;N&gt;</code> — 최근 N일 상세",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/weekly 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 주간 리포트 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
 async def newsletter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /newsletter — 뉴스레터/리드자석 운영 루틴.
@@ -3344,6 +3417,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("premium", premium_command))
     app.add_handler(CommandHandler("brief", brief_command))
     app.add_handler(CommandHandler("b2b", b2b_command))
+    app.add_handler(CommandHandler("weekly", weekly_command))
     app.add_handler(CommandHandler("cta", cta_command))
     app.add_handler(CommandHandler("lead", lead_command))
     app.add_handler(CommandHandler("email", email_command))
