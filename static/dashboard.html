@@ -739,6 +739,17 @@ body::before{
   background:rgba(79,142,255,0.08);color:var(--accent);cursor:pointer;white-space:nowrap;
 }
 
+/* Loading state */
+.loading-state{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:20px;color:var(--txt3);font-size:13px;min-height:60px;
+}
+.loading-spinner{
+  display:inline-block;width:12px;height:12px;border:2px solid var(--txt3);
+  border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 @media(min-width:640px){
   .tab-bar-inner,.header-inner{max-width:640px;margin:0 auto}
   .page{max-width:640px;left:50%;right:auto;width:640px;transform:translateX(-50%)}
@@ -1030,6 +1041,13 @@ function switchTab(id) {
 async function loadAll() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
+
+  // 각 섹션에 로딩 상태 표시
+  ['queue-list','monitor-rows','news-monitor-rows','activity-rows','draft-rows','news-list','pipeline-flow'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>로딩 중…</div>';
+  });
+
   const [r1,r2,r3,r4,r5] = await Promise.allSettled([
     fetch('/control/status').then(r => r.json()),
     fetch('/control/providers').then(r => r.json()),
