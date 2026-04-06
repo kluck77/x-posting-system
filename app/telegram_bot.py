@@ -842,7 +842,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/premium — 프리미엄 Korea Brief 후보 관리\n"
         "/brief — Premium Brief 오퍼 준비 관리\n"
         "/b2b — B2B 리서치 후보 관리 (상태/메모/대상/활용/그룹핑)\n"
-        "/cta <id> <type> — CTA 유형 설정/조회\n"
+        "/cta — CTA 유형 설정/조회 + 카피 라이브러리 (/cta copy)\n"
         "/weekly — 주간 운영 리포트 (콘텐츠/프리미엄/B2B/뉴스레터)\n"
         "/newsletter — 뉴스레터/리드자석 운영 루틴\n"
         "/lead — 리드 자산 관리 (이름/유형/메모/내보내기)\n"
@@ -2163,10 +2163,13 @@ async def brief_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /cta — CTA 유형 관리.
-    /cta <id> <type>  — CTA 설정
-    /cta list <type>  — CTA별 목록
-    /cta              — CTA 분포 요약
+    /cta — CTA 유형 관리 + CTA 카피 라이브러리.
+    /cta <id> <type>         — 드래프트 CTA 설정
+    /cta list <type>         — CTA별 드래프트 목록
+    /cta                     — CTA 분포 요약
+    /cta copy                — CTA 카피 라이브러리 관리
+    /cta link <draft_id> <copy_id>  — 드래프트에 카피 연결
+    /cta unlink <draft_id>          — 카피 연결 해제
     """
     args = context.args or []
 
@@ -2176,6 +2179,251 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from app.services.email_lead_service import EmailLeadService, CTA_TYPES
         svc = EmailLeadService(db)
 
+        subcmd = args[0].lower() if args else ""
+
+        # /cta copy — CTA 카피 라이브러리 서브트리
+        if subcmd == "copy":
+            from app.services.cta_copy_service import CtaCopyService, CTA_COPY_TYPES
+            csvc = CtaCopyService(db)
+            copy_sub = args[1].lower() if len(args) > 1 else "summary"
+
+            # /cta copy (요약)
+            if copy_sub == "summary" or len(args) == 1:
+                text = csvc.format_summary()
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            # /cta copy add <type> <text>
+            elif copy_sub == "add":
+                if len(args) < 4:
+                    types = " | ".join(CTA_COPY_TYPES)
+                    await update.message.reply_text(
+                        f"사용법: <code>/cta copy add &lt;type&gt; &lt;text&gt;</code>\n유형: {types}",
+                        parse_mode="HTML",
+                    )
+                    return
+                ct = args[2].lower()
+                text = " ".join(args[3:])[:1000]
+                result = csvc.add_copy(ct, text)
+                if result:
+                    await update.message.reply_text(
+                        f"✅ CTA 카피 #{result.id} 추가 ({ct})\n"
+                        f"<i>{text[:200]}</i>",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"❌ 추가 실패. 유효 유형: {', '.join(CTA_COPY_TYPES)}"
+                    )
+
+            # /cta copy view <id>
+            elif copy_sub == "view":
+                if len(args) < 3:
+                    await update.message.reply_text(
+                        "사용법: <code>/cta copy view &lt;id&gt;</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                copy_id, err = _parse_draft_id(args, 2)
+                if copy_id is None:
+                    await update.message.reply_text(err)
+                    return
+                copy = csvc.get_by_id(copy_id)
+                if not copy:
+                    await update.message.reply_text(f"❌ 카피 #{copy_id} 없음")
+                    return
+                text = csvc.format_copy_detail(copy)
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            # /cta copy edit <id> <text>
+            elif copy_sub == "edit":
+                if len(args) < 4:
+                    await update.message.reply_text(
+                        "사용법: <code>/cta copy edit &lt;id&gt; &lt;text&gt;</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                copy_id, err = _parse_draft_id(args, 2)
+                if copy_id is None:
+                    await update.message.reply_text(err)
+                    return
+                new_text = " ".join(args[3:])[:1000]
+                result = csvc.edit_copy(copy_id, new_text)
+                if result:
+                    await update.message.reply_text(
+                        f"✏️ 카피 #{copy_id} 수정 완료\n<i>{new_text[:200]}</i>",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text(f"❌ 카피 #{copy_id} 수정 실패")
+
+            # /cta copy note <id> <text>
+            elif copy_sub == "note":
+                if len(args) < 4:
+                    await update.message.reply_text(
+                        "사용법: <code>/cta copy note &lt;id&gt; &lt;text&gt;</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                copy_id, err = _parse_draft_id(args, 2)
+                if copy_id is None:
+                    await update.message.reply_text(err)
+                    return
+                note = " ".join(args[3:])[:500]
+                result = csvc.set_note(copy_id, note)
+                if result:
+                    await update.message.reply_text(
+                        f"📌 카피 #{copy_id} 메모 저장:\n<i>{note[:200]}</i>",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text(f"❌ 카피 #{copy_id} 없음")
+
+            # /cta copy on <id>
+            elif copy_sub == "on":
+                if len(args) < 3:
+                    await update.message.reply_text(
+                        "사용법: <code>/cta copy on &lt;id&gt;</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                copy_id, err = _parse_draft_id(args, 2)
+                if copy_id is None:
+                    await update.message.reply_text(err)
+                    return
+                result = csvc.activate(copy_id)
+                if result:
+                    await update.message.reply_text(f"✅ 카피 #{copy_id} 활성화")
+                else:
+                    await update.message.reply_text(f"❌ 카피 #{copy_id} 없음")
+
+            # /cta copy off <id>
+            elif copy_sub == "off":
+                if len(args) < 3:
+                    await update.message.reply_text(
+                        "사용법: <code>/cta copy off &lt;id&gt;</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                copy_id, err = _parse_draft_id(args, 2)
+                if copy_id is None:
+                    await update.message.reply_text(err)
+                    return
+                result = csvc.deactivate(copy_id)
+                if result:
+                    await update.message.reply_text(f"⏸️ 카피 #{copy_id} 비활성화")
+                else:
+                    await update.message.reply_text(f"❌ 카피 #{copy_id} 없음")
+
+            # /cta copy list [type]
+            elif copy_sub == "list":
+                ct_filter = args[2].lower() if len(args) > 2 else None
+                if ct_filter:
+                    copies = csvc.get_by_type(ct_filter, active_only=False)
+                    label = ct_filter
+                else:
+                    copies = csvc.get_all()
+                    label = "전체"
+                if not copies:
+                    await update.message.reply_text(f"📋 CTA 카피 없음 ({label})")
+                    return
+                lines = [f"📋 <b>CTA 카피</b> [{label}] ({len(copies)}건)\n"]
+                for c in copies:
+                    status = "✅" if c.is_active else "⏸️"
+                    note_mark = " 📌" if c.note else ""
+                    lines.append(
+                        f"• #{c.id} [{c.cta_type}] {status}{note_mark}\n"
+                        f"  {c.copy_text[:60]}…"
+                    )
+                await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+            # /cta copy export
+            elif copy_sub == "export":
+                items = csvc.export_copies()
+                if not items:
+                    await update.message.reply_text("📋 내보낼 CTA 카피 없음")
+                    return
+                lines = [f"📋 <b>CTA 카피 내보내기</b> ({len(items)}건)\n"]
+                for item in items:
+                    status = "✅" if item["is_active"] else "⏸️"
+                    lines.append(
+                        f"──────────────\n"
+                        f"#{item['id']} [{item['cta_type']}] {status}\n"
+                        f"Copy: {item['copy_text'][:80]}…\n"
+                        f"Note: {item['note'] or '—'}"
+                    )
+                text = "\n".join(lines)
+                if len(text) > 4000:
+                    text = text[:4000] + "\n\n… (잘림)"
+                await update.message.reply_text(text, parse_mode="HTML")
+
+            else:
+                types = " | ".join(CTA_COPY_TYPES)
+                await update.message.reply_text(
+                    "사용법:\n"
+                    "<code>/cta copy</code> — 카피 라이브러리 요약\n"
+                    "<code>/cta copy add &lt;type&gt; &lt;text&gt;</code> — 추가\n"
+                    "<code>/cta copy view &lt;id&gt;</code> — 상세\n"
+                    "<code>/cta copy edit &lt;id&gt; &lt;text&gt;</code> — 수정\n"
+                    "<code>/cta copy note &lt;id&gt; &lt;text&gt;</code> — 메모\n"
+                    "<code>/cta copy on &lt;id&gt;</code> — 활성화\n"
+                    "<code>/cta copy off &lt;id&gt;</code> — 비활성화\n"
+                    "<code>/cta copy list [type]</code> — 목록\n"
+                    "<code>/cta copy export</code> — 내보내기\n\n"
+                    f"유형: {types}",
+                    parse_mode="HTML",
+                )
+            return
+
+        # /cta link <draft_id> <copy_id>
+        if subcmd == "link":
+            if len(args) < 3:
+                await update.message.reply_text(
+                    "사용법: <code>/cta link &lt;draft_id&gt; &lt;copy_id&gt;</code>",
+                    parse_mode="HTML",
+                )
+                return
+            from app.services.cta_copy_service import CtaCopyService
+            csvc = CtaCopyService(db)
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            copy_id, err = _parse_draft_id(args, 2)
+            if copy_id is None:
+                await update.message.reply_text(err)
+                return
+            result = csvc.link_to_draft(draft_id, copy_id)
+            if result:
+                await update.message.reply_text(
+                    f"🔗 드래프트 #{draft_id} → 카피 #{copy_id} 연결",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text("❌ 연결 실패 (드래프트 또는 카피 없음)")
+            return
+
+        # /cta unlink <draft_id>
+        if subcmd == "unlink":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "사용법: <code>/cta unlink &lt;draft_id&gt;</code>",
+                    parse_mode="HTML",
+                )
+                return
+            from app.services.cta_copy_service import CtaCopyService
+            csvc = CtaCopyService(db)
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            result = csvc.unlink_from_draft(draft_id)
+            if result:
+                await update.message.reply_text(f"🔗 드래프트 #{draft_id} 카피 연결 해제")
+            else:
+                await update.message.reply_text(f"❌ 드래프트 #{draft_id} 없음")
+            return
+
+        # /cta (기존 기능: 분포 요약)
         if not args:
             by_cta = svc.group_by_cta()
             if not by_cta:
@@ -2187,7 +2435,8 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"\n유효: {' | '.join(CTA_TYPES)}")
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
-        elif args[0].lower() == "list":
+        # /cta list <type>
+        elif subcmd == "list":
             if len(args) < 2:
                 await update.message.reply_text(
                     f"사용법: <code>/cta list &lt;type&gt;</code>\n유효: {' | '.join(CTA_TYPES)}",
@@ -2204,6 +2453,7 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lines.append(f"• ID {d.id} [{d.category.value if d.category else '—'}]\n  {(d.hook or '')[:50]}…")
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
+        # /cta <id> <type> — 기존 CTA 설정
         else:
             draft_id, err = _parse_draft_id(args, 0)
             if draft_id is None:

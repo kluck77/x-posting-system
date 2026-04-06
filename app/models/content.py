@@ -263,6 +263,12 @@ class Draft(Base):
         comment="대상 독자 유형 (예: expat_workers, foreign_investors, korea_watchers)"
     )
 
+    # ── CTA 카피 연결 ────────────────────────────────────────────────────────
+    cta_copy_id = Column(
+        Integer, nullable=True,
+        comment="연결된 CTA 카피 블록 ID (cta_copies.id 참조, FK 없음)"
+    )
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 
@@ -301,6 +307,42 @@ class PostLog(Base):
 
     def __repr__(self):
         return f"<PostLog(id={self.id}, draft_id={self.draft_id}, success={self.success})>"
+
+
+class CtaCopy(Base):
+    """
+    재사용 가능한 CTA / 랜딩 카피 블록 테이블.
+    뉴스레터 가입, 리드자석, 프리미엄 티저 등에 쓰이는 짧은 카피를 관리합니다.
+    """
+    __tablename__ = "cta_copies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cta_type = Column(
+        String(50), nullable=False,
+        comment="CTA 유형: newsletter_signup/lead_magnet/premium_teaser/premium_waitlist/b2b_inquiry"
+    )
+    copy_text = Column(
+        Text, nullable=False,
+        comment="CTA 카피 본문 (짧은 재사용 블록)"
+    )
+    note = Column(
+        Text, nullable=True,
+        comment="운영자 메모 (용도, 컨텍스트 등)"
+    )
+    is_active = Column(
+        Boolean, default=True, nullable=False,
+        comment="활성 여부 (True=사용중, False=비활성)"
+    )
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), comment="생성 시간"
+    )
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc), comment="수정 시간"
+    )
+
+    def __repr__(self):
+        return f"<CtaCopy(id={self.id}, type={self.cta_type}, active={self.is_active})>"
 
 
 # =============================================================================

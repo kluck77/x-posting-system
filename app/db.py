@@ -230,6 +230,12 @@ def _run_schema_migrations():
             "column": "brief_summary_note",
             "ddl": "ALTER TABLE drafts ADD COLUMN brief_summary_note TEXT",
         },
+        # CTA 카피 연결
+        {
+            "table": "drafts",
+            "column": "cta_copy_id",
+            "ddl": "ALTER TABLE drafts ADD COLUMN cta_copy_id INTEGER",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")
