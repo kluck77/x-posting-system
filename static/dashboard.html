@@ -167,165 +167,134 @@ body::before{
 }
 .alert-banner.hidden{display:none}
 
-/* ===== HERO CARD ===== */
+/* ===== HERO CARD — SPLIT STAGE LAYOUT ===== */
 .hero-card{
-  background:linear-gradient(160deg,rgba(10,14,32,0.98) 0%,rgba(18,24,50,0.95) 45%,rgba(12,18,38,0.98) 100%);
-  border:1px solid rgba(79,142,255,0.28);border-radius:22px;overflow:hidden;
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  box-shadow:0 0 80px rgba(79,142,255,0.12),0 12px 48px rgba(0,0,0,0.7),inset 0 1px 0 rgba(79,142,255,0.2);
+  border:1px solid rgba(79,142,255,0.3);border-radius:22px;overflow:hidden;
+  box-shadow:0 0 120px rgba(79,142,255,0.18),0 20px 60px rgba(0,0,0,0.85),inset 0 1px 0 rgba(255,255,255,0.08);
   position:relative;z-index:1;
 }
-/* Starfield texture overlay */
-.hero-card::before{
-  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
-  background:
-    radial-gradient(ellipse 90% 70% at 20% 60%,rgba(79,142,255,0.1) 0%,transparent 55%),
-    radial-gradient(ellipse 50% 50% at 85% 15%,rgba(168,85,247,0.08) 0%,transparent 50%),
-    radial-gradient(ellipse 40% 30% at 70% 90%,rgba(34,197,94,0.05) 0%,transparent 50%);
-}
-/* Accent stripe at bottom of hero */
+/* Bottom accent line */
 .hero-card::after{
-  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent 0%,rgba(79,142,255,0.5) 30%,rgba(168,85,247,0.4) 70%,transparent 100%);
-  z-index:2;
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;z-index:10;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.6) 35%,rgba(168,85,247,0.5) 65%,transparent);
 }
 
-/* Hero main section */
-.hero-main{
-  display:flex;align-items:stretch;
-  position:relative;z-index:1;
-  min-height:140px;
-}
+.hero-main{display:flex;align-items:stretch;min-height:230px;position:relative;}
 
-/* Character portrait stage — left column */
+/* ── WHITE STAGE — left character column ── */
 .hero-portrait{
-  width:130px;flex-shrink:0;
-  position:relative;
-  display:flex;align-items:stretch;justify-content:center;
-  background:linear-gradient(180deg,rgba(79,142,255,0.08) 0%,rgba(79,142,255,0.02) 100%);
-  border-right:1px solid rgba(79,142,255,0.15);
-  overflow:hidden;
-  min-height:160px;
+  width:160px;flex-shrink:0;
+  position:relative;overflow:hidden;
+  /* Cool white bg — matches hero image's white background perfectly */
+  background:linear-gradient(170deg,#f0f5ff 0%,#e8f0ff 60%,#dce8ff 100%);
 }
-/* Spotlight behind character */
+/* Floor glow at the bottom of the stage */
 .hero-portrait::before{
-  content:'';
-  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
-  width:120px;height:80px;
-  background:radial-gradient(ellipse,rgba(79,142,255,0.22) 0%,transparent 70%);
-  border-radius:50%;
+  content:'';position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);
+  width:180px;height:60px;
+  background:radial-gradient(ellipse,rgba(79,142,255,0.35) 0%,transparent 70%);
+  z-index:3;pointer-events:none;
   animation:portrait-glow 4s ease-in-out infinite;
 }
-/* Floor reflection line */
+/* Stage→dark transition — strong right gradient */
 .hero-portrait::after{
-  content:'';
-  position:absolute;bottom:0;left:10%;right:10%;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.35),transparent);
+  content:'';position:absolute;top:0;right:0;height:100%;width:90px;
+  background:linear-gradient(to right,transparent 0%,rgba(10,14,32,0.96) 100%);
+  z-index:3;pointer-events:none;
 }
 @keyframes portrait-glow{
-  0%,100%{opacity:0.7;transform:translateX(-50%) scaleX(0.9)}
-  50%{opacity:1;transform:translateX(-50%) scaleX(1.1)}
+  0%,100%{opacity:0.6;transform:translateX(-50%) scaleX(0.85)}
+  50%{opacity:1;transform:translateX(-50%) scaleX(1.15)}
 }
-.hero-ring{
-  position:absolute;top:12px;left:50%;transform:translateX(-50%);
-  width:90px;height:90px;border-radius:50%;
-  border:1.5px solid rgba(79,142,255,0.4);
-  animation:hero-ring-pulse 3s ease-in-out infinite;pointer-events:none;
-}
-.hero-ring-ok{
-  position:absolute;top:12px;left:50%;transform:translateX(-50%);
-  width:90px;height:90px;border-radius:50%;
-  border:1.5px solid rgba(34,197,94,0.4);
-  animation:hero-ring-pulse-green 3s ease-in-out infinite;pointer-events:none;display:none;
-}
-/* Character portrait wrapper — animated container */
+/* Character wrapper — animated */
 .hero-emoji{
   display:block;position:relative;z-index:1;
   width:100%;height:100%;
-  animation:char-live 6s ease-in-out infinite;
+  animation:char-live 7s ease-in-out infinite;
   transform-origin:bottom center;will-change:transform;
 }
-/* Real image asset — blonde assistant */
+/* Real image — multiply works perfectly on white bg (white×white=white, colors stay) */
 .hero-char-img{
   display:block;width:100%;height:100%;
-  object-fit:cover;object-position:50% 8%;
-  /* multiply blends white bg into dark panel */
+  object-fit:cover;object-position:50% 5%;
   mix-blend-mode:multiply;
-  filter:brightness(1.08) saturate(1.15) contrast(1.05);
+  filter:brightness(0.97) saturate(1.15) contrast(1.08);
   transition:filter .6s ease;
 }
-.hero-emoji.idle .hero-char-img{
-  filter:brightness(0.55) saturate(0.2) sepia(0.2);
-}
-.hero-emoji.disconnected .hero-char-img{
-  filter:brightness(0.35) saturate(0);
-}
-/* Fallback emoji (shown when image fails) */
+.hero-emoji.idle .hero-char-img{filter:brightness(0.5) saturate(0.15) sepia(0.3);}
+.hero-emoji.disconnected .hero-char-img{filter:brightness(0.25) saturate(0);}
 .hero-emoji-fallback{
-  font-size:72px;line-height:1;
-  display:flex;align-items:flex-end;justify-content:center;
-  height:100%;padding-bottom:8px;
-  filter:drop-shadow(0 -4px 16px rgba(79,142,255,0.3));
+  font-size:80px;display:flex;align-items:flex-end;justify-content:center;
+  height:100%;padding-bottom:10px;
 }
 @keyframes char-live{
   0%   {transform:translateY(0) rotate(0deg) scale(1)}
-  18%  {transform:translateY(-3px) rotate(-0.5deg) scale(1.008)}
-  36%  {transform:translateY(-5px) rotate(0.4deg) scale(1.015)}
-  55%  {transform:translateY(-4px) rotate(-0.2deg) scale(1.01)}
-  72%  {transform:translateY(-2px) rotate(0.4deg) scale(1.006)}
-  88%  {transform:translateY(-4px) rotate(-0.4deg) scale(1.012)}
+  15%  {transform:translateY(-3px) rotate(-0.4deg) scale(1.006)}
+  32%  {transform:translateY(-5px) rotate(0.35deg) scale(1.012)}
+  50%  {transform:translateY(-4px) rotate(-0.2deg) scale(1.009)}
+  68%  {transform:translateY(-2px) rotate(0.3deg) scale(1.005)}
+  85%  {transform:translateY(-4px) rotate(-0.35deg) scale(1.01)}
   100% {transform:translateY(0) rotate(0deg) scale(1)}
 }
 
-/* Hero right — system info */
-.hero-info{flex:1;min-width:0;padding:16px 14px 14px 14px;position:relative;z-index:1}
+/* ── DARK PANEL — right info column ── */
+.hero-info{
+  flex:1;min-width:0;
+  background:linear-gradient(160deg,rgba(10,14,32,0.99) 0%,rgba(14,20,46,0.98) 100%);
+  padding:16px 14px 14px 12px;
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;justify-content:space-between;
+}
+/* Subtle grid texture on dark panel */
+.hero-info::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 100% 80% at 80% 20%,rgba(168,85,247,0.07) 0%,transparent 60%),
+    radial-gradient(ellipse 80% 60% at 20% 80%,rgba(34,197,94,0.05) 0%,transparent 60%);
+}
 .hero-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
-  color:var(--green);margin-bottom:8px;
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--green);margin-bottom:10px;position:relative;
 }
 .hero-badge-dot{
   width:7px;height:7px;border-radius:50%;background:var(--green);
   animation:pulse-glow-green 2s ease-in-out infinite;flex-shrink:0;
 }
 .hero-headline{
-  font-size:18px;font-weight:900;margin-bottom:5px;letter-spacing:-0.5px;
-  background:linear-gradient(135deg,#e2e6f0 0%,#a8b4d0 100%);
+  font-size:19px;font-weight:900;margin-bottom:4px;letter-spacing:-0.6px;
+  background:linear-gradient(135deg,#ffffff 0%,#b8c8e8 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  line-height:1.2;
+  line-height:1.2;position:relative;
 }
-.hero-sub{font-size:11.5px;color:var(--txt2);line-height:1.5;margin-bottom:10px}
+.hero-sub{font-size:11px;color:var(--txt2);line-height:1.5;margin-bottom:12px;position:relative;}
 
-/* Mini stat row inside info area */
-.hero-mini-stats{display:flex;gap:12px;flex-wrap:wrap}
-.hero-mini-stat{display:flex;flex-direction:column;align-items:flex-start}
-.hero-mini-val{font-size:18px;font-weight:800;line-height:1;color:var(--accent)}
-.hero-mini-lbl{font-size:9px;color:var(--txt3);letter-spacing:0.6px;text-transform:uppercase;margin-top:2px}
-
-/* Stat strip */
-.hero-stats{display:flex;border-top:1px solid rgba(255,255,255,0.05);position:relative;z-index:1}
-.hero-stat{flex:1;text-align:center;padding:10px 8px;position:relative}
-.hero-stat+.hero-stat::before{
-  content:'';position:absolute;left:0;top:20%;bottom:20%;
-  width:1px;background:rgba(255,255,255,0.06);
+/* 3-stat grid */
+.hero-mini-stats{display:flex;gap:0;flex-wrap:nowrap;position:relative;margin-top:auto}
+.hero-mini-stat{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  padding:6px 4px;background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);border-radius:8px;
+  margin-right:4px;
 }
-.hero-stat-val{font-size:20px;font-weight:800;line-height:1.1;margin-bottom:3px;color:var(--accent)}
-.hero-stat-lbl{font-size:9px;color:var(--txt3);letter-spacing:0.5px;text-transform:uppercase}
+.hero-mini-stat:last-child{margin-right:0}
+.hero-mini-val{font-size:20px;font-weight:800;line-height:1;color:var(--accent)}
+.hero-mini-lbl{font-size:8px;color:var(--txt3);letter-spacing:0.8px;text-transform:uppercase;margin-top:3px}
 
-/* Worker pills */
+/* Worker pill strip */
 .hero-workers{
-  display:flex;flex-wrap:wrap;gap:5px;
-  padding:8px 14px 12px;border-top:1px solid rgba(255,255,255,0.04);
-  position:relative;z-index:1;min-height:42px;
+  display:flex;flex-wrap:wrap;gap:4px;
+  padding:8px 14px 10px;
+  border-top:1px solid rgba(255,255,255,0.05);
+  position:relative;z-index:1;min-height:38px;
+  background:rgba(0,0,0,0.2);
 }
 .worker-pill{
-  display:inline-flex;align-items:center;gap:5px;
-  padding:3px 9px 3px 6px;border-radius:20px;
-  font-size:10.5px;font-weight:600;border:1px solid;
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 8px 3px 5px;border-radius:20px;
+  font-size:10px;font-weight:600;border:1px solid;
   animation:worker-pill-in .35s ease both;
 }
-@keyframes hero-ring-pulse{0%,100%{opacity:0.2;transform:translateX(-50%) scale(0.92)}50%{opacity:0.85;transform:translateX(-50%) scale(1.08)}}
-@keyframes hero-ring-pulse-green{0%,100%{opacity:0.15;transform:translateX(-50%) scale(0.92)}50%{opacity:0.8;transform:translateX(-50%) scale(1.08)}}
 
 .health-row{
   display:flex;align-items:center;justify-content:space-between;
@@ -378,64 +347,74 @@ body::before{
 .badge-medium{background:rgba(245,158,11,0.12);color:var(--amber)}
 .badge-high{background:rgba(239,68,68,0.12);color:var(--red)}
 
-/* ===== AI WORKSTATION CARDS ===== */
+/* ===== AI WORKSTATION CARDS — STANDALONE PROFILE CARDS ===== */
 .worker-card{
   display:flex;align-items:stretch;
-  border-bottom:1px solid rgba(255,255,255,0.05);
-  position:relative;overflow:hidden;min-height:96px;
+  border-radius:18px;overflow:hidden;
+  border:1px solid rgba(255,255,255,0.09);
+  box-shadow:0 6px 32px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.07);
+  background:rgba(12,16,30,0.95);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  position:relative;min-height:110px;
+  /* Color comes from currentColor via JS style */
 }
-.worker-card:last-child{border-bottom:none}
-/* Left accent bar (role color) */
+/* Left accent bar */
 .worker-card::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:currentColor;opacity:0.7;z-index:3;flex-shrink:0;
+  background:currentColor;z-index:4;
 }
-/* Portrait column — image-based */
+/* Subtle inner glow from role color */
+.worker-card::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 80% at 15% 50%,currentColor 0%,transparent 60%);
+  opacity:0.06;
+}
+/* Portrait column */
 .worker-portrait{
-  width:80px;flex-shrink:0;
+  width:100px;flex-shrink:0;
   display:flex;align-items:stretch;justify-content:center;
   position:relative;overflow:hidden;
-  background:#0a0c18;
+  background:#090c18;
 }
-/* Right-edge fade to blend into card body */
+/* Right fade: portrait → dark card body */
 .worker-portrait::after{
-  content:'';position:absolute;top:0;right:0;width:24px;height:100%;
-  background:linear-gradient(to right,transparent,rgba(11,13,20,0.85));
+  content:'';position:absolute;top:0;right:0;width:36px;height:100%;
+  background:linear-gradient(to right,transparent,rgba(12,16,30,0.98));
   z-index:2;pointer-events:none;
 }
-/* Bottom-edge vignette */
+/* Bottom glow */
 .worker-portrait::before{
-  content:'';position:absolute;bottom:0;left:0;right:0;height:28px;
-  background:linear-gradient(to top,rgba(11,13,20,0.7),transparent);
+  content:'';position:absolute;bottom:0;left:0;right:0;height:40px;
+  background:linear-gradient(to top,rgba(9,12,24,0.8),transparent);
   z-index:2;pointer-events:none;
 }
-/* Real character image inside portrait */
+/* Real character image */
 .worker-char-img{
   width:100%;height:100%;
-  object-fit:cover;object-position:50% 5%;
-  position:relative;z-index:1;
-  display:block;
+  object-fit:cover;object-position:50% 8%;
+  position:relative;z-index:1;display:block;
 }
-/* Fallback avatar (emoji, shown if no image) */
+/* Fallback avatar */
 .worker-avatar{
-  width:52px;height:52px;border-radius:14px;
+  width:56px;height:56px;border-radius:14px;
   display:flex;align-items:center;justify-content:center;
-  font-size:26px;flex-shrink:0;border:1.5px solid;
-  position:relative;z-index:1;will-change:transform;
+  font-size:28px;flex-shrink:0;border:1.5px solid;
+  position:relative;z-index:1;margin:auto;
 }
 /* Info section */
-.worker-info{flex:1;min-width:0;padding:12px 10px 12px 14px}
-.worker-role{font-size:14.5px;font-weight:800;letter-spacing:-0.2px;margin-bottom:2px}
-.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:4px}
-.worker-tagline{font-size:10px;color:var(--txt3);letter-spacing:0.1px;line-height:1.45}
-/* Right count column */
+.worker-info{flex:1;min-width:0;padding:14px 10px 14px 14px;position:relative;z-index:1}
+.worker-role{font-size:15px;font-weight:800;letter-spacing:-0.3px;margin-bottom:3px}
+.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.worker-tagline{font-size:10.5px;color:var(--txt3);line-height:1.5}
+/* Right stat */
 .worker-right{
-  flex-shrink:0;padding:12px 14px 12px 0;
+  flex-shrink:0;padding:14px 16px 14px 0;
   display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
+  position:relative;z-index:1;
 }
-.worker-count{font-size:30px;font-weight:900;line-height:1}
-.worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:3px;letter-spacing:0.4px;text-transform:uppercase;display:flex;align-items:center}
-.worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);display:inline-block;margin-right:3px;flex-shrink:0}
+.worker-count{font-size:32px;font-weight:900;line-height:1}
+.worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;display:flex;align-items:center;gap:3px}
+.worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);flex-shrink:0}
 .worker-status-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
 /* Role animations — applied to both real image and fallback avatar */
 /* Use subtle transform-only animations for image; keep emoji animations for fallback */
@@ -468,19 +447,33 @@ body::before{
   25%{transform:scale(1.01) translateY(-1px)}
   75%{transform:scale(1.005) translateY(-2px)}
 }
-/* Naver arc gauge */
-.naver-arc-section{display:flex;align-items:center;gap:20px;margin-bottom:14px}
-.naver-arc-wrap{position:relative;flex-shrink:0;width:92px;height:92px;filter:drop-shadow(0 0 8px rgba(34,197,94,0.15))}
+/* Worker card entrance */
+#provider-list{display:flex;flex-direction:column;gap:10px}
+@keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.worker-card{animation:card-in .4s ease both}
+/* Naver arc gauge — large centered layout */
+.naver-arc-section{
+  display:flex;flex-direction:column;align-items:center;
+  gap:14px;margin-bottom:16px;
+}
+.naver-arc-wrap{
+  position:relative;width:130px;height:130px;
+  filter:drop-shadow(0 0 14px rgba(34,197,94,0.2));
+  flex-shrink:0;
+}
 .naver-arc-center{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;
 }
-.naver-arc-pct{font-size:18px;font-weight:800;line-height:1.1}
-.naver-arc-lbl{font-size:9px;color:var(--txt3);letter-spacing:0.8px;text-transform:uppercase;margin-top:2px}
-.naver-arc-detail{flex:1;min-width:0}
-.naver-arc-used{font-size:30px;font-weight:700;line-height:1;display:inline}
-.naver-arc-of{font-size:14px;color:var(--txt2)}
-.naver-arc-note{font-size:12px;margin-top:6px}
+.naver-arc-pct{font-size:24px;font-weight:900;line-height:1.1;letter-spacing:-0.5px}
+.naver-arc-lbl{font-size:9px;color:var(--txt3);letter-spacing:1px;text-transform:uppercase;margin-top:3px}
+.naver-arc-detail{
+  display:flex;align-items:center;justify-content:center;gap:16px;
+  width:100%;padding:0 4px;
+}
+.naver-arc-used{font-size:26px;font-weight:700;line-height:1}
+.naver-arc-of{font-size:13px;color:var(--txt2)}
+.naver-arc-note{font-size:12.5px;margin-top:4px;text-align:center}
 /* Naver intake context */
 .naver-context{font-size:11px;color:var(--txt3);margin-top:6px;letter-spacing:0.1px}
 .naver-intake-hint{
@@ -591,6 +584,12 @@ body::before{
 .ops-section-hdr:first-child{border-top:none;margin-top:0;padding-top:0}
 
 .page-title{font-size:22px;font-weight:700;padding:4px 0 4px}
+.ai-tab-header{
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:2px 0 8px;
+}
+.ai-tab-title{font-size:18px;font-weight:800;letter-spacing:-0.4px;color:var(--txt)}
+.ai-tab-sub{font-size:11px;color:var(--txt3)}
 
 /* ===== UPLOAD SLOTS ===== */
 .upload-slot{
@@ -641,14 +640,12 @@ body::before{
     <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
     <div class="hero-card">
       <div class="hero-main">
-        <!-- Character portrait stage -->
+        <!-- Character portrait stage — white-stage layout -->
         <div class="hero-portrait">
-          <div class="hero-ring" id="mascot-ring"></div>
-          <div class="hero-ring-ok" id="mascot-ring-ok"></div>
           <div class="hero-emoji" id="mascot-emoji">
             <img class="hero-char-img" id="hero-char-img"
                  src="/static/hero_blonde_assistant.png"
-                 alt="Assistant"
+                 alt=""
                  onerror="this.outerHTML='<div class=\'hero-emoji-fallback\'>👩‍💻</div>'">
           </div>
         </div>
@@ -694,10 +691,11 @@ body::before{
 
   <!-- TAB 2: AI -->
   <div class="page" id="page-ai">
-    <div class="page-title">🤖 AI 현황</div>
-    <div class="card">
-      <div id="provider-list"></div>
+    <div class="ai-tab-header">
+      <span class="ai-tab-title">AI 워크스테이션</span>
+      <span class="ai-tab-sub">오늘 초안 기준</span>
     </div>
+    <div id="provider-list"></div>
     <p class="footnote">※ 실행 횟수는 오늘 생성된 초안 수 기준</p>
   </div>
 
@@ -709,19 +707,22 @@ body::before{
       <div class="naver-status-strip idle" id="naver-status-strip">● 연결 대기 중</div>
       <div class="naver-arc-section">
         <div class="naver-arc-wrap">
-          <svg viewBox="0 0 92 92" style="width:100%;height:100%;transform:rotate(-90deg)">
-            <circle cx="46" cy="46" r="38" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="7"/>
-            <circle id="naver-arc" cx="46" cy="46" r="38" fill="none" stroke="var(--green)" stroke-width="7"
-              stroke-dasharray="238.8" stroke-dashoffset="238.8" stroke-linecap="round"
-              style="transition:stroke-dashoffset .7s ease,stroke .4s"/>
+          <svg viewBox="0 0 130 130" style="width:100%;height:100%;transform:rotate(-90deg)">
+            <circle cx="65" cy="65" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="9"/>
+            <circle id="naver-arc" cx="65" cy="65" r="52" fill="none" stroke="var(--green)" stroke-width="9"
+              stroke-dasharray="326.7" stroke-dashoffset="326.7" stroke-linecap="round"
+              style="transition:stroke-dashoffset .8s ease,stroke .4s"/>
           </svg>
           <div class="naver-arc-center">
             <div class="naver-arc-pct" id="naver-arc-pct">—</div>
-            <div class="naver-arc-lbl">사용</div>
+            <div class="naver-arc-lbl">사용률</div>
           </div>
         </div>
         <div class="naver-arc-detail">
-          <div><span class="naver-arc-used" id="naver-used">—</span><span class="naver-arc-of"> / 25,000</span></div>
+          <div style="text-align:center">
+            <span class="naver-arc-used" id="naver-used">—</span>
+            <span class="naver-arc-of"> / 25,000</span>
+          </div>
           <div class="naver-arc-note" id="naver-note"></div>
         </div>
       </div>
@@ -905,22 +906,16 @@ function renderHome() {
     s ? (isIdle ? '장시간 비활성 상태' : '시스템 정상 운영 중') : '연결 없음';
   document.getElementById('mascot-sub').textContent =
     u ? `초안 ${u.drafts.used}/${u.drafts.limit} · 게시 ${u.posts.used}/${u.posts.limit} · 오늘` : '연결 확인 중…';
-  // Hero badge + ring
+  // Hero badge
   const liveEl = document.getElementById('mascot-live');
   const dotEl = document.getElementById('hero-badge-dot');
   const txtEl = document.getElementById('hero-badge-txt');
-  const ringEl = document.getElementById('mascot-ring');
-  const ringOkEl = document.getElementById('mascot-ring-ok');
   if (liveEl && dotEl && txtEl) {
     const c = isIdle ? 'var(--amber)' : isOk ? 'var(--green)' : 'var(--txt2)';
     liveEl.style.color = c;
     dotEl.style.background = c;
     dotEl.style.animation = isOk ? '' : 'none';
     txtEl.textContent = isIdle ? 'IDLE' : isOk ? 'LIVE' : '—';
-  }
-  if (ringEl && ringOkEl) {
-    ringEl.style.display = isOk ? 'none' : '';
-    ringOkEl.style.display = isOk ? '' : 'none';
   }
 
   // Worker pills in hero
@@ -986,20 +981,23 @@ function renderHome() {
 function renderAI() {
   const p = D.providers;
   if (!p) { document.getElementById('provider-list').innerHTML = '<div class="empty-state">연결 실패</div>'; return; }
-  document.getElementById('provider-list').innerHTML = (p.roles || []).map(r => {
-    const m = WORKER_META[r.role] || {emoji:'🤖',color:'var(--txt2)',glow:'rgba(123,130,153,0.12)',tagline:'',anim:''};
+  document.getElementById('provider-list').innerHTML = (p.roles || []).map((r, idx) => {
+    const m = WORKER_META[r.role] || {img:'',emoji:'🤖',color:'var(--txt2)',glow:'rgba(123,130,153,0.12)',tagline:'',anim:''};
     const cfgBadge = r.configured
-      ? `<span style="color:var(--green);font-size:11px">● 연결됨</span>`
-      : `<span style="color:var(--red);font-size:11px">● 미설정</span>`;
+      ? `<span style="color:var(--green)">● 연결됨</span>`
+      : `<span style="color:var(--red)">● 미설정</span>`;
     const cnt = r.runs_today ?? '—';
     const isActive = cnt !== '—' && cnt > 0;
-    const noteHtml = r.note ? `<div style="font-size:11px;color:var(--txt3);margin-top:2px">${esc(r.note)}</div>` : '';
+    const noteHtml = r.note ? `<div style="font-size:11px;color:var(--txt3);margin-top:4px;line-height:1.4">${esc(r.note)}</div>` : '';
+    // Role-specific portrait animation class
+    const animCls = m.anim ? `${m.anim}` : '';
+    // Portrait: real image with clean emoji fallback
+    const fallbackStyle = `background:${m.glow};border-color:${m.color}55`;
     const portraitHtml = m.img
-      ? `<img class="worker-char-img ${m.anim||''}" src="/static/${m.img}"
-              alt="${esc(r.role)}"
-              onerror="this.outerHTML='<div class=\\'worker-avatar\\'style=\\'background:${m.glow};border-color:${m.color}55\\'>${m.emoji}</div>'">`
-      : `<div class="worker-avatar" style="background:${m.glow};border-color:${m.color}55;box-shadow:0 0 18px ${m.color}22">${m.emoji}</div>`;
-    return `<div class="worker-card ${m.anim||''}" style="color:${m.color}">
+      ? `<img class="worker-char-img" src="/static/${m.img}" alt=""
+              onerror="this.outerHTML='<div class=\\'worker-avatar\\'style=\\'${fallbackStyle}\\'>${m.emoji}</div>'">`
+      : `<div class="worker-avatar" style="${fallbackStyle};box-shadow:0 0 18px ${m.color}22">${m.emoji}</div>`;
+    return `<div class="worker-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.06}s">
       <div class="worker-portrait">
         ${portraitHtml}
       </div>
@@ -1011,7 +1009,10 @@ function renderAI() {
       </div>
       <div class="worker-right">
         <div class="worker-count" style="color:${m.color}">${cnt}</div>
-        <div class="worker-count-lbl"><span class="worker-status-dot${isActive?' active':''}"></span>${isActive?'실행':'대기'}</div>
+        <div class="worker-count-lbl">
+          <span class="worker-status-dot${isActive?' active':''}"></span>
+          ${isActive?'실행중':'대기'}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -1049,7 +1050,7 @@ function renderIntake() {
   const used = nv ? (nv.used_today || 0) : 0;
   const limit = nv ? (nv.daily_limit || 25000) : 25000;
   const pct = nv ? Math.min(100, used / limit * 100) : 0;
-  const circ = 238.8;
+  const circ = 326.7;
   document.getElementById('naver-used').textContent = nv ? used.toLocaleString() : '—';
   // SVG arc update
   const arcEl = document.getElementById('naver-arc');
