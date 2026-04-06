@@ -445,6 +445,29 @@ class Orchestrator:
             if biz.b2b_candidate and not draft.b2b_status:
                 draft.b2b_status = "new"
                 draft.b2b_updated_at = datetime.now(timezone.utc)
+            # Phase 7: 이메일 버킷/목표 자동 초기화 (수동 설정 보호)
+            if not draft.email_bucket:
+                _cta = biz.cta_type
+                _asset = biz.asset_goal
+                if _cta in ("premium_waitlist", "premium_teaser") or _asset == "premium_teaser":
+                    draft.email_bucket = "premium_teaser"
+                elif biz.b2b_candidate:
+                    draft.email_bucket = "b2b_nurture"
+                elif _cta == "lead_magnet" or _asset == "lead_magnet_push":
+                    draft.email_bucket = "lead_nurture"
+                elif _cta == "newsletter_signup" or _asset == "newsletter_push":
+                    draft.email_bucket = "weekly_free"
+            if not draft.email_goal:
+                _cta = biz.cta_type
+                _asset = biz.asset_goal
+                if _cta in ("premium_waitlist", "premium_teaser") or _asset == "premium_teaser":
+                    draft.email_goal = "tease"
+                elif _cta == "lead_magnet" or _asset == "lead_magnet_push":
+                    draft.email_goal = "nurture"
+                elif _cta == "newsletter_signup" or _asset == "newsletter_push":
+                    draft.email_goal = "signup"
+                elif biz.b2b_candidate:
+                    draft.email_goal = "nurture"
             self.db.commit()
             logger.info(
                 f"[BusinessClassifier] draft_id={draft.id} "

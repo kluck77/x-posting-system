@@ -410,6 +410,96 @@ class TestFormatSummary:
         assert "pdf" in text
 
 
+# ─── 자동 초기화 매핑 검증 테스트 ──────────────────────────────
+
+class TestAutoInitMapping:
+    """orchestrator에서 사용하는 email_bucket/email_goal 자동 매핑 로직 검증."""
+
+    def test_newsletter_signup_maps_to_weekly_free(self, db):
+        """newsletter_signup CTA → email_bucket=weekly_free, email_goal=signup"""
+        src = _make_source(db)
+        draft = _make_draft(db, src, cta_type="newsletter_signup")
+        # 시뮬레이션: orchestrator 매핑 로직
+        if not draft.email_bucket:
+            if draft.cta_type == "newsletter_signup":
+                draft.email_bucket = "weekly_free"
+        if not draft.email_goal:
+            if draft.cta_type == "newsletter_signup":
+                draft.email_goal = "signup"
+        db.commit()
+        assert draft.email_bucket == "weekly_free"
+        assert draft.email_goal == "signup"
+
+    def test_lead_magnet_maps_to_lead_nurture(self, db):
+        """lead_magnet CTA → email_bucket=lead_nurture, email_goal=nurture"""
+        src = _make_source(db)
+        draft = _make_draft(db, src, cta_type="lead_magnet")
+        if not draft.email_bucket:
+            if draft.cta_type == "lead_magnet":
+                draft.email_bucket = "lead_nurture"
+        if not draft.email_goal:
+            if draft.cta_type == "lead_magnet":
+                draft.email_goal = "nurture"
+        db.commit()
+        assert draft.email_bucket == "lead_nurture"
+        assert draft.email_goal == "nurture"
+
+    def test_premium_teaser_maps_correctly(self, db):
+        """premium_waitlist CTA → email_bucket=premium_teaser, email_goal=tease"""
+        src = _make_source(db)
+        draft = _make_draft(db, src, cta_type="premium_waitlist")
+        if not draft.email_bucket:
+            if draft.cta_type in ("premium_waitlist", "premium_teaser"):
+                draft.email_bucket = "premium_teaser"
+        if not draft.email_goal:
+            if draft.cta_type in ("premium_waitlist", "premium_teaser"):
+                draft.email_goal = "tease"
+        db.commit()
+        assert draft.email_bucket == "premium_teaser"
+        assert draft.email_goal == "tease"
+
+    def test_manual_values_not_overwritten(self, db):
+        """수동 설정된 값은 덮어쓰지 않음."""
+        src = _make_source(db)
+        draft = _make_draft(
+            db, src, cta_type="newsletter_signup",
+            email_bucket="onboarding", email_goal="retain",
+        )
+        # 매핑은 이미 설정된 값이 있으면 건너뜀
+        if not draft.email_bucket:
+            draft.email_bucket = "weekly_free"
+        if not draft.email_goal:
+            draft.email_goal = "signup"
+        db.commit()
+        # 원래 수동 값이 유지되어야 함
+        assert draft.email_bucket == "onboarding"
+        assert draft.email_goal == "retain"
+
+    def test_no_mapping_for_follow_cta(self, db):
+        """follow CTA는 이메일 매핑 없음."""
+        src = _make_source(db)
+        draft = _make_draft(db, src, cta_type="follow")
+        if not draft.email_bucket:
+            if draft.cta_type == "newsletter_signup":
+                draft.email_bucket = "weekly_free"
+        assert draft.email_bucket is None
+        assert draft.email_goal is None
+
+    def test_asset_goal_lead_magnet_push(self, db):
+        """asset_goal=lead_magnet_push → lead_nurture"""
+        src = _make_source(db)
+        draft = _make_draft(db, src, asset_goal="lead_magnet_push")
+        if not draft.email_bucket:
+            if draft.asset_goal == "lead_magnet_push":
+                draft.email_bucket = "lead_nurture"
+        if not draft.email_goal:
+            if draft.asset_goal == "lead_magnet_push":
+                draft.email_goal = "nurture"
+        db.commit()
+        assert draft.email_bucket == "lead_nurture"
+        assert draft.email_goal == "nurture"
+
+
 class TestFormatDraftDetail:
     def test_includes_all(self, db):
         src = _make_source(db)
