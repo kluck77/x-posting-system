@@ -1,20 +1,24 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: 18-G (premium visual reconstruction)
+## ⚠️ LAST COMPLETED PHASE: 18-I (material dashboard rebuild + real character assets)
 
 **DO NOT re-implement the dashboard or control room. It is already built and locked.**
 
-Phase 18-G (visual reconstruction) complete:
-- **Hero card:** portrait-stage left column, `char-live` animation (translateY+rotate+scale), gradient headline, mini-stat row, worker pills strip
-- **AI tab:** workstation cards — `worker-portrait` left column (currentColor bg + dark overlay + glow), each AI role has visual desk presence
-- **Atmosphere:** 4-layer `body::before` radial gradients; deeper card glass (`backdrop-filter:blur(16px)`)
-- **Pipeline:** larger nodes (48px), stronger pulse (scale + glow), wider connectors, faster flow animation
-- **Naver card:** status strip banner with level color coding (ok/caution/warning/idle)
-- **News items:** arrow bullet prefix
-- **Ops:** section group headers, accent color on non-zero values
-- **Safari fix:** hero-ring-pulse keyframes include `translateX(-50%)` to prevent centering regression
+Phase 18-I complete:
+- **Hero — split-stage layout:** white character stage (160px) + dark info panel
+  `mix-blend-mode: multiply` on white bg = character colors preserved, white areas disappear
+  Strong right-fade gradient bridges portrait→panel. min-height 230px. 3-stat grid tiles.
+- **AI page — standalone profile cards:** outer `.card` wrapper removed entirely.
+  Each worker is an independent card (border-radius 18px, own shadow, own glass bg, own glow).
+  Portrait 100px wide. Left role-color accent bar. Card entrance animation with stagger.
+- **Naver arc gauge:** enlarged to 130×130px (r=52, circ=326.7), centered column layout.
+- **In-dashboard asset upload:** `POST /control/upload-asset` (Ops tab) — operator uploads
+  character PNGs from phone without SSH. Whitelist enforced. 10MB limit.
+- **Real image paths wired:**
+  `/static/hero_blonde_assistant.png`, `draftwriter.png`, `reviewer.png`,
+  `researcher.png`, `trendhunter_black.png` — all with onerror emoji fallbacks.
 - 579 tests passing, 23 critical flows protected
-- Commit: `d5e906a`
+- Commits: `291fc3c` (18-I), `3d93b96` (18-H assets+upload), `d5e906a` (18-G)
 
 ---
 
@@ -22,14 +26,16 @@ Phase 18-G (visual reconstruction) complete:
 
 **Phase 18 — Mobile Control Room Bundle** (complete + production-deployed)
 
-What was built in Phase 18:
+What was built in Phase 18 through 18-I:
 1. `app/services/naver_usage.py` — Naver API daily call counter
-2. `app/api/control_room.py` — `/control/status`, `/control/providers`, `/control/flow-trace`, `/control/naver`, `/control/recent-news` endpoints
-3. `static/dashboard.html` — mobile-first 4-tab dashboard (Status / AI / Intake / Ops), Safari-optimized, safe-area insets, 30s auto-refresh
-4. `app/telegram_bot.py` — `/menu` command with InlineKeyboard (✍️초안 / 📋큐 / 📊상태 / 👀모니터 / 🛟복구)
-5. `tests/test_control_room.py` — 37 tests for all control room endpoints
-6. `tests/test_critical_flows.py` — 6 new critical tests for quick menu
-7. `deploy_dashboard.sh` — VPS deployment script (systemd service, port 8000)
+2. `app/api/control_room.py` — `/control/status`, `/control/providers`, `/control/flow-trace`,
+   `/control/naver`, `/control/recent-news`, `POST /control/upload-asset`
+3. `static/dashboard.html` — mobile-first 4-tab dashboard, Safari-optimized, split-stage hero,
+   standalone AI profile cards, real character image assets, 30s auto-refresh
+4. `app/telegram_bot.py` — `/menu` command with InlineKeyboard
+5. `tests/test_control_room.py` — 37 tests
+6. `tests/test_critical_flows.py` — 6 critical tests
+7. `deploy_dashboard.sh` — VPS deployment script
 
 ---
 
@@ -60,11 +66,13 @@ What was built in Phase 18:
 | 15 | Ops recovery bundle (startup_check, /recover, recovery_playbook.md) | Locked |
 | 16 | Critical flows regression bundle (test_critical_flows.py, pytest -m critical) | Locked |
 | 17 | Release gate bundle (go_live_checklist.md, pre_run_guide.md, release_readiness.md) | Locked |
-| **18** | **Control Room dashboard (naver_usage, control_room.py, dashboard.html, 37 tests, docs/control_room.md)** | **Locked** |
+| **18** | **Control Room dashboard (naver_usage, control_room.py, dashboard.html, 37 tests)** | **Locked** |
 | **18** | **Telegram /menu quick-action buttons (_handle_quick_callback, 6 critical tests)** | **Locked** |
-| **18-C** | **Premium Polish: card shadows, mascot/dot animations, role taglines, Naver context, Telegram UX** | **Locked** |
+| **18-C** | **Premium Polish: card shadows, mascot animations, role taglines, Naver context** | **Locked** |
 | **18-C fix** | **Safari transform conflict fix (mascot-idle keyframe), deploy_dashboard.sh** | **Locked** |
-| **18-G** | **Premium visual reconstruction (portrait hero, workstation AI cards, atmosphere, pipeline, Naver status strip)** | **Locked** |
+| **18-G** | **Visual reconstruction (portrait hero, workstation AI cards, atmosphere, pipeline)** | **Locked** |
+| **18-H** | **Real character image assets + in-dashboard upload UI (POST /control/upload-asset)** | **Locked** |
+| **18-I** | **Material rebuild: split-stage hero, standalone AI cards, large Naver gauge** | **Locked** |
 
 ---
 
@@ -84,26 +92,19 @@ What was built in Phase 18:
 579 tests passing, 23 critical flows protected, go-live docs in place.
 VPS deployed at 107.191.61.190:8000/control/ via deploy_dashboard.sh.
 
-**Optional next: Phase 18-E (visual premium pass)**
-The dashboard is functional and correct. A cinematic premium redesign was scoped but not yet built:
-- Atmospheric `body::before` radial gradient bg
-- Glass card morphism (`backdrop-filter: blur(12px)`, rgba surface, inset highlight)
-- Hero card with integrated stat strip + worker pills strip
-- AI worker cards: left `::before` accent bar
-- Naver SVG circular arc gauge (r=32, circ≈201.1)
-- Flowing pipeline connector animation
-This is purely visual — no API or logic changes required. Operator can request it explicitly.
+Character images on VPS: hero_blonde_assistant.png, draftwriter.png, reviewer.png,
+researcher.png, trendhunter_black.png — uploaded via Ops tab upload UI.
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 14 — Phase 18-G visual reconstruction)
+- Date: 2026-04-06 (session 14 — Phases 18-G / 18-H / 18-I)
 - Branch: claude/extract-prediction-time-n82UK
 - Key commits:
-  - `d5e906a` — Phase 18-G (portrait hero, workstation AI cards, atmosphere, pipeline, Naver strip)
-  - `0979853` — Phase 18-F (visual reconstruction base)
-  - `b04da8e` — Phase 18-E (cinematic premium pass)
-  - `f1304e5` — Phase 18-C fix (Safari mascot animation + card depth)
+  - `291fc3c` — Phase 18-I (split-stage hero, standalone AI cards, large Naver gauge)
+  - `3d93b96` — Phase 18-H (real character assets + upload UI)
+  - `d5e906a` — Phase 18-G (portrait hero, workstation cards, atmosphere)
+  - `f1304e5` — Phase 18-C fix (Safari animation)
   - `776dd92` — deploy_dashboard.sh
 - Run `git log --oneline -8` to see recent commits
