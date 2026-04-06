@@ -840,6 +840,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/perf — 최근 성과 메모 목록\n"
         "/biz — 비즈니스 분류 요약 (premium/b2b/newsletter 후보)\n"
         "/premium — 프리미엄 Korea Brief 후보 관리\n"
+        "/b2b — B2B 리서치 후보 관리 (상태/메모/대상/활용/그룹핑)\n"
         "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
         "/recover — 영속 상태 파일 자가 진단\n"
         "/pending — 대기 초안\n"
@@ -1930,6 +1931,282 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /b2b — B2B 리서치 후보 관리.
+
+    사용법:
+      /b2b                          — 전체 요약
+      /b2b list [상태]              — 후보 목록
+      /b2b view <id>                — 후보 상세
+      /b2b status <id> <상태>       — 상태 변경
+      /b2b note <id> <메모>         — 운영자 메모
+      /b2b audience <id> <대상>     — 대상 독자 설정
+      /b2b usecase <id> <사례>      — 활용 사례 설정
+      /b2b group [audience|usecase] [값] — 그룹핑/필터링
+      /b2b init                     — 미초기화 후보 일괄 'new'
+      /b2b export [상태]            — 내보내기
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.b2b_candidate_service import B2BCandidateService
+        svc = B2BCandidateService(db)
+
+        # /b2b (요약)
+        if subcmd == "summary" or not args:
+            text = svc.format_summary()
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /b2b list [상태]
+        elif subcmd == "list":
+            status_filter = args[1].lower() if len(args) > 1 else None
+            candidates = svc.get_candidates(status=status_filter, limit=10)
+            if not candidates:
+                await update.message.reply_text(
+                    f"🏢 B2B 후보 없음" + (f" (상태: {status_filter})" if status_filter else "")
+                )
+                return
+            lines = [f"🏢 <b>B2B 리서치 후보</b>" + (f" [{status_filter}]" if status_filter else "") + "\n"]
+            for d in candidates:
+                score = d.monetization_score or 0
+                status = d.b2b_status or "new"
+                aud = d.b2b_target_audience or "—"
+                note_marker = " 📝" if d.b2b_note else ""
+                lines.append(
+                    f"• ID {d.id} [{status}] 💰{score} 👥{aud}{note_marker}\n"
+                    f"  {(d.hook or '')[:50]}…"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /b2b view <id>
+        elif subcmd == "view":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "사용법: <code>/b2b view &lt;id&gt;</code>", parse_mode="HTML"
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            draft = svc.get_candidate_by_id(draft_id)
+            if not draft:
+                await update.message.reply_text(f"❌ #{draft_id}는 B2B 후보가 아닙니다.")
+                return
+            text = svc.format_candidate_detail(draft)
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /b2b status <id> <상태>
+        elif subcmd == "status":
+            if len(args) < 3:
+                from app.services.b2b_candidate_service import B2B_STATUSES
+                statuses = " | ".join(B2B_STATUSES)
+                await update.message.reply_text(
+                    f"사용법: <code>/b2b status &lt;id&gt; &lt;상태&gt;</code>\n"
+                    f"상태: {statuses}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            new_status = args[2].lower()
+            result = svc.update_status(draft_id, new_status)
+            if result:
+                await update.message.reply_text(
+                    f"🏢 #{draft_id} B2B 상태 → <b>{new_status}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                from app.services.b2b_candidate_service import B2B_STATUSES
+                await update.message.reply_text(
+                    f"❌ 상태 변경 실패. 유효한 상태: {', '.join(B2B_STATUSES)}"
+                )
+
+        # /b2b note <id> <메모>
+        elif subcmd == "note":
+            if len(args) < 3:
+                await update.message.reply_text(
+                    "사용법: <code>/b2b note &lt;id&gt; &lt;메모&gt;</code>\n"
+                    "예: <code>/b2b note 42 규제 브리프로 investor 대상 적합</code>",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            note = " ".join(args[2:])[:500]
+            result = svc.set_note(draft_id, note)
+            if result:
+                await update.message.reply_text(
+                    f"📝 #{draft_id} B2B 메모 저장:\n<i>{note[:200]}</i>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 B2B 후보가 아닙니다.")
+
+        # /b2b audience <id> <대상>
+        elif subcmd == "audience":
+            if len(args) < 3:
+                from app.services.b2b_candidate_service import B2B_TARGET_AUDIENCES
+                types = "\n".join(f"  • {t}" for t in B2B_TARGET_AUDIENCES)
+                await update.message.reply_text(
+                    f"사용법: <code>/b2b audience &lt;id&gt; &lt;대상&gt;</code>\n\n"
+                    f"추천 대상:\n{types}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            audience = args[2].lower()
+            result = svc.set_target_audience(draft_id, audience)
+            if result:
+                await update.message.reply_text(
+                    f"👥 #{draft_id} B2B 대상 → <b>{audience}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 B2B 후보가 아닙니다.")
+
+        # /b2b usecase <id> <사례>
+        elif subcmd == "usecase":
+            if len(args) < 3:
+                from app.services.b2b_candidate_service import B2B_USE_CASES
+                cases = "\n".join(f"  • {c}" for c in B2B_USE_CASES)
+                await update.message.reply_text(
+                    f"사용법: <code>/b2b usecase &lt;id&gt; &lt;사례&gt;</code>\n\n"
+                    f"추천 사례:\n{cases}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            use_case = args[2].lower()
+            result = svc.set_use_case(draft_id, use_case)
+            if result:
+                await update.message.reply_text(
+                    f"📋 #{draft_id} B2B 활용 → <b>{use_case}</b>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id}는 B2B 후보가 아닙니다.")
+
+        # /b2b group [audience|usecase] [값]
+        elif subcmd == "group":
+            group_type = args[1].lower() if len(args) > 1 else "overview"
+            group_value = args[2].lower() if len(args) > 2 else None
+
+            if group_type == "audience" and group_value:
+                drafts = svc.get_by_audience(group_value, limit=10)
+                if not drafts:
+                    await update.message.reply_text(f"🏢 대상 '{group_value}' 후보 없음")
+                    return
+                lines = [f"🏢 <b>B2B 후보</b> — 👥 {group_value} ({len(drafts)}건)\n"]
+                for d in drafts:
+                    status = d.b2b_status or "new"
+                    uc = d.b2b_use_case or "—"
+                    lines.append(f"• ID {d.id} [{status}] 📋{uc}\n  {(d.hook or '')[:50]}…")
+                await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+            elif group_type == "usecase" and group_value:
+                drafts = svc.get_by_use_case(group_value, limit=10)
+                if not drafts:
+                    await update.message.reply_text(f"🏢 사례 '{group_value}' 후보 없음")
+                    return
+                lines = [f"🏢 <b>B2B 후보</b> — 📋 {group_value} ({len(drafts)}건)\n"]
+                for d in drafts:
+                    status = d.b2b_status or "new"
+                    aud = d.b2b_target_audience or "—"
+                    lines.append(f"• ID {d.id} [{status}] 👥{aud}\n  {(d.hook or '')[:50]}…")
+                await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+            else:
+                by_aud = svc.group_by_audience()
+                by_uc = svc.group_by_use_case()
+                lines = ["🏢 <b>B2B 그룹핑 현황</b>\n"]
+                if by_aud:
+                    lines.append("<b>대상 독자:</b>")
+                    for aud, cnt in sorted(by_aud.items(), key=lambda x: -x[1]):
+                        lines.append(f"  👥 {aud}: {cnt}건")
+                    lines.append("")
+                if by_uc:
+                    lines.append("<b>활용 사례:</b>")
+                    for uc, cnt in sorted(by_uc.items(), key=lambda x: -x[1]):
+                        lines.append(f"  📋 {uc}: {cnt}건")
+                if not by_aud and not by_uc:
+                    lines.append("아직 audience/usecase가 설정된 후보 없음")
+                lines.append("")
+                lines.append(
+                    "상세: <code>/b2b group audience investors</code>\n"
+                    "상세: <code>/b2b group usecase regulation_brief</code>"
+                )
+                await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /b2b init
+        elif subcmd == "init":
+            count = svc.init_new_candidates()
+            await update.message.reply_text(f"✅ {count}개 B2B 후보 'new' 상태 초기화됨")
+
+        # /b2b export [상태]
+        elif subcmd == "export":
+            status_filter = args[1].lower() if len(args) > 1 else None
+            items = svc.export_candidates(status=status_filter, limit=10)
+            if not items:
+                await update.message.reply_text("🏢 내보낼 B2B 후보 없음")
+                return
+            lines = [f"🏢 <b>B2B 후보 내보내기</b> ({len(items)}건)\n"]
+            for item in items:
+                premium = ""
+                if item.get("premium_linkage"):
+                    premium = f"\n  ⭐ 프리미엄: {item['premium_linkage'].get('premium_status', '—')}"
+                lines.append(
+                    f"──────────────\n"
+                    f"ID: {item['draft_id']} | 💰{item['monetization_score'] or 0} | "
+                    f"[{item['b2b_status']}]\n"
+                    f"Hook: {item['hook'][:60]}…\n"
+                    f"Category: {item['category']} | Risk: {item['risk_level']}\n"
+                    f"Audience: {item['b2b_target_audience'] or '—'}\n"
+                    f"Use Case: {item['b2b_use_case'] or '—'}\n"
+                    f"Note: {item['b2b_note'] or '—'}"
+                    f"{premium}"
+                )
+            text = "\n".join(lines)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/b2b</code> — 요약\n"
+                "<code>/b2b list [상태]</code> — 목록\n"
+                "<code>/b2b view &lt;id&gt;</code> — 상세\n"
+                "<code>/b2b status &lt;id&gt; &lt;상태&gt;</code> — 상태 변경\n"
+                "<code>/b2b note &lt;id&gt; &lt;메모&gt;</code> — 메모\n"
+                "<code>/b2b audience &lt;id&gt; &lt;대상&gt;</code> — 대상 독자\n"
+                "<code>/b2b usecase &lt;id&gt; &lt;사례&gt;</code> — 활용 사례\n"
+                "<code>/b2b group [audience|usecase] [값]</code> — 그룹핑\n"
+                "<code>/b2b init</code> — 미초기화 후보 설정\n"
+                "<code>/b2b export [상태]</code> — 내보내기",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/b2b 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ B2B 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
 async def biz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /biz [summary|premium|b2b|newsletter] — 비즈니스 분류 요약/후보 조회.
@@ -2199,6 +2476,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("perf", perf_command))
     app.add_handler(CommandHandler("biz", biz_command))
     app.add_handler(CommandHandler("premium", premium_command))
+    app.add_handler(CommandHandler("b2b", b2b_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))

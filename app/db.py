@@ -151,6 +151,22 @@ def _run_schema_migrations():
             "column": "b2b_use_case",
             "ddl": "ALTER TABLE drafts ADD COLUMN b2b_use_case VARCHAR(200)",
         },
+        # Phase 5-B2B: B2B 후보 파이프라인
+        {
+            "table": "drafts",
+            "column": "b2b_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_note TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_status",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_status VARCHAR(20)",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_updated_at",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_updated_at DATETIME",
+        },
         # Phase 5-3: 프리미엄 후보 파이프라인
         {
             "table": "drafts",

@@ -441,6 +441,10 @@ class Orchestrator:
             if "premium_candidate" in biz.business_tags:
                 draft.premium_status = "new"
                 draft.premium_updated_at = datetime.now(timezone.utc)
+            # Phase 5-B2B: B2B 후보 자동 초기화
+            if biz.b2b_candidate and not draft.b2b_status:
+                draft.b2b_status = "new"
+                draft.b2b_updated_at = datetime.now(timezone.utc)
             self.db.commit()
             logger.info(
                 f"[BusinessClassifier] draft_id={draft.id} "

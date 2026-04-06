@@ -196,6 +196,18 @@ class Draft(Base):
         String(200), nullable=True,
         comment="B2B 활용 사례 (예: market_entry, regulation_monitor, risk_assessment)"
     )
+    b2b_note = Column(
+        Text, nullable=True,
+        comment="B2B 후보에 대한 운영자 상업/리서치 메모"
+    )
+    b2b_status = Column(
+        String(20), nullable=True,
+        comment="B2B 후보 상태: new/reviewing/shortlisted/postponed/rejected/promoted"
+    )
+    b2b_updated_at = Column(
+        DateTime, nullable=True,
+        comment="B2B 상태 마지막 변경 시간"
+    )
 
     # ── Phase 5-3: 프리미엄 후보 파이프라인 ─────────────────────────────────
     premium_status = Column(
