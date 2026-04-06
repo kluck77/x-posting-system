@@ -390,3 +390,54 @@ class TestRecoveryLifecycleScenario:
         with patch("app.utils.startup_check._STATE_FILES", fake_files):
             result = run_startup_check()  # must not raise
         assert set(result.keys()) == set(_STATE_FILES.keys())
+
+
+# =============================================================================
+# 6. Telegram Quick Menu (/menu command)
+# =============================================================================
+
+class TestTelegramQuickMenu:
+    """
+    /menu 커맨드와 퀵 액션 콜백이 telegram_bot.py에 올바르게 구현됐는지 검증.
+    telegram 라이브러리 임포트 없이 소스 텍스트 분석으로 검증합니다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def bot_source(self):
+        self.src = (Path(__file__).parent.parent / "app" / "telegram_bot.py").read_text()
+
+    @pytest.mark.critical
+    def test_menu_command_defined(self):
+        """menu_command 함수가 정의되어 있어야 한다."""
+        assert "async def menu_command(" in self.src
+
+    @pytest.mark.critical
+    def test_menu_command_registered(self):
+        """CommandHandler('menu', menu_command)가 등록되어 있어야 한다."""
+        assert 'CommandHandler("menu", menu_command)' in self.src
+
+    @pytest.mark.critical
+    def test_all_five_quick_callbacks_defined(self):
+        """5개 quick_ callback_data가 모두 정의되어 있어야 한다."""
+        for cb in ("quick_draft", "quick_queue", "quick_status", "quick_monitor", "quick_recover"):
+            assert cb in self.src, f"Missing callback_data: {cb}"
+
+    @pytest.mark.critical
+    def test_quick_handler_routed_in_callback_handler(self):
+        """callback_handler에서 quick_ 접두사가 _handle_quick_callback으로 라우팅돼야 한다."""
+        assert 'startswith("quick_")' in self.src
+        assert "_handle_quick_callback" in self.src
+
+    @pytest.mark.critical
+    def test_quick_handler_calls_existing_commands(self):
+        """_handle_quick_callback이 기존 커맨드 핸들러를 재사용해야 한다."""
+        assert "queue_command" in self.src
+        assert "status_command" in self.src
+        assert "monitor_command" in self.src
+        assert "recover_command" in self.src
+
+    @pytest.mark.critical
+    def test_five_inline_buttons_present(self):
+        """5개 인라인 버튼 텍스트가 menu_command에 있어야 한다."""
+        for label in ("초안 만들기", "큐 보기", "오늘 상태", "모니터 상태", "복구 체크"):
+            assert label in self.src, f"Missing button label: {label}"

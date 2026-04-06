@@ -450,6 +450,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_news_callback(query, context)
         return
 
+    # --- 퀵 액션 버튼 콜백 ---
+    if callback_data.startswith("quick_"):
+        await _handle_quick_callback(query, context)
+        return
+
     # --- 콘텐츠 팩 선택 콜백 ---
     if callback_data.startswith("pack_select:"):
         await _handle_pack_select_callback(query, context)
@@ -504,6 +509,39 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"❌ 오류: {str(e)[:200]}")
     finally:
         orchestrator.close()
+
+
+async def _handle_quick_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    """
+    퀵 액션 인라인 버튼 콜백 처리.
+    기존 커맨드 핸들러를 재사용하기 위해 query.message를 update.message로 래핑합니다.
+    callback_data: quick_draft / quick_queue / quick_status / quick_monitor / quick_recover
+    """
+
+    class _U:
+        """callback query 메시지를 command handler에 전달하기 위한 최소 래퍼."""
+        message = query.message
+
+    u = _U()
+    action = query.data
+
+    if action == "quick_draft":
+        await query.message.reply_text(
+            "✍️ <b>초안 만들기</b>\n\n"
+            "URL 또는 텍스트를 보내주세요:\n"
+            "• 뉴스 링크를 그냥 붙여넣거나\n"
+            "• <code>/draft 주제나 내용</code> 으로 즉시 생성",
+            parse_mode="HTML",
+        )
+    elif action == "quick_queue":
+        await queue_command(u, context)
+    elif action == "quick_status":
+        await status_command(u, context)
+    elif action == "quick_monitor":
+        # context.args가 None이면 monitor_command는 "status"로 기본 처리됨
+        await monitor_command(u, context)
+    elif action == "quick_recover":
+        await recover_command(u, context)
 
 
 async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):
@@ -804,6 +842,22 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/recover — 영속 상태 파일 자가 진단\n"
         "/pending — 대기 초안\n"
         "/cancel — 취소\n",
+        parse_mode="HTML",
+    )
+
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/menu — 퀵 액션 인라인 버튼 메뉴."""
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✍️ 초안 만들기", callback_data="quick_draft")],
+        [InlineKeyboardButton("📋 큐 보기",     callback_data="quick_queue")],
+        [InlineKeyboardButton("📊 오늘 상태",   callback_data="quick_status")],
+        [InlineKeyboardButton("👀 모니터 상태", callback_data="quick_monitor")],
+        [InlineKeyboardButton("🛟 복구 체크",   callback_data="quick_recover")],
+    ])
+    await update.message.reply_text(
+        "⚡ <b>퀵 액션</b>\n원하는 작업을 탭하세요.",
+        reply_markup=keyboard,
         parse_mode="HTML",
     )
 
@@ -1859,6 +1913,7 @@ def create_telegram_app() -> Application | None:
 
     # 커맨드
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("recover", recover_command))
