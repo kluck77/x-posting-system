@@ -37,9 +37,10 @@ body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
-    radial-gradient(ellipse 80% 60% at 10% 15%,rgba(79,142,255,0.12) 0%,transparent 55%),
-    radial-gradient(ellipse 60% 50% at 90% 80%,rgba(168,85,247,0.09) 0%,transparent 55%),
-    radial-gradient(ellipse 70% 50% at 50% 110%,rgba(34,197,94,0.07) 0%,transparent 55%);
+    radial-gradient(ellipse 90% 65% at 8% 12%,rgba(79,142,255,0.18) 0%,transparent 52%),
+    radial-gradient(ellipse 65% 55% at 92% 82%,rgba(168,85,247,0.14) 0%,transparent 52%),
+    radial-gradient(ellipse 75% 55% at 50% 105%,rgba(34,197,94,0.1) 0%,transparent 52%),
+    radial-gradient(ellipse 50% 40% at 75% 25%,rgba(34,211,238,0.06) 0%,transparent 50%);
 }
 
 .app-header{
@@ -145,11 +146,11 @@ body::before{
 .tab-btn.active .tab-icon{transform:scale(1.18);filter:drop-shadow(0 0 6px rgba(79,142,255,0.5))}
 
 .card{
-  background:rgba(14,18,30,0.88);
-  border:1px solid rgba(255,255,255,0.08);
+  background:rgba(14,18,30,0.90);
+  border:1px solid rgba(255,255,255,0.09);
   border-radius:16px;padding:14px 16px;
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  box-shadow:0 4px 32px rgba(0,0,0,0.55),0 1px 0 rgba(255,255,255,0.07) inset,0 0 0 1px rgba(255,255,255,0.04) inset;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:0 4px 40px rgba(0,0,0,0.65),0 1px 0 rgba(255,255,255,0.09) inset,0 0 0 1px rgba(255,255,255,0.05) inset;
   position:relative;z-index:1;
 }
 .card-title{font-size:11px;font-weight:700;color:var(--txt3);
@@ -166,88 +167,144 @@ body::before{
 }
 .alert-banner.hidden{display:none}
 
-/* Hero card — replaces mascot-card + quick-stats */
+/* ===== HERO CARD ===== */
 .hero-card{
-  background:linear-gradient(145deg,rgba(15,20,40,0.95) 0%,rgba(20,28,55,0.92) 50%,rgba(14,22,38,0.95) 100%);
-  border:1px solid rgba(79,142,255,0.3);border-radius:20px;overflow:hidden;
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  box-shadow:0 0 60px rgba(79,142,255,0.1),0 8px 40px rgba(0,0,0,0.6),inset 0 1px 0 rgba(79,142,255,0.18);
+  background:linear-gradient(160deg,rgba(10,14,32,0.98) 0%,rgba(18,24,50,0.95) 45%,rgba(12,18,38,0.98) 100%);
+  border:1px solid rgba(79,142,255,0.28);border-radius:22px;overflow:hidden;
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:0 0 80px rgba(79,142,255,0.12),0 12px 48px rgba(0,0,0,0.7),inset 0 1px 0 rgba(79,142,255,0.2);
   position:relative;z-index:1;
 }
-.hero-card::after{
-  content:'';position:absolute;inset:0;
+/* Starfield texture overlay */
+.hero-card::before{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
   background:
-    radial-gradient(ellipse 80% 60% at 10% 50%,rgba(79,142,255,0.06) 0%,transparent 60%),
-    radial-gradient(ellipse 40% 40% at 90% 20%,rgba(168,85,247,0.05) 0%,transparent 50%);
-  pointer-events:none;z-index:0;
+    radial-gradient(ellipse 90% 70% at 20% 60%,rgba(79,142,255,0.1) 0%,transparent 55%),
+    radial-gradient(ellipse 50% 50% at 85% 15%,rgba(168,85,247,0.08) 0%,transparent 50%),
+    radial-gradient(ellipse 40% 30% at 70% 90%,rgba(34,197,94,0.05) 0%,transparent 50%);
 }
-.hero-body,.hero-stats,.hero-workers{position:relative;z-index:1}
-.hero-body{padding:20px 16px 14px}
-.hero-body::after{
-  content:'';display:block;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.4),rgba(168,85,247,0.3),transparent);
-  margin-top:14px;
+/* Accent stripe at bottom of hero */
+.hero-card::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent 0%,rgba(79,142,255,0.5) 30%,rgba(168,85,247,0.4) 70%,transparent 100%);
+  z-index:2;
 }
-.hero-top{display:flex;align-items:center;gap:16px}
-.hero-avatar-wrap{
-  position:relative;width:72px;height:72px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
+
+/* Hero main section */
+.hero-main{
+  display:flex;align-items:stretch;
+  position:relative;z-index:1;
+  min-height:140px;
 }
-.hero-avatar-wrap::before{
-  content:'';position:absolute;inset:-20px;
-  background:radial-gradient(circle,rgba(79,142,255,0.18) 0%,transparent 70%);
-  border-radius:50%;z-index:0;
-  animation:hero-glow-pulse 3s ease-in-out infinite;
+
+/* Character portrait stage — left column */
+.hero-portrait{
+  width:110px;flex-shrink:0;
+  position:relative;
+  display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:8px;
+  background:linear-gradient(180deg,rgba(79,142,255,0.06) 0%,rgba(79,142,255,0.02) 100%);
+  border-right:1px solid rgba(79,142,255,0.1);
+  overflow:hidden;
 }
-@keyframes hero-glow-pulse{
-  0%,100%{opacity:0.6;transform:scale(0.9)}
-  50%{opacity:1;transform:scale(1.1)}
+/* Spotlight behind character */
+.hero-portrait::before{
+  content:'';
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  width:120px;height:80px;
+  background:radial-gradient(ellipse,rgba(79,142,255,0.22) 0%,transparent 70%);
+  border-radius:50%;
+  animation:portrait-glow 4s ease-in-out infinite;
+}
+/* Floor reflection line */
+.hero-portrait::after{
+  content:'';
+  position:absolute;bottom:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.35),transparent);
+}
+@keyframes portrait-glow{
+  0%,100%{opacity:0.7;transform:translateX(-50%) scaleX(0.9)}
+  50%{opacity:1;transform:translateX(-50%) scaleX(1.1)}
 }
 .hero-ring{
-  position:absolute;inset:-10px;border-radius:50%;
-  border:2px solid rgba(79,142,255,0.45);
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  width:90px;height:90px;border-radius:50%;
+  border:1.5px solid rgba(79,142,255,0.4);
   animation:hero-ring-pulse 3s ease-in-out infinite;pointer-events:none;
 }
 .hero-ring-ok{
-  position:absolute;inset:-10px;border-radius:50%;
-  border:2px solid rgba(34,197,94,0.45);
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  width:90px;height:90px;border-radius:50%;
+  border:1.5px solid rgba(34,197,94,0.4);
   animation:hero-ring-pulse-green 3s ease-in-out infinite;pointer-events:none;display:none;
 }
+/* The character emoji — styled as real character */
 .hero-emoji{
-  font-size:62px;line-height:1;display:inline-block;
-  animation:mascot-idle 5s ease-in-out infinite;
-  transform-origin:center;will-change:transform;position:relative;z-index:1;
+  font-size:80px;line-height:1;
+  display:block;position:relative;z-index:1;
+  animation:char-live 5s ease-in-out infinite;
+  transform-origin:bottom center;will-change:transform;
+  filter:drop-shadow(0 -4px 16px rgba(79,142,255,0.3)) drop-shadow(0 4px 8px rgba(0,0,0,0.5));
 }
-.hero-info{flex:1;min-width:0}
+@keyframes char-live{
+  0%   {transform:translateY(0) rotate(0deg) scale(1)}
+  15%  {transform:translateY(-4px) rotate(-0.8deg) scale(1.01)}
+  30%  {transform:translateY(-6px) rotate(0.5deg) scale(1.02)}
+  50%  {transform:translateY(-5px) rotate(-0.3deg) scale(1.015)}
+  70%  {transform:translateY(-3px) rotate(0.6deg) scale(1.01)}
+  85%  {transform:translateY(-5px) rotate(-0.5deg) scale(1.015)}
+  100% {transform:translateY(0) rotate(0deg) scale(1)}
+}
+
+/* Hero right — system info */
+.hero-info{flex:1;min-width:0;padding:16px 14px 14px 14px;position:relative;z-index:1}
 .hero-badge{
   display:inline-flex;align-items:center;gap:5px;
-  font-size:10px;font-weight:800;letter-spacing:0.9px;text-transform:uppercase;
-  color:var(--green);margin-bottom:6px;
+  font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  color:var(--green);margin-bottom:8px;
 }
 .hero-badge-dot{
   width:7px;height:7px;border-radius:50%;background:var(--green);
   animation:pulse-glow-green 2s ease-in-out infinite;flex-shrink:0;
 }
-.hero-headline{font-size:19px;font-weight:800;margin-bottom:4px;letter-spacing:-0.4px;color:var(--txt)}
-.hero-sub{font-size:12px;color:var(--txt2);line-height:1.4}
-.hero-stats{display:flex;border-top:1px solid rgba(255,255,255,0.06)}
-.hero-stat{flex:1;text-align:center;padding:12px 8px;position:relative}
+.hero-headline{
+  font-size:18px;font-weight:900;margin-bottom:5px;letter-spacing:-0.5px;
+  background:linear-gradient(135deg,#e2e6f0 0%,#a8b4d0 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  line-height:1.2;
+}
+.hero-sub{font-size:11.5px;color:var(--txt2);line-height:1.5;margin-bottom:10px}
+
+/* Mini stat row inside info area */
+.hero-mini-stats{display:flex;gap:12px;flex-wrap:wrap}
+.hero-mini-stat{display:flex;flex-direction:column;align-items:flex-start}
+.hero-mini-val{font-size:18px;font-weight:800;line-height:1;color:var(--accent)}
+.hero-mini-lbl{font-size:9px;color:var(--txt3);letter-spacing:0.6px;text-transform:uppercase;margin-top:2px}
+
+/* Stat strip */
+.hero-stats{display:flex;border-top:1px solid rgba(255,255,255,0.05);position:relative;z-index:1}
+.hero-stat{flex:1;text-align:center;padding:10px 8px;position:relative}
 .hero-stat+.hero-stat::before{
   content:'';position:absolute;left:0;top:20%;bottom:20%;
   width:1px;background:rgba(255,255,255,0.06);
 }
-.hero-stat-val{font-size:22px;font-weight:800;line-height:1.1;margin-bottom:3px;color:var(--accent)}
-.hero-stat-lbl{font-size:10px;color:var(--txt3);letter-spacing:0.5px;text-transform:uppercase}
+.hero-stat-val{font-size:20px;font-weight:800;line-height:1.1;margin-bottom:3px;color:var(--accent)}
+.hero-stat-lbl{font-size:9px;color:var(--txt3);letter-spacing:0.5px;text-transform:uppercase}
+
+/* Worker pills */
 .hero-workers{
-  display:flex;flex-wrap:wrap;gap:6px;
-  padding:10px 16px 14px;border-top:1px solid rgba(255,255,255,0.05);min-height:44px;
+  display:flex;flex-wrap:wrap;gap:5px;
+  padding:8px 14px 12px;border-top:1px solid rgba(255,255,255,0.04);
+  position:relative;z-index:1;min-height:42px;
 }
 .worker-pill{
   display:inline-flex;align-items:center;gap:5px;
-  padding:4px 10px 4px 7px;border-radius:20px;
-  font-size:11px;font-weight:600;border:1px solid;
+  padding:3px 9px 3px 6px;border-radius:20px;
+  font-size:10.5px;font-weight:600;border:1px solid;
   animation:worker-pill-in .35s ease both;
 }
+@keyframes hero-ring-pulse{0%,100%{opacity:0.2;transform:translateX(-50%) scale(0.92)}50%{opacity:0.85;transform:translateX(-50%) scale(1.08)}}
+@keyframes hero-ring-pulse-green{0%,100%{opacity:0.15;transform:translateX(-50%) scale(0.92)}50%{opacity:0.8;transform:translateX(-50%) scale(1.08)}}
 
 .health-row{
   display:flex;align-items:center;justify-content:space-between;
@@ -300,39 +357,50 @@ body::before{
 .badge-medium{background:rgba(245,158,11,0.12);color:var(--amber)}
 .badge-high{background:rgba(239,68,68,0.12);color:var(--red)}
 
-/* Worker cards (AI roles) */
+/* ===== AI WORKSTATION CARDS ===== */
 .worker-card{
-  display:flex;align-items:center;gap:14px;
-  padding:14px 14px 14px 20px;
+  display:flex;align-items:stretch;
   border-bottom:1px solid rgba(255,255,255,0.05);
-  position:relative;overflow:hidden;
-  transition:background .2s;
+  position:relative;overflow:hidden;min-height:90px;
 }
 .worker-card:last-child{border-bottom:none}
-.worker-card:active{background:rgba(255,255,255,0.03)}
-.worker-card::before{
-  content:'';position:absolute;left:0;top:10px;bottom:10px;
-  width:3px;border-radius:0 2px 2px 0;background:currentColor;opacity:0.7;
+/* Portrait column */
+.worker-portrait{
+  width:76px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+  background:currentColor;
+}
+.worker-portrait::before{
+  content:'';position:absolute;inset:0;background:#0b0d14;opacity:0.82;
+}
+.worker-portrait::after{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 80% 80% at 50% 80%,currentColor 0%,transparent 70%);
+  opacity:0.18;
 }
 .worker-avatar{
-  width:56px;height:56px;border-radius:16px;
+  width:52px;height:52px;border-radius:14px;
   display:flex;align-items:center;justify-content:center;
-  font-size:26px;flex-shrink:0;border:1.5px solid;will-change:transform;
+  font-size:26px;flex-shrink:0;border:1.5px solid;
+  position:relative;z-index:1;will-change:transform;
 }
-.worker-info{flex:1;min-width:0}
-.worker-role{font-size:15px;font-weight:800;letter-spacing:-0.2px;margin-bottom:2px}
-.worker-provider{font-size:12px;color:var(--txt2);margin-bottom:3px}
-.worker-tagline{font-size:11px;color:var(--txt3);letter-spacing:0.1px}
-.worker-right{text-align:right;flex-shrink:0}
-.worker-count{font-size:32px;font-weight:900;line-height:1}
-.worker-count-lbl{font-size:10px;color:var(--txt3);margin-top:2px}
-.worker-status-dot{
-  width:6px;height:6px;border-radius:50%;
-  background:var(--txt3);display:inline-block;margin-right:4px;
+/* Info section */
+.worker-info{flex:1;min-width:0;padding:12px 10px 12px 14px}
+.worker-role{font-size:14.5px;font-weight:800;letter-spacing:-0.2px;margin-bottom:2px}
+.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:4px}
+.worker-tagline{font-size:10px;color:var(--txt3);letter-spacing:0.1px;line-height:1.45}
+/* Right count column */
+.worker-right{
+  flex-shrink:0;padding:12px 14px 12px 0;
+  display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
 }
+.worker-count{font-size:30px;font-weight:900;line-height:1}
+.worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:3px;letter-spacing:0.4px;text-transform:uppercase;display:flex;align-items:center}
+.worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);display:inline-block;margin-right:3px;flex-shrink:0}
 .worker-status-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
 /* Role animations */
-.role-draft .worker-avatar{animation:dot-blink 1.2s ease-in-out infinite}
+.role-draft .worker-avatar{animation:dot-blink 1.4s ease-in-out infinite}
 .role-review .worker-avatar{animation:avatar-breathe 3s ease-in-out infinite}
 .role-research .worker-avatar{animation:avatar-bob 4s ease-in-out infinite}
 .role-fact .worker-avatar{animation:avatar-breathe 2.2s ease-in-out infinite}
@@ -355,7 +423,18 @@ body::before{
 .naver-intake-hint{
   font-size:12px;color:var(--txt2);margin-top:10px;padding:8px 10px;
   background:rgba(79,142,255,0.06);border-left:2px solid rgba(79,142,255,0.3);border-radius:4px;
+  line-height:1.5;
 }
+/* Naver status badge strip */
+.naver-status-strip{
+  display:flex;align-items:center;gap:6px;
+  margin-bottom:14px;padding:6px 10px;border-radius:8px;
+  font-size:11.5px;font-weight:600;
+}
+.naver-status-strip.ok{background:rgba(34,197,94,0.08);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
+.naver-status-strip.caution{background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.2)}
+.naver-status-strip.warning{background:rgba(239,68,68,0.08);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+.naver-status-strip.idle{background:rgba(75,81,104,0.1);color:var(--txt3);border:1px solid rgba(75,81,104,0.2)}
 @media(prefers-reduced-motion:reduce){
   .hero-emoji,.hero-ring,.hero-ring-ok,.pipe-connector,
   .role-draft .worker-avatar,.role-review .worker-avatar,
@@ -373,37 +452,48 @@ body::before{
 .naver-status{font-size:12px;margin-top:8px}
 
 .news-item{
+  display:flex;align-items:flex-start;gap:8px;
   padding:9px 0;border-bottom:1px solid var(--border);
-  font-size:13px;color:var(--txt);line-height:1.4;
+  font-size:13px;color:var(--txt);line-height:1.45;
+}
+.news-item::before{
+  content:'▸';color:var(--accent);flex-shrink:0;font-size:11px;margin-top:2px;opacity:0.75;
 }
 .news-item:last-child{border-bottom:none}
-.empty-state{font-size:13px;color:var(--txt3);padding:8px 0;text-align:center}
+.empty-state{font-size:13px;color:var(--txt3);padding:10px 0;text-align:center;opacity:0.7}
 
-.pipeline-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.pipeline{display:flex;align-items:center;min-width:max-content;padding:4px 0}
+.pipeline-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+.pipeline{display:flex;align-items:center;min-width:max-content;padding:6px 0}
 .pipe-node{
-  display:flex;flex-direction:column;align-items:center;gap:5px;
-  min-width:64px;padding:8px 4px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  min-width:68px;padding:8px 4px;
 }
 .pipe-icon{
-  width:40px;height:40px;border-radius:50%;
+  width:48px;height:48px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  font-size:16px;border:2px solid transparent;
+  font-size:18px;border:2px solid transparent;transition:box-shadow .3s;
 }
-.pipe-icon.done{background:rgba(34,197,94,0.2);border-color:var(--green);color:var(--green);box-shadow:0 0 14px rgba(34,197,94,0.3)}
-.pipe-icon.active{background:rgba(79,142,255,0.22);border-color:var(--accent);color:var(--accent);box-shadow:0 0 14px rgba(79,142,255,0.35);animation:pipe-node-pulse 2s ease-in-out infinite}
+.pipe-icon.done{
+  background:rgba(34,197,94,0.18);border-color:var(--green);color:var(--green);
+  box-shadow:0 0 16px rgba(34,197,94,0.35);
+}
+.pipe-icon.active{
+  background:rgba(79,142,255,0.25);border-color:var(--accent);color:var(--accent);
+  box-shadow:0 0 20px rgba(79,142,255,0.5);
+  animation:pipe-node-pulse 2s ease-in-out infinite;
+}
 @keyframes pipe-node-pulse{
-  0%,100%{box-shadow:0 0 10px rgba(79,142,255,0.3)}
-  50%{box-shadow:0 0 22px rgba(79,142,255,0.6)}
+  0%,100%{box-shadow:0 0 14px rgba(79,142,255,0.4);transform:scale(1)}
+  50%{box-shadow:0 0 28px rgba(79,142,255,0.7),0 0 48px rgba(79,142,255,0.25);transform:scale(1.06)}
 }
-.pipe-icon.pending{background:rgba(75,81,104,0.15);border-color:var(--txt3);color:var(--txt3)}
+.pipe-icon.pending{background:rgba(75,81,104,0.12);border-color:rgba(75,81,104,0.4);color:var(--txt3)}
 .pipe-icon.fail{background:rgba(239,68,68,0.15);border-color:var(--red);color:var(--red)}
-.pipe-lbl{font-size:10px;color:var(--txt2);white-space:nowrap}
+.pipe-lbl{font-size:10.5px;color:var(--txt2);white-space:nowrap;font-weight:500}
 .pipe-connector{
-  width:20px;height:3px;flex-shrink:0;align-self:center;margin-bottom:18px;
+  width:24px;height:4px;flex-shrink:0;align-self:center;margin-bottom:22px;
   border-radius:2px;
-  background:linear-gradient(90deg,rgba(79,142,255,0.08) 0%,rgba(79,142,255,0.55) 50%,rgba(79,142,255,0.08) 100%);
-  background-size:200% 100%;animation:pipe-flow 1.8s linear infinite;
+  background:linear-gradient(90deg,rgba(79,142,255,0.05) 0%,rgba(79,142,255,0.65) 50%,rgba(79,142,255,0.05) 100%);
+  background-size:200% 100%;animation:pipe-flow 1.6s linear infinite;
 }
 
 .draft-row{
@@ -425,11 +515,17 @@ body::before{
 
 .ops-row{
   display:flex;align-items:center;justify-content:space-between;
-  padding:9px 0;border-bottom:1px solid var(--border);font-size:14px;
+  padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px;
 }
 .ops-row:last-child{border-bottom:none}
 .ops-val{font-size:15px;font-weight:700;color:var(--txt)}
 .ops-lbl{color:var(--txt2)}
+.ops-section-hdr{
+  font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;
+  letter-spacing:1.2px;padding:10px 0 4px;border-top:1px solid rgba(255,255,255,0.04);
+  margin-top:4px;
+}
+.ops-section-hdr:first-child{border-top:none;margin-top:0;padding-top:0}
 
 .page-title{font-size:22px;font-weight:700;padding:4px 0 4px}
 
@@ -460,35 +556,35 @@ body::before{
   <div class="page active" id="page-home">
     <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
     <div class="hero-card">
-      <div class="hero-body">
-        <div class="hero-top">
-          <div class="hero-avatar-wrap">
-            <div class="hero-ring" id="mascot-ring"></div>
-            <div class="hero-ring-ok" id="mascot-ring-ok"></div>
-            <div class="hero-emoji" id="mascot-emoji">👩‍💻</div>
+      <div class="hero-main">
+        <!-- Character portrait stage -->
+        <div class="hero-portrait">
+          <div class="hero-ring" id="mascot-ring"></div>
+          <div class="hero-ring-ok" id="mascot-ring-ok"></div>
+          <div class="hero-emoji" id="mascot-emoji">👩‍💻</div>
+        </div>
+        <!-- System info -->
+        <div class="hero-info">
+          <div class="hero-badge" id="mascot-live">
+            <span class="hero-badge-dot" id="hero-badge-dot"></span>
+            <span id="hero-badge-txt">LIVE</span>
           </div>
-          <div class="hero-info">
-            <div class="hero-badge" id="mascot-live">
-              <span class="hero-badge-dot" id="hero-badge-dot"></span>
-              <span id="hero-badge-txt">LIVE</span>
+          <div class="hero-headline" id="mascot-headline">시스템 정상 운영 중</div>
+          <div class="hero-sub" id="mascot-sub">데이터 로딩 중…</div>
+          <div class="hero-mini-stats">
+            <div class="hero-mini-stat">
+              <div class="hero-mini-val" id="qs-queue">—</div>
+              <div class="hero-mini-lbl">큐</div>
             </div>
-            <div class="hero-headline" id="mascot-headline">시스템 정상 운영 중</div>
-            <div class="hero-sub" id="mascot-sub">데이터 로딩 중…</div>
+            <div class="hero-mini-stat">
+              <div class="hero-mini-val" id="qs-monitor">—</div>
+              <div class="hero-mini-lbl">모니터</div>
+            </div>
+            <div class="hero-mini-stat">
+              <div class="hero-mini-val" id="qs-naver">—</div>
+              <div class="hero-mini-lbl">Naver</div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="hero-stats">
-        <div class="hero-stat">
-          <div class="hero-stat-val" id="qs-queue">—</div>
-          <div class="hero-stat-lbl">큐</div>
-        </div>
-        <div class="hero-stat">
-          <div class="hero-stat-val" id="qs-monitor">—</div>
-          <div class="hero-stat-lbl">모니터</div>
-        </div>
-        <div class="hero-stat">
-          <div class="hero-stat-val" id="qs-naver">—</div>
-          <div class="hero-stat-lbl">Naver</div>
         </div>
       </div>
       <div class="hero-workers" id="hero-workers"></div>
@@ -521,6 +617,7 @@ body::before{
     <div class="page-title">📰 인풋 &amp; 플로우</div>
     <div class="card">
       <div class="card-title">Naver API</div>
+      <div class="naver-status-strip idle" id="naver-status-strip">● 연결 대기 중</div>
       <div class="naver-arc-section">
         <div class="naver-arc-wrap">
           <svg viewBox="0 0 92 92" style="width:100%;height:100%;transform:rotate(-90deg)">
@@ -797,8 +894,10 @@ function renderAI() {
     const cnt = r.runs_today ?? '—';
     const isActive = cnt !== '—' && cnt > 0;
     const noteHtml = r.note ? `<div style="font-size:11px;color:var(--txt3);margin-top:2px">${esc(r.note)}</div>` : '';
-    return `<div class="worker-card ${m.anim||''}" style="color:${m.color};box-shadow:inset 3px 0 0 ${m.color}">
-      <div class="worker-avatar" style="background:${m.glow};border-color:${m.color}55;box-shadow:0 0 20px ${m.color}22">${m.emoji}</div>
+    return `<div class="worker-card ${m.anim||''}" style="color:${m.color}">
+      <div class="worker-portrait" style="color:${m.color}">
+        <div class="worker-avatar" style="background:${m.glow};border-color:${m.color}55;box-shadow:0 0 18px ${m.color}22">${m.emoji}</div>
+      </div>
       <div class="worker-info">
         <div class="worker-role" style="color:${m.color}">${esc(r.role)}</div>
         <div class="worker-provider">${esc(r.provider)} ${cfgBadge}</div>
@@ -856,9 +955,16 @@ function renderIntake() {
   }
   if (arcPctEl) arcPctEl.textContent = nv ? pct.toFixed(1) + '%' : '—';
   const lvlColor = {idle:'var(--txt3)', ok:'var(--green)', caution:'var(--amber)', warning:'var(--red)'};
+  const lvlLabel = {idle:'유휴', ok:'정상', caution:'주의', warning:'경고'};
   document.getElementById('naver-note').innerHTML = nv
     ? `<span style="color:${lvlColor[nv.level] || 'var(--txt2)'}">● ${esc(nv.note)}</span>`
     : `<span style="color:var(--txt3)">● 연결 대기 중</span>`;
+  const stripEl = document.getElementById('naver-status-strip');
+  if (stripEl && nv) {
+    const lvl = nv.level || 'idle';
+    stripEl.className = `naver-status-strip ${lvl}`;
+    stripEl.textContent = `● ${lvlLabel[lvl] || lvl} — ${nv.note || '—'}`;
+  }
   // Naver context: remaining calls + intake hint
   const ctxEl = document.getElementById('naver-context');
   const hintEl = document.getElementById('naver-intake-hint');
@@ -913,6 +1019,7 @@ function renderOps() {
 
   const mon = s?.monitor;
   document.getElementById('monitor-rows').innerHTML = !mon ? '<div class="empty-state">—</div>' : `
+    <div class="ops-section-hdr">Reply Monitor</div>
     <div class="ops-row">
       <span class="ops-lbl">상태</span>
       <span class="ops-val" style="color:${mon.reply_monitor_paused ? 'var(--amber)' : 'var(--green)'}">
@@ -921,12 +1028,13 @@ function renderOps() {
     </div>
     <div class="ops-row">
       <span class="ops-lbl">대기 중 답글 초안</span>
-      <span class="ops-val">${mon.pending_reply_drafts ?? 0}</span>
+      <span class="ops-val" style="color:${(mon.pending_reply_drafts??0)>0?'var(--amber)':'var(--txt)'}">${mon.pending_reply_drafts ?? 0}</span>
     </div>`;
 
   const nm = s?.news;
   document.getElementById('news-monitor-rows').innerHTML = !nm ? '<div class="empty-state">—</div>' : `
-    <div class="ops-row"><span class="ops-lbl">대기 기사</span><span class="ops-val">${nm.pending_articles ?? 0}</span></div>
+    <div class="ops-section-hdr">News Monitor</div>
+    <div class="ops-row"><span class="ops-lbl">대기 기사</span><span class="ops-val" style="color:${(nm.pending_articles??0)>0?'var(--accent)':'var(--txt)'}">${nm.pending_articles ?? 0}</span></div>
     <div class="ops-row"><span class="ops-lbl">스토리 클러스터</span><span class="ops-val">${nm.story_clusters ?? 0}</span></div>
     <div class="ops-row"><span class="ops-lbl">알림 발송 스토리</span><span class="ops-val">${nm.alerted_stories ?? 0}</span></div>
     <div class="ops-row"><span class="ops-lbl">야간 버퍼</span><span class="ops-val">${nm.overnight_buffer ?? 0}</span></div>`;
@@ -934,13 +1042,14 @@ function renderOps() {
   const act = s?.activity;
   const lastPub = s?.queue?.last_published_at;
   document.getElementById('activity-rows').innerHTML = !act ? '<div class="empty-state">—</div>' : `
+    <div class="ops-section-hdr">Activity</div>
     <div class="ops-row">
       <span class="ops-lbl">마지막 활동</span>
-      <span class="ops-val">${esc(act.last_activity_kst || '—')}</span>
+      <span class="ops-val" style="font-size:13px">${esc(act.last_activity_kst || '—')}</span>
     </div>
     <div class="ops-row">
       <span class="ops-lbl">비활성 시간</span>
-      <span class="ops-val" style="color:${act.is_idle ? 'var(--red)' : 'var(--txt)'}">
+      <span class="ops-val" style="color:${act.is_idle ? 'var(--red)' : act.hours_idle>12?'var(--amber)':'var(--txt)'}">
         ${act.hours_idle != null ? act.hours_idle.toFixed(1) + 'h' : '—'}${act.is_idle ? ' ⚠️' : ''}
       </span>
     </div>
