@@ -1039,6 +1039,7 @@ function switchTab(id) {
 }
 
 async function loadAll() {
+  const t0 = performance.now();
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
 
@@ -1064,6 +1065,8 @@ async function loadAll() {
   btn.classList.remove('spinning');
   const kst = D.status?.generated_at_kst || new Date().toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul'});
   document.getElementById('last-refresh').textContent = kst;
+  const elapsed = (performance.now() - t0).toFixed(0);
+  console.log(`[Dashboard] 데이터 로드 완료 (${elapsed}ms)`);
 }
 
 function renderAll() { renderHome(); renderAI(); renderIntake(); renderOps(); }

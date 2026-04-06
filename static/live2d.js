@@ -1,20 +1,23 @@
 // live2d.js — Live2D 캐릭터 대시보드 Hero 씬 통합
 // 출처: pixi-live2d-display (guansss/CodePen 검증 패턴)
 
+const _perf = { start: performance.now() };
+
 async function initLive2D() {
   const heroScene = document.getElementById('heroScene');
   const canvas = document.getElementById('live2dCanvas');
 
   if (!canvas || !heroScene) return;
 
-  // PIXI, Cubism이 로드될 때까지 대기 (async defer로 인해 순서 보장 안 될 수 있음)
+  // PIXI, Cubism이 로드될 때까지 대기 (최대 3초)
   let retries = 0;
-  while ((!window.PIXI || !window.Live2DCubismCore) && retries < 50) {
+  const maxRetries = 30; // 3초 (100ms × 30)
+  while ((!window.PIXI || !window.Live2DCubismCore) && retries < maxRetries) {
     await new Promise(r => setTimeout(r, 100));
     retries++;
   }
   if (!window.PIXI || !window.Live2DCubismCore) {
-    console.warn('Live2D: PIXI 또는 Cubism 로드 실패. Hero 모델 스킵.');
+    console.warn('Live2D: CDN 로드 지연. Hero 모델 스킵 — 대시보드는 정상 작동합니다.');
     return;
   }
 
@@ -93,7 +96,8 @@ async function initLive2D() {
     }
   }, 3000);
 
-  console.log('[Live2D] 초기화 완료 — shizuku 로드됨');
+  const elapsed = (performance.now() - _perf.start).toFixed(0);
+  console.log(`[Live2D] 초기화 완료 — shizuku 로드됨 (${elapsed}ms)`);
 }
 
 // DOM 준비 후 실행
