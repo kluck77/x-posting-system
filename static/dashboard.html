@@ -196,27 +196,27 @@ body::before{
   position:relative;min-height:235px;overflow:hidden;z-index:1;flex:1;
 }
 
-/* CHARACTER — absolute, emerges from the scene via isolation+multiply */
+/* CHARACTER — absolute, bleeds into dark scene via layered gradient mask */
 .hero-emoji{
   position:absolute;left:-8px;top:0;bottom:0;width:210px;
   z-index:2;will-change:transform;
   animation:char-live 7s ease-in-out infinite;
   transform-origin:bottom center;
-  /* isolation+white bg: multiply(white_img_bg, white)=white(gone), multiply(color, white)=color */
-  isolation:isolate;
-  background:#ffffff;
-  /* Mask the wrapper itself to fade character into dark card at edges */
-  -webkit-mask-image:
-    radial-gradient(ellipse 85% 90% at 42% 52%, black 18%, rgba(0,0,0,0.88) 48%, transparent 73%);
-  mask-image:
-    radial-gradient(ellipse 85% 90% at 42% 52%, black 18%, rgba(0,0,0,0.88) 48%, transparent 73%);
 }
-/* multiply removes white bg perfectly within isolation context */
+/* Layered mask: top fade (hides white sky bg) + right fade (blends into info panel) */
 .hero-char-img{
   display:block;width:100%;height:100%;
-  object-fit:cover;object-position:50% 6%;
-  mix-blend-mode:multiply;
-  filter:brightness(0.96) saturate(1.15) contrast(1.06);
+  object-fit:cover;object-position:50% 20%;
+  /* Suppress browser filename/alt rendering */
+  font-size:0;color:transparent;
+  /* Top fade hides white background; right fade bleeds into info panel */
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 18%, black 38%, black 85%, transparent 100%),
+    linear-gradient(to right,  black 42%, rgba(0,0,0,0.45) 65%, transparent 88%);
+  mask-image:
+    linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 18%, black 38%, black 85%, transparent 100%),
+    linear-gradient(to right,  black 42%, rgba(0,0,0,0.45) 65%, transparent 88%);
+  filter:brightness(0.96) saturate(1.12) contrast(1.06);
   transition:filter .6s ease;
 }
 .hero-emoji.idle .hero-char-img{
@@ -396,6 +396,8 @@ body::before{
   width:100%;height:100%;
   object-fit:cover;object-position:50% 10%;
   position:relative;z-index:1;display:block;
+  /* Suppress any browser-rendered filename/alt text */
+  font-size:0;color:transparent;
   /* Right-fade mask — character flows into card, no hard edge */
   -webkit-mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
   mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
@@ -1151,7 +1153,6 @@ function renderOps() {
 
   const mon = s?.monitor;
   document.getElementById('monitor-rows').innerHTML = !mon ? '<div class="empty-state">—</div>' : `
-    <div class="ops-section-hdr">Reply Monitor</div>
     <div class="ops-row">
       <span class="ops-lbl">상태</span>
       <span class="ops-val" style="color:${mon.reply_monitor_paused ? 'var(--amber)' : 'var(--green)'}">
@@ -1165,7 +1166,6 @@ function renderOps() {
 
   const nm = s?.news;
   document.getElementById('news-monitor-rows').innerHTML = !nm ? '<div class="empty-state">—</div>' : `
-    <div class="ops-section-hdr">News Monitor</div>
     <div class="ops-row"><span class="ops-lbl">대기 기사</span><span class="ops-val" style="color:${(nm.pending_articles??0)>0?'var(--accent)':'var(--txt)'}">${nm.pending_articles ?? 0}</span></div>
     <div class="ops-row"><span class="ops-lbl">스토리 클러스터</span><span class="ops-val">${nm.story_clusters ?? 0}</span></div>
     <div class="ops-row"><span class="ops-lbl">알림 발송 스토리</span><span class="ops-val">${nm.alerted_stories ?? 0}</span></div>
@@ -1174,7 +1174,6 @@ function renderOps() {
   const act = s?.activity;
   const lastPub = s?.queue?.last_published_at;
   document.getElementById('activity-rows').innerHTML = !act ? '<div class="empty-state">—</div>' : `
-    <div class="ops-section-hdr">Activity</div>
     <div class="ops-row">
       <span class="ops-lbl">마지막 활동</span>
       <span class="ops-val" style="font-size:13px">${esc(act.last_activity_kst || '—')}</span>
