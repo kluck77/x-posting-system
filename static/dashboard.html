@@ -199,13 +199,13 @@ body::before{
 
 /* Character portrait stage — left column */
 .hero-portrait{
-  width:110px;flex-shrink:0;
+  width:130px;flex-shrink:0;
   position:relative;
-  display:flex;align-items:flex-end;justify-content:center;
-  padding-bottom:8px;
-  background:linear-gradient(180deg,rgba(79,142,255,0.06) 0%,rgba(79,142,255,0.02) 100%);
-  border-right:1px solid rgba(79,142,255,0.1);
+  display:flex;align-items:stretch;justify-content:center;
+  background:linear-gradient(180deg,rgba(79,142,255,0.08) 0%,rgba(79,142,255,0.02) 100%);
+  border-right:1px solid rgba(79,142,255,0.15);
   overflow:hidden;
+  min-height:160px;
 }
 /* Spotlight behind character */
 .hero-portrait::before{
@@ -238,21 +238,42 @@ body::before{
   border:1.5px solid rgba(34,197,94,0.4);
   animation:hero-ring-pulse-green 3s ease-in-out infinite;pointer-events:none;display:none;
 }
-/* The character emoji — styled as real character */
+/* Character portrait wrapper — animated container */
 .hero-emoji{
-  font-size:80px;line-height:1;
   display:block;position:relative;z-index:1;
-  animation:char-live 5s ease-in-out infinite;
+  width:100%;height:100%;
+  animation:char-live 6s ease-in-out infinite;
   transform-origin:bottom center;will-change:transform;
-  filter:drop-shadow(0 -4px 16px rgba(79,142,255,0.3)) drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+/* Real image asset — blonde assistant */
+.hero-char-img{
+  display:block;width:100%;height:100%;
+  object-fit:cover;object-position:50% 8%;
+  /* multiply blends white bg into dark panel */
+  mix-blend-mode:multiply;
+  filter:brightness(1.08) saturate(1.15) contrast(1.05);
+  transition:filter .6s ease;
+}
+.hero-emoji.idle .hero-char-img{
+  filter:brightness(0.55) saturate(0.2) sepia(0.2);
+}
+.hero-emoji.disconnected .hero-char-img{
+  filter:brightness(0.35) saturate(0);
+}
+/* Fallback emoji (shown when image fails) */
+.hero-emoji-fallback{
+  font-size:72px;line-height:1;
+  display:flex;align-items:flex-end;justify-content:center;
+  height:100%;padding-bottom:8px;
+  filter:drop-shadow(0 -4px 16px rgba(79,142,255,0.3));
 }
 @keyframes char-live{
   0%   {transform:translateY(0) rotate(0deg) scale(1)}
-  15%  {transform:translateY(-4px) rotate(-0.8deg) scale(1.01)}
-  30%  {transform:translateY(-6px) rotate(0.5deg) scale(1.02)}
-  50%  {transform:translateY(-5px) rotate(-0.3deg) scale(1.015)}
-  70%  {transform:translateY(-3px) rotate(0.6deg) scale(1.01)}
-  85%  {transform:translateY(-5px) rotate(-0.5deg) scale(1.015)}
+  18%  {transform:translateY(-3px) rotate(-0.5deg) scale(1.008)}
+  36%  {transform:translateY(-5px) rotate(0.4deg) scale(1.015)}
+  55%  {transform:translateY(-4px) rotate(-0.2deg) scale(1.01)}
+  72%  {transform:translateY(-2px) rotate(0.4deg) scale(1.006)}
+  88%  {transform:translateY(-4px) rotate(-0.4deg) scale(1.012)}
   100% {transform:translateY(0) rotate(0deg) scale(1)}
 }
 
@@ -361,24 +382,41 @@ body::before{
 .worker-card{
   display:flex;align-items:stretch;
   border-bottom:1px solid rgba(255,255,255,0.05);
-  position:relative;overflow:hidden;min-height:90px;
+  position:relative;overflow:hidden;min-height:96px;
 }
 .worker-card:last-child{border-bottom:none}
-/* Portrait column */
+/* Left accent bar (role color) */
+.worker-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:currentColor;opacity:0.7;z-index:3;flex-shrink:0;
+}
+/* Portrait column — image-based */
 .worker-portrait{
-  width:76px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
+  width:80px;flex-shrink:0;
+  display:flex;align-items:stretch;justify-content:center;
   position:relative;overflow:hidden;
-  background:currentColor;
+  background:#0a0c18;
 }
-.worker-portrait::before{
-  content:'';position:absolute;inset:0;background:#0b0d14;opacity:0.82;
-}
+/* Right-edge fade to blend into card body */
 .worker-portrait::after{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 80% 80% at 50% 80%,currentColor 0%,transparent 70%);
-  opacity:0.18;
+  content:'';position:absolute;top:0;right:0;width:24px;height:100%;
+  background:linear-gradient(to right,transparent,rgba(11,13,20,0.85));
+  z-index:2;pointer-events:none;
 }
+/* Bottom-edge vignette */
+.worker-portrait::before{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:28px;
+  background:linear-gradient(to top,rgba(11,13,20,0.7),transparent);
+  z-index:2;pointer-events:none;
+}
+/* Real character image inside portrait */
+.worker-char-img{
+  width:100%;height:100%;
+  object-fit:cover;object-position:50% 5%;
+  position:relative;z-index:1;
+  display:block;
+}
+/* Fallback avatar (emoji, shown if no image) */
 .worker-avatar{
   width:52px;height:52px;border-radius:14px;
   display:flex;align-items:center;justify-content:center;
@@ -399,12 +437,37 @@ body::before{
 .worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:3px;letter-spacing:0.4px;text-transform:uppercase;display:flex;align-items:center}
 .worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);display:inline-block;margin-right:3px;flex-shrink:0}
 .worker-status-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
-/* Role animations */
+/* Role animations — applied to both real image and fallback avatar */
+/* Use subtle transform-only animations for image; keep emoji animations for fallback */
+.role-draft .worker-char-img{animation:char-work 3.5s ease-in-out infinite}
+.role-review .worker-char-img{animation:char-breathe 4s ease-in-out infinite}
+.role-research .worker-char-img{animation:char-lean 5s ease-in-out infinite}
+.role-fact .worker-char-img{animation:char-breathe 3.5s ease-in-out infinite}
+.role-trend .worker-char-img{animation:char-scan 6s ease-in-out infinite}
 .role-draft .worker-avatar{animation:dot-blink 1.4s ease-in-out infinite}
 .role-review .worker-avatar{animation:avatar-breathe 3s ease-in-out infinite}
 .role-research .worker-avatar{animation:avatar-bob 4s ease-in-out infinite}
 .role-fact .worker-avatar{animation:avatar-breathe 2.2s ease-in-out infinite}
 .role-trend .worker-avatar{animation:avatar-spin 5s linear infinite}
+@keyframes char-work{
+  0%,100%{transform:scale(1) translateY(0)}
+  30%{transform:scale(1.01) translateY(-1px)}
+  60%{transform:scale(1.005) translateY(-2px)}
+}
+@keyframes char-breathe{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.015)}
+}
+@keyframes char-lean{
+  0%,100%{transform:translateX(0) scale(1)}
+  40%{transform:translateX(1px) scale(1.01)}
+  70%{transform:translateX(-1px) scale(1.008)}
+}
+@keyframes char-scan{
+  0%,100%{transform:scale(1) translateY(0)}
+  25%{transform:scale(1.01) translateY(-1px)}
+  75%{transform:scale(1.005) translateY(-2px)}
+}
 /* Naver arc gauge */
 .naver-arc-section{display:flex;align-items:center;gap:20px;margin-bottom:14px}
 .naver-arc-wrap{position:relative;flex-shrink:0;width:92px;height:92px;filter:drop-shadow(0 0 8px rgba(34,197,94,0.15))}
@@ -561,7 +624,12 @@ body::before{
         <div class="hero-portrait">
           <div class="hero-ring" id="mascot-ring"></div>
           <div class="hero-ring-ok" id="mascot-ring-ok"></div>
-          <div class="hero-emoji" id="mascot-emoji">👩‍💻</div>
+          <div class="hero-emoji" id="mascot-emoji">
+            <img class="hero-char-img" id="hero-char-img"
+                 src="/static/hero_blonde_assistant.png"
+                 alt="Assistant"
+                 onerror="this.outerHTML='<div class=\'hero-emoji-fallback\'>👩‍💻</div>'">
+          </div>
         </div>
         <!-- System info -->
         <div class="hero-info">
@@ -775,11 +843,11 @@ async function loadAll() {
 function renderAll() { renderHome(); renderAI(); renderIntake(); renderOps(); }
 
 const WORKER_META = {
-  DraftWriter: {emoji:'✍️',color:'#19c37d',glow:'rgba(25,195,125,0.18)',tagline:'초안 작성 · 5-criteria 자가검증',anim:'role-draft'},
-  Reviewer:    {emoji:'🔍',color:'#cc785c',glow:'rgba(204,120,92,0.18)',tagline:'품질 검토 · PASS/WEAK/FAIL 최종 판정',anim:'role-review'},
-  Researcher:  {emoji:'🦊',color:'#4f8eff',glow:'rgba(79,142,255,0.18)',tagline:'맥락 리서치 · 해석 갭 발굴',anim:'role-research'},
-  FactChecker: {emoji:'🧩',color:'#a855f7',glow:'rgba(168,85,247,0.18)',tagline:'팩트체크 · 글로벌 관련성 평가',anim:'role-fact'},
-  TrendHunter: {emoji:'📡',color:'#22d3ee',glow:'rgba(34,211,238,0.18)',tagline:'트렌드 탐지 · 시장성 필터링',anim:'role-trend'},
+  DraftWriter: {img:'draftwriter.png',     emoji:'✍️',color:'#19c37d',glow:'rgba(25,195,125,0.18)', tagline:'초안 작성 · 5-criteria 자가검증',           anim:'role-draft'},
+  Reviewer:    {img:'reviewer.png',        emoji:'🔍',color:'#cc785c',glow:'rgba(204,120,92,0.18)', tagline:'품질 검토 · PASS/WEAK/FAIL 최종 판정',       anim:'role-review'},
+  Researcher:  {img:'researcher.png',      emoji:'🦊',color:'#4f8eff',glow:'rgba(79,142,255,0.18)',tagline:'맥락 리서치 · 해석 갭 발굴',                  anim:'role-research'},
+  FactChecker: {img:'',                    emoji:'🧩',color:'#a855f7',glow:'rgba(168,85,247,0.18)',tagline:'팩트체크 · 글로벌 관련성 평가',                anim:'role-fact'},
+  TrendHunter: {img:'trendhunter_black.png',emoji:'📡',color:'#22d3ee',glow:'rgba(34,211,238,0.18)',tagline:'트렌드 탐지 · 시장성 필터링',                 anim:'role-trend'},
 };
 
 function renderHome() {
@@ -799,8 +867,12 @@ function renderHome() {
   const u = s?.usage;
   const isIdle = s?.activity?.is_idle;
   const isOk = s && !isIdle && s.health?.db_ok;
-  // Mascot emoji + headline
-  document.getElementById('mascot-emoji').textContent = isIdle ? '😴' : (s ? '👩‍💻' : '🔌');
+  // Mascot state: use CSS class on wrapper (image stays, filter changes)
+  const charEl = document.getElementById('mascot-emoji');
+  if (charEl) {
+    charEl.classList.toggle('idle', !!isIdle);
+    charEl.classList.toggle('disconnected', !s);
+  }
   document.getElementById('mascot-headline').textContent =
     s ? (isIdle ? '장시간 비활성 상태' : '시스템 정상 운영 중') : '연결 없음';
   document.getElementById('mascot-sub').textContent =
@@ -894,9 +966,14 @@ function renderAI() {
     const cnt = r.runs_today ?? '—';
     const isActive = cnt !== '—' && cnt > 0;
     const noteHtml = r.note ? `<div style="font-size:11px;color:var(--txt3);margin-top:2px">${esc(r.note)}</div>` : '';
+    const portraitHtml = m.img
+      ? `<img class="worker-char-img ${m.anim||''}" src="/static/${m.img}"
+              alt="${esc(r.role)}"
+              onerror="this.outerHTML='<div class=\\'worker-avatar\\'style=\\'background:${m.glow};border-color:${m.color}55\\'>${m.emoji}</div>'">`
+      : `<div class="worker-avatar" style="background:${m.glow};border-color:${m.color}55;box-shadow:0 0 18px ${m.color}22">${m.emoji}</div>`;
     return `<div class="worker-card ${m.anim||''}" style="color:${m.color}">
-      <div class="worker-portrait" style="color:${m.color}">
-        <div class="worker-avatar" style="background:${m.glow};border-color:${m.color}55;box-shadow:0 0 18px ${m.color}22">${m.emoji}</div>
+      <div class="worker-portrait">
+        ${portraitHtml}
       </div>
       <div class="worker-info">
         <div class="worker-role" style="color:${m.color}">${esc(r.role)}</div>
