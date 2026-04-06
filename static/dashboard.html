@@ -451,30 +451,60 @@ body::before{
 }
 .station-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3)}
 .station-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
-/* Role state animations on station portrait */
-.role-draft .station-img{animation:char-work 3.5s ease-in-out infinite}
-.role-review .station-img{animation:char-breathe 4s ease-in-out infinite}
-.role-research .station-img{animation:char-lean 5s ease-in-out infinite}
-.role-fact .station-img{animation:char-breathe 3.5s ease-in-out infinite}
-.role-trend .station-img{animation:char-scan 6s ease-in-out infinite}
-@keyframes char-work{
-  0%,100%{transform:scale(1) translateY(0)}
-  30%{transform:scale(1.012) translateY(-1px)}
-  60%{transform:scale(1.006) translateY(-2px)}
-}
-@keyframes char-breathe{
+/* ── Role state animations ── */
+/* Default: idle breathing (all roles when waiting) */
+.station-img{animation:role-idle 6s ease-in-out infinite}
+/* DraftWriter — typing/composing: rhythmic head bob */
+.role-draft .station-img{animation:role-typing 2.8s ease-in-out infinite}
+/* Reviewer — checking/inspecting: slow deliberate scan */
+.role-review .station-img{animation:role-inspect 5s ease-in-out infinite}
+/* Researcher — scanning/searching: lateral sweep */
+.role-research .station-img{animation:role-scan 4.5s ease-in-out infinite}
+/* FactChecker — verifying/confirming: focused nod */
+.role-fact .station-img{animation:role-verify 3.5s ease-in-out infinite}
+/* TrendHunter — signal tracking: alert shifts */
+.role-trend .station-img{animation:role-track 5.5s ease-in-out infinite}
+
+/* Active state: brighter, stronger motion */
+.station-card.is-active .station-img{filter:brightness(0.95) saturate(1.25) contrast(1.08)}
+.station-card.is-active .station-portrait-glow{opacity:0.18}
+
+@keyframes role-idle{
   0%,100%{transform:scale(1)}
-  50%{transform:scale(1.018)}
+  50%{transform:scale(1.008)}
 }
-@keyframes char-lean{
+@keyframes role-typing{
+  0%,100%{transform:translateY(0) scale(1)}
+  15%{transform:translateY(-1.5px) scale(1.01)}
+  30%{transform:translateY(0) scale(1.005)}
+  45%{transform:translateY(-1px) scale(1.008)}
+  60%{transform:translateY(0.5px) scale(1)}
+  80%{transform:translateY(-1px) scale(1.006)}
+}
+@keyframes role-inspect{
+  0%,100%{transform:scale(1) rotate(0deg)}
+  25%{transform:scale(1.015) rotate(-0.3deg)}
+  50%{transform:scale(1.01) rotate(0.2deg)}
+  75%{transform:scale(1.012) rotate(-0.15deg)}
+}
+@keyframes role-scan{
   0%,100%{transform:translateX(0) scale(1)}
-  40%{transform:translateX(1.5px) scale(1.012)}
-  70%{transform:translateX(-1px) scale(1.008)}
+  20%{transform:translateX(2px) scale(1.008)}
+  50%{transform:translateX(-2px) scale(1.012)}
+  80%{transform:translateX(1px) scale(1.005)}
 }
-@keyframes char-scan{
-  0%,100%{transform:scale(1) translateY(0)}
-  25%{transform:scale(1.012) translateY(-1px)}
-  75%{transform:scale(1.006) translateY(-2px)}
+@keyframes role-verify{
+  0%,100%{transform:translateY(0) scale(1)}
+  30%{transform:translateY(-2px) scale(1.01)}
+  50%{transform:translateY(0) scale(1.005)}
+  70%{transform:translateY(-1px) scale(1.008)}
+}
+@keyframes role-track{
+  0%,100%{transform:translateX(0) translateY(0) scale(1)}
+  20%{transform:translateX(1.5px) translateY(-1px) scale(1.01)}
+  45%{transform:translateX(-1px) translateY(0) scale(1.006)}
+  65%{transform:translateX(2px) translateY(-1.5px) scale(1.012)}
+  85%{transform:translateX(-0.5px) translateY(-0.5px) scale(1.004)}
 }
 /* Worker card entrance */
 #provider-list{display:flex;flex-direction:column;gap:14px}
@@ -1045,7 +1075,7 @@ function renderAI() {
     } else {
       portraitInner = `<div class="station-avatar-emoji">${m.emoji}</div>`;
     }
-    return `<div class="station-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.08}s">
+    return `<div class="station-card ${animCls}${isActive ? ' is-active' : ''}" style="color:${m.color};animation-delay:${idx*0.08}s">
       <div class="station-portrait">
         ${portraitInner}
         <div class="station-portrait-glow"></div>
