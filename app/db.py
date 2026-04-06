@@ -167,6 +167,32 @@ def _run_schema_migrations():
             "column": "b2b_updated_at",
             "ddl": "ALTER TABLE drafts ADD COLUMN b2b_updated_at DATETIME",
         },
+        # Phase 7: 이메일/리드자석 메타데이터
+        {
+            "table": "drafts",
+            "column": "lead_asset_name",
+            "ddl": "ALTER TABLE drafts ADD COLUMN lead_asset_name VARCHAR(200)",
+        },
+        {
+            "table": "drafts",
+            "column": "lead_asset_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN lead_asset_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "lead_asset_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN lead_asset_note TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "email_bucket",
+            "ddl": "ALTER TABLE drafts ADD COLUMN email_bucket VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "email_goal",
+            "ddl": "ALTER TABLE drafts ADD COLUMN email_goal VARCHAR(50)",
+        },
         # Phase 5-3: 프리미엄 후보 파이프라인
         {
             "table": "drafts",

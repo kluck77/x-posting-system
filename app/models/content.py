@@ -209,6 +209,28 @@ class Draft(Base):
         comment="B2B 상태 마지막 변경 시간"
     )
 
+    # ── Phase 7: 이메일/리드자석 메타데이터 ─────────────────────────────────
+    lead_asset_name = Column(
+        String(200), nullable=True,
+        comment="리드 자산 이름 (예: Korea Labor Law 2025 Checklist)"
+    )
+    lead_asset_type = Column(
+        String(50), nullable=True,
+        comment="리드 자산 유형: pdf/checklist/timeline/starter_pack/weekly_brief/issue_tracker"
+    )
+    lead_asset_note = Column(
+        Text, nullable=True,
+        comment="리드 자산 운영자 메모"
+    )
+    email_bucket = Column(
+        String(50), nullable=True,
+        comment="이메일 버킷: weekly_free/onboarding/lead_nurture/premium_teaser/premium_conversion/b2b_nurture"
+    )
+    email_goal = Column(
+        String(50), nullable=True,
+        comment="이메일 목표: signup/nurture/convert/tease/retain"
+    )
+
     # ── Phase 5-3: 프리미엄 후보 파이프라인 ─────────────────────────────────
     premium_status = Column(
         String(20), nullable=True,

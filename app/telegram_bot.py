@@ -841,6 +841,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/biz — 비즈니스 분류 요약 (premium/b2b/newsletter 후보)\n"
         "/premium — 프리미엄 Korea Brief 후보 관리\n"
         "/b2b — B2B 리서치 후보 관리 (상태/메모/대상/활용/그룹핑)\n"
+        "/cta <id> <type> — CTA 유형 설정/조회\n"
+        "/lead — 리드 자산 관리 (이름/유형/메모)\n"
+        "/email — 이메일 버킷/목표 관리\n"
         "/status — 시스템 상태 (AI·큐·모니터·마지막 활동)\n"
         "/recover — 영속 상태 파일 자가 진단\n"
         "/pending — 대기 초안\n"
@@ -1931,6 +1934,389 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /cta — CTA 유형 관리.
+    /cta <id> <type>  — CTA 설정
+    /cta list <type>  — CTA별 목록
+    /cta              — CTA 분포 요약
+    """
+    args = context.args or []
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.email_lead_service import EmailLeadService, CTA_TYPES
+        svc = EmailLeadService(db)
+
+        if not args:
+            by_cta = svc.group_by_cta()
+            if not by_cta:
+                await update.message.reply_text("📢 CTA 데이터 없음")
+                return
+            lines = ["📢 <b>CTA 분포</b>\n"]
+            for cta, cnt in sorted(by_cta.items(), key=lambda x: -x[1]):
+                lines.append(f"  • {cta}: {cnt}")
+            lines.append(f"\n유효: {' | '.join(CTA_TYPES)}")
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        elif args[0].lower() == "list":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    f"사용법: <code>/cta list &lt;type&gt;</code>\n유효: {' | '.join(CTA_TYPES)}",
+                    parse_mode="HTML",
+                )
+                return
+            cta_type = args[1].lower()
+            drafts = svc.get_by_cta(cta_type, limit=10)
+            if not drafts:
+                await update.message.reply_text(f"📢 CTA '{cta_type}' 항목 없음")
+                return
+            lines = [f"📢 <b>CTA: {cta_type}</b> ({len(drafts)}건)\n"]
+            for d in drafts:
+                lines.append(f"• ID {d.id} [{d.category.value if d.category else '—'}]\n  {(d.hook or '')[:50]}…")
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        else:
+            draft_id, err = _parse_draft_id(args, 0)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            if len(args) < 2:
+                await update.message.reply_text(
+                    f"사용법: <code>/cta &lt;id&gt; &lt;type&gt;</code>\n유효: {' | '.join(CTA_TYPES)}",
+                    parse_mode="HTML",
+                )
+                return
+            cta_type = args[1].lower()
+            result = svc.set_cta(draft_id, cta_type)
+            if result:
+                await update.message.reply_text(
+                    f"📢 #{draft_id} CTA → <b>{cta_type}</b>", parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ 실패. 유효한 CTA: {', '.join(CTA_TYPES)}"
+                )
+    except Exception as e:
+        logger.error(f"/cta 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ CTA 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
+async def lead_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /lead — 리드 자산 관리.
+
+    사용법:
+      /lead                  — 리드자석 후보 목록
+      /lead view <id>        — 상세
+      /lead asset <id> <이름> — 리드 자산 이름 설정
+      /lead type <id> <유형>  — 리드 자산 유형 설정
+      /lead note <id> <메모>  — 리드 자산 메모
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "list"
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.email_lead_service import EmailLeadService, LEAD_ASSET_TYPES
+        svc = EmailLeadService(db)
+
+        # /lead (목록)
+        if subcmd == "list" or not args:
+            drafts = svc.get_lead_magnet_candidates(limit=10)
+            if not drafts:
+                await update.message.reply_text("📄 리드자석 후보 없음")
+                return
+            lines = [f"📄 <b>리드자석 후보</b> ({len(drafts)}건)\n"]
+            for d in drafts:
+                asset = d.lead_asset_name or "—"
+                atype = d.lead_asset_type or "—"
+                cta = d.cta_type or "—"
+                lines.append(
+                    f"• ID {d.id} [{cta}] 📄{atype}\n"
+                    f"  {(d.hook or '')[:50]}…\n"
+                    f"  └ {asset[:60]}"
+                )
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /lead view <id>
+        elif subcmd == "view":
+            if len(args) < 2:
+                await update.message.reply_text(
+                    "사용법: <code>/lead view &lt;id&gt;</code>", parse_mode="HTML"
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            draft = svc._get_draft(draft_id)
+            if not draft:
+                await update.message.reply_text(f"❌ #{draft_id} 드래프트 없음")
+                return
+            text = svc.format_draft_detail(draft)
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /lead asset <id> <이름>
+        elif subcmd == "asset":
+            if len(args) < 3:
+                await update.message.reply_text(
+                    "사용법: <code>/lead asset &lt;id&gt; &lt;이름&gt;</code>\n"
+                    "예: <code>/lead asset 42 Korea Labor Law 2025 Checklist</code>",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            name = " ".join(args[2:])[:200]
+            result = svc.set_lead_asset(draft_id, name=name)
+            if result:
+                await update.message.reply_text(
+                    f"📄 #{draft_id} 리드 자산 → <b>{name[:80]}</b>", parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id} 드래프트 없음")
+
+        # /lead type <id> <유형>
+        elif subcmd == "type":
+            if len(args) < 3:
+                types = " | ".join(LEAD_ASSET_TYPES)
+                await update.message.reply_text(
+                    f"사용법: <code>/lead type &lt;id&gt; &lt;유형&gt;</code>\n유형: {types}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            asset_type = args[2].lower()
+            result = svc.set_lead_asset(draft_id, asset_type=asset_type)
+            if result:
+                await update.message.reply_text(
+                    f"📦 #{draft_id} 자산 유형 → <b>{asset_type}</b>", parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ 실패. 유효한 유형: {', '.join(LEAD_ASSET_TYPES)}"
+                )
+
+        # /lead note <id> <메모>
+        elif subcmd == "note":
+            if len(args) < 3:
+                await update.message.reply_text(
+                    "사용법: <code>/lead note &lt;id&gt; &lt;메모&gt;</code>",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            note = " ".join(args[2:])[:500]
+            result = svc.set_lead_asset(draft_id, note=note)
+            if result:
+                await update.message.reply_text(
+                    f"📝 #{draft_id} 리드 메모 저장:\n<i>{note[:200]}</i>",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(f"❌ #{draft_id} 드래프트 없음")
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/lead</code> — 리드자석 후보 목록\n"
+                "<code>/lead view &lt;id&gt;</code> — 상세\n"
+                "<code>/lead asset &lt;id&gt; &lt;이름&gt;</code> — 자산 이름\n"
+                "<code>/lead type &lt;id&gt; &lt;유형&gt;</code> — 자산 유형\n"
+                "<code>/lead note &lt;id&gt; &lt;메모&gt;</code> — 자산 메모",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/lead 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 리드 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
+async def email_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /email — 이메일 버킷/목표 관리.
+
+    사용법:
+      /email                    — 요약
+      /email bucket <id> <버킷> — 이메일 버킷 설정
+      /email goal <id> <목표>   — 이메일 목표 설정
+      /email list <버킷>        — 버킷별 목록
+      /email newsletter         — 뉴스레터 후보 목록
+      /email premium            — 프리미엄 티저 후보 목록
+      /email export [cta] [bucket] — 내보내기
+    """
+    args = context.args or []
+    subcmd = args[0].lower() if args else "summary"
+
+    from app.db import get_db
+    db = get_db()
+    try:
+        from app.services.email_lead_service import (
+            EmailLeadService, EMAIL_BUCKETS, EMAIL_GOALS,
+        )
+        svc = EmailLeadService(db)
+
+        # /email (요약)
+        if subcmd == "summary" or not args:
+            text = svc.format_summary()
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        # /email bucket <id> <버킷>
+        elif subcmd == "bucket":
+            if len(args) < 3:
+                buckets = " | ".join(EMAIL_BUCKETS)
+                await update.message.reply_text(
+                    f"사용법: <code>/email bucket &lt;id&gt; &lt;버킷&gt;</code>\n버킷: {buckets}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            bucket = args[2].lower()
+            result = svc.set_email_bucket(draft_id, bucket)
+            if result:
+                await update.message.reply_text(
+                    f"📬 #{draft_id} 이메일 버킷 → <b>{bucket}</b>", parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ 실패. 유효한 버킷: {', '.join(EMAIL_BUCKETS)}"
+                )
+
+        # /email goal <id> <목표>
+        elif subcmd == "goal":
+            if len(args) < 3:
+                goals = " | ".join(EMAIL_GOALS)
+                await update.message.reply_text(
+                    f"사용법: <code>/email goal &lt;id&gt; &lt;목표&gt;</code>\n목표: {goals}",
+                    parse_mode="HTML",
+                )
+                return
+            draft_id, err = _parse_draft_id(args, 1)
+            if draft_id is None:
+                await update.message.reply_text(err)
+                return
+            goal = args[2].lower()
+            result = svc.set_email_goal(draft_id, goal)
+            if result:
+                await update.message.reply_text(
+                    f"🎯 #{draft_id} 이메일 목표 → <b>{goal}</b>", parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ 실패. 유효한 목표: {', '.join(EMAIL_GOALS)}"
+                )
+
+        # /email list <버킷>
+        elif subcmd == "list":
+            if len(args) < 2:
+                buckets = " | ".join(EMAIL_BUCKETS)
+                await update.message.reply_text(
+                    f"사용법: <code>/email list &lt;버킷&gt;</code>\n버킷: {buckets}",
+                    parse_mode="HTML",
+                )
+                return
+            bucket = args[1].lower()
+            drafts = svc.get_by_email_bucket(bucket, limit=10)
+            if not drafts:
+                await update.message.reply_text(f"📬 버킷 '{bucket}' 항목 없음")
+                return
+            lines = [f"📬 <b>이메일 버킷: {bucket}</b> ({len(drafts)}건)\n"]
+            for d in drafts:
+                goal = d.email_goal or "—"
+                cta = d.cta_type or "—"
+                lines.append(f"• ID {d.id} [CTA:{cta}] 🎯{goal}\n  {(d.hook or '')[:50]}…")
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /email newsletter
+        elif subcmd == "newsletter":
+            drafts = svc.get_newsletter_candidates(limit=10)
+            if not drafts:
+                await update.message.reply_text("📧 뉴스레터 후보 없음")
+                return
+            lines = [f"📧 <b>뉴스레터 후보</b> ({len(drafts)}건)\n"]
+            for d in drafts:
+                cta = d.cta_type or "—"
+                bucket = d.email_bucket or "—"
+                lines.append(f"• ID {d.id} [CTA:{cta}] 📬{bucket}\n  {(d.hook or '')[:50]}…")
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /email premium
+        elif subcmd == "premium":
+            drafts = svc.get_premium_teaser_candidates(limit=10)
+            if not drafts:
+                await update.message.reply_text("⭐ 프리미엄 티저 후보 없음")
+                return
+            lines = [f"⭐ <b>프리미엄 티저 후보</b> ({len(drafts)}건)\n"]
+            for d in drafts:
+                cta = d.cta_type or "—"
+                bucket = d.email_bucket or "—"
+                lines.append(f"• ID {d.id} [CTA:{cta}] 📬{bucket}\n  {(d.hook or '')[:50]}…")
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        # /email export [cta=X] [bucket=X]
+        elif subcmd == "export":
+            cta_f = None
+            bucket_f = None
+            for a in args[1:]:
+                if a.startswith("cta="):
+                    cta_f = a[4:]
+                elif a.startswith("bucket="):
+                    bucket_f = a[7:]
+            items = svc.export_email_items(cta_filter=cta_f, bucket_filter=bucket_f, limit=10)
+            if not items:
+                await update.message.reply_text("📧 내보낼 이메일/리드 항목 없음")
+                return
+            lines = [f"📧 <b>이메일/리드 내보내기</b> ({len(items)}건)\n"]
+            for item in items:
+                lines.append(
+                    f"──────────────\n"
+                    f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
+                    f"💰{item['monetization_score'] or 0}\n"
+                    f"Hook: {item['hook'][:60]}…\n"
+                    f"Asset: {item['lead_asset_name'] or '—'} ({item['lead_asset_type'] or '—'})\n"
+                    f"Bucket: {item['email_bucket'] or '—'} | Goal: {item['email_goal'] or '—'}"
+                )
+            text = "\n".join(lines)
+            if len(text) > 4000:
+                text = text[:4000] + "\n\n… (잘림)"
+            await update.message.reply_text(text, parse_mode="HTML")
+
+        else:
+            await update.message.reply_text(
+                "사용법:\n"
+                "<code>/email</code> — 요약\n"
+                "<code>/email bucket &lt;id&gt; &lt;버킷&gt;</code> — 버킷 설정\n"
+                "<code>/email goal &lt;id&gt; &lt;목표&gt;</code> — 목표 설정\n"
+                "<code>/email list &lt;버킷&gt;</code> — 버킷별 목록\n"
+                "<code>/email newsletter</code> — 뉴스레터 후보\n"
+                "<code>/email premium</code> — 프리미엄 티저 후보\n"
+                "<code>/email export [cta=X] [bucket=X]</code> — 내보내기",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"/email 오류: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ 이메일 명령 실패: {str(e)[:200]}")
+    finally:
+        db.close()
+
+
 async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /b2b — B2B 리서치 후보 관리.
@@ -2477,6 +2863,9 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("biz", biz_command))
     app.add_handler(CommandHandler("premium", premium_command))
     app.add_handler(CommandHandler("b2b", b2b_command))
+    app.add_handler(CommandHandler("cta", cta_command))
+    app.add_handler(CommandHandler("lead", lead_command))
+    app.add_handler(CommandHandler("email", email_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))
