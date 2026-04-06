@@ -1,9 +1,15 @@
 // live2d.js — Live2D 캐릭터 대시보드 Hero 씬 통합
 // 출처: pixi-live2d-display (guansss/CodePen 검증 패턴)
 
-const _perf = { start: performance.now() };
+const _perf = {
+  pageStart: performance.now(),
+  live2dStart: null
+};
 
 async function initLive2D() {
+  _perf.live2dStart = performance.now();
+  const delayFromPageStart = (_perf.live2dStart - _perf.pageStart).toFixed(0);
+  console.log(`[Live2D] 로드 시작 (페이지 로드 후 ${delayFromPageStart}ms)`);
   const heroScene = document.getElementById('heroScene');
   const canvas = document.getElementById('live2dCanvas');
 
@@ -96,13 +102,35 @@ async function initLive2D() {
     }
   }, 3000);
 
-  const elapsed = (performance.now() - _perf.start).toFixed(0);
-  console.log(`[Live2D] 초기화 완료 — shizuku 로드됨 (${elapsed}ms)`);
+  const elapsed = (_perf.live2dStart ? (performance.now() - _perf.live2dStart).toFixed(0) : '?');
+  const totalPageTime = (performance.now() - _perf.pageStart).toFixed(0);
+  console.log(`[Live2D] 초기화 완료 (로드 ${elapsed}ms, 총 ${totalPageTime}ms)`);
 }
 
-// DOM 준비 후 실행
+// Lazy load: 페이지 로드 후 2초 뒤 또는 사용자 상호작용 후 로드
+function scheduleLive2DLoad() {
+  // 이미 로드된 경우 스킵
+  if (window._live2dScheduled) return;
+  window._live2dScheduled = true;
+
+  // 옵션 1: 2초 뒤 자동 로드 (페이지 로드 완료 후)
+  setTimeout(() => {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      initLive2D();
+    }
+  }, 2000);
+
+  // 옵션 2: 사용자 상호작용 시 즉시 로드 (터치/클릭)
+  const heroScene = document.getElementById('heroScene');
+  if (heroScene) {
+    heroScene.addEventListener('click', initLive2D, { once: true });
+    heroScene.addEventListener('touchstart', initLive2D, { once: true });
+  }
+}
+
+// DOM 준비되면 lazy load 스케줄링
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initLive2D);
+  document.addEventListener('DOMContentLoaded', scheduleLive2DLoad);
 } else {
-  initLive2D();
+  scheduleLive2DLoad();
 }
