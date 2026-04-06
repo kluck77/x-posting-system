@@ -66,6 +66,17 @@
 - [x] Hint lifecycle complete: write (`/hint`) → read (`/hints`) → delete (`/hint clear`)
 - [x] `format_hint_impact_summary()` — [HINT]×[PERF] co-occurrence: 3-bucket summary (both / perf-only / hint-only); appended to `/report` and weekly report (Layer 2)
 
+**Business Classification (Phase 5)**
+- [x] BusinessClassifier — auto-tag content by business purpose (growth/newsletter/premium/B2B/lead_magnet/sponsor)
+- [x] CTA type recommendation per draft (follow/reply/newsletter_signup/lead_magnet/premium_waitlist/b2b_inquiry)
+- [x] Monetization score (0-100) per draft
+- [x] Asset goal classification (x_only/newsletter_push/lead_magnet_push/premium_teaser/b2b_asset)
+- [x] Premium Brief candidate detection + reason
+- [x] B2B research candidate detection + target audience + use case
+- [x] `/biz` Telegram command (summary/premium/b2b/newsletter views)
+- [x] Business tags shown in Telegram approval cards
+- [x] 26 business classifier tests
+
 **Infrastructure**
 - [x] News monitor (Naver API, 1-min interval, cross-verify ≥4 sources)
 - [x] Morning digest (sleep-period top-5, 5am KST)
@@ -144,6 +155,9 @@
 | v10 | Rate limiter settings externalization (max_drafts/telegram/posts_per_day in Settings) | Done |
 | v10 | OpenAI DraftWriter prompt refresh (audience, credibility>virality, expanded bans) | Done |
 | v10 | Reviewer quality_flags (ReviewResult field + checklist in REVIEW_SYSTEM_PROMPT) | Done |
+| v11 | Business classification layer (Phase 1-2): auto-tagging, CTA, monetization score | Done |
+| v11 | Premium/B2B/Newsletter candidate detection + `/biz` command | Done |
+| v11 | Business tags in Telegram approval cards | Done |
 | — | Low-risk auto-posting (feature flag) | Deferred — not building without explicit operator directive |
 
 ### Locked Areas — Do Not Reopen
