@@ -4,81 +4,71 @@
 
 - Date: 2026-04-06
 - Branch: claude/extract-prediction-time-n82UK
-- Phase: Phase 16 — Critical Flows Regression Bundle
+- Phase: Phase 17 — Release Gate Bundle
 
 ---
 
 ## What This Session Did
 
-Added scenario-level regression tests for the most important operator-facing flows.
-No new product features. No behavior changes. Pure test/verification leverage.
+Added operator-facing release-readiness documentation. No code changes.
+No behavior changes. Three new docs + two broken README links fixed.
 
 ---
 
-## Coverage Gaps Filled
+## Release-Readiness Gaps Found
 
-Before this session, the following critical behaviors had no scenario-level regression coverage:
-
-| Gap | Risk |
-|-----|------|
-| `run_reply_monitor()` paused guard | `/monitor off` could silently stop working |
-| Queue sequential lifecycle | Position shifts after remove not verified end-to-end |
-| Approval card HTML structure | Markup regressions would go unnoticed |
-| Inline keyboard button completeness | Missing button caught only at runtime |
-| Recovery summary labels | Dropped section caught only by operator |
-| Idle reminder cooldown lifecycle | Double-send scenario only tested piecemeal |
-| Startup check safety guarantee | No test that `run_startup_check()` never raises |
+| Gap | Severity | Detail |
+|-----|----------|--------|
+| No go-live checklist | High | Operator has no step-by-step before first real post |
+| No pre-run verification guide | High | Operator doesn't know what startup success looks like |
+| No release-readiness summary | Medium | No plain-language "what is this and what requires my judgment" doc |
+| Broken README links | Medium | `docs/SETUP_WINDOWS.md` and `docs/ENV_GUIDE.md` linked but missing |
 
 ---
 
 ## Bundle Items Implemented
 
-### 1. `tests/test_critical_flows.py` (new, 17 tests in 5 classes)
+### 1. `docs/go_live_checklist.md` (new)
 
-**TestMonitorPausedGuard** (3 tests)
-- `test_paused_monitor_skips_poll_entirely` — is_paused=True → ReplyMonitor never instantiated
-- `test_unpaused_monitor_instantiates_monitor_class` — is_paused=False → ReplyMonitor used
-- `test_pause_resume_cycle_restores_expected_state` — off → on cycle has correct values
+7-section pre-launch checklist for operators:
+1. Environment setup — which 7 keys are mandatory, what each is for
+2. Quick verification — `pytest -m critical -q` before first start
+3. First startup — expected log lines, acceptable warnings, blocking errors
+4. Telegram smoke test — `/status`, `/recover`, `/draft test`
+5. First real draft (mock mode) — safe dry run
+6. First live post — read-before-approve reminder
+7. Ongoing operation — rate limits, `/recover`, `ENABLE_AUTO_POST_LOW_RISK=false`
 
-**TestQueueLifecycleScenario** (3 tests)
-- `test_full_add_view_remove_clear_lifecycle` — sequential: add 3 → view(2) → remove(1) → positions shift → clear → empty
-- `test_published_item_invisible_throughout_lifecycle` — published posts excluded from all operations
-- `test_notified_post_not_re_notified_on_next_scheduler_run` — notified_at prevents double notification
+Ends with a clear "What ready to go live means" checklist.
 
-**TestCrossFlowConsistency** (5 tests)
-- `test_approval_card_always_contains_required_html_elements` — `<b>` tags always present
-- `test_approval_keyboard_always_has_all_four_action_buttons` — approve/reject/defer/regenerate always present
-- `test_recovery_summary_always_contains_all_four_state_labels` — all 4 file labels always in output
-- `test_status_and_monitor_commands_both_use_is_paused` — source-level check via file read (avoids telegram lib import)
-- `test_callback_parser_rejects_non_allowlisted_actions` — unknown actions (delete, auto_post, bypass) always rejected
+### 2. `docs/pre_run_guide.md` (new)
 
-**TestIdleReminderLifecycleScenario** (2 tests)
-- `test_full_lifecycle_sequential` — record → 50h idle → send → cooldown → activity resets clock
-- `test_fresh_install_never_triggers_reminder` — no file → no spam
+4-check verification guide for before each significant startup:
+1. Critical flow tests — `pytest -m critical -q` with pass/fail table
+2. Start the bot — expected log messages, acceptable warnings table, blocking errors table
+3. Telegram smoke test — `/status`, `/recover` with expected responses
+4. Draft test — `/draft test` and what success looks like
 
-**TestRecoveryLifecycleScenario** (4 tests)
-- `test_all_missing_files_produce_no_errors` — fresh install safe
-- `test_valid_post_queue_reports_pending_count` — valid file parsed correctly
-- `test_corrupt_file_detected_startup_continues` — corrupt file → detected, no crash
-- `test_run_startup_check_never_raises` — startup_check() never throws
+Also includes a complete "What to do if something fails" table and reference to full test suite command.
 
-### 2. `pytest.ini` — `critical` marker registered
+### 3. `docs/release_readiness.md` (new)
 
-```
-markers =
-    critical: Critical operator-flow regression tests — run before any large change
-```
+Plain-language non-technical summary:
+- System state table (536 tests, 17 critical, auto-posting disabled)
+- "What is locked and stable" — 8 areas with plain descriptions
+- "What is permanently excluded" — auto-post, images, dashboard, etc.
+- "What requires your judgment" — 5 operator decisions with clear framing
+- Documents table linking to all operator-facing docs
+- "What to check before each session" — 3-item daily checklist
 
-Command: `pytest -m critical -q --tb=short` (17 tests, ~0.3s)
+### 4. README.md — Broken link fixes (tiny UX polish)
 
-### 3. `docs/regression_guide.md` (new)
+Three changes:
+1. `Windows 상세 설치 → [docs/SETUP_WINDOWS.md]` → replaced with link to `pre_run_guide.md`
+2. Project structure `docs/` section — replaced 2 missing files with 6 docs that actually exist
+3. "상세 문서" section — replaced 2 broken links with 5 links to existing docs
 
-Short operator/dev reference:
-- What each test class protects
-- Quick verification command
-- What must pass before merging a large change
-- Guidance for adding new critical tests
-- Cross-reference table of locked areas → test files
+No behavior changes. Purely cosmetic.
 
 ---
 
@@ -86,29 +76,28 @@ Short operator/dev reference:
 
 | File | Change |
 |------|--------|
-| `tests/test_critical_flows.py` | New: 5 classes, 17 tests |
-| `pytest.ini` | +3 lines: `markers = critical: ...` |
-| `docs/regression_guide.md` | New: operator/dev regression reference |
+| `docs/go_live_checklist.md` | New: 7-section operator pre-launch checklist |
+| `docs/pre_run_guide.md` | New: startup verification guide |
+| `docs/release_readiness.md` | New: plain-language system state summary |
+| `README.md` | Fixed 2 broken links, updated project structure + docs section |
+| `docs/handoffs/LATEST_STATUS.md` | Phase 17 added, next-candidates updated to "operator-ready" |
 
 ---
 
-## Test Counts
+## Tests Run
 
-- Before: 519 passed
-- After: 536 passed (+17)
-- 0 failures
-- Critical-marked tests: 17 (`pytest -m critical` → 17 selected)
+```
+pytest -m critical -q --tb=short
+17 passed, 519 deselected, 2 warnings in 0.30s
+```
+
+No code was changed — full suite count remains 536.
 
 ---
 
-## Notes on Approach
+## Tiny Fix Justification
 
-- `test_status_and_monitor_commands_both_use_is_paused` reads `telegram_bot.py` as a text
-  file rather than importing the module, to avoid the `cryptography/cffi` issue that
-  affects all tests that `import app.telegram_bot`.
-  (Same pattern as `test_intake_fast_path.py`'s inline copy approach.)
-
-- All tests are pure logic tests — no external API calls, no DB writes, no file I/O
-  outside `tmp_path`.
-
-- No Layer 1 code was changed. All tests are additive.
+README linked to `docs/SETUP_WINDOWS.md` and `docs/ENV_GUIDE.md` in two places each.
+Neither file exists. An operator clicking these links gets a 404.
+Fix: replaced with links to the three new docs created in this session.
+Scope: 3 README edits, no behavior change.

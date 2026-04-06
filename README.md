@@ -66,7 +66,7 @@ python scripts/ingest_sample.py
 pytest tests/ -v
 ```
 
-Windows 상세 설치 → [docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md)
+첫 실행 전 → [docs/pre_run_guide.md](docs/pre_run_guide.md)
 
 ---
 
@@ -189,8 +189,12 @@ x-posting-system/
 │   ├── ingest_sample.py         # 샘플 데이터 테스트
 │   └── get_telegram_chat_id.py  # 텔레그램 Chat ID 확인
 ├── docs/
-│   ├── SETUP_WINDOWS.md         # Windows 상세 설치 가이드
-│   └── ENV_GUIDE.md             # .env 환경변수 전체 참조
+│   ├── go_live_checklist.md     # 첫 게시 전 체크리스트
+│   ├── pre_run_guide.md         # 시작 전 검증 가이드
+│   ├── release_readiness.md     # 시스템 상태 요약 (비개발자용)
+│   ├── OPERATOR_WORKFLOW.md     # 운영자 커맨드 가이드
+│   ├── recovery_playbook.md     # 장애 복구 안내
+│   └── regression_guide.md     # 회귀 테스트 참조 (개발자용)
 ├── .env.example                 # 환경변수 템플릿
 ├── requirements.txt
 └── run.py                       # 실행 진입점
@@ -231,6 +235,9 @@ x-posting-system/
 
 ## 상세 문서
 
-- [Windows 설치 가이드](docs/SETUP_WINDOWS.md)
-- [환경변수(.env) 전체 참조](docs/ENV_GUIDE.md)
+- [Go-Live 체크리스트](docs/go_live_checklist.md) — 첫 게시 전 필독
+- [시작 전 검증 가이드](docs/pre_run_guide.md) — 시작 전 확인 방법
+- [시스템 상태 요약](docs/release_readiness.md) — 무엇이 안전하고 무엇이 운영자 판단인지
+- [운영자 커맨드 가이드](docs/OPERATOR_WORKFLOW.md)
+- [장애 복구 안내](docs/recovery_playbook.md)
 - [프로젝트 현황](PROJECT_STATUS.md)

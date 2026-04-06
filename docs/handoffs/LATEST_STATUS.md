@@ -33,6 +33,7 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 | Phase 14 hygiene bundle (processed_replies cap, x_username config, pending_articles cap) | Locked |
 | Phase 15 ops recovery bundle (startup_check, /recover command, corrupt-file warning, recovery_playbook.md) | Locked |
 | Phase 16 critical flows regression bundle (test_critical_flows.py, pytest -m critical, regression_guide.md) | Locked |
+| Phase 17 release gate bundle (go_live_checklist.md, pre_run_guide.md, release_readiness.md, README links fixed) | Locked |
 
 ---
 
@@ -49,13 +50,13 @@ Phase 12 Growth Intelligence Bundle complete. Advisory labels (우선/보통/보
 
 ## Next Candidates
 
-**Nothing urgent.** System is stable and well-tested (536 tests, 17 critical-flow marked).
-Growth advisory layer active. Operator tools complete. Hygiene done. Recovery tooling in place. Regression bundle in place.
+**System is operator-ready.** 536 tests passing, 17 critical flows protected, go-live docs in place.
+No open feature gaps. Next actions are entirely operator-driven (go live, observe, refine).
 
 ---
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 8 — Phase 16 Critical Flows Regression Bundle)
+- Date: 2026-04-06 (session 9 — Phase 17 Release Gate Bundle)
 - Branch: claude/extract-prediction-time-n82UK
 - Commit: see `git log --oneline -1`
