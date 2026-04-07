@@ -1,428 +1,243 @@
-# X Posting System - Korean Affairs English Content
+# X Posting System
 
-**한국 이슈를 해외 독자에게 영어로 전달하는 X(트위터) 포스팅 시스템**
+**한국 이슈를 해외 독자에게 영어로 전달하는 반수동 콘텐츠 운영 시스템**
 
-AI가 초안을 만들고, 텔레그램에서 승인하면, X에 자동 게시됩니다.
+*Semi-manual, approval-first content operating system: Korean source → AI draft suite → Telegram approval → operator posts manually.*
 
 ---
 
-## 이 프로젝트가 하는 것
+## 이 프로젝트가 하는 것 / 안 하는 것
 
-1. 한국 관련 소스(뉴스, 이슈 등)를 입력합니다
-2. AI가 영어 X 포스트 초안을 생성합니다
-3. 텔레그램으로 승인 카드가 옵니다
-4. Approve 버튼을 누르면 X에 게시됩니다
-5. 모든 기록이 데이터베이스에 저장됩니다
+**하는 것**
+- 한국 뉴스·커뮤니티 소스를 입력하면 영어 X 포스트 초안을 AI가 생성합니다
+- 텔레그램으로 승인 카드를 전송합니다 (Approve / Reject / Defer / Regenerate)
+- **Approve를 눌러야만** X에 게시됩니다 — 자동 게시 없음, 예외 없음
+- 모든 기록이 SQLite DB에 저장됩니다
 
-## 이 프로젝트가 하지 않는 것
-
-- 웹 대시보드 없음
-- 이미지/영상 생성 없음
-- 자동 좋아요/팔로우/DM/리플 없음
-- 멀티 계정 관리 없음
-- 스팸/조작 기능 없음
+**안 하는 것**
+- 승인 없이 자동 게시 없음
+- 자동 좋아요 / 팔로우 / DM / 리플 없음
+- 스팸·조작 기능 없음
 - 위험 콘텐츠 자동 게시 없음
+- 이미지·영상 자동 생성 없음 (DALL-E, Stable Diffusion 등 영구 제외)
 
 ---
 
-## 사전 준비물
+## AI 파이프라인
 
-| 항목 | 필수? | 설명 |
-|------|-------|------|
-| Python 3.11+ | 필수 | 프로그래밍 언어 |
-| pip | 필수 | Python 패키지 설치 도구 (Python과 함께 설치됨) |
-| 텔레그램 봇 토큰 | 선택 | 없으면 Mock 모드로 실행 |
-| X API 키 | 선택 | 없으면 Mock 모드로 실행 |
-| OpenAI/Anthropic API 키 | 선택 | 없으면 Mock AI로 실행 |
+```
+소스 입력
+  └─▶ Gemini (Researcher)       — 배경 리서치 & 해석 갭 발굴
+        └─▶ OpenAI (DraftWriter) — 영어 초안 생성
+              └─▶ Perplexity (FactChecker) — 팩트 검증
+                    └─▶ Claude (Reviewer)  — 품질·리스크 최종 판단
+                          └─▶ 텔레그램 승인 카드
+                                └─▶ [Approve → 운영자가 X에 직접 게시]
+별도: Grok (TrendHunter) — /trends 명령으로 트렌드 탐색
+```
 
-**API 키가 하나도 없어도 시스템은 Mock 모드로 완전히 작동합니다!**
+5-Criteria 품질 필터 (자동):
+`expertise` / `marketability` / `consistency` / `follower_quality` / `repeat_consumption`
+기준 미달 초안은 자동 재생성됩니다.
 
 ---
 
-## Windows 설치 가이드 (처음부터 끝까지)
+## 빠른 시작
 
-### Step 1: 프로젝트 폴더 열기
-
-1. 파일 탐색기에서 이 프로젝트 폴더를 엽니다
-2. 폴더 안의 빈 곳을 Shift + 마우스 우클릭
-3. "여기에서 터미널 열기" 또는 "여기에서 PowerShell 열기" 클릭
-
-또는:
-```
-cd C:\Users\gfeed\Desktop\x모델
-```
-
-### Step 2: 가상환경 만들기
-
-가상환경은 이 프로젝트만의 독립된 Python 환경입니다.
+**API 키가 하나도 없어도 Mock 모드로 전체 파이프라인이 동작합니다.**
 
 ```bash
-python -m venv venv
-```
-
-> 만약 `python`이 안 되면 아래 명령어를 대신 사용하세요:
-> ```
-> "C:\Users\gfeed\AppData\Local\Python\bin\python.exe" -m venv venv
-> ```
-
-### Step 3: 가상환경 활성화
-
-```bash
-# PowerShell인 경우:
-.\venv\Scripts\Activate.ps1
-
-# CMD (명령 프롬프트)인 경우:
-.\venv\Scripts\activate.bat
-
-# Git Bash인 경우:
-source venv/Scripts/activate
-```
-
-활성화되면 터미널 앞에 `(venv)`가 표시됩니다.
-
-> **PowerShell에서 오류가 나는 경우:**
-> ```
-> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-> ```
-> 를 먼저 실행한 후 다시 시도하세요.
-
-### Step 4: Python 패키지 설치
-
-```bash
+# 1. 의존성 설치
 pip install -r requirements.txt
-```
 
-성공하면 `Successfully installed ...` 메시지가 나옵니다.
+# 2. 환경변수 설정
+cp .env.example .env
+# .env 파일에 API 키 입력 (없으면 Mock 모드로 자동 실행)
 
-### Step 5: 환경변수 설정
-
-`.env.example` 파일을 복사해서 `.env`로 이름을 바꿉니다:
-
-```bash
-# PowerShell:
-Copy-Item .env.example .env
-
-# CMD:
-copy .env.example .env
-```
-
-그 다음 `.env` 파일을 메모장으로 열어서 API 키를 입력합니다:
-
-```bash
-notepad .env
-```
-
-> **중요: .env 파일은 절대 GitHub에 올리면 안 됩니다!**
-
-### Step 6: 데이터베이스 초기화
-
-```bash
-python scripts/init_db.py
-```
-
-`데이터베이스 초기화 완료!` 메시지가 나오면 성공입니다.
-
-### Step 7: 시스템 실행
-
-```bash
+# 3. 실행
 python run.py
-```
+# → FastAPI: http://localhost:8000/docs
+# → 텔레그램 봇 자동 시작 (토큰이 있는 경우)
 
-이 명령 하나로:
-- 데이터베이스 초기화
-- FastAPI 서버 시작 (http://localhost:8000)
-- 텔레그램 봇 시작 (설정된 경우)
-
-**브라우저에서 http://localhost:8000/docs 를 열면 API 문서가 나옵니다.**
-
----
-
-## .env 파일 설명
-
-### 지금 당장 필요한 키
-
-| 변수 | 설명 | 어디서 받나? |
-|------|------|-------------|
-| `TELEGRAM_BOT_TOKEN` | 텔레그램 봇 토큰 | 텔레그램에서 @BotFather에게 `/newbot` |
-| `TELEGRAM_CHAT_ID` | 내 채팅 ID | `python scripts/get_telegram_chat_id.py` 실행 |
-
-### X에 게시하려면 필요한 키
-
-| 변수 | 설명 | 어디서 받나? |
-|------|------|-------------|
-| `X_API_KEY` | X API Consumer Key | https://developer.x.com/en/portal/dashboard |
-| `X_API_SECRET` | X API Consumer Secret | 위와 동일 |
-| `X_ACCESS_TOKEN` | X Access Token | 위와 동일 |
-| `X_ACCESS_TOKEN_SECRET` | X Access Token Secret | 위와 동일 |
-
-### AI 초안 생성에 필요한 키 (선택)
-
-| 변수 | 설명 | 어디서 받나? |
-|------|------|-------------|
-| `OPENAI_API_KEY` | ChatGPT API 키 | https://platform.openai.com/api-keys |
-| `ANTHROPIC_API_KEY` | Claude API 키 | https://console.anthropic.com/settings/keys |
-
-> AI 키를 넣었으면 `.env`에서 `ACTIVE_DRAFT_PROVIDER=openai` (또는 `anthropic`)으로 변경하세요.
-
-### 선택 (나중에)
-
-| 변수 | 설명 |
-|------|------|
-| `GEMINI_API_KEY` | Google AI 리서치 (미래) |
-| `GROK_API_KEY` | xAI 트렌드 탐지 (미래) |
-| `PERPLEXITY_API_KEY` | 팩트체크 (미래) |
-
----
-
-## 텔레그램 승인은 어떻게 작동하나요?
-
-1. 소스를 입력하면 AI가 초안을 생성합니다
-2. 텔레그램으로 승인 카드가 옵니다 (훅, 본문, 카테고리, 위험도 표시)
-3. 4개 버튼 중 하나를 누릅니다:
-   - **Approve** = X에 바로 게시
-   - **Reject** = 거절 (DB에 기록)
-   - **Defer** = 나중에 다시 검토
-   - **Regenerate** = AI가 다시 작성
-
-### 텔레그램 봇 명령어
-
-| 명령어 | 설명 |
-|--------|------|
-| `/start` | 봇 소개 메시지 |
-| `/status` | AI 프로바이더 상태 확인 |
-| `/pending` | 대기 중인 초안 목록 |
-
----
-
-## X 게시는 어떻게 작동하나요?
-
-1. 텔레그램에서 **Approve** 버튼을 누릅니다
-2. 시스템이 X API를 호출해서 포스트를 게시합니다
-3. 게시 성공하면 텔레그램에 확인 메시지가 옵니다 (Post ID + URL)
-4. DB에 게시 기록이 저장됩니다
-
-**안전 규칙:**
-- 승인 없이는 절대 게시되지 않습니다
-- 동일한 텍스트는 중복 게시되지 않습니다
-- 하루 최대 3회 게시로 제한됩니다
-
----
-
-## Mock 모드란?
-
-API 키가 없으면 시스템은 자동으로 Mock(가짜) 모드로 전환됩니다.
-
-| 기능 | Mock 모드에서 |
-|------|--------------|
-| AI 초안 | 미리 만든 샘플 텍스트 반환 |
-| 텔레그램 | 로그에만 출력 (실제 전송 안 함) |
-| X 게시 | `mock_1234567890` 같은 가짜 ID 반환 |
-
-Mock 모드에서도 전체 파이프라인이 정상 작동하므로 테스트에 유용합니다.
-
----
-
-## 샘플 데이터로 테스트하기
-
-API 키 없이도 테스트할 수 있습니다:
-
-```bash
+# 4. 샘플 데이터로 파이프라인 테스트
 python scripts/ingest_sample.py
-```
 
-이 스크립트는:
-1. 한국 출산율 기사와 반도체 수출 기사를 입력합니다
-2. AI 파이프라인을 실행합니다 (Mock 모드)
-3. 결과를 DB에 저장합니다
-
-API 서버가 실행 중이라면 브라우저에서도 테스트 가능:
-- http://localhost:8000/docs 에서 `/ingest` 엔드포인트 사용
-- http://localhost:8000/drafts/pending 에서 대기 중인 초안 확인
-- http://localhost:8000/usage 에서 오늘 사용량 확인
-
----
-
-## 테스트 실행
-
-```bash
+# 5. 테스트
 pytest tests/ -v
 ```
 
-현재 76개의 테스트가 있으며, 모든 핵심 기능을 검증합니다:
-- 설정 로딩
-- 카테고리/위험도 분류
-- 승인 필수 로직
-- 중복 방지 (URL + 텍스트)
-- 일일 사용량 제한
-- 텔레그램 콜백 파싱
-- X 게시 서비스
-- 전체 파이프라인 (E2E)
+첫 실행 전 → [docs/pre_run_guide.md](docs/pre_run_guide.md)
 
 ---
 
-## 일일 사용 제한
+## Mock 모드
 
-월 $30 예산에 맞춘 기본 제한:
+API 키 없이도 전체 파이프라인을 테스트할 수 있습니다.
 
-| 항목 | 하루 최대 |
-|------|----------|
-| AI 초안 생성 | 5회 |
-| 텔레그램 승인 카드 | 5회 |
-| X 게시 | 3회 |
-
-사용량 확인: http://localhost:8000/usage
+| 기능 | Mock 모드에서 |
+|------|--------------|
+| AI 초안 | 미리 정의된 샘플 텍스트 반환 |
+| 텔레그램 | 터미널 로그에만 출력 |
+| X 게시 | `mock_1234567890` 가짜 ID 반환 |
 
 ---
 
-## 자주 발생하는 오류와 해결법
+## 텔레그램 봇 커맨드
 
-### `python` 명령이 안 될 때
-Microsoft Store가 열리는 경우:
-```bash
-# 전체 경로로 실행
-"C:\Users\gfeed\AppData\Local\Python\bin\python.exe" run.py
-```
+| 커맨드 | 설명 |
+|--------|------|
+| `/start` | 봇 소개 및 전체 명령어 목록 |
+| `/status` | AI 프로바이더 상태 · 멘션 모니터 · 큐 현황 · 마지막 활동 |
+| `/draft [url/text]` | 분석 카드 없이 즉시 단일 초안 생성 (가장 빠른 경로) |
+| `/pack [url/text]` | 콘텐츠 팩 직접 생성 (메인 3개 + 댓글 + 인용 등) |
+| `/thread` | 스레드 생성 |
+| `/trends [키워드]` | Grok 트렌드 탐색 |
+| `/queue` | 게시 큐 현황 |
+| `/queue <본문>` | 게시 큐에 추가 (최적 슬롯에 승인 알림 발송) |
+| `/queue remove <n>` | n번 대기 항목 제거 |
+| `/queue clear` | 대기 항목 전체 제거 |
+| `/queue view <n>` | n번 항목 전체 텍스트 + 등록시각 + 알림 여부 확인 |
+| `/monitor` | 멘션 모니터 현재 상태 확인 |
+| `/monitor off` | 멘션 모니터 일시정지 |
+| `/monitor on` | 멘션 모니터 재개 |
+| `/hunt` | 댓글 기회 탐색 (CommentHunter) |
+| `/note <id> <메모>` | 초안에 일회성 메모 추가 |
+| `/hint <id> <메모>` | 장기 힌트 저장 (DraftWriter에 자동 주입) |
+| `/hint clear <id>` | 힌트 라인 제거 |
+| `/hints` | 활성 힌트 목록 조회 |
+| `/perf <id> <메모>` | 게시 후 성과 메모 기록 |
+| `/perf` | 최근 성과 메모 목록 |
+| `/report` | 주간 성과 리포트 (즉시 실행) |
+| `/digest` | 아침 뉴스 다이제스트 (즉시 실행) |
+| `/pending` | 승인 대기 초안 목록 |
+| `/cancel` | 현재 작업 취소 |
 
-### `ModuleNotFoundError: No module named 'app'`
-프로젝트 루트 폴더에서 실행하고 있는지 확인하세요:
-```bash
-cd C:\Users\gfeed\Desktop\x모델
-python run.py
-```
-
-### `pip install` 실패
-가상환경이 활성화되어 있는지 확인:
-```bash
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-### 텔레그램 봇이 응답하지 않을 때
-1. `.env`에 `TELEGRAM_BOT_TOKEN`과 `TELEGRAM_CHAT_ID`가 정확한지 확인
-2. 텔레그램에서 봇에게 먼저 메시지를 보낸 후 Chat ID 확인:
-   ```bash
-   python scripts/get_telegram_chat_id.py
-   ```
-
-### `ENABLE_AUTO_POST_LOW_RISK=true`로 바꿔도 되나요?
-v1에서는 **바꾸지 마세요**. 이 기능은 아직 개발 중이며, 바꿔도 politics/policy/economy/society 카테고리는 여전히 승인이 필요합니다.
-
----
-
-## GitHub에 안전하게 올리기
-
-### 절대 올리면 안 되는 파일
-
-| 파일 | 이유 |
-|------|------|
-| `.env` | API 키가 들어있음 |
-| `*.db` | 개인 데이터가 들어있음 |
-| `*.log` | 내부 로그 |
-
-이 파일들은 `.gitignore`에 이미 등록되어 있어서 실수로 올라가지 않습니다.
-
-### GitHub CLI로 올리기 (gh가 설치된 경우)
-
-```bash
-# 1. GitHub에 private 저장소 생성 + 코드 올리기
-gh repo create x-posting-system --private --source=. --push
-
-# 끝! 이것 하나면 됩니다.
-```
-
-### GitHub CLI 없이 올리기
-
-1. https://github.com/new 에서 새 저장소 만들기
-   - Repository name: `x-posting-system`
-   - **Private** 선택 (중요!)
-   - "Create repository" 클릭
-
-2. 터미널에서:
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/x-posting-system.git
-git branch -M main
-git push -u origin main
-```
-
-(`YOUR_USERNAME`을 본인 GitHub 아이디로 바꾸세요)
-
-### 커밋하기
-
-```bash
-git add -A
-git commit -m "설명 메시지"
-git push
-```
+승인 카드 버튼: **Approve** · **Reject** · **Defer** · **Regenerate**
 
 ---
 
-## 휴대폰에서 GitHub Mobile로 확인하기
+## 안전 규칙 (코드에서 강제)
 
-1. 스마트폰에 **GitHub** 앱을 설치합니다
-2. 로그인합니다
-3. 저장소 목록에서 `x-posting-system`을 찾습니다
-4. 할 수 있는 것:
-   - 코드 파일 읽기
-   - 커밋 이력 확인
-   - README 보기
-   - Issues 확인
-   - Pull Request 확인
+- 승인 없이 절대 게시 안 됨
+- politics / policy / economy / society 카테고리는 항상 승인 필요
+- 동일 텍스트 중복 게시 방지
+- 하루 최대 게시 10회 (환경변수로 조정 가능)
+
+---
+
+## API 엔드포인트
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/health` | 헬스 체크 |
+| GET | `/status` | AI 프로바이더 상태 |
+| POST | `/ingest` | 소스 입력 + 파이프라인 실행 |
+| GET | `/drafts/pending` | 승인 대기 목록 |
+| POST | `/drafts/{id}/approve` | 승인 + X 게시 |
+| POST | `/drafts/{id}/reject` | 거절 |
+| POST | `/drafts/{id}/retry` | 재시도 |
+| GET | `/usage` | 일일 사용량 |
+
+전체 문서: http://localhost:8000/docs
 
 ---
 
 ## 프로젝트 구조
 
 ```
-x모델/
-├── app/                         # 메인 애플리케이션
-│   ├── main.py                  # 진입점 (FastAPI + 텔레그램 봇)
-│   ├── config.py                # 설정 관리 (.env 읽기)
-│   ├── db.py                    # 데이터베이스 연결
+x-posting-system/
+├── app/
+│   ├── main.py                  # FastAPI + 텔레그램 봇 진입점
+│   ├── config.py                # 설정 (.env 읽기)
+│   ├── db.py                    # SQLite 연결
 │   ├── orchestrator.py          # AI 파이프라인 오케스트레이터
 │   ├── telegram_bot.py          # 텔레그램 봇 핸들러
-│   ├── api/
-│   │   └── admin.py             # FastAPI 관리 API
-│   ├── models/
-│   │   └── content.py           # DB 모델 + Pydantic 스키마
-│   ├── providers/               # AI 프로바이더
+│   ├── api/admin.py             # FastAPI 관리 API
+│   ├── models/content.py        # DB 모델 + Pydantic 스키마
+│   ├── providers/               # AI 프로바이더 (5개)
 │   │   ├── base.py              # 추상 인터페이스
 │   │   ├── ai_provider.py       # 프로바이더 팩토리
-│   │   ├── mock_providers.py    # Mock (가짜) AI
-│   │   ├── openai_provider.py   # ChatGPT 연동
-│   │   └── anthropic_provider.py # Claude 연동
-│   ├── services/                # 비즈니스 로직
-│   │   ├── classifier.py        # 카테고리/위험도 분류
-│   │   ├── source_service.py    # 소스 수집
-│   │   ├── draft_service.py     # 초안 관리
-│   │   ├── telegram_service.py  # 텔레그램 카드 전송
-│   │   ├── x_publisher.py       # X 게시
-│   │   └── rate_limiter.py      # 일일 사용량 제한
-│   └── utils/
-│       └── logging_config.py    # 로깅 설정
-├── tests/                       # 테스트 (76개)
-├── scripts/                     # 유틸리티 스크립트
+│   │   ├── openai_provider.py   # DraftWriter (ChatGPT)
+│   │   ├── anthropic_provider.py # Reviewer (Claude)
+│   │   ├── gemini_provider.py   # Researcher (Gemini)
+│   │   ├── grok_provider.py     # TrendHunter (Grok)
+│   │   ├── perplexity_provider.py # FactChecker (Perplexity)
+│   │   └── mock_providers.py    # Mock AI (API 키 불필요)
+│   └── services/
+│       ├── classifier.py        # 카테고리·위험도 분류
+│       ├── quality_scorer.py    # 5-Criteria 품질 채점
+│       ├── content_fetcher.py   # URL 수집 (3단계 fallback)
+│       ├── prediction_service.py # 게시 시간 예측
+│       ├── telegram_service.py  # 승인 카드 전송
+│       ├── x_publisher.py       # X 게시
+│       ├── rate_limiter.py      # 일일 사용량 제한
+│       ├── morning_digest.py    # 아침 뉴스 다이제스트
+│       ├── news_monitor.py      # 뉴스 모니터링
+│       ├── rss_fetcher.py       # RSS 수집
+│       ├── naver_news.py        # 네이버 뉴스 API
+│       ├── vision_service.py    # 이미지 분석
+│       └── growth/              # 계정 성장 파이프라인
+│           ├── post_queue.py       # 최적 시간대 승인 알림 (자동 게시 없음)
+│           ├── comment_hunter.py   # 트렌드 댓글 초안 생성
+│           ├── reply_monitor.py    # 멘션 모니터링 (/monitor off/on으로 제어)
+│           ├── weekly_report.py    # 주간 성과 리포트
+│           ├── monitor_state.py    # 멘션 모니터 on/off 상태 (data/monitor_state.json)
+│           └── activity_tracker.py # 파이프라인 유휴 감지 (48h 알림)
+├── tests/                       # 자동화 테스트
+├── scripts/
 │   ├── init_db.py               # DB 초기화
-│   ├── ingest_sample.py         # 샘플 데이터 입력
+│   ├── ingest_sample.py         # 샘플 데이터 테스트
 │   └── get_telegram_chat_id.py  # 텔레그램 Chat ID 확인
+├── docs/
+│   ├── go_live_checklist.md     # 첫 게시 전 체크리스트
+│   ├── pre_run_guide.md         # 시작 전 검증 가이드
+│   ├── release_readiness.md     # 시스템 상태 요약 (비개발자용)
+│   ├── OPERATOR_WORKFLOW.md     # 운영자 커맨드 가이드
+│   ├── recovery_playbook.md     # 장애 복구 안내
+│   └── regression_guide.md     # 회귀 테스트 참조 (개발자용)
 ├── .env.example                 # 환경변수 템플릿
-├── .gitignore                   # Git 무시 파일 목록
-├── requirements.txt             # Python 패키지 목록
-├── pytest.ini                   # 테스트 설정
-├── run.py                       # 실행 스크립트
-└── PROJECT_STATUS.md            # 프로젝트 현황
+├── requirements.txt
+└── run.py                       # 실행 진입점
 ```
 
 ---
 
-## 다음 업그레이드 경로
+## 완료된 버전
 
 | 단계 | 내용 | 상태 |
 |------|------|------|
-| Phase 1 | Mock MVP (전체 파이프라인) | 완료 |
-| Phase 2 | 실제 X API 연동 | 완료 (키 입력만 하면 됨) |
-| Phase 3 | 실제 AI 연동 (OpenAI/Claude) | 완료 (키 입력만 하면 됨) |
-| Phase 4 | Gemini 리서치 연동 | 미래 |
-| Phase 5 | Grok 트렌드 탐지 | 미래 |
-| Phase 6 | Perplexity 팩트체크 | 미래 |
-| Phase 7 | RSS 자동 수집 | 미래 |
-| Phase 8 | 저위험 자동 게시 (feature flag) | 미래 |
+| v1 | Mock MVP — 전체 파이프라인 | 완료 |
+| v2 | 실제 X API + OpenAI/Claude 연동 | 완료 |
+| v3 | Gemini / Grok / Perplexity 연동 | 완료 |
+| v4 | 5-Criteria 품질 프레임워크 | 완료 |
+| v4 | URL 수집 3단계 fallback (Jina AI) | 완료 |
+| v4 | Growth 파이프라인 (Queue/Hunter/Monitor) | 완료 |
+| v4 | ContentPack 멀티 초안 출력 | 완료 |
+| v5 | RSS 자동 수집 & 뉴스 모니터 | 완료 |
+| v5 | 토픽 메모리 + 콘텐츠 믹스 어드바이저 | 완료 |
+| v5 | 보이스 가드 (AI 어투 감지) + RepetitionGuard | 완료 |
+| v6 | 품질 점수 어드바이저리, 운영자 메모(/note), 프롬프트 감사 | 완료 |
+| v7 | 성과 피드백 루프 (/perf), 힌트 시스템 (/hint · /hints · /hint clear) | 완료 |
+| v7 | PostQueue 승인 게이트 (자동 게시 → 운영자 탭 후 게시) | 완료 |
+| v8 | /draft 즉시 초안 경로, 콘텐츠 팩 pending key 버그 수정 | 완료 |
+| v8 | 승인 카드 topic_tags 표시, 글자수 초과 경고 | 완료 |
+| v8 | /queue remove, /queue clear, 큐 미리보기 개선 | 완료 |
+| v8 | /monitor off/on/status, 멘션 모니터 일시정지 | 완료 |
+| v8 | 유휴 파이프라인 알림 (48h 무활동 → Telegram 알림) | 완료 |
+| v8 | /status 개선 (모니터·큐·활동 시각 통합) | 완료 |
+| v9 | 멘션 모니터 인라인 버튼 (reply_use/reply_skip) | 완료 |
+| v9 | /queue view <n> — 큐 항목 전체 텍스트 확인 | 완료 |
+| v10 | Rate limiter 설정 외부화 (Settings + .env.example) | 완료 |
+| v10 | OpenAI DraftWriter 프롬프트 갱신 | 완료 |
+| v10 | Reviewer quality_flags 구조화 | 완료 |
+
+---
+
+## 상세 문서
+
+- [Go-Live 체크리스트](docs/go_live_checklist.md) — 첫 게시 전 필독
+- [시작 전 검증 가이드](docs/pre_run_guide.md) — 시작 전 확인 방법
+- [시스템 상태 요약](docs/release_readiness.md) — 무엇이 안전하고 무엇이 운영자 판단인지
+- [운영자 커맨드 가이드](docs/OPERATOR_WORKFLOW.md)
+- [장애 복구 안내](docs/recovery_playbook.md)
+- [프로젝트 현황](PROJECT_STATUS.md)

@@ -5,8 +5,10 @@ AI가 생성한 포스트 초안을 데이터베이스에 저장하고 관리합
 중복 방지, 버전 관리, 상태 업데이트 등을 처리합니다.
 """
 
+import json
 import logging
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.models.content import (
     Draft, SourceItem, ApprovalStatus, ContentCategory, RiskLevel
@@ -190,3 +192,458 @@ class DraftService:
             logger.warning(f"중복 텍스트 감지: 기존 draft_id={existing.id}")
             return True
         return False
+
+    def save_performance_note(self, draft_id: int, note: str) -> Draft | None:
+        """
+        게시 후 성과 메모를 manual_notes에 [PERF] 태그로 추가합니다.
+
+        pre-draft 메모(/note)와 구분하기 위해 [PERF] 접두어를 사용합니다.
+        기존 메모가 있으면 줄바꿈 후 추가합니다.
+        """
+        draft = self.get_by_id(draft_id)
+        if not draft:
+            return None
+        tag = f"[PERF] {note.strip()}"
+        if draft.manual_notes:
+            draft.manual_notes = draft.manual_notes + f"\n{tag}"
+        else:
+            draft.manual_notes = tag
+        self.db.commit()
+        self.db.refresh(draft)
+        logger.info(f"성과 메모 저장: draft_id={draft_id}, note={note[:60]}")
+        return draft
+
+    def get_recent_operator_hints(self, limit: int = 3) -> list[str]:
+        """
+        최근 approved/published 초안의 manual_notes에서 operator hint 추출.
+
+        v2 우선순위:
+        1. [HINT] 접두어 라인 우선 수집 — 운영자가 "장기 반영"으로 표시한 것
+        2. [HINT]가 부족하면 일반 non-[PERF] 라인으로 나머지 채움 (v1 fallback)
+
+        prefix 규칙:
+        - [HINT] <text>  → 장기 힌트, 우선 사용
+        - [PERF] <text>  → 성과 기록, 항상 제외
+        - <text>         → 일반 메모, fallback으로만 사용
+
+        초안당 첫 번째 유효 라인만 수집 (중복 방지).
+        빈 결과면 [] 반환 — 실패 시 조용히 처리 (Layer 2 보호).
+        """
+        try:
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status.in_([
+                        ApprovalStatus.APPROVED,
+                        ApprovalStatus.PUBLISHED,
+                    ]),
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+                .order_by(Draft.updated_at.desc())
+                .limit(20)
+                .all()
+            )
+
+            hint_lines: list[str] = []   # [HINT] 우선 수집
+            fallback_lines: list[str] = []  # 일반 메모 fallback
+
+            for d in drafts:
+                found_hint = False
+                found_fallback = False
+                for line in (d.manual_notes or "").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("[HINT]"):
+                        text = line[6:].strip()
+                        if text and not found_hint:
+                            hint_lines.append(text[:120])
+                            found_hint = True
+                    elif not line.startswith("[PERF]") and not found_fallback:
+                        fallback_lines.append(line[:120])
+                        found_fallback = True
+
+            # [HINT] 우선 → 부족하면 fallback으로 채움
+            combined = hint_lines[:limit]
+            if len(combined) < limit:
+                needed = limit - len(combined)
+                combined += fallback_lines[:needed]
+            return combined
+
+        except Exception as e:
+            logger.warning(f"[OperatorHints] 수집 실패 (무시): {e}")
+            return []
+
+    def get_hint_lines_with_draft_id(
+        self, limit: int = 10
+    ) -> list[tuple[int, str]]:
+        """
+        최근 approved/published 초안의 [HINT] 라인을 (draft_id, text) 형태로 반환.
+
+        /hints 조회 명령용 read path.
+        - [HINT] prefix가 있는 라인만 수집 (fallback 없음 — 명시적 힌트만 표시)
+        - 초안당 모든 [HINT] 라인 수집 (get_recent_operator_hints와 달리 1개 제한 없음)
+        - 빈 결과면 [] 반환
+        """
+        try:
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status.in_([
+                        ApprovalStatus.APPROVED,
+                        ApprovalStatus.PUBLISHED,
+                    ]),
+                    Draft.manual_notes.like("%[HINT]%"),
+                )
+                .order_by(Draft.updated_at.desc())
+                .limit(20)
+                .all()
+            )
+            results: list[tuple[int, str]] = []
+            for d in drafts:
+                for line in (d.manual_notes or "").splitlines():
+                    line = line.strip()
+                    if line.startswith("[HINT]"):
+                        text = line[6:].strip()
+                        if text:
+                            results.append((d.id, text[:120]))
+                if len(results) >= limit:
+                    break
+            return results[:limit]
+        except Exception as e:
+            logger.warning(f"[HintLines] 조회 실패 (무시): {e}")
+            return []
+
+    def clear_hint_lines(self, draft_id: int) -> Draft | None:
+        """
+        draft의 manual_notes에서 [HINT] 라인만 제거하고 나머지는 보존.
+
+        - [PERF] 라인, 일반 메모는 그대로 유지
+        - [HINT] 라인이 없어도 오류 없이 반환
+        - draft 없으면 None 반환
+        """
+        draft = self.get_by_id(draft_id)
+        if not draft:
+            return None
+        original = draft.manual_notes or ""
+        kept = "\n".join(
+            line for line in original.splitlines()
+            if not line.strip().startswith("[HINT]")
+        ).strip()
+        draft.manual_notes = kept if kept else None
+        self.db.commit()
+        self.db.refresh(draft)
+        logger.info(f"[HINT] 라인 제거: draft_id={draft_id}")
+        return draft
+
+    def format_hint_impact_summary(self, days: int = 60) -> str:
+        """
+        [HINT] × [PERF] 공존 기반 힌트 영향 요약 텍스트 반환 (v3 feedback).
+
+        같은 draft에 [HINT]와 [PERF]가 함께 있으면 "성과 확인 + 힌트화" 로 분류.
+        이것이 기존 DB 구조로 가능한 가장 직접적인 연결 고리.
+
+        3버킷:
+        - both    : [HINT] + [PERF] 공존 — 성과 기반 힌트, 가장 신뢰 가능
+        - perf_only : [PERF]만 — 성과 기록했지만 힌트화 안 됨 (/hint 검토 대상)
+        - hint_only : [HINT]만 — 힌트화했지만 성과 미확인
+
+        빈 결과면 "" 반환 (Layer 2 보호).
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        try:
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status == ApprovalStatus.PUBLISHED,
+                    Draft.published_at >= cutoff,
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[HintImpact] 쿼리 실패 (무시): {e}")
+            return ""
+
+        both = perf_only = hint_only = 0
+        for d in drafts:
+            notes = d.manual_notes or ""
+            has_hint = any(l.strip().startswith("[HINT]") for l in notes.splitlines())
+            has_perf = any(l.strip().startswith("[PERF]") for l in notes.splitlines())
+            if has_hint and has_perf:
+                both += 1
+            elif has_perf:
+                perf_only += 1
+            elif has_hint:
+                hint_only += 1
+
+        if both == 0 and perf_only == 0 and hint_only == 0:
+            return ""
+
+        lines = [f"💡 <b>힌트 영향 요약 ({days}일)</b>"]
+        if both:
+            lines.append(f"• 성과 확인 + 힌트화: {both}건  ← 가장 신뢰할 수 있는 힌트")
+        if perf_only:
+            lines.append(
+                f"• 성과만 기록 (힌트 미변환): {perf_only}건"
+                f"  ← /hint 로 힌트화 검토"
+            )
+        if hint_only:
+            lines.append(f"• 힌트만 있음 (성과 미확인): {hint_only}건")
+
+        return "\n".join(lines)
+
+    def get_published_with_perf_notes(self, limit: int = 5) -> list[Draft]:
+        """
+        [PERF] 태그가 있는 최근 게시 초안을 반환합니다.
+
+        성과 패턴 파악 및 프롬프트 개선 참고용.
+        """
+        return (
+            self.db.query(Draft)
+            .filter(
+                Draft.approval_status == ApprovalStatus.PUBLISHED,
+                Draft.manual_notes.like("%[PERF]%"),
+            )
+            .order_by(Draft.published_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def format_perf_summary(self, days: int = 30) -> str:
+        """
+        [PERF] 메모 기반 집계 요약 + v2 패턴 분석 텍스트 반환.
+
+        v1: 카테고리 / topic_tags / output_format 빈도 집계 + 최근 PERF 메모 원문 3개
+        v2: 전체 게시 초안 태그와 교차 비교 → 늘릴 후보 / 줄일 후보 제안
+        분석 엔진 없음 — 운영자가 패턴을 읽는 참고용. 빈 결과면 "" 반환.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        # [PERF] 메모가 있는 게시 초안 (성과 데이터)
+        perf_drafts = (
+            self.db.query(Draft)
+            .filter(
+                Draft.approval_status == ApprovalStatus.PUBLISHED,
+                Draft.manual_notes.like("%[PERF]%"),
+                Draft.published_at >= cutoff,
+            )
+            .order_by(Draft.published_at.desc())
+            .limit(30)
+            .all()
+        )
+
+        if not perf_drafts:
+            return ""
+
+        # v1: 성과 초안 집계
+        categories: Counter = Counter()
+        perf_tags: Counter = Counter()
+        formats: Counter = Counter()
+        recent_notes: list[str] = []
+
+        for d in perf_drafts:
+            if d.category:
+                categories[d.category.value] += 1
+            if d.topic_tags:
+                try:
+                    for tag in json.loads(d.topic_tags):
+                        perf_tags[tag.strip().lower()] += 1
+                except Exception:
+                    pass
+            if d.output_format:
+                formats[d.output_format] += 1
+            for line in (d.manual_notes or "").splitlines():
+                if line.startswith("[PERF]"):
+                    note = line[7:].strip()
+                    if note:
+                        recent_notes.append(note)
+
+        lines = [f"📊 <b>성과 메모 요약 ({days}일 / {len(perf_drafts)}건)</b>"]
+        if categories:
+            lines.append("• 카테고리: " + ", ".join(
+                f"{k}×{v}" for k, v in categories.most_common(4)
+            ))
+        if perf_tags:
+            lines.append("• 태그: " + ", ".join(
+                f"{k}×{v}" for k, v in perf_tags.most_common(5)
+            ))
+        if formats:
+            lines.append("• 형식: " + ", ".join(
+                f"{k}×{v}" for k, v in formats.most_common(3)
+            ))
+        if recent_notes:
+            lines.append("• 최근 메모:")
+            for note in recent_notes[:3]:
+                lines.append(f'  - "{note[:80]}"')
+
+        # v2: 전체 게시 초안 태그와 교차 비교 → 패턴 제안
+        all_tags: Counter = Counter()
+        try:
+            all_published = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status == ApprovalStatus.PUBLISHED,
+                    Draft.published_at >= cutoff,
+                    Draft.topic_tags.isnot(None),
+                )
+                .limit(100)
+                .all()
+            )
+            for d in all_published:
+                try:
+                    for tag in json.loads(d.topic_tags):
+                        all_tags[tag.strip().lower()] += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        if all_tags:
+            # 늘릴 후보: [PERF] 비율 ≥ 40% (perf_count / total_count)
+            increase = [
+                t for t, pc in perf_tags.most_common()
+                if all_tags[t] > 0 and pc / all_tags[t] >= 0.4
+            ]
+            # 줄일 후보: 전체에서 2회 이상 등장하지만 [PERF] 메모에 전혀 없는 태그
+            decrease = [
+                t for t, tc in all_tags.most_common(10)
+                if tc >= 2 and perf_tags[t] == 0
+            ]
+            if increase:
+                lines.append("→ 늘릴 후보: " + ", ".join(increase[:3]))
+            if decrease:
+                lines.append("→ 줄일 후보: " + ", ".join(decrease[:3]))
+
+        return "\n".join(lines)
+
+    # ── Phase 5: 비즈니스 분류 조회 ────────────────────────────────────────
+
+    def get_premium_candidates(self, limit: int = 20) -> list[Draft]:
+        """프리미엄 브리프 후보 드래프트 조회 (monetization_score 내림차순)."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(
+                    Draft.business_tags.isnot(None),
+                    Draft.business_tags.contains("premium_candidate"),
+                )
+                .order_by(Draft.monetization_score.desc().nullslast())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessQuery] premium_candidates 조회 실패: {e}")
+            return []
+
+    def get_b2b_candidates(self, limit: int = 20) -> list[Draft]:
+        """B2B 리서치 후보 드래프트 조회."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(Draft.b2b_candidate == True)
+                .order_by(Draft.monetization_score.desc().nullslast())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessQuery] b2b_candidates 조회 실패: {e}")
+            return []
+
+    def get_newsletter_candidates(self, limit: int = 20) -> list[Draft]:
+        """뉴스레터 푸시 후보 드래프트 조회."""
+        try:
+            return (
+                self.db.query(Draft)
+                .filter(
+                    Draft.business_tags.isnot(None),
+                    Draft.business_tags.contains("newsletter"),
+                    Draft.approval_status.in_([
+                        ApprovalStatus.PUBLISHED,
+                        ApprovalStatus.APPROVED,
+                        ApprovalStatus.PENDING,
+                    ]),
+                )
+                .order_by(Draft.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessQuery] newsletter_candidates 조회 실패: {e}")
+            return []
+
+    def format_business_summary(self, days: int = 7) -> str:
+        """
+        최근 N일간 비즈니스 분류 요약 리포트.
+        텔레그램 /report 등에서 사용.
+        """
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            drafts = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.created_at >= cutoff,
+                    Draft.business_tags.isnot(None),
+                )
+                .all()
+            )
+
+            if not drafts:
+                return f"📊 비즈니스 분류 요약 ({days}일): 데이터 없음"
+
+            # 태그 카운트
+            tag_counter: Counter = Counter()
+            cta_counter: Counter = Counter()
+            asset_counter: Counter = Counter()
+            total_score = 0
+            premium_count = 0
+            b2b_count = 0
+
+            for d in drafts:
+                try:
+                    tags = json.loads(d.business_tags)
+                    for t in tags:
+                        tag_counter[t] += 1
+                except Exception:
+                    pass
+                if d.cta_type:
+                    cta_counter[d.cta_type] += 1
+                if d.asset_goal:
+                    asset_counter[d.asset_goal] += 1
+                if d.monetization_score:
+                    total_score += d.monetization_score
+                if d.business_tags and "premium_candidate" in d.business_tags:
+                    premium_count += 1
+                if d.b2b_candidate:
+                    b2b_count += 1
+
+            avg_score = total_score // len(drafts) if drafts else 0
+
+            lines = [
+                f"📊 비즈니스 분류 요약 ({days}일, {len(drafts)}건)",
+                f"",
+                f"💰 평균 수익화 점수: {avg_score}/100",
+                f"⭐ 프리미엄 후보: {premium_count}건",
+                f"🏢 B2B 후보: {b2b_count}건",
+                f"",
+                f"🏷 비즈니스 태그:",
+            ]
+            for tag, count in tag_counter.most_common(8):
+                lines.append(f"  {tag}: {count}")
+
+            lines.append(f"")
+            lines.append(f"📢 CTA 분포:")
+            for cta, count in cta_counter.most_common(5):
+                lines.append(f"  {cta}: {count}")
+
+            lines.append(f"")
+            lines.append(f"🎯 자산 목표:")
+            for goal, count in asset_counter.most_common(5):
+                lines.append(f"  {goal}: {count}")
+
+            return "\n".join(lines)
+        except Exception as e:
+            logger.warning(f"[BusinessSummary] 요약 생성 실패: {e}")
+            return f"📊 비즈니스 요약 생성 실패: {e}"

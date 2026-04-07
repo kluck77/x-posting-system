@@ -6,7 +6,11 @@ FastAPI 관리자/디버그 엔드포인트
 """
 
 import logging
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+
 from app.config import settings, validate_settings
 from app.db import get_db, init_db
 from app.models.content import (
@@ -24,6 +28,14 @@ app = FastAPI(
     description="한국 이슈 영문 X 포스팅 시스템 관리 API",
     version="1.0.0",
 )
+
+# ── Control Room 라우터 + 정적 파일 ───────────────────────────────────────────
+from app.api.control_room import router as control_router
+app.include_router(control_router)
+
+_static_dir = Path("static")
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
 @app.on_event("startup")
@@ -213,6 +225,18 @@ async def retry_draft(draft_id: int):
     try:
         result = await orchestrator.retry_failed(draft_id)
         return result
+    finally:
+        orchestrator.close()
+
+
+# === 트렌드 탐색 ===
+
+@app.get("/trends")
+async def get_trends(topic: str = "korea"):
+    """TrendHunter를 실행하여 현재 한국 관련 트렌딩 토픽을 탐색합니다."""
+    orchestrator = Orchestrator()
+    try:
+        return await orchestrator.get_trending_topics(topic)
     finally:
         orchestrator.close()
 

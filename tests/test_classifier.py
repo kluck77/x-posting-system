@@ -101,3 +101,103 @@ class TestRequiresApproval:
     def test_default_auto_off(self):
         """기본값은 자동 게시 OFF → 모든 것이 승인 필요"""
         assert requires_approval(RiskLevel.LOW, ContentCategory.EVERGREEN) is True
+
+
+class TestClassifyCommunityRisk:
+    """커뮤니티 입력 리스크 재평가 테스트"""
+
+    def test_minimum_medium_from_low(self):
+        from app.services.classifier import classify_community_risk
+        risk, _ = classify_community_risk(
+            "비트코인 반감기 반응", "다들 지금 매수 타이밍이라고 함",
+            ContentCategory.ECONOMY, RiskLevel.LOW, ""
+        )
+        assert risk == RiskLevel.MEDIUM
+
+    def test_politics_always_high(self):
+        from app.services.classifier import classify_community_risk
+        risk, reasoning = classify_community_risk(
+            "대선 여론", "커뮤에서 야당 지지율 올랐다고 함",
+            ContentCategory.POLITICS, RiskLevel.MEDIUM, ""
+        )
+        assert risk == RiskLevel.HIGH
+        assert "HIGH" in reasoning or "정치" in reasoning or "politics" in reasoning
+
+    def test_policy_always_high(self):
+        from app.services.classifier import classify_community_risk
+        risk, _ = classify_community_risk(
+            "규제 관련 커뮤 반응", "새 정책 반응",
+            ContentCategory.POLICY, RiskLevel.LOW, ""
+        )
+        assert risk == RiskLevel.HIGH
+
+    def test_fraud_keyword_triggers_high(self):
+        from app.services.classifier import classify_community_risk
+        risk, reasoning = classify_community_risk(
+            "코인 사기 의혹", "이 프로젝트 먹튀라는 썰이 돔",
+            ContentCategory.ECONOMY, RiskLevel.MEDIUM, ""
+        )
+        assert risk == RiskLevel.HIGH
+        assert "먹튀" in reasoning or "커뮤니티" in reasoning
+
+    def test_pump_dump_keywords_trigger_high(self):
+        from app.services.classifier import classify_community_risk
+        risk, _ = classify_community_risk(
+            "코인 작전", "지금 세력 펌핑 중이라는 글이 올라옴",
+            ContentCategory.ECONOMY, RiskLevel.LOW, ""
+        )
+        assert risk == RiskLevel.HIGH
+
+    def test_rumor_keyword_triggers_high(self):
+        from app.services.classifier import classify_community_risk
+        risk, _ = classify_community_risk(
+            "찌라시 유통", "미확인 루머 돌고 있음",
+            ContentCategory.SOCIETY, RiskLevel.LOW, ""
+        )
+        assert risk == RiskLevel.HIGH
+
+    def test_existing_high_preserved(self):
+        from app.services.classifier import classify_community_risk
+        risk, _ = classify_community_risk(
+            "일반 경제 글", "그냥 경제 얘기",
+            ContentCategory.ECONOMY, RiskLevel.HIGH, "이미 high"
+        )
+        assert risk == RiskLevel.HIGH
+
+    def test_reasoning_contains_community_note(self):
+        from app.services.classifier import classify_community_risk
+        _, reasoning = classify_community_risk(
+            "테스트", "내용",
+            ContentCategory.EVERGREEN, RiskLevel.LOW, "기존 근거"
+        )
+        assert "커뮤니티" in reasoning
+
+
+class TestBuildCommunityWarning:
+    """커뮤니티 경고 문구 생성 테스트"""
+
+    def test_returns_string(self):
+        from app.services.classifier import build_community_warning
+        result = build_community_warning("제목", "내용", ContentCategory.ECONOMY, RiskLevel.MEDIUM)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_contains_source_note(self):
+        from app.services.classifier import build_community_warning
+        result = build_community_warning("제목", "내용", ContentCategory.ECONOMY, RiskLevel.MEDIUM)
+        assert "커뮤니티" in result
+
+    def test_coin_manipulation_warning(self):
+        from app.services.classifier import build_community_warning
+        result = build_community_warning("코인 작전", "펌핑 세력 글", ContentCategory.ECONOMY, RiskLevel.HIGH)
+        assert "조작" in result or "검증" in result
+
+    def test_fraud_warning(self):
+        from app.services.classifier import build_community_warning
+        result = build_community_warning("고소장 공개", "사기 고발글", ContentCategory.SOCIETY, RiskLevel.HIGH)
+        assert "법적" in result or "사실 확인" in result
+
+    def test_high_risk_badge(self):
+        from app.services.classifier import build_community_warning
+        result = build_community_warning("제목", "내용", ContentCategory.POLITICS, RiskLevel.HIGH)
+        assert "HIGH" in result or "🔴" in result

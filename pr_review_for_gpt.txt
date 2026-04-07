@@ -1,0 +1,234 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PR 코드 리뷰 요청 — x-posting-system
+브랜치: claude/extract-prediction-time-n82UK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+아래 형식으로 리뷰해줘:
+1. 바뀐 내용 요약
+2. 좋은 점
+3. 위험 지점
+4. 과한 수정 여부
+5. MVP 방향 적합성
+6. Claude/Cursor용 수정 프롬프트
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 프로젝트 개요
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@cheesesvav (영문 X 계정)용 자동 포스팅 시스템.
+한국 커뮤니티/뉴스 → 영문 X 포스트 자동 생성 → 사람 승인 → 게시.
+
+AI 파이프라인:
+  Gemini(Researcher) → OpenAI(DraftWriter) → Perplexity(FactChecker)
+  → Claude(Reviewer) → 텔레그램 승인카드 → X 게시
+  별도: Grok(TrendHunter)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 이번 PR 변경 범위 (49개 파일, +14,925줄)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### [A] 5-Criteria 품질 프레임워크 통합
+
+목표: "번역이 아닌 해석" 계정 차별화 강화.
+5개 기준: expertise(해석력) / marketability(글로벌 관련성) /
+           consistency(브랜드 일관성) / follower_quality(독자층) / repeat_consumption(재방문력)
+
+#### app/services/quality_scorer.py (신규, 434줄)
+
+score_draft() — 초안 채점 (0-100점):
+  +20 훅에 숫자/지표 포함
+  +20 훅이 "South Korea"로 시작하지 않음
+  +15 CTA 포함 (Follow/Bookmark/Thread)
+  +15 본문 270자 이하
+  +10 "you" 직접 호칭
+  +10 구체적 국가/기관명
+  +10 커뮤니티 반응 표현
+  -15 금지어 (however/furthermore/moreover 등)
+  임계값: 60점 미만 → 재생성
+
+score_5criteria() — 5기준 채점 (각 20점, 합계 100점):
+  점수 >= 70: pass / 50-69: warn / < 50: reject+재생성
+
+#### app/orchestrator.py 변경
+
+Step 3 추가: Gemini interpretation_gaps → DraftWriter source_text에 주입
+  "[Researcher identified interpretation gaps]" 블록 추가
+
+Step 4.5 추가: score_5criteria() 자동 체크
+  reject → 개선 플래그 포함해서 재생성 (최대 1회)
+
+Step 5.5 추가: Reviewer recommended_action=="regenerate" 처리
+  → DraftWriter 재실행 + 피드백 포함 + Reviewer 재평가 (최대 1회)
+
+#### app/providers/grok_provider.py (신규, 152줄)
+
+시스템 프롬프트에 QUALITY FILTER 추가:
+  marketability_score 1-10 (글로벌 관련성)
+  follower_fit_score 1-10 (독자층 적합성)
+  두 점수 모두 >= 6인 트렌드만 반환
+
+#### app/providers/perplexity_provider.py (신규, 142줄)
+
+팩트체크 결과에 5-criteria 평가 추가:
+  interpretation_opportunity: high/medium/low
+  marketability_signal: global/regional/local
+
+#### app/providers/gemini_provider.py (신규, 137줄)
+
+리서치 결과에 해석 갭 발굴 의무화:
+  interpretation_gaps: ["Reuters가 놓친 것 1", "놓친 것 2"]
+  fact_labels: {"팩트": "challenges_assumption|missing_context|confirms_common_narrative"}
+
+#### app/providers/base.py 변경
+
+ResearchResult에 필드 추가:
+  interpretation_gaps: list[str] = []
+  fact_labels: dict[str, str] = {}
+
+FactCheckResult에 필드 추가:
+  interpretation_opportunity: str = ""
+  marketability_signal: str = ""
+
+---
+
+### [B] URL 수집 3단계 Fallback
+
+#### app/services/content_fetcher.py (신규, 302줄)
+
+Strategy 1: Direct fetch (Chrome UA 헤더)
+Strategy 2: Jina AI Reader (r.jina.ai/{url}) — JS 렌더링, API키 불필요
+Strategy 3: Google Cache (최후 수단)
+반환: {"title", "text", "url", "source": "direct|jina|google_cache|failed", "error"}
+
+---
+
+### [C] 성장 파이프라인 (app/services/growth/)
+
+4개 모듈 신규:
+  post_queue.py (247줄): 최적 시간대 게시 스케줄러
+    슬롯: 9:00/10:30/12:00/13:30/15:00/19:00/21:00 KST
+    최소 간격 30분
+  comment_hunter.py (297줄): X API 트렌드 감지 + 댓글 초안 생성
+    5개 키워드, MIN_LIKES=10 MAX_LIKES=200
+  reply_monitor.py (296줄): 멘션 폴링 + 재답글 초안 생성
+  weekly_report.py (269줄): 7일 메트릭 수집 + AI 분석 (매주 월요일 9시 KST)
+  _tg_helper.py (30줄): 공유 텔레그램 전송 헬퍼
+
+---
+
+### [D] 기타 신규 서비스
+
+app/services/classifier.py (107줄):
+  classify_category(), classify_risk(), classify_community_risk()
+  커뮤니티 입력 특별 처리: 루머/오해 위험도 강화
+
+app/services/prediction_service.py (122줄):
+  predict_publish_time() — 카테고리/위험도 기반 최적 게시 시간 예측
+
+app/services/morning_digest.py (351줄):
+  매일 아침 자동 뉴스 다이제스트 생성
+
+app/services/rss_fetcher.py (196줄):
+  한국 뉴스 RSS 피드 수집 (연합뉴스, 조선, 한경 등)
+
+app/services/naver_news.py (132줄):
+  네이버 뉴스 API 연동
+
+app/services/news_monitor.py (338줄):
+  뉴스 모니터링 백그라운드 태스크
+
+app/services/vision_service.py (138줄):
+  이미지 OCR/분석 (Claude Vision)
+
+---
+
+### [E] 텔레그램 봇 확장 (app/telegram_bot.py, +857줄)
+
+신규 커맨드:
+  /trends — Grok 트렌드 탐색
+  /url [링크] — URL 수집 + 포스팅
+  /digest — 아침 다이제스트
+  /queue — 게시 큐 현황
+  /report — 주간 리포트
+
+승인 카드 개선:
+  5-criteria 점수 표시
+  criteria "warn"/"reject" 시 플래그 메시지 추가
+  Jina AI 수집 시 출처 표시
+
+---
+
+### [F] 제거된 것
+
+providers: DeepSeek, Groq, Mistral, Together, Tavily 완전 제거
+base.py: WebSearchResult, BaseWebSearcher 제거
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 핵심 코드 스니펫
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### orchestrator.py — Step 4.5 (5-criteria 자동 필터)
+
+```python
+criteria_result = score_5criteria(
+    draft_result.hook, draft_result.body, data.source_type
+)
+if criteria_result["action"] == "reject":
+    draft_result = await self.ai.draft_writer.generate_draft(
+        title=data.title,
+        source_text=data.source_text + "\n\nIMPROVEMENT REQUIRED: " + " | ".join(criteria_result["flags"]),
+        ...
+    )
+```
+
+### orchestrator.py — Step 5.5 (Reviewer regenerate 루프)
+
+```python
+if review.recommended_action == "regenerate":
+    feedback_prompt = data.source_text + "\n\nREVIEWER FEEDBACK: " + review.ai_rationale
+    draft_result = await self.ai.draft_writer.generate_draft(
+        title=data.title,
+        source_text=feedback_prompt[:3000],
+        ...
+    )
+    review = await self.ai.reviewer.review_and_refine(...)
+```
+
+### orchestrator.py — Step 3 (해석 갭 주입)
+
+```python
+if research.interpretation_gaps:
+    gaps_text = "\n".join(f"- {g}" for g in research.interpretation_gaps[:3])
+    enriched_source = (
+        f"{data.source_text}\n\n"
+        f"[Researcher identified interpretation gaps — use these for your angle]:\n"
+        f"{gaps_text}"
+    )
+```
+
+### content_fetcher.py — 3단계 fallback
+
+```python
+async def fetch_url_content(url: str) -> dict:
+    result = await _fetch_direct(url)        # Strategy 1: Chrome UA
+    if result: return result
+    result = await _fetch_jina(url)          # Strategy 2: r.jina.ai
+    if result: return result
+    result = await _fetch_google_cache(url)  # Strategy 3: Google Cache
+    if result: return result
+    return {"source": "failed", "error": "모든 수집 전략 실패"}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 테스트 현황
+
+tests/ 디렉토리:
+  test_classifier.py (100줄)
+  test_quality_scorer.py (77줄)
+  test_content_fetcher.py (56줄)
+  test_prediction_service.py (129줄)
+  test_rss_fetcher.py (65줄)
+  test_config.py (50줄)
+  test_providers.py (51줄, 기존 + 신규)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
