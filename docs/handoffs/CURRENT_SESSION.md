@@ -1,109 +1,93 @@
-# Current Session — 2026-04-07 (Session 18)
+# Current Session — 2026-04-07 (Session 19)
 
 ## What Was Done This Session
 
-### Pixel HUD Dashboard — Full Rebuild
+### Pixel HUD Dashboard — Refinement Pass
 
-**Discarded:**
-- 기존 `dashboard.html` (1459 lines) — 폐기 (백업은 `dashboard.html.backup` 보존)
-- `static/live2d.js` — 삭제
-- Live2D CDN `<script>` 태그 4개 — 제거
-- Portrait/image 카드 레이아웃 — 제거
-- Old card-stack 페이지 구조 — 폐기
+S18에서 만든 픽셀 HUD 대시보드를 운영자 피드백 기반으로 다듬음.
+백엔드/스키마/테스트 변경 없음. `static/dashboard.html` 단일 파일만 수정.
 
-**Backend:**
-- `app/api/control_room.py` — `/control/business-summary` 신규 엔드포인트
-  - Premium / Brief / B2B / Newsletter+Lead / Weekly compact / CTA perf 단일 JSON
-  - 각 섹션 try/except로 독립 격리 (Layer 2 원칙)
-  - 기존 서비스만 호출, 스키마/저장소 변경 없음
+### 1. 한글 UI 로컬라이제이션 (전체)
 
-**Frontend (`static/dashboard.html`, 1128 lines):**
-- 픽셀-디지털 컨트롤 룸 미학 (스캔라인 + 그리드 텍스처 + HUD 코너)
-- 다크 네이비 배경, 제한된 액센트 팔레트 (cyan/green/amber/magenta/gold)
-- JetBrains Mono / SF Mono 픽셀 폰트
-- 모바일 우선 (Safari iOS 안전영역 대응)
-- 4개 페이지 완전 재작성:
+- 타이틀 / 브랜드 sub / 탭 4개 (홈/AI/인테이크/운영)
+- Home: SYSTEM PULSE → 시스템 상태, 상태 라벨 OPERATIONAL/IDLE/DEGRADED → 정상 운영 중 / 대기 중 / 점검 필요
+- meta DB·텔레그램·X·유휴 정상/중단
+- KPI 라벨: 초안·7일 / 승인 대기 / 프리미엄 / B2B
+- strip: 뉴스레터 / 리드 자료 / 연결된 CTA
+- 패널: 이번 주 하이라이트
+- AI: 역할명 5개 한글 (드래프트 작성/리뷰어/리서처/팩트체커/트렌드 헌터), 모드 모의/운영, 오늘 실행
+- 인테이크: 단계명 4개 한글 (소스 수집/뉴스레터·리드/프리미엄·B2B/CTA·카피), 바 라벨 발행됨/승인/대기/반려
+- 운영: 카드 6개 한글 (프리미엄 큐/브리프 오퍼/B2B 후보/뉴스레터·리드/주간 하이라이트/CTA 성과)
+- pill / empty / loading 모두 한글
+- 영문 유지: 워드마크 `X·CTRL` 만
 
-  - **Home / Status:**
-    - HUD 펄스 hero (OPERATIONAL/IDLE/DEGRADED 상태별 색)
-    - signal bars 모션
-    - 4분면 KPI 그리드 (drafts·queue·premium·b2b)
-    - 3분할 strip (newsletter·lead·cta linked)
-    - Weekly highlights 패널
+### 2. 모바일 가독성 / 사이즈 업그레이드
 
-  - **AI / Workstations:**
-    - 5개 노드 카드 (DraftWriter / Reviewer / Researcher / FactChecker / TrendHunter)
-    - 역할별 픽셀 SVG 아이콘 + 고유 모션:
-      - DraftWriter: typing dots
-      - Reviewer: eye blink
-      - Researcher: scan sweep
-      - FactChecker: check flash
-      - TrendHunter: signal pulse rings
-    - provider / runs_today / configured 표시
+- 베이스 폰트 13 → 15px
+- 헤더 52→54, 탭바 60→64, 탭 라벨 9→11
+- **Home Hero**: min-height 140→200, 상태 라벨 22 → **34px**
+- **KPI 카드**: min-height 78→**118px**, 숫자 26 → **46px**, 카드에 BR 코너 마커 추가
+- **Strip cell**: val 15 → **24px**, min-height 74px
+- **AI 노드**: min-height 64→**92px**, 역할 11→15, runs 18 → **30px**, 아이콘 34→42
+- **인테이크 lane**: head 9→12, 단계 카운트 11 → **20px** (cyan), 바 11px, 라벨 12px
+- **운영 카드**: head 9→13, big 18 → **30px**, pill 10→12, mini-item 10→12
+- 패널 헤드 10→12, empty 11→13
 
-  - **Intake / Flow:**
-    - 4단 lane (Content → Newsletter/Lead → Premium/B2B → CTA/Copy)
-    - 각 lane 색상별 바그래프 (cyan / green / amber / magenta)
-    - 단계 표시 + 화살표 connector
-    - 총합 카운트
+### 3. 럭키캣 시스템 상태머신 (장식 → 의미)
 
-  - **Ops / Monitoring:**
-    - 6개 카드 (Premium / Brief / B2B / Newsletter+Lead / Weekly Highlights / CTA Performance)
-    - 카드별 색상 코드 (amber / amber / magenta / green / gold / magenta)
-    - 상태 pill + 미니 항목 3개
-    - "ready to publish", "notable" 신호 강조
-    - sync timestamp
+이전: 랜덤 patrol(가로 이동) + healthy 일 때만 lucky-pulse.
+지금: 시스템 신호에 직접 묶인 5개 상태로 분기.
 
-**Lucky Cat 마스코트 (이미지 무사용):**
-- 인라인 SVG (64x64, shape-rendering: crispEdges)
-- 머리 / 귀 / 눈 / 코 / 수염 / 몸통 / 꼬리 / 들어올린 앞발 / 금화
-- 동작:
-  - blink (4.8s)
-  - paw wave (3.6s)
-  - tail flick (5s)
-  - coin bob (2.2s)
-  - patrol walk (랜덤 9–17초 간격, 6.2s 이동)
-- `health.db_ok && !is_idle` → lucky-pulse 골드 글로우 (2.4s)
-- `prefers-reduced-motion: reduce` 시 모든 모션 정지
-- Home 페이지 우하단에만 표시, 데이터 영역 위 z-index, pointer-events:none
+| 상태 | 트리거 | 행동 |
+|------|--------|------|
+| `alert` | `health.db_ok === false` | grayscale + 어둡게, paw·tail·coin 정지, **귀 twitch** |
+| `idle` | `activity.is_idle` | paw·coin 정지, 꼬리 9s 로 느려짐 |
+| `coin-rush` | `premium.total > 0 \|\| b2b.total > 0` | 금화 bob 0.9s 가속 + 강한 골드 드롭섀도우 |
+| `lean-weekly` | `weekly.highlights.length > 0` | weekly 패널 쪽으로 살짝 기울임 (`translateX(-12px)`) |
+| `healthy` | 위 어느 것도 아닐 때 | `lucky-pulse` + blink + tail flick |
 
-**Visual System:**
-- HUD 코너 마커 (TL/TR/BL/BR)
-- 점선 헤더 구분선
-- 픽셀 모노스페이스 타이포
-- 패널/카드 일관 컴포넌트 셋
-- 빈 상태 명시 (`empty` / `ops-empty`)
-- 모션 정책: blink / pulse / scan / typing / patrol / flicker만 허용
+- coin-rush 와 lean-weekly 는 healthy 위에 합쳐서 적용 가능
+- 5초마다 + `refreshAll()` 직후 재평가
+- `prefers-reduced-motion: reduce` 시 비활성
+- 의미 없던 랜덤 patrol 제거
+- 마스코트 64 → 72px
+
+### 4. 변경되지 않은 것
+
+- 백엔드 (`/control/*`), 스키마, 모델, 마이그레이션
+- 비즈니스 서비스 (premium/brief/b2b/newsletter/weekly/cta)
+- 텔레그램 명령
+- 럭키캣 SVG 모양 (귀에 클래스만 추가)
+- AI 노드 SVG 아이콘 / 인테이크 lane 구조 / 운영 6카드 구조
 
 ## Files Changed This Session
 
 | File | Change |
 |------|--------|
-| `app/api/control_room.py` | `/control/business-summary` 엔드포인트 추가 (174 lines) |
-| `static/dashboard.html` | **전체 재작성** (1459 → 1128 lines) |
-| `static/live2d.js` | **삭제** |
-| `docs/handoffs/LATEST_STATUS.md` | S18 entry |
-| `docs/handoffs/CURRENT_SESSION.md` | This file |
+| `static/dashboard.html` | CSS 스케일 상향 + 한글 UI 전체 + 럭키캣 상태머신 |
+| `docs/handoffs/CURRENT_SESSION.md` | S19 entry (이 파일) |
+| `docs/handoffs/LATEST_STATUS.md` | S19 entry 추가 |
 
-## Current State
-- 896 tests passing (no regressions)
-- Branch: `claude/extract-prediction-time-n82UK`
-- 동일 커밋이 `claude/premium-control-room-ui-LJFba`에도 정렬됨
+## Commits (S19)
 
-## Preserved
-- Layer 1 approval-first workflow 무변경
-- 모든 비즈니스 서비스 (premium/brief/b2b/newsletter/weekly/cta) 무변경
-- 스키마 무변경
-- 기존 텔레그램 명령 무변경
-- 기존 control_room 엔드포인트 무변경 (status/providers/flow-trace/recent-news/naver/upload-asset 모두 유지)
+- `e798d9c` — S19 step1: CSS 스케일 상향 (mobile readability)
+- `3913a57` — S19 step2: 한글 UI 로컬라이제이션
+- `1c824ff` — S19 step3: 럭키캣 시스템 상태머신
+
+Branch: `claude/premium-control-room-ui-LJFba`
 
 ## Manual Verification Points
-1. `GET /control/` → 새 픽셀 HUD 대시보드 응답
-2. `GET /control/business-summary` → 6 섹션 JSON 응답
-3. 모바일 Safari (375px) — 4탭 모두 가로 스크롤 없이 렌더
-4. 30초 간격 자동 새로고침 (`refreshAll`)
-5. Home 페이지 럭키캣 — blink, tail flick, paw wave, 가끔 patrol walk
-6. db_ok && !idle 일 때 골드 글로우 활성
-7. `prefers-reduced-motion` 활성화 시 모든 모션 정지
-8. AI 페이지 — 5개 노드 각각 다른 모션
-9. Ops 페이지 — 비즈니스 데이터 없을 때 "empty" 명시
+
+1. iPhone Safari 375px — 모든 텍스트 가독, 가로 스크롤 없음
+2. Home 상태 라벨이 한글 (정상 운영 중 / 대기 중 / 점검 필요)
+3. KPI 4개 숫자 46px
+4. AI 노드 5개 역할명 한글
+5. 인테이크 4단계 + 바 그래프 한글
+6. 운영 6카드 한글
+7. 럭키캣 동작:
+   - 정상 → 골드 글로우 + blink + tail
+   - DB 끊김 → grayscale + 정지 + 귀 twitch
+   - 프리미엄/B2B 존재 → 금화 가속 + 강한 골드 광
+   - weekly 하이라이트 존재 → 좌측 약간 기울임
+   - 유휴 → 꼬리만 느리게
+8. `prefers-reduced-motion` 시 모두 정지

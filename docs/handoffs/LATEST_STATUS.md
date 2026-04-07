@@ -1,6 +1,15 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard Rebuild (S18)
+## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard Refinement (S19)
+
+**S19 — Refinement on top of S18 dashboard (`static/dashboard.html` only):**
+- Full Korean UI localization (chrome / Home / AI / Intake / Ops, all operator-facing text)
+- Mobile readability scale-up: base font 13→15px, KPI numbers 26→**46px**, Ops big 18→**30px**, AI runs 18→**30px**, Hero state 22→**34px**
+- Lucky cat → system-aware state machine: `alert` (db down, ear twitch only) / `idle` (slow tail) / `coin-rush` (premium·b2b candidates → fast coin + gold glow) / `lean-weekly` (highlights → tilt toward weekly panel) / `healthy` (lucky-pulse + blink + tail)
+- Removed decorative random patrol; cat now reflects real signals from `/control/status` + `/control/business-summary`
+- No backend / schema / test changes
+
+## ⚠️ PREVIOUS PHASE: Pixel HUD Dashboard Rebuild (S18)
 
 **DO NOT re-implement premium/b2b/email/lead base services. They are built and tested.**
 **DO NOT revert to portrait/Live2D dashboard — it has been replaced with a pixel HUD.**
