@@ -4075,5 +4075,267 @@ body::before, body::after{display:none !important}
 }
 </style>
 
+<script>
+/* ─── S31 — AI tab: team overview panel above 5 stations ── */
+(function(){
+  const WORKFLOW = ['DraftWriter','Reviewer','Researcher','FactChecker','TrendHunter'];
+  const ROLE_KO = {DraftWriter:'드래프트 작성',Reviewer:'리뷰어',Researcher:'리서처',FactChecker:'팩트체커',TrendHunter:'트렌드 헌터'};
+  const STEP = {DraftWriter:'01',Reviewer:'02',Researcher:'03',FactChecker:'04',TrendHunter:'05'};
+
+  function ensureOverview(){
+    const page = document.getElementById('page-ai'); if(!page) return null;
+    let ov = document.getElementById('team-overview');
+    if(!ov){
+      ov = document.createElement('div');
+      ov.id = 'team-overview';
+      ov.className = 'tov';
+      ov.innerHTML = `
+        <div class="tov-head">
+          <span class="tov-title">팀 오버뷰 · 5 스테이션</span>
+          <span class="tov-stamp" id="tov-stamp">—</span>
+        </div>
+        <div class="tov-stats">
+          <div class="tov-stat"><div class="k">오늘 총 실행</div><div class="v" id="tov-total">—</div><div class="s" id="tov-total-sub">—</div></div>
+          <div class="tov-stat"><div class="k">가장 바쁨</div><div class="v" id="tov-busy">—</div><div class="s" id="tov-busy-sub">—</div></div>
+          <div class="tov-stat"><div class="k">병목</div><div class="v" id="tov-bot">—</div><div class="s" id="tov-bot-sub">—</div></div>
+        </div>
+        <div class="tov-flow" id="tov-flow"></div>
+        <div class="tov-dotmap" id="tov-dotmap"></div>`;
+      const header = page.querySelector('.ws-header');
+      if(header) header.insertAdjacentElement('afterend', ov);
+      else page.insertBefore(ov, page.firstChild);
+    }
+    return ov;
+  }
+
+  const origAI = window.renderAI;
+  window.renderAI = function(){
+    if(typeof origAI === 'function') origAI();
+    ensureOverview();
+    const p = state.providers;
+    if(!p){
+      const t = document.getElementById('tov-total'); if(t) t.textContent='—';
+      const b = document.getElementById('tov-busy'); if(b) b.textContent='—';
+      const bot = document.getElementById('tov-bot'); if(bot) bot.textContent='—';
+      const flow = document.getElementById('tov-flow'); if(flow) flow.innerHTML='';
+      const dm = document.getElementById('tov-dotmap'); if(dm) dm.innerHTML='';
+      return;
+    }
+    const byKey = {};
+    (p.roles||[]).forEach(r=>{byKey[r.role]=r});
+    const roles = WORKFLOW.map(k=>byKey[k]).filter(Boolean);
+
+    const totalRuns = roles.reduce((s,r)=>s+(r.runs_today||0),0);
+    const activeCount = roles.filter(r=>r.configured && (r.runs_today||0)>0).length;
+    const unconf = roles.filter(r=>!r.configured).length;
+    const sorted = roles.slice().sort((a,b)=>(b.runs_today||0)-(a.runs_today||0));
+    const busy = sorted[0];
+    const busyRuns = busy ? (busy.runs_today||0) : 0;
+
+    // bottleneck logic: prefer unconfigured role, else lowest active among configured (if there IS workload),
+    // else "없음"
+    let botRole=null, botReason='';
+    const unconfRoles = roles.filter(r=>!r.configured);
+    if(unconfRoles.length){
+      botRole = unconfRoles[0];
+      botReason = '프로바이더 미설정';
+    } else if(totalRuns > 0){
+      const configured = roles.filter(r=>r.configured);
+      const low = configured.slice().sort((a,b)=>(a.runs_today||0)-(b.runs_today||0))[0];
+      if(low && (low.runs_today||0) === 0){
+        botRole = low;
+        botReason = '대기 상태';
+      } else if(busy && busyRuns >= 5 && low && (busyRuns - (low.runs_today||0)) >= 4){
+        botRole = low;
+        botReason = '편중 가능성';
+      }
+    }
+
+    // populate stats
+    const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent = v; };
+    set('tov-total', String(totalRuns));
+    set('tov-total-sub', `가동 ${activeCount}/${roles.length}${unconf?` · 미설정 ${unconf}`:''}`);
+    set('tov-busy', busyRuns>0 ? (ROLE_KO[busy.role]||busy.role) : '—');
+    set('tov-busy-sub', busyRuns>0 ? `${busyRuns}회 · ${busy.provider||'—'}` : '대기 중');
+    set('tov-bot', botRole ? (ROLE_KO[botRole.role]||botRole.role) : '없음');
+    set('tov-bot-sub', botRole ? botReason : '흐름 정상');
+    const stamp = document.getElementById('tov-stamp');
+    if(stamp){
+      const d = new Date();
+      stamp.textContent = d.toTimeString().substring(0,5) + ' KST · ' + (p.mock_mode?'모의':'운영');
+    }
+
+    // flow strip — 5 steps with inter-arrow, active glow, busy highlight
+    const flow = document.getElementById('tov-flow');
+    if(flow){
+      flow.innerHTML = roles.map((r,i)=>{
+        const active = r.configured && (r.runs_today||0)>0;
+        const off = !r.configured;
+        const isBusy = busy && r.role===busy.role && busyRuns>0;
+        const isBot = botRole && r.role===botRole.role;
+        const cls = ['tf-node'];
+        if(active) cls.push('on');
+        if(off) cls.push('off');
+        if(isBusy) cls.push('busy');
+        if(isBot) cls.push('bot');
+        const sep = i<roles.length-1 ? '<span class="tf-sep">›</span>' : '';
+        return `<span class="${cls.join(' ')}">
+          <span class="tf-step">${STEP[r.role]||''}</span>
+          <span class="tf-name">${ROLE_KO[r.role]||r.role}</span>
+          <span class="tf-runs">${r.runs_today||0}</span>
+        </span>${sep}`;
+      }).join('');
+    }
+
+    // dotmap — per role: 12-cell row, filled left-to-right by runs
+    const dm = document.getElementById('tov-dotmap');
+    if(dm){
+      const N = 12;
+      const globalMax = Math.max(1, ...roles.map(r=>r.runs_today||0));
+      dm.innerHTML = roles.map(r=>{
+        const runs = r.runs_today||0;
+        const off = !r.configured;
+        const filled = Math.min(N, Math.round((runs/globalMax)*N));
+        const cells = Array.from({length:N},(_,i)=>{
+          if(off) return '<i class="off"></i>';
+          if(i<filled) return '<i class="on"></i>';
+          return '<i></i>';
+        }).join('');
+        return `<div class="tov-dm-row ${off?'off':''}${runs>0?' active':''}">
+          <span class="n">${ROLE_KO[r.role]||r.role}</span>
+          <span class="dots">${cells}</span>
+          <span class="v">${off?'—':runs}</span>
+        </div>`;
+      }).join('');
+    }
+  };
+})();
+</script>
+
+<style>
+/* ─── S31 — AI team overview panel ─── */
+#team-overview.tov{
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:12px 14px 12px 14px;
+  margin-bottom:12px;
+}
+.tov-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.tov-title{
+  font-size:11px;letter-spacing:0.6px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.tov-title::before{
+  content:'●';color:var(--accent);font-size:8px;margin-right:6px;vertical-align:middle;
+}
+.tov-stamp{
+  margin-left:auto;font-size:10px;color:var(--txt3);
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+
+.tov-stats{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;
+}
+.tov-stat{
+  padding:9px 11px;border:1px solid var(--line);border-radius:3px;
+  background:var(--panel);display:flex;flex-direction:column;gap:3px;
+  position:relative;
+}
+.tov-stat::before{
+  content:'';position:absolute;left:0;top:10px;bottom:10px;width:2px;border-radius:2px;
+}
+.tov-stat:nth-child(1)::before{background:var(--accent);opacity:0.55}
+.tov-stat:nth-child(2)::before{background:var(--cat-brief);opacity:0.55}
+.tov-stat:nth-child(3)::before{background:var(--warn);opacity:0.5}
+.tov-stat .k{font-size:9px;letter-spacing:0.5px;color:var(--txt3);text-transform:uppercase;font-weight:600}
+.tov-stat .v{
+  font-size:17px;font-weight:700;color:var(--txt);line-height:1.2;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";letter-spacing:-0.1px;
+}
+.tov-stat:nth-child(2) .v,
+.tov-stat:nth-child(3) .v{
+  font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:600;
+}
+.tov-stat .s{font-size:10px;color:var(--txt2);line-height:1.35}
+
+/* flow strip — workflow overview */
+.tov-flow{
+  display:flex;align-items:center;flex-wrap:wrap;gap:4px;
+  padding:8px 10px;margin-bottom:10px;
+  border:1px solid var(--line);border-radius:3px;background:var(--panel);
+}
+.tf-node{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 8px;border:1px solid var(--line);border-radius:2px;
+  background:var(--surface-2);font-size:11px;color:var(--txt2);
+}
+.tf-node .tf-step{
+  font-size:9px;color:var(--txt3);letter-spacing:0.4px;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+.tf-node .tf-name{color:var(--txt2)}
+.tf-node .tf-runs{
+  font-size:10px;color:var(--txt3);font-family:ui-monospace,monospace;
+  font-feature-settings:"tnum";padding-left:4px;border-left:1px solid var(--line);
+}
+.tf-node.on{border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+.tf-node.on .tf-name{color:var(--txt)}
+.tf-node.on .tf-runs{color:var(--txt2)}
+.tf-node.busy{
+  border-color:color-mix(in srgb,var(--accent) 60%,var(--line));
+  box-shadow:0 0 0 1px rgba(127,179,230,0.15) inset;
+}
+.tf-node.busy .tf-runs{color:var(--accent)}
+.tf-node.bot{
+  border-color:color-mix(in srgb,var(--warn) 50%,var(--line));
+  border-style:dashed;
+}
+.tf-node.bot .tf-name{color:var(--warn);opacity:0.85}
+.tf-node.off{opacity:0.45}
+.tf-sep{color:var(--txt3);opacity:0.4;font-size:11px;padding:0 2px}
+
+/* dotmap — per-role activity bars */
+.tov-dotmap{
+  display:flex;flex-direction:column;gap:4px;
+  padding:8px 10px;border:1px solid var(--line);border-radius:3px;
+  background:var(--panel);
+}
+.tov-dm-row{
+  display:grid;grid-template-columns:84px 1fr 28px;gap:10px;align-items:center;
+  font-size:11px;
+}
+.tov-dm-row .n{
+  color:var(--txt2);font-size:10px;letter-spacing:0.2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tov-dm-row.active .n{color:var(--txt)}
+.tov-dm-row.off .n{color:var(--txt3)}
+.tov-dm-row .dots{display:flex;gap:2px;align-items:center}
+.tov-dm-row .dots i{
+  width:8px;height:6px;background:var(--line2);border-radius:1px;flex:1;
+  max-width:14px;
+}
+.tov-dm-row .dots i.on{background:var(--accent);opacity:0.7}
+.tov-dm-row .dots i.off{background:transparent;border:1px dashed var(--line);height:4px}
+.tov-dm-row .v{
+  text-align:right;font-size:11px;font-weight:600;color:var(--txt);
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+.tov-dm-row.off .v{color:var(--txt3)}
+.tov-dm-row.active .dots i.on:last-of-type{animation:s31DotTick 1.8s ease-in-out infinite}
+@keyframes s31DotTick{0%,100%{opacity:0.6}50%{opacity:1}}
+
+@media (max-width:760px){
+  .tov-stats{grid-template-columns:1fr}
+  .tov-flow{gap:3px;padding:6px 8px}
+  .tf-node{padding:3px 6px;font-size:10px}
+  .tov-dm-row{grid-template-columns:72px 1fr 26px;gap:8px}
+}
+@media (prefers-reduced-motion: reduce){
+  .tov-dm-row *{animation:none !important}
+}
+</style>
+
 </body>
 </html>

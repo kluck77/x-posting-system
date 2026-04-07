@@ -1,6 +1,15 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S30 — Home as Company Situation Board (weekly promoted)
+## ⚠️ LAST COMPLETED PHASE: Dashboard S31 — AI Team Overview Panel (top) + 5 Stations (bottom)
+
+`static/dashboard.html` AI 탭만 수정.
+- `#page-ai` 상단에 `#team-overview` 주입 (ws-header 아래)
+- 3-stat 그리드: 오늘 총 실행 / 가장 바쁨 / 병목 (2px 좌측 color rule, 병목은 unconf > 대기 > 편중 감지)
+- `tov-flow`: 5 노드 workflow strip (on/busy/bot/off) + › 구분자
+- `tov-dotmap`: 역할별 12-cell 정규화 activity row + last-on tick pulse
+- S28 ws-grid 5 스테이션 (3-zone, module icons, live traces) 은 변경 없이 유지
+
+## PREVIOUS: Dashboard S30 — Home as Company Situation Board (weekly promoted)
 
 `static/dashboard.html` Home 탭만 수정. 백엔드 무변경.
 - Home `#page-home` 을 flex column + `order` 로 재정렬: Situation Board → 이번 주 핵심 → KPI chip strip → demoted hero-compact

@@ -1,4 +1,31 @@
-# Current Session — 2026-04-07 (Session 30)
+# Current Session — 2026-04-07 (Session 31)
+
+## S31 — AI 탭: 팀 오버뷰 패널 상단 도입
+
+`static/dashboard.html` AI 탭만 수정. 백엔드/다른 탭 무변경.
+
+### 변경 내용
+1. `#page-ai` 상단에 `#team-overview` 신규 주입 (ws-header 바로 아래, ws-grid 위)
+2. **3-stat 그리드**: 오늘 총 실행 / 가장 바쁨 / 병목
+   - 총 실행: mono tnum 큰 숫자 + "가동 N/5 · 미설정 K" sub
+   - 가장 바쁨: 역할명 + "N회 · provider"
+   - 병목: unconfigured 우선 > 제일 적게 돈 역할(대기) > 편중 가능성 감지
+3. **tov-flow**: 5 노드 workflow strip — step(01..05) · 이름 · 오늘 실행 수
+   - on/busy/bot/off 4 상태 구분 (busy=accent shadow, bot=warn dashed, off=opacity 0.45)
+   - 노드 사이에 › 구분자, 중앙 flex-wrap 허용
+4. **tov-dotmap**: 역할별 12-cell mini activity row
+   - 이름(84px) + 도트(flex) + 숫자(28px)
+   - on 셀은 accent 0.7, off 는 dashed 4px, 마지막 on 셀이 1.8s soft tick
+   - 전역 최대치 기준 정규화 → 역할 간 상대 부하 비교 가능
+5. 기존 S28 ws-grid 5 스테이션은 그대로 유지 (renderAI 원본 호출 후 overview만 populate)
+
+### Files
+- `static/dashboard.html` — S31 script (renderAI wrap · ensureOverview) + S31 style
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 30
 
 ## S30 — Home 전용 재편: 회사 메인 상황판 + 주간 핵심 승격
 
