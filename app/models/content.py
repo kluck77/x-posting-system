@@ -34,6 +34,8 @@ class ContentCategory(str, enum.Enum):
     SOCIETY = "society"
     KPOP_CULTURE = "kpop_culture"
     EVERGREEN = "evergreen"
+    CRYPTO = "crypto"         # 크립토/디파이 (AI 출력과 일치)
+    COMMUNITY = "community"   # 한국 커뮤니티 반응 포스트
 
 
 class RiskLevel(str, enum.Enum):
@@ -133,6 +135,140 @@ class Draft(Base):
     )
     published_at = Column(DateTime, nullable=True, comment="게시 시간")
 
+    # 커뮤니티 입력 경고
+    community_warning = Column(Text, nullable=True, comment="커뮤니티 기반 입력 경고 및 검증 필요 항목")
+
+    # 예측 게시 시간
+    predicted_publish_at = Column(DateTime, nullable=True, comment="예측 최적 게시 시간 (UTC)")
+    prediction_reasoning = Column(Text, nullable=True, comment="예측 근거")
+
+    # 댓글(reply) 대상 트윗 ID
+    reply_to_tweet_id = Column(String(50), nullable=True, comment="답글 대상 트윗 ID (있으면 reply로 게시)")
+
+    # ── Phase 4: 성과 로깅 기반 필드 ────────────────────────────────────────
+    content_type = Column(
+        String(50), nullable=True,
+        comment="입력 소스 유형 (news_link/x_post/observation/screenshot_ref/raw_text)"
+    )
+    topic_tags = Column(
+        String(500), nullable=True,
+        comment="주제 태그 JSON 배열 — 예: '[\"economy\",\"BOK\",\"rates\"]'"
+    )
+    output_format = Column(
+        String(20), nullable=True, default="single",
+        comment="출력 형식: single | pack"
+    )
+    manual_notes = Column(
+        Text, nullable=True,
+        comment="사용자 수동 메모 (선택)"
+    )
+
+    # ── Phase 5: 비즈니스 분류 + 수익화 메타데이터 ──────────────────────────
+    business_tags = Column(
+        String(500), nullable=True,
+        comment="비즈니스 태그 JSON 배열 — 예: '[\"growth\",\"newsletter\",\"premium_candidate\"]'"
+    )
+    cta_type = Column(
+        String(50), nullable=True,
+        comment="CTA 유형: follow/reply/newsletter_signup/lead_magnet/premium_waitlist/b2b_inquiry"
+    )
+    monetization_score = Column(
+        Integer, nullable=True,
+        comment="수익화 잠재력 점수 (0-100)"
+    )
+    asset_goal = Column(
+        String(50), nullable=True,
+        comment="자산 목표: x_only/newsletter_push/lead_magnet_push/premium_teaser/b2b_asset"
+    )
+    premium_reason = Column(
+        Text, nullable=True,
+        comment="프리미엄 브리프 후보 사유"
+    )
+    b2b_candidate = Column(
+        Boolean, nullable=True, default=False,
+        comment="B2B 리서치/리포트 후보 여부"
+    )
+    b2b_target_audience = Column(
+        String(200), nullable=True,
+        comment="B2B 대상 독자층 (예: foreign_investors, policy_makers, supply_chain)"
+    )
+    b2b_use_case = Column(
+        String(200), nullable=True,
+        comment="B2B 활용 사례 (예: market_entry, regulation_monitor, risk_assessment)"
+    )
+    b2b_note = Column(
+        Text, nullable=True,
+        comment="B2B 후보에 대한 운영자 상업/리서치 메모"
+    )
+    b2b_status = Column(
+        String(20), nullable=True,
+        comment="B2B 후보 상태: new/reviewing/shortlisted/postponed/rejected/promoted"
+    )
+    b2b_updated_at = Column(
+        DateTime, nullable=True,
+        comment="B2B 상태 마지막 변경 시간"
+    )
+
+    # ── Phase 7: 이메일/리드자석 메타데이터 ─────────────────────────────────
+    lead_asset_name = Column(
+        String(200), nullable=True,
+        comment="리드 자산 이름 (예: Korea Labor Law 2025 Checklist)"
+    )
+    lead_asset_type = Column(
+        String(50), nullable=True,
+        comment="리드 자산 유형: pdf/checklist/timeline/starter_pack/weekly_brief/issue_tracker"
+    )
+    lead_asset_note = Column(
+        Text, nullable=True,
+        comment="리드 자산 운영자 메모"
+    )
+    email_bucket = Column(
+        String(50), nullable=True,
+        comment="이메일 버킷: weekly_free/onboarding/lead_nurture/premium_teaser/premium_conversion/b2b_nurture"
+    )
+    email_goal = Column(
+        String(50), nullable=True,
+        comment="이메일 목표: signup/nurture/convert/tease/retain"
+    )
+
+    # ── Brief Offer 메타데이터 (프리미엄 후보 → 오퍼 준비) ───────────────────
+    brief_type = Column(
+        String(50), nullable=True,
+        comment="브리프 유형: weekly_brief/policy_brief/market_brief/issue_brief/explainer_pack/special_report"
+    )
+    brief_price_tier = Column(
+        String(20), nullable=True,
+        comment="가격 티어: low/mid/premium"
+    )
+    brief_summary_note = Column(
+        Text, nullable=True,
+        comment="브리프 오퍼 요약/피치 메모 (운영자 작성)"
+    )
+
+    # ── Phase 5-3: 프리미엄 후보 파이프라인 ─────────────────────────────────
+    premium_status = Column(
+        String(20), nullable=True,
+        comment="프리미엄 후보 상태: new/reviewing/shortlisted/postponed/rejected/promoted"
+    )
+    premium_note = Column(
+        Text, nullable=True,
+        comment="프리미엄 후보에 대한 운영자 판단 메모"
+    )
+    premium_updated_at = Column(
+        DateTime, nullable=True,
+        comment="프리미엄 상태 마지막 변경 시간"
+    )
+    target_reader_type = Column(
+        String(100), nullable=True,
+        comment="대상 독자 유형 (예: expat_workers, foreign_investors, korea_watchers)"
+    )
+
+    # ── CTA 카피 연결 ────────────────────────────────────────────────────────
+    cta_copy_id = Column(
+        Integer, nullable=True,
+        comment="연결된 CTA 카피 블록 ID (cta_copies.id 참조, FK 없음)"
+    )
+
     # 관계
     source_item = relationship("SourceItem", back_populates="drafts")
 
@@ -173,6 +309,42 @@ class PostLog(Base):
         return f"<PostLog(id={self.id}, draft_id={self.draft_id}, success={self.success})>"
 
 
+class CtaCopy(Base):
+    """
+    재사용 가능한 CTA / 랜딩 카피 블록 테이블.
+    뉴스레터 가입, 리드자석, 프리미엄 티저 등에 쓰이는 짧은 카피를 관리합니다.
+    """
+    __tablename__ = "cta_copies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cta_type = Column(
+        String(50), nullable=False,
+        comment="CTA 유형: newsletter_signup/lead_magnet/premium_teaser/premium_waitlist/b2b_inquiry"
+    )
+    copy_text = Column(
+        Text, nullable=False,
+        comment="CTA 카피 본문 (짧은 재사용 블록)"
+    )
+    note = Column(
+        Text, nullable=True,
+        comment="운영자 메모 (용도, 컨텍스트 등)"
+    )
+    is_active = Column(
+        Boolean, default=True, nullable=False,
+        comment="활성 여부 (True=사용중, False=비활성)"
+    )
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), comment="생성 시간"
+    )
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc), comment="수정 시간"
+    )
+
+    def __repr__(self):
+        return f"<CtaCopy(id={self.id}, type={self.cta_type}, active={self.is_active})>"
+
+
 # =============================================================================
 # Pydantic 스키마 (API 요청/응답용)
 # =============================================================================
@@ -204,6 +376,9 @@ class DraftResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    community_warning: Optional[str] = None
+    predicted_publish_at: Optional[datetime] = None
+    prediction_reasoning: Optional[str] = None
 
     class Config:
         from_attributes = True

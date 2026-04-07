@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>X Control Room</title>
+<style>
+:root {
+  --bg: #0b0d14;
+  --surface: #141720;
+  --surface2: #1a1e2e;
+  --border: rgba(255,255,255,0.07);
+  --txt: #e2e6f0;
+  --txt2: #7b8299;
+  --txt3: #4b5168;
+  --accent: #4f8eff;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --purple: #a855f7;
+  --cyan: #22d3ee;
+  --header-h: 56px;
+  --tab-h: 60px;
+  --shadow-card: 0 2px 16px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.3);
+  --glow-accent: rgba(79,142,255,0.35);
+  --glow-green: rgba(34,197,94,0.35);
+  --glow-amber: rgba(245,158,11,0.35);
+  --glow-red: rgba(239,68,68,0.35);
+  --glow-purple: rgba(168,85,247,0.35);
+  --glow-cyan: rgba(34,211,238,0.35);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px}
+body{height:100dvh;height:-webkit-fill-available;overflow:hidden;background:var(--bg)}
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 90% 65% at 8% 12%,rgba(79,142,255,0.18) 0%,transparent 52%),
+    radial-gradient(ellipse 65% 55% at 92% 82%,rgba(168,85,247,0.14) 0%,transparent 52%),
+    radial-gradient(ellipse 75% 55% at 50% 105%,rgba(34,197,94,0.1) 0%,transparent 52%),
+    radial-gradient(ellipse 50% 40% at 75% 25%,rgba(34,211,238,0.06) 0%,transparent 50%);
+}
+
+.app-header{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding-top:env(safe-area-inset-top);
+  height:calc(var(--header-h) + env(safe-area-inset-top));
+  background:rgba(11,13,20,0.88);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-end;
+}
+.header-inner{
+  width:100%;padding:0 16px 10px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.header-left{display:flex;align-items:center;gap:10px}
+.header-title{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.cr-badge{
+  font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--accent);background:rgba(79,142,255,0.12);
+  border:1px solid rgba(79,142,255,0.25);border-radius:5px;padding:2px 7px;
+}
+.header-right{display:flex;align-items:center;gap:10px}
+#last-refresh{font-size:11px;color:var(--txt3)}
+#refresh-btn{
+  background:none;border:1px solid var(--border);color:var(--txt2);
+  border-radius:8px;padding:5px 10px;font-size:15px;cursor:pointer;
+  transition:color .2s;
+}
+#refresh-btn:active{color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinning{animation:spin .7s linear infinite;display:inline-block}
+/* Combined mascot idle: float + breathe in one keyframe to avoid Safari transform conflict */
+@keyframes mascot-idle{
+  0%  {transform:translateY(0) scale(1)}
+  20% {transform:translateY(-3px) scale(1.04)}
+  50% {transform:translateY(-6px) scale(1.08)}
+  80% {transform:translateY(-3px) scale(1.04)}
+  100%{transform:translateY(0) scale(1)}
+}
+@keyframes ring-pulse{
+  0%,100%{opacity:0.25;transform:scale(0.94)}
+  50%{opacity:0.9;transform:scale(1.06);box-shadow:0 0 22px rgba(79,142,255,0.55)}
+}
+@keyframes ring-pulse-green{
+  0%,100%{opacity:0.2;transform:scale(0.94)}
+  50%{opacity:0.85;transform:scale(1.06);box-shadow:0 0 22px rgba(34,197,94,0.55)}
+}
+@keyframes radar-sweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes avatar-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+@keyframes avatar-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes avatar-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:0.35}}
+@keyframes pulse-glow-green{0%,100%{box-shadow:0 0 6px rgba(34,197,94,0.5)}50%{box-shadow:0 0 16px rgba(34,197,94,1),0 0 28px rgba(34,197,94,0.4)}}
+@keyframes pulse-glow-red{0%,100%{box-shadow:0 0 6px rgba(239,68,68,0.5)}50%{box-shadow:0 0 16px rgba(239,68,68,1),0 0 28px rgba(239,68,68,0.4)}}
+@keyframes pulse-glow-amber{0%,100%{box-shadow:0 0 6px rgba(245,158,11,0.5)}50%{box-shadow:0 0 16px rgba(245,158,11,1),0 0 28px rgba(245,158,11,0.4)}}
+@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
+@keyframes hero-ring-pulse{0%,100%{opacity:0.2;transform:scale(0.92)}50%{opacity:0.85;transform:scale(1.08)}}
+@keyframes hero-ring-pulse-green{0%,100%{opacity:0.15;transform:scale(0.92)}50%{opacity:0.8;transform:scale(1.08)}}
+@keyframes pipe-flow{0%{background-position:200% center}100%{background-position:-200% center}}
+@keyframes worker-pill-in{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
+
+.content{
+  position:fixed;
+  top:calc(var(--header-h) + env(safe-area-inset-top));
+  bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));
+  left:0;right:0;overflow:hidden;z-index:1;
+}
+
+.page{
+  position:absolute;inset:0;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:none;flex-direction:column;gap:12px;
+  padding:12px 16px 16px;
+}
+.page.active{display:flex}
+
+.tab-bar{
+  position:fixed;bottom:0;left:0;right:0;z-index:100;
+  height:calc(var(--tab-h) + env(safe-area-inset-bottom));
+  padding-bottom:env(safe-area-inset-bottom);
+  background:rgba(11,13,20,0.92);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:flex;align-items:flex-start;
+}
+.tab-bar-inner{display:flex;width:100%;padding-top:4px}
+.tab-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  gap:2px;min-height:56px;padding:6px 4px 4px;
+  background:none;border:none;color:var(--txt3);cursor:pointer;
+  transition:color .2s;font-size:10px;letter-spacing:0.3px;
+  position:relative;
+}
+.tab-btn::before{
+  content:'';position:absolute;top:0;left:18%;right:18%;
+  height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  border-radius:0 0 3px 3px;opacity:0;transition:opacity .25s;
+}
+.tab-btn .tab-icon{font-size:22px;line-height:1;transition:transform .25s,filter .25s}
+.tab-btn.active{color:var(--accent)}
+.tab-btn.active::before{opacity:1}
+.tab-btn.active .tab-icon{transform:scale(1.18);filter:drop-shadow(0 0 6px rgba(79,142,255,0.5))}
+
+.card{
+  background:rgba(14,18,30,0.90);
+  border:1px solid rgba(255,255,255,0.09);
+  border-radius:16px;padding:14px 16px;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:0 4px 40px rgba(0,0,0,0.65),0 1px 0 rgba(255,255,255,0.09) inset,0 0 0 1px rgba(255,255,255,0.05) inset;
+  position:relative;z-index:1;
+}
+.card-title{font-size:11px;font-weight:700;color:var(--txt3);
+  text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px}
+.card-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title-row .card-title{margin-bottom:0}
+
+.alert-banner{
+  background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);
+  border-left:3px solid var(--red);
+  border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;
+  color:var(--red);font-size:13px;font-weight:600;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.alert-banner.hidden{display:none}
+
+/* ===== HERO CARD — IMMERSIVE SCENE LAYOUT ===== */
+.hero-card{
+  /* Unified dark background — ONE scene, not two boxes */
+  background:linear-gradient(140deg,#07091a 0%,#0c1030 55%,#080c1e 100%);
+  border:1px solid rgba(79,142,255,0.28);border-radius:22px;overflow:hidden;
+  box-shadow:0 0 100px rgba(79,142,255,0.15),0 20px 60px rgba(0,0,0,0.9),
+             inset 0 1px 0 rgba(79,142,255,0.18);
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;
+}
+/* Subtle atmosphere inside card */
+.hero-card::before{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 70% 80% at 5% 60%,rgba(79,142,255,0.12) 0%,transparent 55%),
+    radial-gradient(ellipse 50% 50% at 90% 10%,rgba(168,85,247,0.07) 0%,transparent 50%),
+    radial-gradient(ellipse 60% 40% at 60% 100%,rgba(34,197,94,0.06) 0%,transparent 55%);
+}
+/* Bottom accent line */
+.hero-card::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;z-index:10;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(79,142,255,0.55) 35%,rgba(168,85,247,0.45) 65%,transparent);
+}
+
+/* Hero scene — character + info in same unified space */
+.hero-main{
+  position:relative;min-height:235px;overflow:hidden;z-index:1;flex:1;
+}
+
+/* CHARACTER — absolute, bleeds into dark scene via layered gradient mask */
+.hero-emoji{
+  position:absolute;left:-8px;top:0;bottom:0;width:210px;
+  z-index:2;will-change:transform;
+  animation:char-live 7s ease-in-out infinite;
+  transform-origin:bottom center;
+}
+/* Layered mask: top fade (hides white sky bg) + right fade (blends into info panel) */
+.hero-char-img{
+  display:block;width:100%;height:100%;
+  object-fit:cover;object-position:50% 20%;
+  /* Suppress browser filename/alt rendering */
+  font-size:0;color:transparent;
+  /* Top fade hides white background; right fade bleeds into info panel */
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 18%, black 38%, black 85%, transparent 100%),
+    linear-gradient(to right,  black 42%, rgba(0,0,0,0.45) 65%, transparent 88%);
+  mask-image:
+    linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 18%, black 38%, black 85%, transparent 100%),
+    linear-gradient(to right,  black 42%, rgba(0,0,0,0.45) 65%, transparent 88%);
+  filter:brightness(0.96) saturate(1.12) contrast(1.06);
+  transition:filter .6s ease;
+}
+.hero-emoji.idle .hero-char-img{
+  filter:brightness(0.45) saturate(0.1) sepia(0.3);
+}
+.hero-emoji.disconnected .hero-char-img{
+  filter:brightness(0.2) saturate(0);
+}
+.hero-emoji-fallback{
+  font-size:88px;display:flex;align-items:flex-end;justify-content:center;
+  height:100%;padding-bottom:12px;
+  filter:drop-shadow(0 0 20px rgba(79,142,255,0.4));
+}
+@keyframes char-live{
+  0%   {transform:translateY(0) translateX(0) rotate(0deg)}
+  12%  {transform:translateY(-2px) translateX(0.5px) rotate(-0.3deg)}
+  28%  {transform:translateY(-4px) translateX(-0.5px) rotate(0.25deg)}
+  45%  {transform:translateY(-3px) translateX(0.3px) rotate(-0.15deg)}
+  62%  {transform:translateY(-2px) translateX(-0.3px) rotate(0.2deg)}
+  80%  {transform:translateY(-3px) translateX(0.4px) rotate(-0.25deg)}
+  100% {transform:translateY(0) translateX(0) rotate(0deg)}
+}
+@keyframes portrait-glow{
+  0%,100%{opacity:0.6}50%{opacity:1}
+}
+
+/* INFO PANEL — overlaid on right side of the unified dark scene */
+.hero-info{
+  position:absolute;right:0;top:0;bottom:0;width:60%;
+  /* Gradient bg: solid dark on right, fades to transparent on left (over character) */
+  background:linear-gradient(to left,
+    rgba(7,9,26,0.97) 0%,
+    rgba(7,9,26,0.93) 50%,
+    rgba(7,9,26,0.55) 75%,
+    transparent 100%
+  );
+  padding:18px 16px 14px 32px;
+  z-index:3;
+  display:flex;flex-direction:column;justify-content:space-between;
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--green);margin-bottom:10px;
+}
+.hero-badge-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--green);
+  animation:pulse-glow-green 2s ease-in-out infinite;flex-shrink:0;
+}
+.hero-headline{
+  font-size:19px;font-weight:900;margin-bottom:5px;letter-spacing:-0.5px;
+  background:linear-gradient(135deg,#ffffff 0%,#aabedd 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  line-height:1.2;
+}
+.hero-sub{font-size:11px;color:var(--txt2);line-height:1.55;margin-bottom:12px}
+
+/* 3-stat tiles */
+.hero-mini-stats{display:flex;gap:4px;flex-wrap:nowrap;margin-top:auto}
+.hero-mini-stat{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  padding:6px 4px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:8px;
+}
+.hero-mini-val{font-size:18px;font-weight:800;line-height:1;color:var(--accent)}
+.hero-mini-lbl{font-size:8px;color:var(--txt3);letter-spacing:0.8px;text-transform:uppercase;margin-top:3px}
+
+/* Team roster strip */
+.hero-workers{
+  display:flex;flex-wrap:wrap;gap:4px;
+  padding:7px 14px 10px;
+  border-top:1px solid rgba(255,255,255,0.05);
+  position:relative;z-index:4;min-height:36px;
+  background:rgba(0,0,0,0.25);
+}
+.worker-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px 2px 5px;border-radius:20px;
+  font-size:10px;font-weight:600;border:1px solid;
+  animation:worker-pill-in .35s ease both;
+}
+
+.health-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--border);
+}
+.health-row:last-child{border-bottom:none}
+.health-label{font-size:14px;color:var(--txt)}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block}
+.dot-green{background:var(--green);animation:pulse-glow-green 2.5s ease-in-out infinite}
+.dot-red{background:var(--red);animation:pulse-glow-red 2.5s ease-in-out infinite}
+.dot-amber{background:var(--amber);animation:pulse-glow-amber 2.5s ease-in-out infinite}
+.dot-gray{background:var(--txt3)}
+
+.gauge-wrap{margin-bottom:12px}
+.gauge-wrap:last-child{margin-bottom:0}
+.gauge-header{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+.gauge-label{color:var(--txt2)}
+.gauge-nums{color:var(--txt)}
+.gauge-track{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.gauge-fill{height:100%;border-radius:3px;transition:width .4s ease}
+.gauge-fill.ok{background:var(--green);box-shadow:0 0 8px rgba(34,197,94,0.45)}
+.gauge-fill.caution{background:var(--amber);box-shadow:0 0 8px rgba(245,158,11,0.45)}
+.gauge-fill.warning{background:var(--red);box-shadow:0 0 8px rgba(239,68,68,0.45)}
+.gauge-fill.idle{background:var(--txt3)}
+
+.timeline-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 0;border-bottom:1px solid var(--border);
+}
+.timeline-item:last-child{border-bottom:none}
+.tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  margin-top:5px;flex-shrink:0}
+.tl-body{flex:1;min-width:0}
+.tl-hook{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.tl-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tl-time{font-size:11px;color:var(--txt3)}
+
+.badge{
+  display:inline-block;padding:2px 7px;border-radius:5px;
+  font-size:10px;font-weight:600;letter-spacing:0.3px;white-space:nowrap;
+}
+.badge-pending{background:rgba(245,158,11,0.15);color:var(--amber)}
+.badge-approved{background:rgba(79,142,255,0.15);color:var(--accent)}
+.badge-published{background:rgba(34,197,94,0.15);color:var(--green)}
+.badge-rejected{background:rgba(239,68,68,0.15);color:var(--red)}
+.badge-deferred{background:rgba(123,130,153,0.15);color:var(--txt2)}
+.badge-failed{background:rgba(239,68,68,0.2);color:var(--red)}
+.badge-regenerate{background:rgba(168,85,247,0.15);color:var(--purple)}
+.badge-low{background:rgba(34,197,94,0.12);color:var(--green)}
+.badge-medium{background:rgba(245,158,11,0.12);color:var(--amber)}
+.badge-high{background:rgba(239,68,68,0.12);color:var(--red)}
+
+/* ===== AI WORKSTATION CARDS ===== */
+.worker-card{
+  display:flex;align-items:stretch;
+  border-radius:16px;overflow:hidden;
+  border:1px solid rgba(255,255,255,0.08);
+  /* Role-color atmosphere: gradient from currentColor side */
+  background:linear-gradient(105deg,rgba(0,0,0,0) 0%,rgba(12,15,28,0.96) 35%,rgba(10,13,24,0.98) 100%);
+  position:relative;min-height:108px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.06);
+}
+/* Role-color left atmosphere — bleeds from portrait into card */
+.worker-card::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:130px;pointer-events:none;z-index:0;
+  background:linear-gradient(to right,currentColor,transparent);
+  opacity:0.07;
+}
+/* Left role-color accent line */
+.worker-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:currentColor;opacity:0.75;z-index:4;
+}
+/* Portrait area — seamlessly part of the card scene */
+.worker-portrait{
+  width:96px;flex-shrink:0;
+  position:relative;overflow:hidden;
+  background:#070914;z-index:1;
+}
+/* Right fade: wide, soft — portrait bleeds into card info area */
+.worker-portrait::after{
+  content:'';position:absolute;top:0;right:0;width:52px;height:100%;
+  background:linear-gradient(to right,transparent,rgba(10,13,24,0.97));
+  z-index:3;pointer-events:none;
+}
+/* Bottom scene darkening */
+.worker-portrait::before{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:36px;
+  background:linear-gradient(to top,rgba(7,9,20,0.85),transparent);
+  z-index:3;pointer-events:none;
+}
+/* Character portrait image */
+.worker-char-img{
+  width:100%;height:100%;
+  object-fit:cover;object-position:50% 10%;
+  position:relative;z-index:1;display:block;
+  /* Suppress any browser-rendered filename/alt text */
+  font-size:0;color:transparent;
+  /* Right-fade mask — character flows into card, no hard edge */
+  -webkit-mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
+  mask-image:linear-gradient(to right,black 45%,rgba(0,0,0,0.6) 70%,transparent 95%);
+}
+/* Fallback emoji avatar */
+.worker-avatar{
+  width:54px;height:54px;border-radius:13px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:27px;border:1.5px solid;
+  position:relative;z-index:2;margin:auto;
+}
+/* Info section */
+.worker-info{flex:1;min-width:0;padding:13px 10px 13px 12px;position:relative;z-index:2}
+.worker-role{
+  font-size:14.5px;font-weight:800;letter-spacing:-0.3px;margin-bottom:2px;
+  text-shadow:0 0 20px currentColor;
+}
+.worker-provider{font-size:11px;color:var(--txt2);margin-bottom:5px;display:flex;align-items:center;gap:5px}
+.worker-tagline{font-size:10px;color:var(--txt3);line-height:1.55}
+/* Right stat column */
+.worker-right{
+  flex-shrink:0;padding:13px 15px 13px 0;
+  display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
+  position:relative;z-index:2;min-width:52px;
+}
+.worker-count{font-size:30px;font-weight:900;line-height:1}
+.worker-count-lbl{font-size:9px;color:var(--txt3);margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;display:flex;align-items:center;gap:3px}
+.worker-status-dot{width:5px;height:5px;border-radius:50%;background:var(--txt3);flex-shrink:0}
+.worker-status-dot.active{background:var(--green);animation:pulse-glow-green 2s ease-in-out infinite}
+/* Role animations — applied to both real image and fallback avatar */
+/* Use subtle transform-only animations for image; keep emoji animations for fallback */
+.role-draft .worker-char-img{animation:char-work 3.5s ease-in-out infinite}
+.role-review .worker-char-img{animation:char-breathe 4s ease-in-out infinite}
+.role-research .worker-char-img{animation:char-lean 5s ease-in-out infinite}
+.role-fact .worker-char-img{animation:char-breathe 3.5s ease-in-out infinite}
+.role-trend .worker-char-img{animation:char-scan 6s ease-in-out infinite}
+.role-draft .worker-avatar{animation:dot-blink 1.4s ease-in-out infinite}
+.role-review .worker-avatar{animation:avatar-breathe 3s ease-in-out infinite}
+.role-research .worker-avatar{animation:avatar-bob 4s ease-in-out infinite}
+.role-fact .worker-avatar{animation:avatar-breathe 2.2s ease-in-out infinite}
+.role-trend .worker-avatar{animation:avatar-spin 5s linear infinite}
+@keyframes char-work{
+  0%,100%{transform:scale(1) translateY(0)}
+  30%{transform:scale(1.01) translateY(-1px)}
+  60%{transform:scale(1.005) translateY(-2px)}
+}
+@keyframes char-breathe{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.015)}
+}
+@keyframes char-lean{
+  0%,100%{transform:translateX(0) scale(1)}
+  40%{transform:translateX(1px) scale(1.01)}
+  70%{transform:translateX(-1px) scale(1.008)}
+}
+@keyframes char-scan{
+  0%,100%{transform:scale(1) translateY(0)}
+  25%{transform:scale(1.01) translateY(-1px)}
+  75%{transform:scale(1.005) translateY(-2px)}
+}
+/* Worker card entrance */
+#provider-list{display:flex;flex-direction:column;gap:10px}
+@keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.worker-card{animation:card-in .4s ease both}
+/* Naver arc gauge — large centered layout */
+.naver-arc-section{
+  display:flex;flex-direction:column;align-items:center;
+  gap:14px;margin-bottom:16px;
+}
+.naver-arc-wrap{
+  position:relative;width:130px;height:130px;
+  filter:drop-shadow(0 0 14px rgba(34,197,94,0.2));
+  flex-shrink:0;
+}
+.naver-arc-center{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+}
+.naver-arc-pct{font-size:24px;font-weight:900;line-height:1.1;letter-spacing:-0.5px}
+.naver-arc-lbl{font-size:9px;color:var(--txt3);letter-spacing:1px;text-transform:uppercase;margin-top:3px}
+.naver-arc-detail{
+  display:flex;align-items:center;justify-content:center;gap:16px;
+  width:100%;padding:0 4px;
+}
+.naver-arc-used{font-size:26px;font-weight:700;line-height:1}
+.naver-arc-of{font-size:13px;color:var(--txt2)}
+.naver-arc-note{font-size:12.5px;margin-top:4px;text-align:center}
+/* Naver intake context */
+.naver-context{font-size:11px;color:var(--txt3);margin-top:6px;letter-spacing:0.1px}
+.naver-intake-hint{
+  font-size:12px;color:var(--txt2);margin-top:10px;padding:8px 10px;
+  background:rgba(79,142,255,0.06);border-left:2px solid rgba(79,142,255,0.3);border-radius:4px;
+  line-height:1.5;
+}
+/* Naver status badge strip */
+.naver-status-strip{
+  display:flex;align-items:center;gap:6px;
+  margin-bottom:14px;padding:6px 10px;border-radius:8px;
+  font-size:11.5px;font-weight:600;
+}
+.naver-status-strip.ok{background:rgba(34,197,94,0.08);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
+.naver-status-strip.caution{background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.2)}
+.naver-status-strip.warning{background:rgba(239,68,68,0.08);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+.naver-status-strip.idle{background:rgba(75,81,104,0.1);color:var(--txt3);border:1px solid rgba(75,81,104,0.2)}
+@media(prefers-reduced-motion:reduce){
+  .hero-emoji,.hero-ring,.hero-ring-ok,.pipe-connector,
+  .role-draft .worker-avatar,.role-review .worker-avatar,
+  .role-research .worker-avatar,.role-fact .worker-avatar,.role-trend .worker-avatar
+  {animation:none!important;transform:none!important}
+  .dot-green,.dot-red,.dot-amber,.hero-badge-dot{animation:none!important;
+    box-shadow:0 0 6px rgba(34,197,94,0.5)}
+  .worker-pill{animation:none!important;opacity:1!important}
+}
+.footnote{font-size:11px;color:var(--txt3);text-align:center;padding-top:4px}
+
+.naver-big{display:flex;align-items:baseline;gap:6px;margin-bottom:12px}
+.naver-big .nb-val{font-size:36px;font-weight:700}
+.naver-big .nb-of{font-size:16px;color:var(--txt2)}
+.naver-status{font-size:12px;margin-top:8px}
+
+.news-item{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:9px 0;border-bottom:1px solid var(--border);
+  font-size:13px;color:var(--txt);line-height:1.45;
+}
+.news-item::before{
+  content:'▸';color:var(--accent);flex-shrink:0;font-size:11px;margin-top:2px;opacity:0.75;
+}
+.news-item:last-child{border-bottom:none}
+.empty-state{
+  font-size:12.5px;color:var(--txt3);padding:16px 0;text-align:center;
+  letter-spacing:0.2px;
+}
+.empty-state::before{content:'—  ';opacity:0.4}
+.empty-state::after{content:'  —';opacity:0.4}
+
+.pipeline-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+.pipeline{display:flex;align-items:center;min-width:max-content;padding:6px 0}
+.pipe-node{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  min-width:68px;padding:8px 4px;
+}
+.pipe-icon{
+  width:48px;height:48px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;border:2px solid transparent;transition:box-shadow .3s;
+}
+.pipe-icon.done{
+  background:rgba(34,197,94,0.18);border-color:var(--green);color:var(--green);
+  box-shadow:0 0 16px rgba(34,197,94,0.35);
+}
+.pipe-icon.active{
+  background:rgba(79,142,255,0.25);border-color:var(--accent);color:var(--accent);
+  box-shadow:0 0 20px rgba(79,142,255,0.5);
+  animation:pipe-node-pulse 2s ease-in-out infinite;
+}
+@keyframes pipe-node-pulse{
+  0%,100%{box-shadow:0 0 14px rgba(79,142,255,0.4);transform:scale(1)}
+  50%{box-shadow:0 0 28px rgba(79,142,255,0.7),0 0 48px rgba(79,142,255,0.25);transform:scale(1.06)}
+}
+.pipe-icon.pending{background:rgba(75,81,104,0.12);border-color:rgba(75,81,104,0.4);color:var(--txt3)}
+.pipe-icon.fail{background:rgba(239,68,68,0.15);border-color:var(--red);color:var(--red)}
+.pipe-lbl{font-size:10.5px;color:var(--txt2);white-space:nowrap;font-weight:500}
+.pipe-connector{
+  width:24px;height:4px;flex-shrink:0;align-self:center;margin-bottom:22px;
+  border-radius:2px;
+  background:linear-gradient(90deg,rgba(79,142,255,0.05) 0%,rgba(79,142,255,0.65) 50%,rgba(79,142,255,0.05) 100%);
+  background-size:200% 100%;animation:pipe-flow 1.6s linear infinite;
+}
+
+.draft-row{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 0;border-bottom:1px solid var(--border);
+}
+.draft-row:last-child{border-bottom:none}
+.draft-hook{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.draft-badges{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.draft-time{font-size:11px;color:var(--txt3);flex-shrink:0}
+
+.queue-item{padding:10px 0;border-bottom:1px solid var(--border)}
+.queue-item:last-child{border-bottom:none}
+.queue-text{font-size:13px;line-height:1.4;margin-bottom:5px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.queue-meta{display:flex;align-items:center;gap:8px}
+.queue-time{font-size:11px;color:var(--txt3)}
+.notified-tag{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(79,142,255,0.12);color:var(--accent)}
+
+.ops-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px;
+}
+.ops-row:last-child{border-bottom:none}
+.ops-val{font-size:15px;font-weight:700;color:var(--txt)}
+.ops-lbl{color:var(--txt2)}
+.ops-section-hdr{
+  font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;
+  letter-spacing:1.2px;padding:10px 0 4px;border-top:1px solid rgba(255,255,255,0.04);
+  margin-top:4px;
+}
+.ops-section-hdr:first-child{border-top:none;margin-top:0;padding-top:0}
+
+.page-title{font-size:22px;font-weight:700;padding:4px 0 4px}
+.ai-tab-header{
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:2px 0 8px;
+}
+.ai-tab-title{font-size:18px;font-weight:800;letter-spacing:-0.4px;color:var(--txt)}
+.ai-tab-sub{font-size:11px;color:var(--txt3)}
+
+/* ===== UPLOAD SLOTS ===== */
+.upload-slot{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:10px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+  cursor:pointer;transition:background .2s;
+}
+.upload-slot:active{background:rgba(79,142,255,0.08)}
+.upload-slot-icon{font-size:22px;flex-shrink:0;width:36px;text-align:center}
+.upload-slot-info{flex:1;min-width:0}
+.upload-slot-name{font-size:12.5px;font-weight:600;color:var(--txt)}
+.upload-slot-status{font-size:11px;margin-top:1px}
+.upload-slot-status.ok{color:var(--green)}
+.upload-slot-status.missing{color:var(--txt3)}
+.upload-slot-status.uploading{color:var(--accent)}
+.upload-slot-status.error{color:var(--red)}
+.upload-slot-btn{
+  font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+  background:rgba(79,142,255,0.08);color:var(--accent);cursor:pointer;white-space:nowrap;
+}
+
+@media(min-width:640px){
+  .tab-bar-inner,.header-inner{max-width:640px;margin:0 auto}
+  .page{max-width:640px;left:50%;right:auto;width:640px;transform:translateX(-50%)}
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-inner">
+    <div class="header-left">
+      <span class="header-title">🛰️ X System</span>
+      <span class="cr-badge">CONTROL ROOM</span>
+    </div>
+    <div class="header-right">
+      <span id="last-refresh">—</span>
+      <button id="refresh-btn" onclick="loadAll()">↻</button>
+    </div>
+  </div>
+</header>
+
+<div class="content">
+
+  <!-- TAB 1: STATUS -->
+  <div class="page active" id="page-home">
+    <div id="alert-banner" class="alert-banner hidden">⚠️ <span id="alert-text"></span></div>
+    <div class="hero-card">
+      <!-- Unified dark scene: character + info share same space -->
+      <div class="hero-main">
+        <!-- Character: absolute, masked, emerges from dark bg -->
+        <div class="hero-emoji" id="mascot-emoji">
+          <img class="hero-char-img" id="hero-char-img"
+               src="/static/hero_blonde_assistant.png"
+               alt=""
+               onerror="this.outerHTML='<div class=\'hero-emoji-fallback\'>👩‍💻</div>'">
+        </div>
+        <!-- Info panel: right-side overlay within the same scene -->
+        <div class="hero-info">
+          <div>
+            <div class="hero-badge" id="mascot-live">
+              <span class="hero-badge-dot" id="hero-badge-dot"></span>
+              <span id="hero-badge-txt">LIVE</span>
+            </div>
+            <div class="hero-headline" id="mascot-headline">시스템 정상 운영 중</div>
+            <div class="hero-sub" id="mascot-sub">데이터 로딩 중…</div>
+          </div>
+          <div class="hero-mini-stats">
+            <div class="hero-mini-stat">
+              <div class="hero-mini-val" id="qs-queue">—</div>
+              <div class="hero-mini-lbl">큐</div>
+            </div>
+            <div class="hero-mini-stat">
+              <div class="hero-mini-val" id="qs-monitor">—</div>
+              <div class="hero-mini-lbl">모니터</div>
+            </div>
+            <div class="hero-mini-stat">
+              <div class="hero-mini-val" id="qs-naver">—</div>
+              <div class="hero-mini-lbl">Naver</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Team roster -->
+      <div class="hero-workers" id="hero-workers"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">System Health</div>
+      <div id="health-rows"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Daily Quota</div>
+      <div id="quota-gauges"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent Activity</div>
+      <div id="home-timeline"></div>
+    </div>
+  </div>
+
+  <!-- TAB 2: AI -->
+  <div class="page" id="page-ai">
+    <div class="ai-tab-header">
+      <span class="ai-tab-title">AI 워크스테이션</span>
+      <span class="ai-tab-sub">오늘 초안 기준</span>
+    </div>
+    <div id="provider-list"></div>
+    <p class="footnote">※ 실행 횟수는 오늘 생성된 초안 수 기준</p>
+  </div>
+
+  <!-- TAB 3: INTAKE -->
+  <div class="page" id="page-intake">
+    <div class="ai-tab-header">
+      <span class="ai-tab-title">인풋 &amp; 플로우</span>
+      <span class="ai-tab-sub">뉴스 수집 · 초안 흐름</span>
+    </div>
+    <div class="card">
+      <div class="card-title">Naver API</div>
+      <div class="naver-status-strip idle" id="naver-status-strip">● 연결 대기 중</div>
+      <div class="naver-arc-section">
+        <div class="naver-arc-wrap">
+          <svg viewBox="0 0 130 130" style="width:100%;height:100%;transform:rotate(-90deg)">
+            <circle cx="65" cy="65" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="9"/>
+            <circle id="naver-arc" cx="65" cy="65" r="52" fill="none" stroke="var(--green)" stroke-width="9"
+              stroke-dasharray="326.7" stroke-dashoffset="326.7" stroke-linecap="round"
+              style="transition:stroke-dashoffset .8s ease,stroke .4s"/>
+          </svg>
+          <div class="naver-arc-center">
+            <div class="naver-arc-pct" id="naver-arc-pct">—</div>
+            <div class="naver-arc-lbl">사용률</div>
+          </div>
+        </div>
+        <div class="naver-arc-detail">
+          <div style="text-align:center">
+            <span class="naver-arc-used" id="naver-used">—</span>
+            <span class="naver-arc-of"> / 25,000</span>
+          </div>
+          <div class="naver-arc-note" id="naver-note"></div>
+        </div>
+      </div>
+      <div class="naver-context" id="naver-context"></div>
+      <div class="naver-intake-hint" id="naver-intake-hint" style="display:none"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent News</div>
+      <div id="news-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pipeline Flow</div>
+      <div class="pipeline-scroll">
+        <div class="pipeline" id="pipeline-flow"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent Drafts</div>
+      <div id="draft-rows"></div>
+    </div>
+  </div>
+
+  <!-- TAB 4: OPS -->
+  <div class="page" id="page-ops">
+    <div class="ai-tab-header">
+      <span class="ai-tab-title">운영 현황</span>
+      <span class="ai-tab-sub">큐 · 모니터 · 활동</span>
+    </div>
+    <div class="card">
+      <div class="card-title-row">
+        <span class="card-title">Queue</span>
+        <span id="queue-count-badge" class="badge badge-pending">0 pending</span>
+      </div>
+      <div id="queue-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Reply Monitor</div>
+      <div id="monitor-rows"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">News Monitor</div>
+      <div id="news-monitor-rows"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Activity</div>
+      <div id="activity-rows"></div>
+    </div>
+    <div class="card">
+      <div class="card-title-row">
+        <span class="card-title">캐릭터 이미지 업로드</span>
+        <span id="upload-status" style="font-size:11px;color:var(--txt3)"></span>
+      </div>
+      <div id="upload-slots" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+</div>
+
+<nav class="tab-bar">
+  <div class="tab-bar-inner">
+    <button class="tab-btn active" onclick="switchTab('home')">
+      <span class="tab-icon">🏠</span>Status
+    </button>
+    <button class="tab-btn" onclick="switchTab('ai')">
+      <span class="tab-icon">🤖</span>AI
+    </button>
+    <button class="tab-btn" onclick="switchTab('intake')">
+      <span class="tab-icon">📰</span>Intake
+    </button>
+    <button class="tab-btn" onclick="switchTab('ops')">
+      <span class="tab-icon">⚙️</span>Ops
+    </button>
+  </div>
+</nav>
+
+<script>
+'use strict';
+const D = {};
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function kstFmt(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+  } catch(e) { return String(iso); }
+}
+function badge(status) {
+  const labels = {pending:'대기', approved:'승인', published:'게시', rejected:'거절', deferred:'보류', failed:'실패', regenerate:'재생성'};
+  const cls = labels[status] ? status : 'deferred';
+  return `<span class="badge badge-${esc(cls)}">${esc(labels[status] || status)}</span>`;
+}
+function riskBadge(risk) {
+  if (!risk) return '';
+  return `<span class="badge badge-${esc(risk)}">${esc(risk)}</span>`;
+}
+function dot(ok) {
+  return `<span class="dot ${ok ? 'dot-green' : 'dot-red'}"></span>`;
+}
+function dotAmber(on) {
+  return `<span class="dot ${on ? 'dot-amber' : 'dot-green'}"></span>`;
+}
+function gaugeClass(pct) {
+  if (pct < 50) return 'ok';
+  if (pct < 75) return 'caution';
+  return 'warning';
+}
+function gaugeBar(used, limit, label) {
+  if (!limit) return '';
+  const pct = Math.min(100, Math.round(used / limit * 100));
+  const cls = gaugeClass(pct);
+  const labelHtml = label ? `<span class="gauge-label">${esc(label)}</span>` : '<span></span>';
+  return `<div class="gauge-wrap">
+    <div class="gauge-header">${labelHtml}<span class="gauge-nums">${used} / ${limit}</span></div>
+    <div class="gauge-track"><div class="gauge-fill ${cls}" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+function switchTab(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  const idx = {home:0, ai:1, intake:2, ops:3}[id] ?? 0;
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+}
+
+async function loadAll() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  const [r1,r2,r3,r4,r5] = await Promise.allSettled([
+    fetch('/control/status').then(r => r.json()),
+    fetch('/control/providers').then(r => r.json()),
+    fetch('/control/flow-trace?limit=15').then(r => r.json()),
+    fetch('/control/naver').then(r => r.json()),
+    fetch('/control/recent-news?limit=8').then(r => r.json()),
+  ]);
+  D.status    = r1.status === 'fulfilled' ? r1.value : null;
+  D.providers = r2.status === 'fulfilled' ? r2.value : null;
+  D.trace     = r3.status === 'fulfilled' ? r3.value : [];
+  D.naver     = r4.status === 'fulfilled' ? r4.value : null;
+  D.news      = r5.status === 'fulfilled' ? r5.value : [];
+  renderAll();
+  btn.classList.remove('spinning');
+  const kst = D.status?.generated_at_kst || new Date().toLocaleTimeString('ko-KR', {timeZone:'Asia/Seoul'});
+  document.getElementById('last-refresh').textContent = kst;
+}
+
+function renderAll() { renderHome(); renderAI(); renderIntake(); renderOps(); }
+
+const WORKER_META = {
+  DraftWriter: {img:'draftwriter.png',     emoji:'✍️',color:'#19c37d',glow:'rgba(25,195,125,0.18)', tagline:'초안 작성 · 5-criteria 자가검증',           anim:'role-draft'},
+  Reviewer:    {img:'reviewer.png',        emoji:'🔍',color:'#cc785c',glow:'rgba(204,120,92,0.18)', tagline:'품질 검토 · PASS/WEAK/FAIL 최종 판정',       anim:'role-review'},
+  Researcher:  {img:'researcher.png',      emoji:'🦊',color:'#4f8eff',glow:'rgba(79,142,255,0.18)',tagline:'맥락 리서치 · 해석 갭 발굴',                  anim:'role-research'},
+  FactChecker: {img:'factchecker.png',     emoji:'🧩',color:'#a855f7',glow:'rgba(168,85,247,0.18)',tagline:'팩트체크 · 글로벌 관련성 평가',                anim:'role-fact'},
+  TrendHunter: {img:'trendhunter_black.png',emoji:'📡',color:'#22d3ee',glow:'rgba(34,211,238,0.18)',tagline:'트렌드 탐지 · 시장성 필터링',                 anim:'role-trend'},
+};
+
+function renderHome() {
+  const s = D.status;
+  const banner = document.getElementById('alert-banner');
+  let alertMsg = '';
+  if (s?.activity?.is_idle) alertMsg = `48시간 이상 비활성 (${s.activity.hours_idle?.toFixed(1)}h 경과)`;
+  else if (s && !s.health?.db_ok) alertMsg = 'DB 연결 오류 — 확인 필요';
+  else if (s && !s.health?.x_configured) alertMsg = 'X API 미설정';
+  if (alertMsg) {
+    banner.classList.remove('hidden');
+    document.getElementById('alert-text').textContent = alertMsg;
+  } else {
+    banner.classList.add('hidden');
+  }
+
+  const u = s?.usage;
+  const isIdle = s?.activity?.is_idle;
+  const isOk = s && !isIdle && s.health?.db_ok;
+  // Mascot state: use CSS class on wrapper (image stays, filter changes)
+  const charEl = document.getElementById('mascot-emoji');
+  if (charEl) {
+    charEl.classList.toggle('idle', !!isIdle);
+    charEl.classList.toggle('disconnected', !s);
+  }
+  document.getElementById('mascot-headline').textContent =
+    s ? (isIdle ? '장시간 비활성 상태' : '시스템 정상 운영 중') : '연결 없음';
+  document.getElementById('mascot-sub').textContent =
+    u ? `초안 ${u.drafts.used}/${u.drafts.limit} · 게시 ${u.posts.used}/${u.posts.limit} · 오늘` : '연결 확인 중…';
+  // Hero badge
+  const liveEl = document.getElementById('mascot-live');
+  const dotEl = document.getElementById('hero-badge-dot');
+  const txtEl = document.getElementById('hero-badge-txt');
+  if (liveEl && dotEl && txtEl) {
+    const c = isIdle ? 'var(--amber)' : isOk ? 'var(--green)' : 'var(--txt2)';
+    liveEl.style.color = c;
+    dotEl.style.background = c;
+    dotEl.style.animation = isOk ? '' : 'none';
+    txtEl.textContent = isIdle ? 'IDLE' : isOk ? 'LIVE' : '—';
+  }
+
+  // Worker pills in hero
+  const hwEl = document.getElementById('hero-workers');
+  if (hwEl && D.providers?.roles?.length) {
+    hwEl.innerHTML = D.providers.roles.map((r, i) => {
+      const m = WORKER_META[r.role] || {emoji:'🤖',color:'var(--txt2)'};
+      const cnt = r.runs_today ?? 0;
+      return `<span class="worker-pill" style="color:${m.color};border-color:${m.color}33;background:${m.color}0d;animation-delay:${i*0.07}s">${m.emoji} <span style="opacity:.7">${esc(r.role)}</span>${cnt?` <strong>${cnt}</strong>`:''}</span>`;
+    }).join('');
+  } else if (hwEl) { hwEl.innerHTML = ''; }
+
+  const qc = s?.queue?.pending_count ?? '—';
+  const qEl = document.getElementById('qs-queue');
+  qEl.textContent = qc;
+  qEl.style.color = (typeof qc === 'number' && qc > 0) ? 'var(--amber)' : 'var(--green)';
+
+  const mon = s?.monitor;
+  const monEl = document.getElementById('qs-monitor');
+  if (mon) {
+    monEl.textContent = mon.reply_monitor_paused ? 'OFF' : 'ON';
+    monEl.style.color = mon.reply_monitor_paused ? 'var(--amber)' : 'var(--green)';
+  } else { monEl.textContent = '—'; monEl.style.color = ''; }
+
+  const nEl = document.getElementById('qs-naver');
+  if (D.naver) {
+    nEl.textContent = (D.naver.pct_used?.toFixed(1) ?? '—') + '%';
+    nEl.style.color = D.naver.level === 'warning' ? 'var(--red)' : D.naver.level === 'caution' ? 'var(--amber)' : 'var(--green)';
+  } else { nEl.textContent = '—'; nEl.style.color = ''; }
+
+  const h = s?.health;
+  document.getElementById('health-rows').innerHTML = !h ? '<div class="empty-state">연결 실패</div>' : [
+    ['DB', h.db_ok, false],
+    ['Telegram', h.telegram_configured, false],
+    ['X API', h.x_configured, false],
+    ['Mock Mode', h.mock_mode, true],
+    ['Auto-Post', h.auto_post_enabled, true],
+  ].map(([lbl, val, isWarningOn]) => {
+    const dotHtml = isWarningOn
+      ? `<span class="dot ${val ? 'dot-amber' : 'dot-green'}"></span>`
+      : dot(val);
+    return `<div class="health-row"><span class="health-label">${esc(lbl)}</span>${dotHtml}</div>`;
+  }).join('');
+
+  const ug = s?.usage;
+  document.getElementById('quota-gauges').innerHTML = !ug ? '<div class="empty-state">—</div>' : [
+    gaugeBar(ug.drafts.used, ug.drafts.limit, 'Drafts'),
+    gaugeBar(ug.telegram.used, ug.telegram.limit, 'Telegram'),
+    gaugeBar(ug.posts.used, ug.posts.limit, 'Posts'),
+  ].join('');
+
+  const trace = (D.trace || []).slice(0, 6);
+  document.getElementById('home-timeline').innerHTML = !trace.length ? '<div class="empty-state">없음</div>' :
+    trace.map(t => `<div class="timeline-item">
+      <div class="tl-dot"></div>
+      <div class="tl-body">
+        <div class="tl-hook">${esc(t.hook)}</div>
+        <div class="tl-meta">${badge(t.status)}${riskBadge(t.risk_level)}<span class="tl-time">${esc(t.created_kst)}</span></div>
+      </div>
+    </div>`).join('');
+}
+
+function renderAI() {
+  const p = D.providers;
+  if (!p) { document.getElementById('provider-list').innerHTML = '<div class="empty-state">연결 실패</div>'; return; }
+  document.getElementById('provider-list').innerHTML = (p.roles || []).map((r, idx) => {
+    const m = WORKER_META[r.role] || {img:'',emoji:'🤖',color:'var(--txt2)',glow:'rgba(123,130,153,0.12)',tagline:'',anim:''};
+    const cfgBadge = r.configured
+      ? `<span style="color:var(--green);font-size:10px">● 연결됨</span>`
+      : `<span style="color:var(--red);font-size:10px">● 미설정</span>`;
+    const cnt = r.runs_today ?? 0;
+    const isActive = typeof cnt === 'number' && cnt > 0;
+    const cntDisplay = cnt === 0 ? '0' : cnt;
+    const noteHtml = r.note ? `<div style="font-size:10px;color:var(--txt3);margin-top:4px;line-height:1.4;opacity:0.8">${esc(r.note)}</div>` : '';
+    const animCls = m.anim || '';
+    // Portrait — real image; alt="" prevents filename text; onerror shows emoji
+    const fallbackStyle = `background:${m.glow};border-color:${m.color}55`;
+    const portraitHtml = m.img
+      ? `<img class="worker-char-img" src="/static/${m.img}" alt=""
+              onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\\'worker-avatar\\'style=\\'${fallbackStyle};box-shadow:0 0 16px ${m.color}18\\'>${m.emoji}</div>'">`
+      : `<div class="worker-avatar" style="${fallbackStyle};box-shadow:0 0 16px ${m.color}18">${m.emoji}</div>`;
+    // Active state: highlight count and status
+    const countStyle = isActive
+      ? `color:${m.color};text-shadow:0 0 20px ${m.color}60`
+      : `color:var(--txt3)`;
+    return `<div class="worker-card ${animCls}" style="color:${m.color};animation-delay:${idx*0.07}s">
+      <div class="worker-portrait">
+        ${portraitHtml}
+      </div>
+      <div class="worker-info">
+        <div class="worker-role" style="color:${m.color}">${esc(r.role)}</div>
+        <div class="worker-provider">${esc(r.provider)}&nbsp;${cfgBadge}</div>
+        <div class="worker-tagline">${esc(m.tagline)}</div>
+        ${noteHtml}
+      </div>
+      <div class="worker-right">
+        <div class="worker-count" style="${countStyle}">${cntDisplay}</div>
+        <div class="worker-count-lbl">
+          <span class="worker-status-dot${isActive?' active':''}"></span>
+          ${isActive?'실행중':'대기'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function pipelineHTML(status) {
+  const stages = [
+    {label:'Source',  icon:'📥'},
+    {label:'Research',icon:'🔭'},
+    {label:'Draft',   icon:'✍️'},
+    {label:'Review',  icon:'🔍'},
+    {label:'Approval',icon:'✅'},
+  ];
+  const stateMap = {
+    pending:    ['done','done','done','active','pending'],
+    approved:   ['done','done','done','done','active'],
+    published:  ['done','done','done','done','done'],
+    rejected:   ['done','done','done','done','fail'],
+    deferred:   ['done','done','done','done','fail'],
+    failed:     ['done','done','done','done','fail'],
+    regenerate: ['done','done','active','pending','pending'],
+  };
+  const states = stateMap[status] || ['done','done','done','active','pending'];
+  return stages.map((st, i) =>
+    (i > 0 ? '<div class="pipe-connector"></div>' : '') +
+    `<div class="pipe-node">
+      <div class="pipe-icon ${states[i]}">${st.icon}</div>
+      <div class="pipe-lbl">${st.label}</div>
+    </div>`
+  ).join('');
+}
+
+function renderIntake() {
+  const nv = D.naver;
+  const used = nv ? (nv.used_today || 0) : 0;
+  const limit = nv ? (nv.daily_limit || 25000) : 25000;
+  const pct = nv ? Math.min(100, used / limit * 100) : 0;
+  const circ = 326.7;
+  document.getElementById('naver-used').textContent = nv ? used.toLocaleString() : '—';
+  // SVG arc update
+  const arcEl = document.getElementById('naver-arc');
+  const arcPctEl = document.getElementById('naver-arc-pct');
+  if (arcEl && nv) {
+    arcEl.style.strokeDashoffset = circ * (1 - pct / 100);
+    arcEl.style.stroke = pct >= 75 ? 'var(--red)' : pct >= 50 ? 'var(--amber)' : 'var(--green)';
+  }
+  if (arcPctEl) arcPctEl.textContent = nv ? pct.toFixed(1) + '%' : '—';
+  const lvlColor = {idle:'var(--txt3)', ok:'var(--green)', caution:'var(--amber)', warning:'var(--red)'};
+  const lvlLabel = {idle:'유휴', ok:'정상', caution:'주의', warning:'경고'};
+  document.getElementById('naver-note').innerHTML = nv
+    ? `<span style="color:${lvlColor[nv.level] || 'var(--txt2)'}">● ${esc(nv.note)}</span>`
+    : `<span style="color:var(--txt3)">● 연결 대기 중</span>`;
+  const stripEl = document.getElementById('naver-status-strip');
+  if (stripEl && nv) {
+    const lvl = nv.level || 'idle';
+    stripEl.className = `naver-status-strip ${lvl}`;
+    stripEl.textContent = `● ${lvlLabel[lvl] || lvl} — ${nv.note || '—'}`;
+  }
+  // Naver context: remaining calls + intake hint
+  const ctxEl = document.getElementById('naver-context');
+  const hintEl = document.getElementById('naver-intake-hint');
+  if (ctxEl) {
+    const remaining = nv ? (nv.remaining ?? Math.max(0, (nv.daily_limit || 25000) - (nv.used_today || 0))) : 25000;
+    ctxEl.innerHTML = nv
+      ? `<span style="color:var(--txt3)">뉴스 기사 스캔용 API</span> · <span style="color:${pct>50?'var(--amber)':'var(--green)'}">잔여 ${remaining.toLocaleString()} 콜</span>`
+      : `<span style="color:var(--txt3)">뉴스 기사 스캔용 API · 재시작 시 초기화</span>`;
+  }
+  if (hintEl) {
+    const news = D.news || [];
+    if (news.length > 0) {
+      hintEl.style.display = '';
+      hintEl.textContent = `${news.length}개 기사 대기 중 — 관심 있는 기사를 Telegram에 링크로 보내면 초안이 생성됩니다`;
+    } else {
+      hintEl.style.display = 'none';
+    }
+  }
+
+  const news = D.news || [];
+  document.getElementById('news-list').innerHTML = !news.length
+    ? '<div class="empty-state">최근 뉴스 없음</div>'
+    : news.map(n => `<div class="news-item">${esc(n.title)}</div>`).join('');
+
+  const latest = (D.trace || [])[0];
+  document.getElementById('pipeline-flow').innerHTML = pipelineHTML(latest?.status || 'pending');
+
+  const trace = (D.trace || []).slice(0, 8);
+  document.getElementById('draft-rows').innerHTML = !trace.length
+    ? '<div class="empty-state">초안 없음</div>'
+    : trace.map(t => `<div class="draft-row">
+        <span class="draft-hook">${esc(t.hook)}</span>
+        <div class="draft-badges">${badge(t.status)}${riskBadge(t.risk_level)}</div>
+        <span class="draft-time">${esc(t.created_kst)}</span>
+      </div>`).join('');
+}
+
+function renderOps() {
+  const s = D.status;
+  const qItems = s?.queue?.pending_items || [];
+  const qTotal = s?.queue?.pending_count ?? 0;
+  document.getElementById('queue-count-badge').textContent = `${qTotal} pending`;
+  document.getElementById('queue-list').innerHTML = !qItems.length
+    ? '<div class="empty-state">큐 비어 있음</div>'
+    : qItems.map(item => `<div class="queue-item">
+        <div class="queue-text">${esc(item.text)}</div>
+        <div class="queue-meta">
+          <span class="queue-time">${kstFmt(item.added_at)}</span>
+          ${item.notified ? '<span class="notified-tag">알림 완료</span>' : ''}
+        </div>
+      </div>`).join('');
+
+  const mon = s?.monitor;
+  document.getElementById('monitor-rows').innerHTML = !mon ? '<div class="empty-state">—</div>' : `
+    <div class="ops-row">
+      <span class="ops-lbl">상태</span>
+      <span class="ops-val" style="color:${mon.reply_monitor_paused ? 'var(--amber)' : 'var(--green)'}">
+        ${mon.reply_monitor_paused ? '⏸ 일시정지' : '▶ 활성'}
+      </span>
+    </div>
+    <div class="ops-row">
+      <span class="ops-lbl">대기 중 답글 초안</span>
+      <span class="ops-val" style="color:${(mon.pending_reply_drafts??0)>0?'var(--amber)':'var(--txt)'}">${mon.pending_reply_drafts ?? 0}</span>
+    </div>`;
+
+  const nm = s?.news;
+  document.getElementById('news-monitor-rows').innerHTML = !nm ? '<div class="empty-state">—</div>' : `
+    <div class="ops-row"><span class="ops-lbl">대기 기사</span><span class="ops-val" style="color:${(nm.pending_articles??0)>0?'var(--accent)':'var(--txt)'}">${nm.pending_articles ?? 0}</span></div>
+    <div class="ops-row"><span class="ops-lbl">스토리 클러스터</span><span class="ops-val">${nm.story_clusters ?? 0}</span></div>
+    <div class="ops-row"><span class="ops-lbl">알림 발송 스토리</span><span class="ops-val">${nm.alerted_stories ?? 0}</span></div>
+    <div class="ops-row"><span class="ops-lbl">야간 버퍼</span><span class="ops-val">${nm.overnight_buffer ?? 0}</span></div>`;
+
+  const act = s?.activity;
+  const lastPub = s?.queue?.last_published_at;
+  document.getElementById('activity-rows').innerHTML = !act ? '<div class="empty-state">—</div>' : `
+    <div class="ops-row">
+      <span class="ops-lbl">마지막 활동</span>
+      <span class="ops-val" style="font-size:13px">${esc(act.last_activity_kst || '—')}</span>
+    </div>
+    <div class="ops-row">
+      <span class="ops-lbl">비활성 시간</span>
+      <span class="ops-val" style="color:${act.is_idle ? 'var(--red)' : act.hours_idle>12?'var(--amber)':'var(--txt)'}">
+        ${act.hours_idle != null ? act.hours_idle.toFixed(1) + 'h' : '—'}${act.is_idle ? ' ⚠️' : ''}
+      </span>
+    </div>
+    <div class="ops-row">
+      <span class="ops-lbl">마지막 게시</span>
+      <span class="ops-val" style="font-size:13px">${kstFmt(lastPub)}</span>
+    </div>`;
+}
+
+// ── Asset upload UI ────────────────────────────────────────────────────────
+const UPLOAD_SLOTS = [
+  {file:'hero_blonde_assistant.png', label:'홈 히어로 — 금발 어시스턴트', icon:'👩‍💻'},
+  {file:'draftwriter.png',           label:'DraftWriter',                  icon:'✍️'},
+  {file:'reviewer.png',              label:'Reviewer',                     icon:'🔍'},
+  {file:'researcher.png',            label:'Researcher',                   icon:'🦊'},
+  {file:'factchecker.png',           label:'FactChecker',                  icon:'🧩'},
+  {file:'trendhunter_black.png',     label:'TrendHunter',                  icon:'📡'},
+];
+
+function renderUploadSlots() {
+  const wrap = document.getElementById('upload-slots');
+  if (!wrap) return;
+  wrap.innerHTML = UPLOAD_SLOTS.map(s => {
+    const img = new Image();
+    img.src = '/static/' + s.file + '?t=' + Date.now();
+    img.onload  = () => _setSlotStatus(s.file, 'ok',      '✓ 업로드됨');
+    img.onerror = () => _setSlotStatus(s.file, 'missing', '미업로드');
+    const safeId = s.file.replace(/\./g, '_');
+    return `<div class="upload-slot" onclick="triggerUpload('${s.file}')">
+      <div class="upload-slot-icon">${s.icon}</div>
+      <div class="upload-slot-info">
+        <div class="upload-slot-name">${s.label}</div>
+        <div class="upload-slot-status missing" id="ustat_${safeId}">확인 중…</div>
+      </div>
+      <div class="upload-slot-btn">업로드</div>
+      <input type="file" accept="image/png,image/jpeg,image/webp"
+             id="uinput_${safeId}" style="display:none"
+             onchange="doUpload(this,'${s.file}')">
+    </div>`;
+  }).join('');
+}
+
+function _setSlotStatus(filename, cls, msg) {
+  const el = document.getElementById('ustat_' + filename.replace(/\./g,'_'));
+  if (!el) return;
+  el.className = 'upload-slot-status ' + cls;
+  el.textContent = msg;
+}
+
+function triggerUpload(filename) {
+  document.getElementById('uinput_' + filename.replace(/\./g,'_')).click();
+}
+
+async function doUpload(input, targetFilename) {
+  const file = input.files[0];
+  if (!file) return;
+  _setSlotStatus(targetFilename, 'uploading', '업로드 중…');
+  const fd = new FormData();
+  // rename the file to the expected target filename before sending
+  const renamed = new File([file], targetFilename, {type: file.type});
+  fd.append('file', renamed);
+  try {
+    const res = await fetch('/control/upload-asset', {method:'POST', body:fd});
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      _setSlotStatus(targetFilename, 'ok', `✓ 완료 (${(data.size/1024).toFixed(0)}KB)`);
+      document.getElementById('upload-status').textContent = `마지막 업로드: ${targetFilename}`;
+      // Reload the image in hero/AI cards
+      if (targetFilename === 'hero_blonde_assistant.png') {
+        const img = document.getElementById('hero-char-img');
+        if (img) img.src = '/static/' + targetFilename + '?t=' + Date.now();
+      }
+      // Reload AI worker images
+      document.querySelectorAll('.worker-char-img').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        if (src.includes(targetFilename.replace('?t=','').split('?')[0]))
+          img.src = '/static/' + targetFilename + '?t=' + Date.now();
+      });
+      renderAI(); // re-render AI cards with fresh image
+    } else {
+      _setSlotStatus(targetFilename, 'error', data.detail || '업로드 실패');
+    }
+  } catch(e) {
+    _setSlotStatus(targetFilename, 'error', '네트워크 오류');
+  }
+  input.value = '';
+}
+
+renderUploadSlots();
+
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>

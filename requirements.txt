@@ -33,5 +33,9 @@ requests-oauthlib>=2.0.0
 pytest>=8.3.4
 pytest-asyncio>=0.25.0
 
+# Scheduler (뉴스 모니터)
+apscheduler>=3.10.0
+
 # Utilities
 python-dateutil>=2.9.0
+python-multipart>=0.0.9
