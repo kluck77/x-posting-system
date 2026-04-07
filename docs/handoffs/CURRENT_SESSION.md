@@ -1,63 +1,58 @@
-# Current Session — 2026-04-07 (Session 21)
+# Current Session — 2026-04-07 (Session 22)
 
 ## What Was Done This Session
 
-### Pixel HUD Dashboard — S21 (Human-level polish + Home focus)
+### Dashboard S22 — Quiet internal tool mode (direction shift)
 
-S18(rebuild) → S19(Korean/mobile) → S20(polish) → **S21(human-level + Home focus)**.
-백엔드/스키마/승인 워크플로 변경 없음. `static/dashboard.html` 단일 파일만.
+게임풍 HUD → **조용한 AI 회사 내부 운영툴**. 백엔드/승인 워크플로/테스트 변경 없음. `static/dashboard.html` 단일 파일 CSS 오버라이드 블록(S22 reset HUD) 추가.
 
-S21은 두 단계로 진행되었음:
-(a) 전반적 휴먼 레벨 폴리시 — S20 위에 S21 스텝 1~5 적용 (토큰·글로우 미세조정, 신규 컴포넌트 CSS, HTML 구조 정리, 홈 spark + attention-band, AI 워커 프레즌스)
-(b) **Home 집중 리파인 (이번 커밋 핵심)** — "사람이 마감한 운영실 메인 화면" 느낌
+### 실제 제거한 HUD 요소
+1. 전역 배경 grid + scanline (`body::before/::after` display:none)
+2. 모든 L자 코너 장식: `.panel/.kpi/.ops-card/.ws-node/.lane::before::after` + `.hero-corner`
+3. Hero signal bar (`.signal` 4-bar 애니메이션)
+4. 탭 활성 글로우 + underline box-shadow + ic drop-shadow
+5. panel-hero accent 인셋 글로우 + hero state label text-shadow + 헤더 dot pulse 애니메이션
+6. flow-wrap 세로 그라디언트 rail + 흐르는 pulse dot
+7. stage-dot, worker-rail, ws-status blink, bar-row glow, lucky-pulse glow
 
-### Home 집중 변경
+### 타이포 체계
+- 본문: `-apple-system/SF Pro Text/Inter/Pretendard/system-ui` · base 14px
+- 숫자 전용 mono tabular: `.num, .k-val, runs, ops-head .big, lane num, strip val, hero label, hero-summary b, ops-summary val, clock`
+- KPI 46→40px/700/-0.8px, hero state 38→30px/700/-0.3px, ops big 30→24px/700
 
-1. **Hero 위계 강화**
-   - `hero-state .label` 34px/700/+1px → **38px/800/-0.5px**, text-shadow 0.25→0.30
-   - `.sub` 색을 txt → txt2 로 낮춰 주상태와 분리
+### 패널 스타일
+- 모든 컨테이너 단색 `var(--panel)` + 1px `var(--line)` + **좌측 3px 카테고리 accent bar** 로 통일
+- radius 2px (뾰족함 살짝 완화), box-shadow 제거, 그라디언트 배경 제거
+- panel-head: accent 대신 `var(--txt)` 텍스트 + 앞 6px 사각 accent dot
+- ws-header/ops-summary/attn-band 도 같은 패턴
 
-2. **hero-summary 4칩 강조 (숫자+라벨 한 단위)**
-   - flex → **4-column grid**(모바일 2-column), 칩 형태 (`surface-2` 배경, 좌측 2px accent 라인)
-   - 라벨 11px/600/txt3, **숫자 20px/800/tnum/-0.5px**
-   - 칩별 좌측 보더 색: 초안=news / 승인대기=ok / 프리미엄=premium / B2B=b2b
+### 상태색 vs 카테고리색 분리
+- **상태색(ok/warn/danger)** 은 진짜 상태에만:
+  - hero state label ok/warn (db 정상/점검)
+  - attention band danger/warn/idle
+  - state-chip ready(ok)/wait(warn)/empty(neutral)
+  - 헤더 상태 dot (ok)
+- **카테고리색(cat-premium/brief/b2b/news/weekly/cta)** 은 섹션 식별에만:
+  - 좌측 3px bar (KPI/strip/ops-card/lane/ws-node)
+  - KPI 프리미엄/B2B 숫자 색
+  - lane bar fill, ops-mini-item 보더
+- **accent(브랜드)** 는 주 패널/탭 언더라인/패널 head dot/attention band bar 에만
 
-3. **Weekly 하이라이트 홈 중심 승격 (`.panel-hero`)**
-   - 새 클래스 `.panel-hero` 추가 — 테두리 accent 알파 0.28, 내부 accent 인셋 글로우
-   - 헤더 `◆ 이번 주 하이라이트`, 카운트 라벨 13/700/txt
-   - `.hl-item` padding 11→12, font 13→14, 좌측 보더 3→4px, hook 600
-
-4. **Lucky cat `warning` 상태 연결**
-   - `applyCatState()` 클리어 목록에 `warning` 추가
-   - 분기: db_ok=false → alert / is_idle → idle / telegram|X 미설정 → **warning** / 기본 → lucky-pulse (+ coin-rush / lean-weekly)
-   - warning CSS(6~7s 느린 paw/tail, 앰버 글로우)는 S21 (a) 단계에서 이미 추가되어 있음
-
-### 변경되지 않은 것 (의도)
-
-- 백엔드 / 스키마 / 테스트 / 승인 워크플로 / 자동 발행
-- Intake 4 lane / Ops 6 카드 구조
-- AI 5 노드 워커 프레즌스 (S21 a 단계에서 적용 완료)
-- Strip / KPI 그리드 자체 구조
-- 고양이 SVG 자체, 다른 상태(alert/idle/coin-rush/lean-weekly/healthy)
+### 카드 반복감 완화
+- KPI/strip/ws-node: 좌측 bar 색 차이로 구분 (카테고리 또는 line2)
+- Ops 6 카드: 상단 색 띠 제거, 좌측 bar 색만 다름
+- 여백 일관화 (panel margin 12, ws/flow/ops gap 8)
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `static/dashboard.html` | S21 누적 + Home 집중 (hero 위계, hero-summary 칩, panel-hero, cat warning 분기) |
-| `docs/handoffs/CURRENT_SESSION.md` | S21 entry |
-| `docs/handoffs/LATEST_STATUS.md` | S21 entry |
+| `static/dashboard.html` | S22 quiet reset 블록(~200 lines) append |
+| `docs/handoffs/CURRENT_SESSION.md` | 이 파일 |
+| `docs/handoffs/LATEST_STATUS.md` | S22 entry |
 
 ## Branches
-
 - `claude/extract-prediction-time-n82UK`
 - `claude/premium-control-room-ui-LJFba`
 
-양 브랜치 동기화.
-
-## Manual Verification
-
-1. iPhone 375px — hero 상태가 38px 로 강조, 4-칩이 2x2 로 떨어짐
-2. hero-summary 각 칩의 라벨/숫자가 한 단위로 읽힘
-3. 이번 주 하이라이트 패널이 accent 테두리로 홈 중심 요소처럼 보임
-4. 텔레그램/X 미설정일 때 고양이가 `warning` 으로 긴장감 있는 모션
+양 브랜치 sync.

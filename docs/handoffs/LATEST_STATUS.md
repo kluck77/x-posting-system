@@ -1,6 +1,20 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard S21 — Human-level + Home focus
+## ⚠️ LAST COMPLETED PHASE: Dashboard S22 — Quiet Internal Tool Mode
+
+**방향 전환**: 게임풍 HUD → 조용한 AI 회사 내부 운영툴. `static/dashboard.html` 단일 파일.
+- 전역 배경 grid/scanline 제거, 모든 카드 L자 코너 장식 제거, 시그널 바 제거
+- 탭: 글로우·언더라인 그림자 제거, 1px accent 언더라인 + 텍스트 색 변화만
+- 타이포: 본문 system-ui(-apple/Inter/Pretendard), 숫자만 mono tabular 유지
+- 패널/KPI/hero/hero-summary/ops-card/ws-node/lane 전부 평평한 `var(--panel)` + 좌측 3px 카테고리 accent bar 로 통일 (반복감 감소)
+- Hero state 라벨 38→30px/700, text-shadow 제거, sub/meta 색 조정
+- KPI 숫자 46→40px, amber/magenta 만 카테고리 색, cyan/green 은 중립 txt
+- Ops 카드: 상단 색 띠 제거, 좌측 3px bar 로 통일, head 색도 중립 txt
+- lucky cat: lucky-pulse/warning glow 제거, coin-rush 만 약한 drop-shadow 유지
+- state-chip/empty-pro/ops-summary/attn-band/strip-cell 전부 2px border-radius 로 부드럽게
+- 상태색(ok/warn/danger)은 진짜 상태에만 (hero state 라벨, state-chip ready/wait, empty, attention band danger/warn/idle) · 카테고리색은 좌측 bar/카테고리 숫자에만
+
+## ⚠️ PREVIOUS PHASE: Pixel HUD Dashboard S21 — Human-level + Home focus
 
 **S21 — Human-level polish + Home-focused refinement on top of S20. `static/dashboard.html` only.**
 - **Hero 위계 강화**: state 라벨 34→38px/800/-0.5px, sub 색을 txt2로 내려 주·보조 분리

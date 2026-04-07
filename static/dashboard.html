@@ -1114,6 +1114,285 @@ body::after{
 }
 .cat-wrap.coin-rush{filter:drop-shadow(0 0 7px rgba(255,209,102,0.65))}
 
+/* ─── S22 · quiet internal tool mode (reset HUD) ──────────── */
+
+/* 1. 전역 배경 장식 제거 */
+body::before,body::after{display:none !important}
+
+/* 2. 타이포 제품형 전환 — 본문 system-ui, 숫자만 mono tabular */
+html,body{
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter','Pretendard',system-ui,'Segoe UI',Roboto,sans-serif;
+  font-size:14px;
+  letter-spacing:0;
+}
+.num,.k-val,.k-val .unit,
+.ws-meta .runs,.ops-head .big,
+.lane-head .num,.strip-cell .val,
+.hero-state .label,.hero-summary span b,
+.ops-summary .cell .val,
+#clk-utc,#clk-kst{
+  font-family:'JetBrains Mono','SF Mono',Menlo,Monaco,monospace;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+
+/* 3. 헤더 정리 — 조용한 브랜드 + 펄스 dot 제거 */
+.hud-header{background:rgba(10,13,24,0.92)}
+.hud-brand{text-transform:none;letter-spacing:0.3px;font-size:13px;color:var(--txt)}
+.hud-brand .dot{
+  width:7px;height:7px;background:var(--ok);box-shadow:none;
+  animation:none;
+}
+.hud-brand-sub{letter-spacing:0.1px;font-size:11px;color:var(--txt3)}
+.hud-clock{letter-spacing:0.3px}
+
+/* 4. 탭 — 글로우·그라디 제거, 1px 언더라인만 */
+.tab-btn{border-top:1px solid transparent;color:var(--txt2);font-weight:600}
+.tab-btn.active{
+  color:var(--txt);background:transparent;border-top-color:var(--accent);
+  font-weight:700;
+}
+.tab-btn.active .ic{filter:none;font-size:20px}
+.tab-btn.active::after{display:none}
+.tab-btn .ic{font-size:18px}
+
+/* 5. 코너 장식 전부 제거 */
+.hero-corner{display:none}
+.panel::before,.panel::after,
+.kpi::before,.kpi::after,
+.ops-card::before,.ops-card::after,
+.ws-node::before,.ws-node::after,
+.lane::before{display:none}
+
+/* 6. 시그널 바 / 배경 신호 애니메이션 제거 */
+.signal{display:none}
+
+/* 7. 패널 primitive — flat + 좌측 3px accent */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--accent);
+  box-shadow:none;
+}
+.panel-head{
+  color:var(--txt);font-weight:700;font-size:13px;
+  letter-spacing:0.1px;border-bottom-color:var(--line);
+}
+.panel-head::before{
+  content:'';display:inline-block;width:6px;height:6px;
+  background:var(--accent);margin-right:4px;vertical-align:1px;
+}
+.panel-head .label{color:var(--txt2);font-weight:600}
+.panel-hero{
+  border-left-color:var(--accent);
+  box-shadow:none;background:var(--panel);
+}
+.panel-hero .panel-head{border-bottom-color:var(--line)}
+
+/* 8. Hero — 평평한 패널, 업무 헤더 스타일 */
+.hero{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--accent);
+  box-shadow:none;
+}
+.hero::before,.hero::after{display:none}
+.hero-body{padding:16px 18px 14px 18px}
+.hero-title{
+  color:var(--txt2);text-transform:uppercase;
+  letter-spacing:0.8px;font-size:11px;font-weight:700;
+}
+.hero-title::before{content:''}
+.hero-state{margin-top:8px}
+.hero-state .label{
+  font-size:30px;font-weight:700;letter-spacing:-0.3px;color:var(--txt);
+  text-shadow:none !important;
+}
+.hero-state .label.ok{color:var(--ok)}
+.hero-state .label.warn{color:var(--warn)}
+.hero-state .label.idle{color:var(--txt)}
+.hero-state .sub{color:var(--txt2);font-size:13px}
+.hero-meta{color:var(--txt3);font-size:11px}
+.hero-spark{opacity:0.55}
+
+/* hero-summary chips — 평평하게 */
+.hero-summary span{
+  background:var(--bg2);border:1px solid var(--line);border-left-width:3px;
+  border-radius:2px;padding:10px 11px;
+}
+.hero-summary span b{font-size:22px;color:var(--txt)}
+
+/* 9. KPI — 좌측 3px 카테고리 bar + flat, 숫자 사이즈 조정 */
+.kpi-grid{gap:8px}
+.kpi{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--line2);
+  border-radius:2px;min-height:104px;padding:13px 14px 12px 14px;
+}
+.kpi.cyan{border-left-color:var(--accent)}
+.kpi.green{border-left-color:var(--ok)}
+.kpi.amber{border-left-color:var(--cat-premium)}
+.kpi.magenta{border-left-color:var(--cat-b2b)}
+.kpi .k-label{color:var(--txt2);font-size:12px;font-weight:600;letter-spacing:0}
+.kpi .k-val{font-size:40px;font-weight:700;letter-spacing:-0.8px;color:var(--txt)}
+.kpi.amber .k-val{color:var(--cat-premium)}
+.kpi.magenta .k-val{color:var(--cat-b2b)}
+.kpi.cyan .k-val{color:var(--txt)}
+.kpi.green .k-val{color:var(--txt)}
+.kpi .k-sub{color:var(--txt3);font-size:11px;margin-top:6px}
+
+/* 10. attention band — 조용한 노티스 */
+.attn-band{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:2px;
+  box-shadow:none;
+}
+.attn-band .label{font-weight:700}
+
+/* 11. strip cells */
+.strip{gap:8px}
+.strip-cell{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--line2);border-radius:2px;
+}
+.strip-cell .val{font-size:22px;font-weight:700}
+
+/* 12. ws-header / lane section header */
+.ws-header,.lane-head{
+  color:var(--txt);font-weight:700;font-size:13px;letter-spacing:0.1px;
+}
+.ws-header{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:2px}
+.ws-header .right{color:var(--txt2)}
+.lane-head .stage{background:var(--bg2);border-radius:2px;color:var(--txt2)}
+.lane-head .num{color:var(--txt)}
+
+/* 13. AI 워크스테이션 — flat, 좌측 역할 색 bar, 서브틀 구분 */
+.ws-node{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--line2);border-radius:2px;
+  padding:14px 16px;min-height:auto;
+}
+.ws-node[class*="role-"]{border-left-color:var(--role)}
+.ws-node .worker-rail{display:none}
+.ws-node .ws-icon{
+  border:1px solid var(--line);background:var(--bg2);
+  border-radius:2px;
+}
+.ws-node .ws-icon::before,.ws-node .ws-icon::after{display:none}
+.ws-node .ws-icon svg [fill="none"]{fill:none}
+.ws-role{font-size:14px;font-weight:700}
+.role-badge{
+  background:var(--bg2);border-radius:2px;font-size:10px;
+  padding:2px 6px;
+}
+.ws-prov{font-size:11px;font-weight:500;color:var(--txt2)}
+.ws-node[class*="role-"] .ws-prov{color:var(--txt2)}
+.ws-status{color:var(--txt2);font-size:11px}
+.ws-status::before{width:4px;height:4px;animation:none;opacity:0.7}
+.ws-task{color:var(--txt3);font-size:11px;border-top-color:var(--line);border-top-style:solid}
+.ws-task b{color:var(--txt2)}
+.ws-meta .runs{font-size:26px;font-weight:700;letter-spacing:-0.5px}
+.ws-meta .lbl{color:var(--txt3);text-transform:uppercase;font-size:9px;letter-spacing:0.5px}
+.ws-activity i.on{box-shadow:none}
+.ws-node[class*="role-"].working .worker-rail{box-shadow:none}
+.ws-node[class*="role-"] .ws-icon svg rect,
+.ws-node[class*="role-"] .ws-icon svg circle,
+.ws-node[class*="role-"] .ws-icon svg line{opacity:0.9}
+
+/* 14. lanes flat */
+.lane{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--line2);border-radius:2px;
+  padding-left:20px;
+}
+.lane.green{border-left-color:var(--cat-news)}
+.lane.amber{border-left-color:var(--cat-premium)}
+.lane.magenta{border-left-color:var(--cat-b2b)}
+.lane::after{display:none}
+.lane .stage-dot{display:none}
+.flow-wrap::before,.flow-wrap::after{display:none}
+.bar-row .bv{border-radius:1px;background:var(--bg2)}
+.bar-row .bv::after{box-shadow:none;background:var(--accent);opacity:0.85}
+.lane.amber .bv::after{background:var(--cat-premium)}
+.lane.green .bv::after{background:var(--cat-news)}
+.lane.magenta .bv::after{background:var(--cat-b2b)}
+.bar-row .bn{color:var(--txt);font-weight:600}
+
+/* 15. Ops cards — flat, 카테고리 좌측 3px bar (상단 띠 제거) */
+.ops-card{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--line2);border-top:1px solid var(--line);
+  border-radius:2px;
+}
+.ops-card.amber{border-left-color:var(--cat-premium)}
+.ops-card.brief{border-left-color:var(--cat-brief)}
+.ops-card.green{border-left-color:var(--cat-news)}
+.ops-card.magenta{border-left-color:var(--cat-b2b)}
+.ops-card.gold{border-left-color:var(--cat-weekly)}
+.ops-card.cta{border-left-color:var(--cat-cta)}
+.ops-head{color:var(--txt);font-weight:700;font-size:13px;letter-spacing:0}
+.ops-card.amber .ops-head,
+.ops-card.brief .ops-head,
+.ops-card.green .ops-head,
+.ops-card.magenta .ops-head,
+.ops-card.gold .ops-head,
+.ops-card.cta .ops-head{color:var(--txt)}
+.ops-head .big{font-size:24px;font-weight:700;color:var(--txt)}
+.ops-row .pill{
+  background:var(--bg2);border:1px solid var(--line);border-radius:2px;
+  color:var(--txt2);font-weight:500;
+}
+.ops-row .pill b{color:var(--txt);font-weight:700;margin-right:4px}
+.ops-mini-item{
+  background:var(--bg2);border-radius:2px;border-left-width:2px;
+}
+.ops-summary{
+  background:var(--panel);border:1px solid var(--line);border-radius:2px;
+  border-left:3px solid var(--accent);gap:0;
+}
+.ops-summary .cell{background:var(--panel);border-right:1px solid var(--line)}
+.ops-summary .cell:last-child{border-right:none}
+.ops-summary .cell .val{font-size:22px;font-weight:700;color:var(--txt)}
+.ops-summary .cell .lbl{color:var(--txt2)}
+
+/* 16. state chip — 평평, neutral/ready/wait/empty */
+.state-chip{
+  border-radius:2px;background:var(--bg2);color:var(--txt2);
+  border-color:var(--line);
+}
+.state-chip::before{display:none}
+.state-chip.ready{color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,var(--bg2));border-color:color-mix(in srgb,var(--ok) 30%,var(--line))}
+.state-chip.wait{color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--bg2));border-color:color-mix(in srgb,var(--warn) 30%,var(--line))}
+.state-chip.empty{color:var(--txt3);background:var(--bg2);border-color:var(--line)}
+
+/* 17. empty-pro 부드럽게 */
+.empty-pro{
+  background:var(--bg2);border-radius:2px;
+  border:1px dashed var(--line);
+}
+
+/* 18. highlights row — 리스트형 업무툴 */
+.hl-item{
+  background:var(--bg2);border-left-width:3px;border-radius:2px;
+  padding:11px 13px;
+}
+.panel-hero .hl-item{font-size:13px;padding:11px 13px;border-left-width:3px}
+.hl-item .id{color:var(--txt3)}
+.hl-item .hook{color:var(--txt);font-weight:500}
+.hl-item .score{color:var(--cat-weekly)}
+
+/* 19. lucky cat — glow 더 절제 (데이터 가림 방지 + 조용) */
+.cat-wrap{opacity:0.85}
+.cat-wrap.lucky-pulse{filter:none;animation:none}
+.cat-wrap.coin-rush{filter:drop-shadow(0 0 4px rgba(255,209,102,0.5))}
+.cat-wrap.warning{filter:none}
+.cat-wrap.alert{filter:grayscale(0.7) brightness(0.7)}
+
+/* 20. 작은 여백/반복감 완화 */
+.panel{margin-bottom:12px}
+.ws-grid{gap:8px}
+.flow-wrap{gap:8px}
+.ops-grid{gap:8px}
+
 /* ─── Page-specific styles inserted in later steps ────────── */
 </style>
 </head>
