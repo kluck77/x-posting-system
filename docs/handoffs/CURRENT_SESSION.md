@@ -1,4 +1,33 @@
-# Current Session — 2026-04-07 (Session 50 — Forensic)
+# Current Session — 2026-04-07 (Session 51 — Forensic)
+
+## S51 — AI 카드 아이콘/텍스트 충돌 수리 (역할명 첫 글자 잘림)
+
+`static/dashboard.html` 만. AI 탭 한정. 삭제-온리.
+
+### 스크린샷 증거
+"뷰어", "서처", "트체커", "렌드 헌터" — 역할명 첫 글자(리/리/팩/트)가 아이콘 박스에 덮여 잘림.
+
+### Root Cause
+S28 L4804 `#ws-grid.v28 .ws28-icon { width:80px !important; height:56px !important }` 가 여전히 살아있었음.
+- specificity `#id + 2 class` > S37의 `.ws28-icon{width:52px !important}` (1 class)
+- S28이 이겨서 아이콘 실제 width = 80px
+- 그러나 S37의 grid-template-columns 는 `52px 1fr`
+- 80px 아이콘 박스가 52px 컬럼을 **28px 오버플로우**해서 텍스트 컬럼 첫 글자를 덮어씀
+
+추가: @media(max-width:760px) L4888 `#ws-grid.v28 .ws28-icon{width:70px}` 도 같은 방식으로 iPhone에서 70→52 오버플로우.
+
+### 실제 수정 (삭제 2줄)
+1. L4804 `#ws-grid.v28 .ws28-icon{width:80px;height:56px}` → 삭제
+2. L4888 `#ws-grid.v28 .ws28-icon{width:70px;height:50px}` (미디어쿼리) → 삭제
+
+결과: S37 canonical `.ws28-icon{width:52px;height:50px}` 가 유일 규칙. 아이콘이 52px 컬럼 안에 정상 수납되고 텍스트 시작점 침범 없음. `.ws28-info { min-width:0 }`(S37 L5557)과 `grid-template-columns:52px 1fr` 로 텍스트 시작선이 카드마다 고정.
+
+### Do Not Touch
+S37 canonical block, S50 tab fix, S50 좌측 밀도(26/52/10), S50 micro chart, 다른 탭.
+
+---
+
+# Previous — Session 50 — Forensic
 
 ## S50 — Tab 전환 + micro chart + 좌측 밀도 (포렌식)
 
