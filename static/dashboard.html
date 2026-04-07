@@ -5135,6 +5135,240 @@ body > .cat-wrap{display:none !important}
 </script>
 
 <style>
+/* ─── S37 — Cat as free-roaming pet + AI card layout rebuild (see script below) ─── */
+</style>
+<script>
+(function(){
+  // ── (A) Cat: detach from panel-hero, become a Home-scoped roaming pet ──
+  function setupCat(){
+    const cat = document.getElementById('cat');
+    const home = document.getElementById('page-home');
+    if(!cat || !home) return;
+    if(cat.dataset.s37) return;
+
+    // Move cat OUT of panel-hero, into #page-home as a free child
+    if(cat.parentNode !== home){
+      home.appendChild(cat);
+    }
+    home.style.position = 'relative';
+    cat.dataset.s37 = '1';
+
+    // Reset inline / inherited transforms
+    cat.style.position = 'absolute';
+    cat.style.zIndex = '5';
+    cat.style.pointerEvents = 'none';
+    cat.style.transition = 'left 2.4s ease-in-out, top 2.4s ease-in-out, transform 0.6s ease, opacity 0.6s ease';
+    cat.style.opacity = '0.78';
+    cat.style.filter = 'none';
+    cat.style.width = '56px';
+    cat.style.height = '56px';
+    cat.style.transform = 'scale(1)';
+
+    // Define perch spots — safe corners that don't cover data
+    function perches(){
+      const w = home.clientWidth || 360;
+      const h = home.clientHeight || 600;
+      // Corners + edges, with margin from content
+      return [
+        {x: w - 64, y: 6,        flip:false}, // top right
+        {x: 6,      y: 6,        flip:true},  // top left
+        {x: w - 64, y: h - 70,   flip:false}, // bottom right
+        {x: 6,      y: h - 70,   flip:true},  // bottom left
+        {x: w - 64, y: Math.round(h*0.45), flip:false}, // mid right
+        {x: 6,      y: Math.round(h*0.55), flip:true},  // mid left
+      ];
+    }
+
+    let idx = 0;
+    function moveTo(spot){
+      cat.style.left = spot.x + 'px';
+      cat.style.top  = spot.y + 'px';
+      cat.style.transform = `scale(1) ${spot.flip ? 'scaleX(-1)' : ''}`.trim();
+    }
+    // Initial perch: top-right
+    function start(){
+      const ps = perches();
+      moveTo(ps[0]);
+    }
+    start();
+
+    // Wander between perches every 22-38s (slow, "lives here" feel)
+    function wander(){
+      const ps = perches();
+      idx = (idx + 1 + Math.floor(Math.random()*2)) % ps.length;
+      moveTo(ps[idx]);
+      const next = 22000 + Math.floor(Math.random()*16000);
+      setTimeout(wander, next);
+    }
+    setTimeout(wander, 8000);
+
+    // Re-perch on resize / orientation change
+    let rt;
+    window.addEventListener('resize', ()=>{
+      clearTimeout(rt);
+      rt = setTimeout(()=>{
+        const ps = perches();
+        moveTo(ps[idx % ps.length]);
+      }, 200);
+    });
+
+    // Hide on non-home tabs (observer on .page.active)
+    function syncVisibility(){
+      const homeActive = home.classList.contains('active');
+      cat.style.display = homeActive ? '' : 'none';
+    }
+    syncVisibility();
+    const mo = new MutationObserver(syncVisibility);
+    mo.observe(home, {attributes:true, attributeFilter:['class']});
+  }
+  setupCat();
+  setTimeout(setupCat, 600);
+  setTimeout(setupCat, 2000);
+})();
+</script>
+
+<style>
+/* ─── S37 — Cat pet styling + AI layout rebuild ─── */
+
+/* (A) Cat — free roaming pet inside #page-home only */
+#page-home > .cat-wrap{
+  position:absolute !important;
+  width:56px !important;height:56px !important;
+  pointer-events:none;
+  z-index:5 !important;
+  filter:none !important;
+  opacity:0.78 !important;
+  transition:left 2.4s ease-in-out, top 2.4s ease-in-out, transform 0.6s ease, opacity 0.6s ease !important;
+}
+#page-home > .cat-wrap .cat-coin-plus{display:none !important}
+/* gentle idle: only blink + slow tail, no aggressive glow */
+#page-home > .cat-wrap.lucky-pulse,
+#page-home > .cat-wrap.coin-rush,
+#page-home > .cat-wrap.warning,
+#page-home > .cat-wrap.alert{
+  filter:none !important;animation:none !important;
+}
+#page-home > .cat-wrap .cat-tail{animation:tailFlick 5.5s ease-in-out infinite !important}
+#page-home > .cat-wrap .cat-eye-l,
+#page-home > .cat-wrap .cat-eye-r{animation:catBlink 6s steps(1,end) infinite !important}
+/* prevent earlier scale rules from overriding */
+#page-home > .cat-wrap{transform:scale(1)}
+/* hide the legacy in-panel cat once moved out */
+#page-home .panel-hero .cat-wrap:not([data-s37]){display:none !important}
+/* never elsewhere */
+#page-ai .cat-wrap, #page-intake .cat-wrap, #page-ops .cat-wrap{display:none !important}
+
+/* (B) AI station card — rebuild as 2-col grid with meta below info
+       Frees text area from being squeezed by icon + right column. */
+#ws-grid.v28 .ws28{
+  display:grid !important;
+  grid-template-columns:58px 1fr !important;
+  grid-template-areas:"icon info" "icon meta" !important;
+  column-gap:12px !important;row-gap:6px !important;
+  padding:12px 10px 12px 0 !important;
+  align-items:start !important;
+}
+.ws28-icon{
+  grid-area:icon;
+  width:58px !important;height:54px !important;
+  align-self:start;
+}
+.ws28-info{
+  grid-area:info;min-width:0;
+  display:flex !important;flex-direction:column;gap:5px !important;
+}
+.ws28-c{
+  grid-area:meta;min-width:0;
+  display:flex !important;flex-direction:row !important;
+  align-items:center !important;justify-content:flex-start !important;
+  gap:10px !important;padding:6px 0 0 0 !important;
+  border-left:none !important;border-top:1px dashed var(--line) !important;
+  margin-top:2px;
+}
+.ws28-c .runs{
+  font-size:18px !important;font-weight:700;line-height:1 !important;
+  font-feature-settings:"tnum";letter-spacing:-0.3px;
+  order:1;flex:0 0 auto;
+}
+.ws28-c .lbl{
+  font-size:8.5px !important;letter-spacing:0.6px;color:var(--txt3);
+  text-transform:uppercase;line-height:1;
+  order:2;flex:0 0 auto;align-self:center;
+}
+.ws28-c .strip{
+  order:3;flex:1 1 auto;justify-content:flex-end;
+  height:12px !important;margin-top:0 !important;gap:2px !important;
+  display:flex !important;align-items:flex-end;max-width:140px;margin-left:auto;
+}
+.ws28-c .strip i{width:3px !important;border-radius:1px}
+.ws28-c .strip i.lo{height:3px !important}
+.ws28-c .strip i.md{height:7px !important}
+.ws28-c .strip i.hi{height:11px !important}
+
+/* (C) AI card text area — restored breathing room */
+.ws28-a{
+  display:flex !important;align-items:center !important;
+  gap:8px !important;flex-wrap:wrap !important;margin-bottom:1px;
+}
+.ws28-role{
+  font-size:13px !important;font-weight:600;color:var(--txt);
+  letter-spacing:0.1px;line-height:1.3;
+}
+.ws28-status{
+  font-size:11px !important;color:var(--txt2);
+  display:inline-flex;align-items:center;gap:5px;line-height:1.3;
+}
+.ws28-status .dot{width:6px;height:6px;border-radius:50%;background:var(--txt3)}
+.ws28-prov{
+  margin-left:auto !important;font-size:10px !important;
+  padding:2px 6px !important;letter-spacing:0.3px;
+  border:1px solid var(--line);border-radius:2px;color:var(--txt3);
+  text-transform:uppercase;font-feature-settings:"tnum";
+  flex:0 0 auto;
+}
+.ws28-b{
+  padding:6px 10px !important;gap:3px !important;
+  display:flex !important;flex-direction:column;
+  border-left:2px solid var(--line) !important;
+  background:linear-gradient(90deg,var(--surface-2) 0%,transparent 80%) !important;
+  border-radius:0 2px 2px 0;
+}
+.ws28.working .ws28-b{border-left-color:var(--accent) !important}
+.ws28-b .ln{
+  font-size:11.5px !important;line-height:1.5 !important;
+  color:var(--txt2);
+  display:flex !important;align-items:baseline;gap:7px;
+  white-space:normal !important;overflow:visible !important;
+  word-break:keep-all;
+}
+.ws28-b .ln .k{
+  font-size:9px !important;letter-spacing:0.4px;
+  color:var(--txt3);text-transform:uppercase;font-weight:600;
+  flex:0 0 26px !important;min-width:26px;padding-top:1px !important;
+}
+.ws28-b .ln.next{
+  font-size:10.5px !important;color:var(--txt3);
+  padding-left:33px !important;line-height:1.45 !important;
+}
+.ws28-b .ln.next::before{content:'→ ';opacity:0.55}
+
+/* (D) Left rail/step number — keep faint, push slightly inside */
+#ws-grid.v28{padding-left:30px !important}
+#ws-grid.v28::before{
+  left:13px !important;opacity:0.35 !important;
+  background:repeating-linear-gradient(var(--line) 0 2px, transparent 2px 6px) !important;
+}
+.ws28-step{
+  left:-22px !important;font-size:8px !important;
+  color:var(--txt3) !important;opacity:0.5;
+  padding:1px 3px !important;letter-spacing:0.3px;font-weight:500;
+  top:18px !important;transform:none !important;
+}
+.ws28-step::after{
+  width:5px !important;height:5px !important;top:calc(100% + 2px) !important;
+}
+.ws28.working .ws28-step{opacity:0.85}
+
 /* ─── S36b — Home order lock + system status shrink + reinforced title fix ─── */
 
 /* (1) Lock Home section order: situation → highlight → KPI → system status */

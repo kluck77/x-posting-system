@@ -1,4 +1,70 @@
-# Current Session — 2026-04-07 (Session 36)
+# Current Session — 2026-04-07 (Session 37)
+
+## S37 — Cat free-roaming pet + AI card layout rebuild
+
+`static/dashboard.html` 만. 새 구조/기능 없음.
+
+### 1) 고양이가 왜 스티커처럼 보였나
+- S36/S36b 까지 고양이는 `#page-home .panel-hero` 안에 `position:absolute; top/right` 으로 박혀 있었음
+- 카드 모서리에 고정되어 있고, transform scale 0.42 로 작아지고 opacity 0.42 로 흐려져서 → "PNG 스티커" 느낌
+- 카드 안에서 한 자리에 묶여 있어서 살아있는 존재감이 0
+
+### 2) 고양이 재설계
+- DOM 이동: JS 로 `#cat` 을 `#page-hero` 안에서 꺼내 `#page-home` 직속 자식으로 이동
+- `#page-home` 에 `position:relative` 부여 → 페이지 전체 좌표계에서 자유 이동
+- 56×56, opacity 0.78, glow/필터 전부 제거
+- **방랑 (wander)**: 6개 perch 좌표 (top-right, top-left, bottom-right, bottom-left, mid-right, mid-left) 사이를 22~38초 간격 랜덤으로 이동
+- 이동은 `transition:left/top 2.4s ease-in-out` 로 천천히 걸어가는 듯한 보간
+- 좌측 perch 일 때는 `scaleX(-1)` 로 자연스럽게 방향 반전
+- 애니메이션은 꼬리(5.5s) + 눈깜빡임(6s) 만 유지, 코인/펄스/얼럿 전부 끔
+- 데이터/버튼 보호: perch 좌표는 카드 외곽 margin 영역에만 배치 (콘텐츠 위로 올라가지 않음)
+- Home 활성일 때만 보이게 MutationObserver 로 감시
+- resize/orientation 대응: 200ms debounce 후 perch 재계산
+
+### 3) AI 카드 텍스트 폭이 좁았던 원인
+- 기존: `.ws28` 가 3-column grid `88px 1fr 108px` (S36 압축 후)
+- 모바일 폭 ~360px 에서: 88(아이콘) + 108(우측 today) + gaps 24 + 좌패딩 30 = 250px 점유 → 가운데 텍스트 영역 ~110px 만 남음
+- "5기준 체크 완료 · perplexity" 같은 문장이 강제로 줄바꿈, "→ DraftWriter 에 컨텍스트 공급" 도 깨짐
+
+### 4) AI 카드 레이아웃 재구축 (CSS-only, DOM 그대로)
+```
+grid-template-columns: 58px 1fr;
+grid-template-areas:
+  "icon info"
+  "icon meta";
+```
+- `.ws28-icon` → icon 영역, 58×54 로 축소 (오버사이즈 포스터 느낌 제거)
+- `.ws28-info` → info 영역, 텍스트가 카드 폭의 ~75% (1fr - 58 - 12) 사용
+- `.ws28-c` → meta 영역, info 바로 아래로 내려가 가로 strip (runs · TODAY · chart) 로 재구성. `border-left` 제거, `border-top:1px dashed` 로 구분.
+- icon 이 두 행 모두 차지 (`grid-area:icon` rowspan)
+
+### 5) AI 카드 타이포 재정리
+- `.ws28-role` 13px 600
+- `.ws28-status` 11px (dot 6px)
+- `.ws28-prov` margin-left:auto 로 우측 끝, 10px pill
+- `.ws28-b .ln` 11.5px / line-height 1.5 / `word-break:keep-all` (한국어 단어 깨짐 금지) / nowrap 해제
+- `.k` 라벨 9px uppercase, 고정폭 26px → 본문이 항상 같은 위치에서 시작
+- `.ws28-b .ln.next` padding-left:33px (라벨 폭 + gap) 로 본문 정렬에 맞춤
+- runs 18px / lbl 8.5px / strip max-width 140px 우측 정렬 → 한 줄 footer 깔끔
+
+### 6) 좌측 0105 트랙
+- rail left 13px, opacity 0.35
+- step 마커 left -22, font 8, opacity 0.5 (working 일 때만 0.85)
+- top:18px 로 카드 첫 줄 baseline 근처
+
+### 수정 파일
+- `static/dashboard.html` (S37 script + style 블록을 S36b 위에 prepend, style/script 태그 균형 맞춤)
+
+### 커밋
+- `dashboard S37: cat as free-roaming Home pet + AI card 2-row grid rebuild`
+
+### Push
+- `claude/extract-prediction-time-n82UK` ✓
+- `claude/premium-control-room-ui-LJFba` ✓
+
+---
+
+# Previous Session — 2026-04-07 (Session 36)
 
 ## S36 — Home + AI 디테일 폴리싱 (마감)
 

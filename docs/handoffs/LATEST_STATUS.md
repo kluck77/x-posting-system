@@ -1,6 +1,14 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S36 + S36b — Home/AI Detail Polish & Final Hardening
+## LAST COMPLETED PHASE: Dashboard S37 — Cat free-roaming pet + AI card layout rebuild
+
+`static/dashboard.html` only.
+
+**Cat**: detached from `.panel-hero` (was a corner sticker), moved to `#page-home` direct child, free-roaming between 6 perch coordinates with 22-38s slow walk transitions, scaleX flip on left perches, blink+tail only, glow off, MutationObserver hides on non-home tabs. "회사에서 키우는 작은 펫" feel.
+
+**AI cards**: 3-col grid `88/1fr/108` was choking text to ~110px on mobile. Rebuilt as 2-col + 2-row grid via `grid-template-areas: "icon info" "icon meta"` — info now gets ~75% of card width, meta (runs · TODAY · chart) becomes a horizontal footer strip below info. Icon shrunk to 58×54. Text uses `word-break:keep-all`, fixed-width `.k` labels (26px) so 담당/최근/다음 baseline-align. provider pill pinned right via `margin-left:auto`. Korean wrapping fixed.
+
+## PREVIOUS PHASE: Dashboard S36 + S36b — Home/AI Detail Polish & Final Hardening
 
 `static/dashboard.html` only. No backend, no new structure.
 
