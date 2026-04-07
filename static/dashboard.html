@@ -5203,17 +5203,33 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
     // Inline style with !important via cssText (setProperty supports priority)
     // Just enough slack: small breathing room above tab bar, no big void.
     pageAi.style.setProperty('padding-bottom', '0px', 'important');
-    pageAi.style.setProperty('flex', '1 1 auto', 'important');
-    pageAi.style.setProperty('min-height', '100%', 'important');
-    // Make ws-grid fill the AI page and distribute cards evenly so no
-    // empty void appears below the last card.
+    // S46: compute actual scroll viewport height and force #page-ai +
+    // #ws-grid to that height so flex space-between has a real target.
+    // Without this, min-height:100% is relative to .hud-main which works
+    // only when .hud-main is a block container — fine here, but force the
+    // exact pixel height as belt+suspenders so iOS Safari does the right thing.
+    const hud = document.querySelector('.hud-main');
+    if(hud){
+      hud.style.setProperty('padding-bottom', '0px', 'important');
+      hud.style.setProperty('padding-top', '14px', 'important');
+    }
+    const hudH = hud ? hud.clientHeight : 0;
+    const targetH = Math.max(0, hudH - 14); // minus padding-top
+    if(targetH > 0){
+      pageAi.style.setProperty('min-height', targetH + 'px', 'important');
+      pageAi.style.setProperty('height', targetH + 'px', 'important');
+    }
+    pageAi.style.setProperty('display', 'flex', 'important');
+    pageAi.style.setProperty('flex-direction', 'column', 'important');
+
     const grid = pageAi.querySelector('#ws-grid.v28');
     if(grid){
       grid.style.setProperty('flex', '1 1 auto', 'important');
       grid.style.setProperty('display', 'flex', 'important');
       grid.style.setProperty('flex-direction', 'column', 'important');
       grid.style.setProperty('justify-content', 'space-between', 'important');
-      grid.style.setProperty('min-height', '100%', 'important');
+      grid.style.setProperty('min-height', '0', 'important');
+      grid.style.setProperty('padding-bottom', '0', 'important');
     }
     const cards = pageAi.querySelectorAll('#ws-grid.v28 .ws28');
     if(cards.length){
@@ -5221,10 +5237,6 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
       last.style.setProperty('margin-bottom', '0px', 'important');
       last.style.setProperty('border-bottom', 'none', 'important');
     }
-    // Also kill .hud-main's own padding-bottom so the scroll area ends
-    // exactly at the tab bar with no extra void.
-    const hud = document.querySelector('.hud-main');
-    if(hud) hud.style.setProperty('padding-bottom', '0px', 'important');
   }
   forceAiBottom();
   setTimeout(forceAiBottom, 300);
@@ -5616,29 +5628,33 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
   grid-area:meta;min-width:0;
   display:flex !important;flex-direction:row !important;
   align-items:center !important;justify-content:flex-start !important;
-  gap:10px !important;padding:6px 0 0 0 !important;
+  gap:10px !important;padding:8px 4px 4px 0 !important;
   border-left:none !important;border-top:1px dashed var(--line) !important;
   margin-top:2px;
 }
 .ws28-c .runs{
-  font-size:18px !important;font-weight:700;line-height:1 !important;
+  font-size:19px !important;font-weight:700;line-height:1 !important;
   font-feature-settings:"tnum";letter-spacing:-0.3px;
-  order:1;flex:0 0 auto;
+  order:1;flex:0 0 auto;align-self:center;
 }
 .ws28-c .lbl{
-  font-size:8.5px !important;letter-spacing:0.6px;color:var(--txt3);
+  font-size:9px !important;letter-spacing:0.6px;color:var(--txt3);
   text-transform:uppercase;line-height:1;
-  order:2;flex:0 0 auto;align-self:center;
+  order:2;flex:0 0 auto;align-self:center;padding-top:2px;
 }
+/* S46: micro chart — was 12px tall with 3px bars, looked crushed.
+   Bumped height + bar widths and gave the strip a stable min-width so it
+   never gets squeezed by the runs/label. */
 .ws28-c .strip{
-  order:3;flex:1 1 auto;justify-content:flex-end;
-  height:12px !important;margin-top:0 !important;gap:2px !important;
-  display:flex !important;align-items:flex-end;max-width:140px;margin-left:auto;
+  order:3;flex:0 0 auto;justify-content:flex-end;
+  height:18px !important;margin:0 0 0 auto !important;gap:2.5px !important;
+  display:flex !important;align-items:flex-end;
+  width:auto !important;min-width:96px;max-width:140px;
 }
-.ws28-c .strip i{width:3px !important;border-radius:1px}
-.ws28-c .strip i.lo{height:3px !important}
-.ws28-c .strip i.md{height:7px !important}
-.ws28-c .strip i.hi{height:11px !important}
+.ws28-c .strip i{width:4px !important;border-radius:1px;display:block}
+.ws28-c .strip i.lo{height:5px !important}
+.ws28-c .strip i.md{height:11px !important}
+.ws28-c .strip i.hi{height:17px !important}
 
 /* (C) AI card text area — restored breathing room */
 .ws28-a{
