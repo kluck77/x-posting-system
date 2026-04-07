@@ -515,12 +515,29 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .cat-wrap{
   position:absolute;
   right:14px;bottom:14px;
-  width:64px;height:64px;
+  width:72px;height:72px;
   pointer-events:none;
   z-index:2;
-  transition:transform 6s linear;
+  transition:transform 1.4s ease-in-out;
 }
-.cat-wrap.patrol{transform:translateX(-90px)}
+.cat-wrap.lean-weekly{transform:translateX(-12px) translateY(-2px)}
+.cat-wrap.alert .cat-paw,
+.cat-wrap.alert .cat-tail,
+.cat-wrap.alert .cat-coin{animation:none !important}
+.cat-wrap.alert{filter:grayscale(0.6) brightness(0.75)}
+.cat-wrap.alert .cat-ear-l,
+.cat-wrap.alert .cat-ear-r{animation:earTwitch 2.6s ease-in-out infinite}
+@keyframes earTwitch{
+  0%,90%,100%{transform:translateY(0)}
+  93%,96%{transform:translateY(-1.5px)}
+}
+.cat-wrap.idle .cat-paw,
+.cat-wrap.idle .cat-coin{animation:none !important}
+.cat-wrap.idle .cat-tail{animation-duration:9s !important}
+.cat-wrap.coin-rush .cat-coin{animation-duration:0.9s !important}
+.cat-wrap.coin-rush{
+  filter:drop-shadow(0 0 10px rgba(255,209,102,0.85));
+}
 .cat-wrap.lucky-pulse{
   filter:drop-shadow(0 0 6px rgba(255,209,102,0.55));
   animation:luckyPulse 2.4s ease-in-out infinite;
@@ -664,8 +681,8 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
           <!-- head -->
           <rect x="18" y="14" width="26" height="20" fill="#f3f4f6"/>
           <!-- ears -->
-          <rect x="18" y="10" width="6" height="6" fill="#f3f4f6"/>
-          <rect x="38" y="10" width="6" height="6" fill="#f3f4f6"/>
+          <rect class="cat-ear-l" x="18" y="10" width="6" height="6" fill="#f3f4f6"/>
+          <rect class="cat-ear-r" x="38" y="10" width="6" height="6" fill="#f3f4f6"/>
           <rect x="20" y="12" width="2" height="2" fill="#ffb6c1"/>
           <rect x="40" y="12" width="2" height="2" fill="#ffb6c1"/>
           <!-- eyes -->
@@ -1100,42 +1117,56 @@ async function refreshAll(){
 refreshAll();
 setInterval(refreshAll,30000);
 
-/* ─── Lucky cat state machine ─────────────────────────────── */
+/* ─── Lucky cat state machine (system-aware) ──────────────── */
 (function catStateMachine(){
   const cat = $('#cat'); if(!cat) return;
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(reduce) return;
-  let patrolling = false;
-  function step(){
-    // patrol short walk every ~14s
-    if(!patrolling && Math.random() < 0.35){
-      patrolling = true;
-      cat.classList.add('patrol');
-      setTimeout(()=>{
-        cat.classList.remove('patrol');
-        patrolling = false;
-      }, 6200);
-    }
-    // schedule next idle decision
-    setTimeout(step, 9000 + Math.random()*8000);
-  }
-  setTimeout(step, 5000);
 
-  // health-aware lucky pulse
-  function applyHealthGlow(){
-    const s = state.status;
-    const h = s && s.health || {};
-    const a = s && s.activity || {};
-    const healthy = h.db_ok && !a.is_idle;
-    cat.classList.toggle('lucky-pulse', !!healthy);
+  // Mode mapping based on system signals:
+  //  alert      → db_ok=false (점검 필요): 정지 + 귀 twitch
+  //  idle       → activity.is_idle: 앉음 + 꼬리만 느리게
+  //  coin-rush  → premium 또는 b2b 후보 존재: 금화 가속 + 골드 글로우
+  //  lean-weekly→ 주간 하이라이트 존재: weekly 패널 쪽으로 살짝 기울임
+  //  healthy    → 기본 정상: lucky-pulse + blink + tail flick
+  function applyCatState(){
+    const s = state.status || {};
+    const b = state.business || {};
+    const h = s.health || {};
+    const a = s.activity || {};
+    const premium = (b.premium && b.premium.total) || 0;
+    const b2bCount = (b.b2b && b.b2b.total) || 0;
+    const weeklyHl = (b.weekly && b.weekly.highlights || []).length;
+
+    const classes = ['alert','idle','coin-rush','lean-weekly','lucky-pulse'];
+    classes.forEach(c=>cat.classList.remove(c));
+
+    if(h.db_ok === false){
+      cat.classList.add('alert');
+      return;
+    }
+    if(a.is_idle){
+      cat.classList.add('idle');
+      return;
+    }
+    // healthy baseline
+    cat.classList.add('lucky-pulse');
+    if(premium > 0 || b2bCount > 0){
+      cat.classList.add('coin-rush');
+    }
+    if(weeklyHl > 0){
+      cat.classList.add('lean-weekly');
+    }
   }
-  // re-apply after each refresh
+
+  // wrap refreshAll so cat updates after each fetch
   const origRefresh = refreshAll;
   window.refreshAll = async function(){
     await origRefresh();
-    applyHealthGlow();
+    applyCatState();
   };
-  setInterval(applyHealthGlow, 5000);
+  setInterval(applyCatState, 5000);
+  applyCatState();
 })();
 </script>
 </body>
