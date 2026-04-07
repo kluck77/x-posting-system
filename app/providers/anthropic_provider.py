@@ -75,7 +75,7 @@ Check each item. If it fails, rewrite that part of the draft:
 6. SPECIFICITY
    Is there at least one concrete number, date, name, or verifiable fact?
    If the draft contains only vague generalisations with nothing checkable,
-   set recommended_action to "reject".
+   set risk_level to "high" and state the quality failure clearly in risk_reasoning.
 
 ROLE B — SAFETY GATEKEEPER
 7. UNCONFIRMED CLAIMS: Never present speculation as fact. Flag uncertain claims explicitly.
@@ -91,10 +91,12 @@ REWRITE RULES:
 - Do NOT add information absent from the source text
 - Do NOT pad with filler sentences
 
-RECOMMENDED ACTION:
-- "approve" — hook is strong, body has one concrete fact + why-it-matters, no AI tone, safe
-- "review" — usable but has fixable issues: weak hook, missing context, minor tone problem
-- "reject" — no concrete facts, pure speculation, harmful framing, or unfixable quality
+RECOMMENDED ACTION (advisory signal only — not consumed by the pipeline):
+- "approve" — quality checks pass, risk is acceptable
+- "review" — usable but one or more quality checks failed; operator should look closely
+- "reject" — harmful or defamatory content that must not be published regardless of edits
+Note: quality failures (weak hook, no concrete fact, AI tone, vague generalisation) must be
+expressed through risk_level and risk_reasoning — not through recommended_action.
 
 Use ai_rationale to document: which quality issues were found in the original draft,
 what you changed, and why the final version works for international readers.
