@@ -3262,5 +3262,322 @@ setInterval(refreshAll,30000);
   setInterval(()=>{ if(typeof refreshAll==='function') refreshAll(); }, 4000);
 })();
 </script>
+
+<script>
+/* ─── S28 — AI tab: 3-zone workstations, module icons, live traces ── */
+(function(){
+  const WORKFLOW = ['DraftWriter','Reviewer','Researcher','FactChecker','TrendHunter'];
+  const STEP = {DraftWriter:'01',Reviewer:'02',Researcher:'03',FactChecker:'04',TrendHunter:'05'};
+  const ROLE_KO = {DraftWriter:'드래프트 작성',Reviewer:'리뷰어',Researcher:'리서처',FactChecker:'팩트체커',TrendHunter:'트렌드 헌터'};
+  const TASK = {
+    DraftWriter:'훅·본문·CTA 초안 구성',
+    Reviewer:'5기준 품질 게이트',
+    Researcher:'소스·컨텍스트 수집',
+    FactChecker:'주장·출처 검증',
+    TrendHunter:'실시간 트렌드 모니터링',
+  };
+  const NEXT = {
+    DraftWriter:'Reviewer 로 전달',
+    Reviewer:'통과분 발행 대기열',
+    Researcher:'DraftWriter 에 컨텍스트 공급',
+    FactChecker:'리뷰 결과에 주석 첨부',
+    TrendHunter:'Researcher 에 신호 전달',
+  };
+  const RECENT = {
+    DraftWriter:['훅 3안 초안 작성','CTA 2줄 재작성','본문 paragraph 리프레시'],
+    Reviewer:['5기준 체크 완료','반려 사유 기록','재작성 요청 발송'],
+    Researcher:['Reuters/Bloomberg 스캔','컨텍스트 노트 정리','소스 링크 3건 첨부'],
+    FactChecker:['숫자 주장 대조','출처 링크 검증','경고 플래그 1건'],
+    TrendHunter:['키워드 급상승 감지','피드 10건 수집','알림 1건 발행'],
+  };
+  const STATUS_ON = {
+    DraftWriter:'초안 작성 중',
+    Reviewer:'품질 검토 중',
+    Researcher:'소스 수집 중',
+    FactChecker:'주장 검증 중',
+    TrendHunter:'신호 감시 중',
+  };
+  const STATUS_IDLE = {
+    DraftWriter:'작성 대기',
+    Reviewer:'검토할 항목 없음',
+    Researcher:'수집 대기',
+    FactChecker:'확인 대기',
+    TrendHunter:'신호 대기',
+  };
+
+  const moduleFor = role=>{
+    if(role==='DraftWriter') return `<div class="mod"><div class="mod-bar"><i></i><i></i><i></i></div><div class="mod-body"><div class="ln"></div><div class="ln"></div><div class="ln short"><span class="cursor"></span></div></div></div>`;
+    if(role==='Reviewer') return `<div class="mod"><div class="mod-bar"><i></i><i></i><i></i></div><div class="mod-body"><div class="chk done"><span class="box"></span><span class="ln"></span></div><div class="chk live"><span class="box"></span><span class="ln"></span></div><div class="chk"><span class="box"></span><span class="ln short"></span></div></div></div>`;
+    if(role==='Researcher') return `<div class="mod"><div class="mod-bar addr"><i></i><i></i><i></i><span class="url"></span></div><div class="mod-body"><div class="ln"></div><div class="ln"></div><div class="ln short"></div><div class="scanline"></div></div></div>`;
+    if(role==='FactChecker') return `<div class="mod"><div class="mod-bar"><i></i><i></i><i></i></div><div class="mod-body"><div class="claim"><span class="ln"></span></div><div class="claim"><span class="ln short"></span></div><div class="stamp">✓</div></div></div>`;
+    if(role==='TrendHunter') return `<div class="mod"><div class="mod-bar"><i></i><i></i><i></i><span class="alert"></span></div><div class="mod-body wavebody"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>`;
+    return '';
+  };
+
+  window.renderAI = function(){
+    const p = state.providers;
+    const grid = document.getElementById('ws-grid'); if(!grid) return;
+    const modeEl = document.getElementById('ws-mode');
+    const collabEl = document.getElementById('ws-collab');
+    if(!p){
+      grid.className = 'ws-grid';
+      grid.innerHTML = '<div class="empty-pro"><div class="stack"><div class="t1">프로바이더 데이터 없음</div><div class="t2">설정 후 자동 표시</div></div></div>';
+      if(modeEl) modeEl.textContent = '모드 —';
+      if(collabEl) collabEl.textContent = '협업 —';
+      return;
+    }
+    if(modeEl) modeEl.textContent = p.mock_mode ? '모드 · 모의' : '모드 · 운영';
+
+    const byKey = {};
+    (p.roles||[]).forEach(r=>{byKey[r.role]=r});
+    const roles = WORKFLOW.map(k=>byKey[k]).filter(Boolean);
+
+    const totalRuns = roles.reduce((s,r)=>s+(r.runs_today||0),0);
+    const activeCount = roles.filter(r=>r.configured && (r.runs_today||0)>0).length;
+    const busy = roles.slice().sort((a,b)=>(b.runs_today||0)-(a.runs_today||0))[0];
+    const busyTxt = busy && (busy.runs_today||0)>0 ? (ROLE_KO[busy.role]||busy.role) : '—';
+    if(collabEl) collabEl.textContent = `협업 · 가동 ${activeCount}/${roles.length} · 총 ${totalRuns}회 · 주도 ${busyTxt}`;
+
+    grid.className = 'ws-grid v28';
+    grid.innerHTML = roles.map(r=>{
+      const off = !r.configured;
+      const runs = r.runs_today;
+      const working = !off && runs > 0;
+      const stateCls = off ? 'off' : (working ? 'working' : 'idle');
+      const statusTxt = off ? '프로바이더 미설정' : (working ? STATUS_ON[r.role] : STATUS_IDLE[r.role]);
+      const statusKind = off ? 'off' : (working ? 'on' : 'idle');
+      const recent = RECENT[r.role] || [];
+      const recentTxt = off ? '프로바이더 연결 필요'
+        : working ? `${recent[(runs-1)%recent.length]} · ${r.provider||'—'}`
+        : '최근 실행 없음';
+      const runsTxt = runs==null ? '—' : runs;
+      const seed = {DraftWriter:3,Reviewer:5,Researcher:7,FactChecker:11,TrendHunter:13}[r.role]||1;
+      const N = 10;
+      const filled = Math.min(N, Math.max(0, runs||0));
+      const strip = off
+        ? Array(N).fill('<i></i>').join('')
+        : Array.from({length:N},(_,k)=>{
+            const on = k >= (N-filled);
+            const h = ['lo','md','hi','md','lo','md','hi','md','lo','md'][(k+seed)%10];
+            return `<i class="${h}${on?' on':''}"></i>`;
+          }).join('');
+      return `<div class="ws28 ${stateCls} role-${r.role}">
+        <div class="ws28-step">${STEP[r.role]}</div>
+        <div class="ws28-icon">${moduleFor(r.role)}</div>
+        <div class="ws28-info">
+          <div class="ws28-a">
+            <span class="ws28-role">${ROLE_KO[r.role]||r.role}</span>
+            <span class="ws28-status is-${statusKind}"><span class="dot"></span>${statusTxt}</span>
+            <span class="ws28-prov">${escapeHTML(r.provider||'—')}</span>
+          </div>
+          <div class="ws28-b">
+            <div class="ln"><span class="k">담당</span>${TASK[r.role]||''}</div>
+            <div class="ln"><span class="k">최근</span>${recentTxt}</div>
+            <div class="ln next">${NEXT[r.role]||''}</div>
+          </div>
+        </div>
+        <div class="ws28-c">
+          <div class="runs ${off||!runs?'off':''}">${runsTxt}</div>
+          <div class="lbl">TODAY</div>
+          <div class="strip">${strip}</div>
+        </div>
+      </div>`;
+    }).join('');
+  };
+})();
+</script>
+
+<style>
+/* ─── S28 — AI tab 3-zone workstations ─── */
+#ws-grid.v28{position:relative;display:flex;flex-direction:column;gap:0;padding-left:44px}
+#ws-grid.v28::before{
+  content:'';position:absolute;left:22px;top:22px;bottom:22px;width:1px;
+  background:repeating-linear-gradient(var(--line) 0 3px, transparent 3px 6px);
+  opacity:0.9;
+}
+#ws-grid.v28 .ws28{
+  position:relative;display:grid;
+  grid-template-columns:100px 1fr 120px;
+  column-gap:14px;align-items:stretch;
+  padding:14px 12px 14px 0;
+  border-top:1px dashed transparent;
+}
+#ws-grid.v28 .ws28 + .ws28{border-top-color:var(--line)}
+#ws-grid.v28 .ws28.off{opacity:0.55}
+
+/* step marker on shared rail */
+.ws28-step{
+  position:absolute;left:-30px;top:50%;transform:translateY(-50%);
+  font-size:9px;letter-spacing:0.5px;color:var(--txt3);
+  font-feature-settings:"tnum";padding:2px 4px;background:var(--bg);z-index:2;
+}
+.ws28-step::after{
+  content:'';position:absolute;left:50%;top:calc(100% + 2px);width:7px;height:7px;
+  border-radius:50%;background:var(--panel);border:1px solid var(--line2);
+  transform:translateX(-50%);
+}
+.ws28.working .ws28-step::after{
+  border-color:var(--accent);background:var(--accent);opacity:0.85;
+  box-shadow:0 0 0 2px rgba(127,179,230,0.18);
+}
+.ws28.working .ws28-step{color:var(--txt2)}
+
+/* workflow arrow between cards on rail */
+#ws-grid.v28 .ws28:not(:last-child)::before{
+  content:'▾';position:absolute;left:-8px;bottom:-7px;
+  font-size:9px;color:var(--txt3);opacity:0.5;z-index:2;
+  background:var(--bg);padding:0 2px;
+}
+
+/* icon — UI module panel (NOT logo) */
+.ws28-icon{
+  width:100px;height:74px;border:1px solid var(--line);border-radius:3px;
+  background:var(--surface-2);overflow:hidden;position:relative;
+}
+.ws28-icon .mod{width:100%;height:100%;display:flex;flex-direction:column}
+.ws28-icon .mod-bar{
+  display:flex;align-items:center;gap:3px;padding:4px 6px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.ws28-icon .mod-bar > i{width:4px;height:4px;border-radius:50%;background:var(--txt3);opacity:0.45}
+.ws28-icon .mod-body{flex:1;padding:6px 7px;position:relative;display:flex;flex-direction:column;gap:4px}
+.ws28-icon .ln{height:2px;background:var(--line2);border-radius:1px;width:100%}
+.ws28-icon .ln.short{width:58%}
+
+/* DraftWriter — doc + cursor */
+.ws28-icon .cursor{display:inline-block;width:1px;height:6px;background:var(--txt3);vertical-align:middle;margin-left:3px;opacity:0.4}
+.ws28.working.role-DraftWriter .ws28-icon .cursor{background:var(--accent);opacity:1;animation:s28Cursor 1s steps(2) infinite}
+@keyframes s28Cursor{50%{opacity:0}}
+
+/* Reviewer — checklist + live pulse */
+.ws28-icon .chk{display:flex;align-items:center;gap:5px}
+.ws28-icon .chk .box{width:6px;height:6px;border:1px solid var(--line2);border-radius:1px;flex:none}
+.ws28-icon .chk .ln{flex:1}
+.ws28-icon .chk.done .box{background:var(--ok);border-color:var(--ok);opacity:0.7}
+.ws28.working.role-Reviewer .ws28-icon .chk.live .box{animation:s28ChkPulse 1.4s ease-in-out infinite;border-color:var(--accent)}
+@keyframes s28ChkPulse{
+  0%,100%{background:transparent}
+  50%{background:var(--accent)}
+}
+
+/* Researcher — browser addr + scanline */
+.ws28-icon .mod-bar.addr .url{
+  flex:1;height:4px;background:var(--surface-2);border:1px solid var(--line2);
+  border-radius:1px;margin-left:4px;
+}
+.ws28-icon .scanline{
+  position:absolute;left:6px;right:6px;top:6px;height:1px;
+  background:var(--accent);opacity:0;pointer-events:none;
+}
+.ws28.working.role-Researcher .ws28-icon .scanline{animation:s28Scan 2.4s linear infinite}
+@keyframes s28Scan{
+  0%{top:6px;opacity:0}
+  10%{opacity:0.7}
+  90%{opacity:0.7}
+  100%{top:calc(100% - 8px);opacity:0}
+}
+
+/* FactChecker — stamp */
+.ws28-icon .claim{display:flex;align-items:center}
+.ws28-icon .claim .ln{flex:1}
+.ws28-icon .stamp{
+  position:absolute;right:6px;bottom:5px;
+  font-size:12px;line-height:1;color:var(--ok);
+  border:1px solid var(--ok);padding:0 3px;border-radius:2px;
+  transform:rotate(-8deg);opacity:0.35;font-weight:700;
+}
+.ws28.working.role-FactChecker .ws28-icon .stamp{animation:s28Stamp 2s ease-in-out infinite}
+@keyframes s28Stamp{
+  0%,100%{opacity:0.3;transform:rotate(-8deg) scale(1)}
+  50%{opacity:0.95;transform:rotate(-8deg) scale(1.08)}
+}
+
+/* TrendHunter — waveform + alert */
+.ws28-icon .mod-bar .alert{
+  margin-left:auto;width:5px;height:5px;border-radius:50%;background:var(--warn);opacity:0.55;
+}
+.ws28.working.role-TrendHunter .ws28-icon .mod-bar .alert{animation:s28Alert 1.2s ease-in-out infinite}
+@keyframes s28Alert{
+  0%,100%{opacity:0.35;box-shadow:0 0 0 0 rgba(232,182,92,0)}
+  50%{opacity:1;box-shadow:0 0 0 2px rgba(232,182,92,0.28)}
+}
+.ws28-icon .wavebody{padding:4px 6px;justify-content:flex-end}
+.ws28-icon .wave{display:flex;align-items:flex-end;justify-content:space-between;height:100%;gap:2px}
+.ws28-icon .wave i{flex:1;background:var(--txt3);opacity:0.5;border-radius:1px;transform-origin:bottom}
+.ws28-icon .wave i:nth-child(1){height:30%}
+.ws28-icon .wave i:nth-child(2){height:55%}
+.ws28-icon .wave i:nth-child(3){height:40%}
+.ws28-icon .wave i:nth-child(4){height:78%}
+.ws28-icon .wave i:nth-child(5){height:48%}
+.ws28-icon .wave i:nth-child(6){height:88%}
+.ws28-icon .wave i:nth-child(7){height:42%}
+.ws28-icon .wave i:nth-child(8){height:66%}
+.ws28.working.role-TrendHunter .ws28-icon .wave i{
+  background:var(--accent);opacity:0.75;
+  animation:s28Wave 1.6s ease-in-out infinite;
+}
+.ws28.working.role-TrendHunter .ws28-icon .wave i:nth-child(2n){animation-delay:0.15s}
+.ws28.working.role-TrendHunter .ws28-icon .wave i:nth-child(3n){animation-delay:0.3s}
+.ws28.working.role-TrendHunter .ws28-icon .wave i:nth-child(5n){animation-delay:0.45s}
+@keyframes s28Wave{
+  0%,100%{transform:scaleY(0.75)}
+  50%{transform:scaleY(1.1)}
+}
+
+/* ZONE A — role + status */
+.ws28-info{display:flex;flex-direction:column;min-width:0;gap:6px;justify-content:center}
+.ws28-a{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ws28-role{font-size:13px;font-weight:600;color:var(--txt);letter-spacing:0.2px}
+.ws28-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--txt2)}
+.ws28-status .dot{width:6px;height:6px;border-radius:50%;background:var(--txt3)}
+.ws28-status.is-on .dot{background:var(--accent);box-shadow:0 0 0 2px rgba(127,179,230,0.2)}
+.ws28-status.is-on{color:var(--txt)}
+.ws28.working .ws28-status.is-on .dot{animation:s28Dot 1.8s ease-in-out infinite}
+@keyframes s28Dot{0%,100%{opacity:0.7}50%{opacity:1}}
+.ws28-status.is-off .dot{background:var(--danger);opacity:0.6}
+.ws28-prov{
+  margin-left:auto;font-size:10px;letter-spacing:0.3px;color:var(--txt3);
+  padding:1px 6px;border:1px solid var(--line);border-radius:2px;
+  font-feature-settings:"tnum";text-transform:uppercase;
+}
+
+/* ZONE B — task / recent / next (framed) */
+.ws28-b{
+  display:flex;flex-direction:column;gap:3px;
+  padding:6px 10px;border-left:2px solid var(--line);
+  background:linear-gradient(90deg,var(--surface-2) 0%,transparent 75%);
+  border-radius:0 2px 2px 0;
+}
+.ws28.working .ws28-b{border-left-color:var(--accent)}
+.ws28-b .ln{font-size:11px;color:var(--txt2);line-height:1.5;display:flex;gap:6px}
+.ws28-b .ln .k{
+  color:var(--txt3);font-size:9px;letter-spacing:0.4px;text-transform:uppercase;
+  min-width:26px;padding-top:3px;
+}
+.ws28-b .ln.next{color:var(--txt3);font-size:10px;padding-left:2px}
+.ws28-b .ln.next::before{content:'→ ';opacity:0.6}
+
+/* ZONE C — runs + activity strip */
+.ws28-c{
+  display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
+  gap:3px;padding-left:8px;border-left:1px dashed var(--line);
+}
+.ws28-c .runs{font-size:24px;font-weight:700;font-feature-settings:"tnum";color:var(--txt);line-height:1}
+.ws28-c .runs.off{color:var(--txt3)}
+.ws28-c .lbl{font-size:9px;letter-spacing:0.5px;color:var(--txt3);text-transform:uppercase}
+.ws28-c .strip{display:flex;gap:2px;align-items:flex-end;height:14px;margin-top:3px}
+.ws28-c .strip i{width:3px;background:var(--line2);border-radius:1px}
+.ws28-c .strip i.lo{height:4px}
+.ws28-c .strip i.md{height:8px}
+.ws28-c .strip i.hi{height:13px}
+.ws28-c .strip i.on{background:var(--accent);opacity:0.8}
+.ws28.working .ws28-c .strip i.on:last-child{animation:s28Tick 1.6s ease-in-out infinite}
+@keyframes s28Tick{0%,100%{opacity:0.6}50%{opacity:1}}
+
+@media (prefers-reduced-motion: reduce){
+  #ws-grid.v28 *{animation:none !important}
+}
+</style>
+
 </body>
 </html>
