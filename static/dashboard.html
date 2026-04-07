@@ -5178,86 +5178,26 @@ body > .cat-wrap{display:none !important}
 .hud-main{
   bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) !important;
 }
-/* S40: specificity bump — S35 has `#page-ai{padding-bottom:0!important}` later
-   in source. Same specificity → S35 wins. Use `html body .hud-main #page-ai`
-   to outrank it (1 ID vs 1 ID + class + 2 elements). */
+/* S47: strip AI viewport-stretching hacks. Return to natural block/column flow.
+   - No height/min-height force on #page-ai (was stretching to viewport → void).
+   - No justify-content:space-between on #ws-grid (was spreading cards apart).
+   - Single bottom margin policy: small padding-bottom on #page-ai only.
+   - Specificity beats S35's later `#page-ai{padding-bottom:0!important}`. */
 html body .hud-main #page-ai.page{
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: 16px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  display: block !important;
 }
-html body .hud-main #page-ai #ws-grid.v28{padding-bottom: 8px !important}
-html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
-  margin-bottom: 20px !important;
-  border-bottom: none !important;
-  border-top: 1px dashed var(--line) !important;
+html body .hud-main #page-ai #ws-grid.v28{
+  justify-content: flex-start !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding-bottom: 0 !important;
 }
-/* S41: ALSO bulletproof via inline style applied by JS below.
-   No CSS can override inline style without !important on the same property,
-   and S35's later #page-ai{padding-bottom:0!important} loses to inline+!important. */
 </style>
 <script>
-/* ─── S41 — Bulletproof AI bottom slack via inline style ── */
-(function(){
-  function forceAiBottom(){
-    const pageAi = document.getElementById('page-ai');
-    if(!pageAi) return;
-    // Inline style with !important via cssText (setProperty supports priority)
-    // Just enough slack: small breathing room above tab bar, no big void.
-    pageAi.style.setProperty('padding-bottom', '0px', 'important');
-    // S46: compute actual scroll viewport height and force #page-ai +
-    // #ws-grid to that height so flex space-between has a real target.
-    // Without this, min-height:100% is relative to .hud-main which works
-    // only when .hud-main is a block container — fine here, but force the
-    // exact pixel height as belt+suspenders so iOS Safari does the right thing.
-    const hud = document.querySelector('.hud-main');
-    if(hud){
-      hud.style.setProperty('padding-bottom', '0px', 'important');
-      hud.style.setProperty('padding-top', '14px', 'important');
-    }
-    const hudH = hud ? hud.clientHeight : 0;
-    const targetH = Math.max(0, hudH - 14); // minus padding-top
-    if(targetH > 0){
-      pageAi.style.setProperty('min-height', targetH + 'px', 'important');
-      pageAi.style.setProperty('height', targetH + 'px', 'important');
-    }
-    pageAi.style.setProperty('display', 'flex', 'important');
-    pageAi.style.setProperty('flex-direction', 'column', 'important');
-
-    const grid = pageAi.querySelector('#ws-grid.v28');
-    if(grid){
-      grid.style.setProperty('flex', '1 1 auto', 'important');
-      grid.style.setProperty('display', 'flex', 'important');
-      grid.style.setProperty('flex-direction', 'column', 'important');
-      grid.style.setProperty('justify-content', 'space-between', 'important');
-      grid.style.setProperty('min-height', '0', 'important');
-      grid.style.setProperty('padding-bottom', '0', 'important');
-    }
-    const cards = pageAi.querySelectorAll('#ws-grid.v28 .ws28');
-    if(cards.length){
-      const last = cards[cards.length - 1];
-      last.style.setProperty('margin-bottom', '0px', 'important');
-      last.style.setProperty('border-bottom', 'none', 'important');
-    }
-  }
-  forceAiBottom();
-  setTimeout(forceAiBottom, 300);
-  setTimeout(forceAiBottom, 1500);
-  setTimeout(forceAiBottom, 4000);
-  // Re-apply after AI tab is rendered (renderAI rebuilds #ws-grid innerHTML)
-  if(typeof window.renderAI === 'function'){
-    const orig = window.renderAI;
-    window.renderAI = function(){
-      const r = orig.apply(this, arguments);
-      requestAnimationFrame(forceAiBottom);
-      return r;
-    };
-  }
-  // Re-apply on tab clicks (any tab — cheap)
-  document.addEventListener('click', e=>{
-    if(e.target.closest && e.target.closest('.tab-btn')){
-      setTimeout(forceAiBottom, 100);
-    }
-  });
-})();
+/* ─── S47 — AI bottom hack removed. Natural flow restored. ── */
 
 /* ─── S39 — Cat continuous walk (no teleport) ── */
 (function(){

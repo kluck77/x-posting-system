@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S40~S46 — AI bottom void + micro chart polish
+## LAST COMPLETED PHASE: Dashboard S47 — AI 레이아웃 해킹 제거, 자연 흐름 복귀
+
+`static/dashboard.html` 만. S39/S41/S46에서 쌓인 높이·flex 강제 해킹이 void 원인으로 확인되어 전부 제거. `#page-ai`는 `display:block` + `padding-bottom:16px`, `#ws-grid.v28`은 `justify-content:flex-start`로 카드 자연 쌓임. S46 micro chart CSS는 유지. 디자인·색·타이포 무변경.
+
+## PREVIOUS: Dashboard S40~S46 — AI bottom void + micro chart polish
 
 `static/dashboard.html` only. AI tab.
 
