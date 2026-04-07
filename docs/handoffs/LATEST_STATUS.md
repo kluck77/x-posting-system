@@ -1,6 +1,16 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S34 — Tab Switching Stabilization + Layout Finalization
+## ⚠️ LAST COMPLETED PHASE: Dashboard S35 — Tab/Page Structure Recovery (critical fix)
+
+`static/dashboard.html`.
+- **Root cause**: S30/S34 에서 `#page-* { display:flex }` 를 ID 선택자로 직접 지정 → specificity 상 `.page.active` 보다 높아 비활성 페이지도 레이아웃에 계속 참여. 긴 문서처럼 스크롤되는 현상 + AI 탭 활성인데 Home 내용이 위에 남는 현상의 진짜 원인.
+- **Fix**: `.page:not(.active){display:none !important}` + `.page.active{display:block !important}` + `#page-*.page.active{display:flex !important;flex-direction:column}` 로 표시 규칙 단일화
+- 탭 JS 단일화: cloneNode 로 모든 기존 리스너 제거 후 `activate(target)` 단일 함수만 남김
+- 스크롤 정책: per-tab memory 제거, 모든 탭 클릭 = 해당 탭 top (재클릭 포함)
+- 고양이: Home panel-hero 내부 only (S34 규칙 유지)
+- `.page.active` fadeIn transform 제거
+
+## PREVIOUS: Dashboard S34 — Tab Switching Stabilization + Layout Finalization
 
 `static/dashboard.html` 프론트만.
 - 탭 전환 단일 핸들러: `.hud-main` scroller, saved 4-tab scrollTop, 2x rAF 복원, scrollHeight clamp, 재클릭 = top

@@ -1,4 +1,40 @@
-# Current Session — 2026-04-07 (Session 34)
+# Current Session — 2026-04-07 (Session 35)
+
+## S35 — 탭/페이지 구조 복구 (긴급)
+
+`static/dashboard.html` 프론트만.
+
+### 실제 원인
+S30/S34 에서 `#page-home { display:flex }`, `#page-ai { display:flex }` 등 **ID 선택자로 display 직접 지정** → ID 선택자는 `.page.active` 클래스 선택자보다 specificity 가 높아서 `.page:not(.active)` 상태에도 페이지가 계속 보임. 비활성 페이지가 레이아웃에 계속 참여 → 긴 문서처럼 스크롤되고, AI 탭 활성인데 Home 이 위에 남는 현상.
+
+### 수정
+1. **CSS display 규칙 단일화** (final truth)
+   ```
+   .page:not(.active){display:none !important}
+   .page.active{display:block !important}
+   #page-*.page.active{display:flex !important;flex-direction:column}
+   ```
+   → flex-column 은 active 상태에서만 적용, 비활성은 무조건 none
+2. **탭 JS 단일화**
+   - 모든 `.tab-btn` cloneNode 로 기존 리스너 전부 제거
+   - `activate(target)` 단일 함수: 버튼 active 토글 + 페이지 active 토글 + rAF 후 scrollTop=0
+   - 부팅 시 초기 active 탭 기준으로 activate 호출 (단일 페이지만 보이도록 강제)
+   - 이전 S33/S34 의 scroll memory / cloneNode 재설치 layered 로직 전부 대체
+3. **스크롤 정책 단순화**
+   - per-tab scroll memory 제거
+   - 탭 클릭 시 **항상** 해당 탭 맨 위에서 시작 (동일 탭 재클릭도 top)
+   - 예측 가능성 최우선
+4. **하단 공백**: `.hud-main` padding-bottom → `calc(12px + env(safe-area-inset-bottom))`, page 하위 padding-bottom 0
+5. **고양이**: Home panel-hero 안에서만, 다른 탭/body 직계 모두 display:none 강제 (S34 규칙 유지)
+6. **fadeIn transform 제거**: `.page.active { animation:none }` iOS jitter 방지
+
+### Files
+- `static/dashboard.html` — S35 script (single tab controller) + S35 style (display truth + cat scope)
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 34
 
 ## S34 — 탭 전환 안정화 + 레이아웃 마감
 

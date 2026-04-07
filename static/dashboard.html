@@ -5059,5 +5059,78 @@ body > .cat-wrap{display:none !important}
 }
 </style>
 
+<script>
+/* ─── S35 — Tab/page structure recovery ── */
+(function(){
+  // Single source of truth for tab switching.
+  // Remove ALL previous listeners by cloning every tab button first.
+  const tabs = document.querySelectorAll('.hud-tabs .tab-btn');
+  tabs.forEach(btn=>{
+    const clone = btn.cloneNode(true);
+    btn.parentNode.replaceChild(clone, btn);
+  });
+
+  const scroller = document.querySelector('.hud-main') || document.scrollingElement || document.documentElement;
+
+  function activate(target){
+    document.querySelectorAll('.hud-tabs .tab-btn').forEach(b=>{
+      b.classList.toggle('active', b.dataset.page===target);
+    });
+    document.querySelectorAll('.page').forEach(p=>{
+      p.classList.toggle('active', p.id===`page-${target}`);
+    });
+    // Always start at top of new tab (simple, predictable)
+    requestAnimationFrame(()=>{
+      if(scroller.scrollTop !== undefined) scroller.scrollTop = 0;
+      window.scrollTo(0,0);
+    });
+  }
+
+  document.querySelectorAll('.hud-tabs .tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      activate(btn.dataset.page);
+    });
+  });
+
+  // Boot: ensure only one page is active
+  const initial = document.querySelector('.hud-tabs .tab-btn.active');
+  activate(initial ? initial.dataset.page : 'home');
+})();
+</script>
+
+<style>
+/* ─── S35 — Page display truth + layout reset ─── */
+
+/* ABSOLUTE RULE: only the active page is visible */
+.page:not(.active){display:none !important}
+.page.active{display:block !important}
+
+/* Re-apply flex column ONLY when active (scoped to active state) */
+#page-home.page.active,
+#page-ai.page.active,
+#page-intake.page.active,
+#page-ops.page.active{
+  display:flex !important;
+  flex-direction:column;
+}
+
+/* Page fadeIn removed — iOS jitter */
+.page.active{animation:none !important}
+
+/* Cat mascot: Home/panel-hero only, never elsewhere */
+#page-ai .cat-wrap,
+#page-intake .cat-wrap,
+#page-ops .cat-wrap,
+body > .cat-wrap{display:none !important}
+
+/* Ensure .hud-main scroll container has clean bottom spacing */
+.hud-main{
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+}
+#page-home,#page-ai,#page-intake,#page-ops{
+  padding-bottom:0 !important;
+}
+</style>
+
 </body>
 </html>
