@@ -5202,13 +5202,16 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
     if(!pageAi) return;
     // Inline style with !important via cssText (setProperty supports priority)
     // Just enough slack: small breathing room above tab bar, no big void.
-    pageAi.style.setProperty('padding-bottom', '20px', 'important');
+    pageAi.style.setProperty('padding-bottom', '0px', 'important');
     const cards = pageAi.querySelectorAll('#ws-grid.v28 .ws28');
     if(cards.length){
       const last = cards[cards.length - 1];
-      last.style.setProperty('margin-bottom', '8px', 'important');
+      last.style.setProperty('margin-bottom', '0px', 'important');
       last.style.setProperty('border-bottom', 'none', 'important');
     }
+    // Also kill .hud-main's own padding-bottom on AI tab so void disappears
+    const hud = document.querySelector('.hud-main');
+    if(hud) hud.style.setProperty('padding-bottom', '0px', 'important');
   }
   forceAiBottom();
   setTimeout(forceAiBottom, 300);
@@ -5583,10 +5586,9 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
   display:grid !important;
   grid-template-columns:58px 1fr !important;
   grid-template-areas:"icon info" "icon meta" !important;
-  column-gap:12px !important;row-gap:8px !important;
-  padding:18px 10px 18px 0 !important;
+  column-gap:12px !important;row-gap:6px !important;
+  padding:12px 10px 12px 0 !important;
   align-items:start !important;
-  min-height:120px !important;
 }
 .ws28-icon{
   grid-area:icon;
