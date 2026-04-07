@@ -5201,12 +5201,12 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
     const pageAi = document.getElementById('page-ai');
     if(!pageAi) return;
     // Inline style with !important via cssText (setProperty supports priority)
-    pageAi.style.setProperty('padding-bottom', 'calc(140px + env(safe-area-inset-bottom, 0px))', 'important');
-    // Also force last station card margin
+    // Just enough slack: small breathing room above tab bar, no big void.
+    pageAi.style.setProperty('padding-bottom', '20px', 'important');
     const cards = pageAi.querySelectorAll('#ws-grid.v28 .ws28');
     if(cards.length){
       const last = cards[cards.length - 1];
-      last.style.setProperty('margin-bottom', '24px', 'important');
+      last.style.setProperty('margin-bottom', '8px', 'important');
       last.style.setProperty('border-bottom', 'none', 'important');
     }
   }
