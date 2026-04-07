@@ -10,7 +10,8 @@
 
 | 버전 | 날짜 | 파일 | 내용 |
 |------|------|------|------|
-| v11 | 2026-04-07 | `telegram_service.py`, `telegram_bot.py` | Telegram 카드 영역 오버라이드 (v10 → v11): 카드 필드 순서 재배치 (Hook→Post→Risk→Why→Verdict 우선), mock 게시 오인 문구 수정 ("POSTED TO X" / "APPROVED & POSTED" → "APPROVED — MANUAL POST PENDING" in mock mode) |
+| v11a | 2026-04-07 | `telegram_service.py`, `telegram_bot.py` | Telegram 카드 영역 오버라이드 (v10 → v11): 카드 필드 순서 재배치 (Hook→Post→Risk→Why→Verdict 우선), mock 게시 오인 문구 수정 ("POSTED TO X" / "APPROVED & POSTED" → "APPROVED — MANUAL POST PENDING" in mock mode) |
+| v11b | 2026-04-07 | `openai_provider.py` | DraftWriter 프롬프트 오버라이드 (v10 → v11): SYSTEM_PROMPT 전면 교체 — hook 공식 5가지, DO NOT 목록 (AI 투성이 문구 / 번역 뉴스 톤), "why it matters" 지시, 한국 고유 용어 정의 지시, thread 억제 규칙 강화; user_msg에 "international audience, no prior Korea knowledge" 명시 |
 
 ---
 
