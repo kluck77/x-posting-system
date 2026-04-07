@@ -1,4 +1,37 @@
-# Current Session — 2026-04-07 (Session 49 — Forensic)
+# Current Session — 2026-04-07 (Session 50 — Forensic)
+
+## S50 — Tab 전환 + micro chart + 좌측 밀도 (포렌식)
+
+`static/dashboard.html` 만. 새 구조 추가 없음.
+
+### Root Cause (tab 전환)
+L3888 / L4996 / L5005 / L5026 / L5032 에 `#page-home{display:flex}` `#page-ai{display:flex}` `#page-intake{display:flex}` `#page-ops{display:flex}` 가 **`.active` 한정 없이** 걸려 있었음. specificity `#id`(1 ID) > `.page.active`(2 class). → `.page{display:none}`/`.active{display:block}`를 모두 이김. **네 페이지가 상시 display:flex 로 stack 노출**. 탭 click은 `.active` class만 바꾸고 시각적으로 아무 효과 없음.
+
+Tab JS handler는 이미 S35(5092~5127) 단 하나로 cloneNode 체인 끝에 정리돼 있어 문제 없음. 문제는 CSS selector만.
+
+### Root Cause (micro chart)
+S48 `border-bottom:1px solid` axis가 `.ws28-c`의 `border-top:1px dashed`와 수직 근접해 이중선. `min-width:104px`가 우측 rail에 붕 뜬 느낌.
+
+### Root Cause (좌측 여백)
+`#ws-grid.v28{padding-left:34px}` + `icon 58px` + `column-gap 12px` = 카드 본문까지 104px 좌측 dead zone. Step rail은 24px면 충분.
+
+### 실제 수정 (삭제/치환만)
+1. **Tab CSS (5줄)**: `#page-home`/`#page-ai`/`#page-intake`/`#page-ops` 의 `{display:flex...}` 규칙 5곳 모두 `.active` 한정사 추가. L3888, 4996, 5005, 5026, 5032.
+2. **Micro chart** (L5585~5592): `border-bottom` 제거, `padding-bottom:1px` 제거, `margin:0 0 1px auto` → `0 0 0 auto`, `height:16px`→`14px`, `min-width:104`→`72`, `max-width:140`→`110`.
+3. **좌측 밀도**:
+   - `#ws-grid.v28{padding-left:34px}` → `26px` (L5824)
+   - `.ws28 grid-template-columns:58px 1fr` → `52px 1fr`
+   - `.ws28 column-gap:12px` → `10px`
+   - `.ws28 padding:12px 10px 12px 0` → `12px 8px 12px 0`
+   - `.ws28-icon width:58;height:54` → `52; 50`
+   - `.ws28-step left:-22px` → `-18px`
+
+### Do Not Touch
+S35 tab JS handler, S37 grid-template-areas, S47 `#page-ai.page` padding, 고양이, 헤더, 백엔드, 승인 로직, 다른 탭 콘텐츠.
+
+---
+
+# Previous — Session 49 — Forensic
 
 ## S49 — AI 카드 우측 모듈, stale override 제거 (삭제-온리)
 
