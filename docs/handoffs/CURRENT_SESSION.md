@@ -1,4 +1,24 @@
-# Current Session — 2026-04-07 (Session 54)
+# Current Session — 2026-04-07 (Session 55 — Forensic)
+
+## S55 — 탭 전환 진짜 원인 발견 (S47 display:block specificity 오버라이드)
+
+### Root Cause
+L5181 S47 블록의 `html body .hud-main #page-ai.page { display: block !important }`
+- specificity = 1 ID + 2 class + **3 element** = (1,2,3)
+- S35의 `#page-ai.page.active { display: flex !important }` @ L5900 = (1,2,0)
+- **S47 이김 → #page-ai 상시 display:block**
+- 증상: AI 탭 클릭은 동작해 보이나, Home/Intake/Ops 클릭 시 #page-ai가 숨지 않아 전환 실패
+- 이전 세션 점검에서 selector list만 보고 `display:block !important` 라인을 놓쳤음
+
+### Fix
+L5185 `display: block !important;` 한 줄 삭제.
+나머지 S47 속성(padding-bottom, height, min-height)은 유지 — display와 무관.
+
+결과: #page-ai 의 display 제어권이 S35 `.active`-scoped rule로 복귀. 네 탭 모두 정상 전환.
+
+---
+
+# Previous — Session 54
 
 ## S54 — AI 카드 왼쪽 시작선 이동 + 탭 전환 로직 재점검
 
