@@ -2872,7 +2872,224 @@ setInterval(refreshAll,30000);
   setInterval(applyCatState, 5000);
   applyCatState();
 })();
+
+/* ─── S26 — Intake + Ops operator board refinement ─────── */
+(function(){
+  if(typeof renderIntake !== 'function' || typeof renderOps !== 'function') return;
+
+  const origIntake = renderIntake;
+  window.renderIntake = function(){
+    origIntake();
+    const b = state.business; if(!b) return;
+    const w = b.weekly||{}, nl = b.newsletter||{}, pr = b.premium||{}, b2b = b.b2b||{}, cta = b.cta_perf||{};
+
+    const inject = (laneId, phrase, parts)=>{
+      const lane = document.getElementById(laneId); if(!lane) return;
+      lane.querySelectorAll('.lane-phrase,.lane-ratio').forEach(e=>e.remove());
+      const head = lane.querySelector('.lane-head'); if(!head) return;
+      const ph = document.createElement('div');
+      ph.className = 'lane-phrase';
+      ph.textContent = phrase;
+      const total = parts.reduce((s,p)=>s+(p.v||0),0);
+      const rb = document.createElement('div');
+      rb.className = 'lane-ratio';
+      rb.innerHTML = total>0
+        ? parts.map(p=>`<i class="r-${p.k}" style="flex:${p.v||0}" title="${p.k} ${p.v||0}"></i>`).join('')
+        : '<i class="r-empty" style="flex:1"></i>';
+      head.insertAdjacentElement('afterend', ph);
+      ph.insertAdjacentElement('afterend', rb);
+    };
+
+    const cTot = w.total_drafts||0;
+    inject('lane-content',
+      cTot ? `이번 주 초안 ${cTot}건 진행 중` : '초안 대기 · 소스 수집 시 자동 생성',
+      [{k:'ok',v:w.published||0},{k:'go',v:w.approved||0},{k:'wait',v:w.pending||0},{k:'no',v:w.rejected||0}]);
+
+    const nlTot = (nl.newsletter_total||0)+(nl.lead_total||0);
+    inject('lane-newsletter',
+      nlTot ? `뉴스레터·리드 ${nlTot}건 자산화 누적` : '자산 없음 · 버킷/리드 수신 시 누적',
+      [{k:'go',v:nl.newsletter_total||0},{k:'wait',v:nl.lead_total||0}]);
+
+    const pbTot = (pr.total||0)+(b2b.total||0);
+    inject('lane-premium',
+      pbTot ? `수익화 후보 ${pbTot}건 · 프리미엄 ${pr.total||0} / B2B ${b2b.total||0}` : '수익화 후보 없음 · 점수 누적 시 승격',
+      [{k:'go',v:pr.total||0},{k:'wait',v:b2b.total||0}]);
+
+    const ctaLnk = cta.linked_copies||0;
+    const ctaUn = cta.unlinked_copies||0;
+    inject('lane-cta',
+      (ctaLnk||ctaUn) ? `CTA 연결 ${ctaLnk} · 미연결 ${ctaUn}` : '연결 없음 · 카피 연결 시 성과 집계',
+      [{k:'go',v:ctaLnk},{k:'wait',v:ctaUn}]);
+
+    const wrap = document.getElementById('flow-wrap');
+    if(wrap) wrap.classList.add('has-conn');
+  };
+
+  const origOps = renderOps;
+  window.renderOps = function(){
+    origOps();
+    const b = state.business; if(!b) return;
+    const pr=b.premium||{}, br=b.brief||{}, bb=b.b2b||{}, nl=b.newsletter||{}, w=b.weekly||{}, cta=b.cta_perf||{};
+
+    // readiness summary (replace plain trio with labeled state)
+    const sum = document.getElementById('ops-summary');
+    if(sum && !sum.classList.contains('s26')){
+      sum.classList.add('s26');
+    }
+
+    // per-card signal bars + mini ratio
+    const cards = document.querySelectorAll('#ops-grid .ops-card');
+    const specs = [
+      {sig:[pr.total||0,(pr.top||[]).length,w.published||0],
+       ratio:[{k:'go',v:(pr.top||[]).length},{k:'wait',v:Math.max(0,(pr.total||0)-(pr.top||[]).length)}]},
+      {sig:[br.total||0,br.ready_count||0,Object.keys(br.types||{}).length],
+       ratio:[{k:'go',v:br.ready_count||0},{k:'wait',v:Math.max(0,(br.total||0)-(br.ready_count||0))}]},
+      {sig:[bb.total||0,Object.keys(bb.audience||{}).length,Object.keys(bb.use_case||{}).length],
+       ratio:[{k:'wait',v:bb.total||0}]},
+      {sig:[nl.newsletter_total||0,nl.lead_total||0,Object.keys(nl.bucket||{}).length],
+       ratio:[{k:'go',v:nl.newsletter_total||0},{k:'wait',v:nl.lead_total||0}]},
+      {sig:[w.total_drafts||0,w.published||0,(w.highlights||[]).length],
+       ratio:[{k:'ok',v:w.published||0},{k:'go',v:w.approved||0},{k:'wait',v:w.pending||0},{k:'no',v:w.rejected||0}]},
+      {sig:[cta.linked_copies||0,cta.unlinked_copies||0,cta.notable_count||0],
+       ratio:[{k:'go',v:cta.linked_copies||0},{k:'wait',v:cta.unlinked_copies||0}]},
+    ];
+    cards.forEach((card,i)=>{
+      const sp = specs[i]; if(!sp) return;
+      card.querySelectorAll('.ops-signal,.ops-ratio').forEach(e=>e.remove());
+      // signal bars in head
+      const head = card.querySelector('.ops-head');
+      if(head){
+        const max = Math.max(...sp.sig,1);
+        const sig = document.createElement('span');
+        sig.className = 'ops-signal';
+        sig.innerHTML = sp.sig.map(v=>{
+          const h = Math.max(2, Math.round((v/max)*12));
+          const on = v>0 ? ' on' : '';
+          return `<i class="${on}" style="height:${h}px"></i>`;
+        }).join('');
+        head.appendChild(sig);
+      }
+      // mini ratio bar at bottom (skip if empty)
+      if(!card.classList.contains('is-empty')){
+        const tot = sp.ratio.reduce((s,p)=>s+(p.v||0),0);
+        if(tot>0){
+          const rb = document.createElement('div');
+          rb.className = 'ops-ratio';
+          rb.innerHTML = sp.ratio.map(p=>`<i class="r-${p.k}" style="flex:${p.v||0}"></i>`).join('');
+          card.appendChild(rb);
+        }
+      }
+    });
+  };
+})();
 </script>
+
+<style>
+/* ─── S26 — Intake flow + Ops operator board ─── */
+/* Intake: lane phrase + ratio + soft connectors + pulse rail */
+#flow-wrap{gap:10px}
+.lane .lane-phrase{
+  font-size:11px;color:var(--txt2);margin-top:4px;
+  letter-spacing:0.2px;line-height:1.4;
+}
+.lane .lane-ratio{
+  display:flex;height:3px;margin-top:6px;border-radius:2px;overflow:hidden;
+  background:var(--surface-2);border:1px solid var(--line);
+}
+.lane .lane-ratio i{display:block;height:100%}
+.lane .lane-ratio .r-ok{background:var(--ok);opacity:0.75}
+.lane .lane-ratio .r-go{background:var(--accent);opacity:0.75}
+.lane .lane-ratio .r-wait{background:var(--warn);opacity:0.6}
+.lane .lane-ratio .r-no{background:var(--danger);opacity:0.55}
+.lane .lane-ratio .r-empty{background:transparent}
+
+#flow-wrap.has-conn .lane{position:relative}
+#flow-wrap.has-conn .lane + .lane::before{
+  content:'↓';position:absolute;left:50%;top:-9px;transform:translateX(-50%);
+  font-size:10px;color:var(--txt3);opacity:0.4;pointer-events:none;
+}
+@media(min-width:760px){
+  #flow-wrap.has-conn{flex-direction:row}
+  #flow-wrap.has-conn .lane{flex:1;min-width:0}
+  #flow-wrap.has-conn .lane + .lane::before{
+    content:'›';left:-9px;top:50%;transform:translateY(-50%);
+    font-size:14px;
+  }
+}
+@media (prefers-reduced-motion: no-preference){
+  #flow-wrap.has-conn::after{
+    content:'';display:block;height:1px;margin-top:6px;
+    background:linear-gradient(90deg,transparent 0%,var(--accent) 50%,transparent 100%);
+    background-size:30% 100%;background-repeat:no-repeat;background-position:-30% 0;
+    animation: flowPulseRail 5s linear infinite;opacity:0.3;
+  }
+}
+@keyframes flowPulseRail{
+  0%{background-position:-30% 0}
+  100%{background-position:130% 0}
+}
+
+/* Ops: head signal bars */
+.ops-card .ops-head{position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.ops-card .ops-head .big{margin-left:auto}
+.ops-card .ops-signal{
+  display:inline-flex;align-items:flex-end;gap:2px;height:14px;
+  padding:0 4px;border-left:1px dashed var(--line);margin-left:2px;
+}
+.ops-card .ops-signal i{
+  display:block;width:3px;background:var(--txt3);opacity:0.35;border-radius:1px;
+}
+.ops-card .ops-signal i.on{background:var(--accent);opacity:0.7}
+.ops-card.is-empty .ops-signal i{background:var(--txt3);opacity:0.2}
+
+/* Ops: mini ratio bar bottom */
+.ops-card .ops-ratio{
+  display:flex;height:3px;margin-top:8px;border-radius:2px;overflow:hidden;
+  background:var(--surface-2);border:1px solid var(--line);
+}
+.ops-card .ops-ratio i{display:block;height:100%}
+.ops-card .ops-ratio .r-ok{background:var(--ok);opacity:0.75}
+.ops-card .ops-ratio .r-go{background:var(--accent);opacity:0.75}
+.ops-card .ops-ratio .r-wait{background:var(--warn);opacity:0.6}
+.ops-card .ops-ratio .r-no{background:var(--danger);opacity:0.55}
+
+/* Ops: compact empty — kill tall dead space */
+.ops-card.is-empty{padding-bottom:10px !important}
+.ops-card.is-empty .empty-pro{
+  padding:6px 8px !important;min-height:0 !important;
+  border:1px dashed var(--line) !important;background:transparent !important;
+  display:flex;align-items:center;gap:8px;margin-top:6px;
+}
+.ops-card.is-empty .empty-pro::before{
+  content:'▢';color:var(--txt3);font-size:11px;
+}
+.ops-card.is-empty .empty-pro .stack{gap:1px}
+.ops-card.is-empty .empty-pro .t1{font-size:11px;color:var(--txt2);letter-spacing:0.2px}
+.ops-card.is-empty .empty-pro .t2{font-size:10px;color:var(--txt3)}
+
+/* Ops: tighten pills / rows so cards feel dense, not empty */
+.ops-card .ops-row{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+.ops-card .ops-row .pill{
+  padding:2px 6px !important;font-size:10px !important;
+  letter-spacing:0.2px;line-height:1.5;
+}
+.ops-card .ops-mini{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.ops-card .ops-mini-item{
+  font-size:10px;line-height:1.45;display:flex;gap:6px;
+  padding:3px 6px;border:1px solid var(--line);border-radius:2px;
+  background:var(--surface-2);
+}
+.ops-card .ops-mini-item .id{color:var(--txt3);min-width:28px;font-feature-settings:"tnum"}
+.ops-card .ops-mini-item .txt{color:var(--txt2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ops-card .ops-mini-item .meta{color:var(--txt3);font-feature-settings:"tnum"}
+
+/* ops-summary: tighter with labels feeling like readiness */
+#ops-summary.s26{gap:6px}
+#ops-summary.s26 .cell{padding:8px 10px}
+#ops-summary.s26 .cell .lbl{font-size:10px;letter-spacing:0.4px;color:var(--txt3);text-transform:uppercase}
+#ops-summary.s26 .cell .val{font-size:22px;font-weight:700;font-feature-settings:"tnum"}
+#ops-summary.s26 .cell .val.dim{color:var(--txt3)}
+</style>
 
 <style>
 /* S25 — AI workstations: collab header + pipe micro-trace */
