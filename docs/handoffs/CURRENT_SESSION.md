@@ -1,4 +1,44 @@
-# Current Session — 2026-04-07 (Session 31)
+# Current Session — 2026-04-07 (Session 32)
+
+## S32 — Intake 흐름 / Ops 요약 역할 분리
+
+`static/dashboard.html` Intake + Ops 탭만 수정. 백엔드 무변경.
+
+### 변경 내용
+1. **Intake = "정보 흐름"** — `#intake-flow-narrative` 주입 (ws-header 아래)
+   - 4 stage 가로 strip: 01 수집 › 02 자산화 › 03 수익화 후보 › 04 연결
+   - 각 stage: 라벨(9px) + 큰 mono 숫자(20px) + sub 문구
+   - active 단계 (마지막 non-zero) 좌측 2px accent rule
+   - dim 단계 opacity 0.55, 좌측 rule 회색
+   - sub 문구 예: "3 발행 · 2 대기", "뉴스레터 5 · 리드 3", "수집 대기 중"
+   - 5s linear pulse rail (하단 1px accent 그라디언트) — 정보 흐름 힌트
+   - S26 lane 블록은 하위 세부용으로 유지
+2. **Ops = "운영 요약"** — `#ops-readiness` 주입 (ops-summary 아래)
+   - 3-count 요약: 준비 / 대기 / 비어있음 (6개 카테고리 집계)
+   - 좌측 2px color rule (ok / warn / txt3)
+   - 하단 6 category chip row: premium / brief / b2b / 뉴스레터·리드 / 주간 / CTA
+     · is-ready (top 있음 또는 notable 있음) · is-wait · is-empty
+     · 각 chip: 상태 dot + 라벨 + 숫자 + 상태어(준비/대기/비어있음)
+   - ops-summary 기존 3-cell (총 후보/발행 준비/주간 누적) 은 유지
+3. **역할 구분 명확화**
+   - Intake : stage 4 + pulse rail = 시간/전환 느낌
+   - Ops    : readiness count + category chip = 상태/판단 느낌
+4. **Empty state** — S26 compact dashed 박스 + 한국어 2줄 구조 유지
+   - 프리미엄/브리프/B2B/뉴스레터·리드/주간/CTA 모두 "없음 + 다음 상태 암시"
+5. **Micro-visual**
+   - tiny pulse rail (intake narrative 하단)
+   - mini ratio bar (S26 lane 유지)
+   - signal bars (S26 ops head 유지)
+   - activity dots (S31 dotmap — AI 탭 유지)
+   - category chip dot (opsr-cat)
+
+### Files
+- `static/dashboard.html` — S32 script (renderIntake/renderOps wrap) + S32 style
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 31
 
 ## S31 — AI 탭: 팀 오버뷰 패널 상단 도입
 

@@ -1,6 +1,15 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S31 — AI Team Overview Panel (top) + 5 Stations (bottom)
+## ⚠️ LAST COMPLETED PHASE: Dashboard S32 — Intake Flow Narrative + Ops Readiness Summary
+
+`static/dashboard.html` Intake + Ops 탭.
+- Intake 상단에 `#intake-flow-narrative` 주입: 01 수집 › 02 자산화 › 03 수익화 후보 › 04 연결 stage strip + active 마커 + 5s pulse rail
+- Ops 에 `#ops-readiness` 주입: 준비/대기/비어있음 3-count + 6 카테고리 chip (ready/wait/empty 상태어)
+- 역할 분리: Intake="정보 흐름", Ops="운영 요약"
+- S26 lane/ops-card 디테일 + 카테고리 border-left 는 하위 세부용으로 유지
+- Empty state 한국어 문구 2줄 형태 유지
+
+## PREVIOUS: Dashboard S31 — AI Team Overview Panel (top) + 5 Stations (bottom)
 
 `static/dashboard.html` AI 탭만 수정.
 - `#page-ai` 상단에 `#team-overview` 주입 (ws-header 아래)

@@ -4337,5 +4337,325 @@ body::before, body::after{display:none !important}
 }
 </style>
 
+<script>
+/* ─── S32 — Intake flow narrative + Ops readiness summary ── */
+(function(){
+  // ───── Intake: top "자산화 흐름" narrative bar ─────
+  function ensureFlowNarrative(){
+    const page = document.getElementById('page-intake'); if(!page) return null;
+    let fn = document.getElementById('intake-flow-narrative');
+    if(!fn){
+      fn = document.createElement('div');
+      fn.id = 'intake-flow-narrative';
+      fn.className = 'ifn';
+      fn.innerHTML = `
+        <div class="ifn-head">
+          <span class="ifn-title">자산화 흐름 · 7일</span>
+          <span class="ifn-stamp" id="ifn-stamp">—</span>
+        </div>
+        <div class="ifn-stages">
+          <div class="ifn-stage" data-k="content">
+            <div class="ifn-k">01 · 수집</div>
+            <div class="ifn-v" id="ifn-content">—</div>
+            <div class="ifn-s" id="ifn-content-s">—</div>
+          </div>
+          <div class="ifn-arrow">›</div>
+          <div class="ifn-stage" data-k="nl">
+            <div class="ifn-k">02 · 자산화</div>
+            <div class="ifn-v" id="ifn-nl">—</div>
+            <div class="ifn-s" id="ifn-nl-s">—</div>
+          </div>
+          <div class="ifn-arrow">›</div>
+          <div class="ifn-stage" data-k="pb">
+            <div class="ifn-k">03 · 수익화 후보</div>
+            <div class="ifn-v" id="ifn-pb">—</div>
+            <div class="ifn-s" id="ifn-pb-s">—</div>
+          </div>
+          <div class="ifn-arrow">›</div>
+          <div class="ifn-stage" data-k="cta">
+            <div class="ifn-k">04 · 연결</div>
+            <div class="ifn-v" id="ifn-cta">—</div>
+            <div class="ifn-s" id="ifn-cta-s">—</div>
+          </div>
+        </div>`;
+      const header = page.querySelector('.ws-header');
+      if(header) header.insertAdjacentElement('afterend', fn);
+      else page.insertBefore(fn, page.firstChild);
+    }
+    return fn;
+  }
+
+  const origIntake = window.renderIntake;
+  window.renderIntake = function(){
+    if(typeof origIntake === 'function') origIntake();
+    ensureFlowNarrative();
+    const b = state.business; if(!b) return;
+    const w = b.weekly||{}, nl=b.newsletter||{}, pr=b.premium||{}, b2b=b.b2b||{}, cta=b.cta_perf||{};
+
+    const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent = v; };
+
+    // 01 수집
+    const cTot = w.total_drafts||0;
+    set('ifn-content', String(cTot));
+    set('ifn-content-s', cTot ? `${w.published||0} 발행 · ${w.pending||0} 대기` : '수집 대기 중');
+    // 02 자산화
+    const nlTot = (nl.newsletter_total||0)+(nl.lead_total||0);
+    set('ifn-nl', String(nlTot));
+    set('ifn-nl-s', nlTot ? `뉴스레터 ${nl.newsletter_total||0} · 리드 ${nl.lead_total||0}` : '자산 누적 대기');
+    // 03 수익화 후보
+    const pbTot = (pr.total||0)+(b2b.total||0);
+    set('ifn-pb', String(pbTot));
+    set('ifn-pb-s', pbTot ? `프리미엄 ${pr.total||0} · B2B ${b2b.total||0}` : '후보 승격 대기');
+    // 04 연결
+    const ctaLnk = cta.linked_copies||0;
+    set('ifn-cta', String(ctaLnk));
+    set('ifn-cta-s', (ctaLnk||cta.unlinked_copies) ? `연결 ${ctaLnk} · 미연결 ${cta.unlinked_copies||0}` : '연결 대기');
+
+    // tone classes per stage
+    const tone = (id,v)=>{
+      const el = document.getElementById(id); if(!el) return;
+      el.classList.toggle('dim', !v);
+      el.classList.toggle('on', !!v);
+    };
+    tone('ifn-content', cTot);
+    tone('ifn-nl', nlTot);
+    tone('ifn-pb', pbTot);
+    tone('ifn-cta', ctaLnk);
+
+    // active stage marker on narrative (the last non-zero stage)
+    const stages = document.querySelectorAll('#intake-flow-narrative .ifn-stage');
+    stages.forEach(s=>s.classList.remove('active','dim'));
+    const vals = [cTot, nlTot, pbTot, ctaLnk];
+    const lastActive = vals.lastIndexOf(Math.max(...vals.filter(v=>v>0)));
+    vals.forEach((v,i)=>{
+      if(!v) stages[i] && stages[i].classList.add('dim');
+    });
+    if(stages[lastActive]) stages[lastActive].classList.add('active');
+
+    const stamp = document.getElementById('ifn-stamp');
+    if(stamp){
+      const d = new Date();
+      stamp.textContent = d.toTimeString().substring(0,5) + ' KST';
+    }
+  };
+
+  // ───── Ops: readiness summary band ─────
+  function ensureReadiness(){
+    const page = document.getElementById('page-ops'); if(!page) return null;
+    let rb = document.getElementById('ops-readiness');
+    if(!rb){
+      rb = document.createElement('div');
+      rb.id = 'ops-readiness';
+      rb.className = 'opsr';
+      rb.innerHTML = `
+        <div class="opsr-head">
+          <span class="opsr-title">운영 요약 · 카테고리 6</span>
+          <span class="opsr-stamp" id="opsr-stamp">—</span>
+        </div>
+        <div class="opsr-counts">
+          <div class="opsr-c ok"><div class="k">준비</div><div class="v" id="opsr-ready">—</div></div>
+          <div class="opsr-c wait"><div class="k">대기</div><div class="v" id="opsr-wait">—</div></div>
+          <div class="opsr-c empty"><div class="k">비어있음</div><div class="v" id="opsr-empty">—</div></div>
+        </div>
+        <div class="opsr-cats" id="opsr-cats"></div>`;
+      const summary = document.getElementById('ops-summary');
+      if(summary) summary.insertAdjacentElement('afterend', rb);
+      else {
+        const header = page.querySelector('.ws-header');
+        if(header) header.insertAdjacentElement('afterend', rb);
+        else page.insertBefore(rb, page.firstChild);
+      }
+    }
+    return rb;
+  }
+
+  const origOps = window.renderOps;
+  window.renderOps = function(){
+    if(typeof origOps === 'function') origOps();
+    ensureReadiness();
+    const b = state.business; if(!b) return;
+    const pr=b.premium||{}, br=b.brief||{}, bb=b.b2b||{}, nl=b.newsletter||{}, w=b.weekly||{}, cta=b.cta_perf||{};
+
+    // categorize each of 6 cards into ready/wait/empty
+    const cats = [
+      {key:'premium', label:'프리미엄', val:pr.total||0,
+       ready:(pr.top||[]).length>0, empty:!(pr.total||0)},
+      {key:'brief', label:'브리프', val:br.total||0,
+       ready:(br.ready_count||0)>0, empty:!(br.total||0)},
+      {key:'b2b', label:'B2B', val:bb.total||0,
+       ready:false, empty:!(bb.total||0)},
+      {key:'nl', label:'뉴스레터·리드', val:(nl.newsletter_total||0)+(nl.lead_total||0),
+       ready:(nl.newsletter_total||0)>0, empty:!((nl.newsletter_total||0)+(nl.lead_total||0))},
+      {key:'weekly', label:'주간', val:w.total_drafts||0,
+       ready:(w.highlights||[]).length>0, empty:!(w.total_drafts||0)},
+      {key:'cta', label:'CTA', val:cta.linked_copies||0,
+       ready:(cta.notable_count||0)>0, empty:!(cta.linked_copies||0)},
+    ];
+    const readyCount = cats.filter(c=>!c.empty && c.ready).length;
+    const emptyCount = cats.filter(c=>c.empty).length;
+    const waitCount  = cats.length - readyCount - emptyCount;
+    const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v};
+    set('opsr-ready', String(readyCount));
+    set('opsr-wait', String(waitCount));
+    set('opsr-empty', String(emptyCount));
+
+    const catsEl = document.getElementById('opsr-cats');
+    if(catsEl){
+      catsEl.innerHTML = cats.map(c=>{
+        const kind = c.empty ? 'empty' : (c.ready ? 'ready' : 'wait');
+        const phrase = c.empty ? '비어있음' : (c.ready ? '준비' : '대기');
+        return `<div class="opsr-cat is-${kind}" data-k="${c.key}">
+          <span class="dot"></span>
+          <span class="lbl">${c.label}</span>
+          <span class="num">${c.val}</span>
+          <span class="ph">${phrase}</span>
+        </div>`;
+      }).join('');
+    }
+
+    const stamp = document.getElementById('opsr-stamp');
+    if(stamp){
+      const d = new Date();
+      stamp.textContent = d.toTimeString().substring(0,5) + ' KST';
+    }
+  };
+})();
+</script>
+
+<style>
+/* ─── S32 — Intake flow narrative + Ops readiness summary ─── */
+
+/* Intake narrative */
+#intake-flow-narrative.ifn{
+  background:var(--surface-2);border:1px solid var(--line);
+  border-radius:4px;padding:12px 14px;margin-bottom:12px;
+}
+.ifn-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.ifn-title{
+  font-size:11px;letter-spacing:0.6px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.ifn-title::before{content:'●';color:var(--accent);font-size:8px;margin-right:6px;vertical-align:middle}
+.ifn-stamp{
+  margin-left:auto;font-size:10px;color:var(--txt3);
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+.ifn-stages{
+  display:flex;align-items:stretch;gap:6px;
+}
+.ifn-stage{
+  flex:1;min-width:0;padding:9px 11px;
+  border:1px solid var(--line);border-radius:3px;background:var(--panel);
+  display:flex;flex-direction:column;gap:3px;position:relative;
+}
+.ifn-stage::before{
+  content:'';position:absolute;left:0;top:10px;bottom:10px;width:2px;
+  background:var(--line2);border-radius:2px;opacity:0.6;
+}
+.ifn-stage.active::before{background:var(--accent);opacity:0.8}
+.ifn-stage.dim{opacity:0.55}
+.ifn-stage .ifn-k{
+  font-size:9px;letter-spacing:0.4px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.ifn-stage .ifn-v{
+  font-size:20px;font-weight:700;color:var(--txt);line-height:1;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+.ifn-stage .ifn-v.dim{color:var(--txt3)}
+.ifn-stage.active .ifn-v{color:var(--txt)}
+.ifn-stage .ifn-s{font-size:10px;color:var(--txt2);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.ifn-arrow{
+  display:flex;align-items:center;justify-content:center;
+  color:var(--txt3);opacity:0.45;font-size:14px;padding:0 2px;
+  flex:none;
+}
+
+@media (prefers-reduced-motion: no-preference){
+  #intake-flow-narrative.ifn::after{
+    content:'';display:block;height:1px;margin-top:10px;
+    background:linear-gradient(90deg,transparent 0%,var(--accent) 50%,transparent 100%);
+    background-size:30% 100%;background-repeat:no-repeat;background-position:-30% 0;
+    animation: s32IfnRail 5s linear infinite;opacity:0.3;
+  }
+}
+@keyframes s32IfnRail{
+  0%{background-position:-30% 0}
+  100%{background-position:130% 0}
+}
+
+/* Ops readiness summary */
+#ops-readiness.opsr{
+  background:var(--surface-2);border:1px solid var(--line);
+  border-radius:4px;padding:12px 14px;margin:12px 0;
+}
+.opsr-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.opsr-title{
+  font-size:11px;letter-spacing:0.6px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.opsr-title::before{content:'◉';color:var(--accent);font-size:9px;margin-right:6px;vertical-align:middle}
+.opsr-stamp{
+  margin-left:auto;font-size:10px;color:var(--txt3);
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+
+.opsr-counts{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;
+}
+.opsr-c{
+  padding:8px 11px;border:1px solid var(--line);border-radius:3px;
+  background:var(--panel);display:flex;align-items:baseline;gap:8px;position:relative;
+}
+.opsr-c::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px}
+.opsr-c.ok::before{background:var(--ok);opacity:0.6}
+.opsr-c.wait::before{background:var(--warn);opacity:0.55}
+.opsr-c.empty::before{background:var(--txt3);opacity:0.35}
+.opsr-c .k{
+  font-size:9px;letter-spacing:0.5px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.opsr-c .v{
+  margin-left:auto;font-size:18px;font-weight:700;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";line-height:1;
+}
+.opsr-c.ok .v{color:var(--ok)}
+.opsr-c.wait .v{color:var(--warn)}
+.opsr-c.empty .v{color:var(--txt3)}
+
+.opsr-cats{
+  display:flex;gap:6px;flex-wrap:wrap;
+  padding-top:10px;border-top:1px dashed var(--line);
+}
+.opsr-cat{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 9px;border:1px solid var(--line);border-radius:2px;
+  background:var(--panel);font-size:11px;
+}
+.opsr-cat .dot{width:6px;height:6px;border-radius:50%;background:var(--txt3);flex:none}
+.opsr-cat.is-ready .dot{background:var(--ok)}
+.opsr-cat.is-wait .dot{background:var(--warn)}
+.opsr-cat.is-empty .dot{background:var(--txt3);opacity:0.5}
+.opsr-cat .lbl{color:var(--txt2);letter-spacing:0.2px}
+.opsr-cat.is-ready .lbl{color:var(--txt)}
+.opsr-cat .num{
+  color:var(--txt);font-weight:700;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+  padding-left:4px;border-left:1px solid var(--line);
+}
+.opsr-cat.is-empty .num{color:var(--txt3);font-weight:400}
+.opsr-cat .ph{
+  margin-left:4px;font-size:9px;letter-spacing:0.4px;color:var(--txt3);
+  text-transform:uppercase;
+}
+
+@media (max-width:760px){
+  .ifn-stages{flex-direction:column}
+  .ifn-arrow{transform:rotate(90deg);padding:2px 0}
+  .opsr-counts{grid-template-columns:1fr}
+}
+</style>
+
 </body>
 </html>
