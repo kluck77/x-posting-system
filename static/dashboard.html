@@ -1393,6 +1393,83 @@ html,body{
 .flow-wrap{gap:8px}
 .ops-grid{gap:8px}
 
+/* ─── S22b · AI workstation v2 (업무 스테이션) ──────────── */
+.ws-node{
+  display:grid;grid-template-columns:44px 1fr auto;gap:14px;
+  align-items:start;padding:14px 16px;min-height:auto;
+}
+.ws-node .ws-icon{
+  width:44px;height:44px;border:1px solid var(--line);
+  background:var(--bg2);border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--txt2);
+}
+.ws-node[class*="role-"] .ws-icon{color:var(--role)}
+.ws-node.off .ws-icon{color:var(--txt3)}
+.ws-node .ic-work{width:24px;height:24px;display:block}
+.ic-doc .cursor{animation:cursorBlink 1s steps(2,end) infinite}
+.ic-browser .scan{opacity:0.55}
+.ic-monitor .alert{opacity:0.85}
+
+.ws-info{min-width:0;display:flex;flex-direction:column;gap:4px}
+.ws-top{
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  line-height:1.2;
+}
+.ws-role{font-size:14px;font-weight:700;color:var(--txt);letter-spacing:0}
+.ws-top .role-badge{
+  font-size:9px;padding:2px 5px;background:var(--bg2);
+  border:1px solid var(--line);border-radius:2px;color:var(--txt2);
+  font-weight:700;letter-spacing:0.3px;
+}
+.ws-node[class*="role-"] .role-badge{
+  color:var(--role);border-color:color-mix(in srgb,var(--role) 40%,var(--line));
+}
+.ws-top .ws-prov{
+  font-size:11px;color:var(--txt3);font-weight:500;letter-spacing:0;
+  margin-left:auto;
+}
+.ws-status{
+  font-size:12px;color:var(--txt);font-weight:600;
+  display:flex;align-items:center;gap:6px;margin-top:2px;
+}
+.ws-status::before{display:none}
+.ws-status .ws-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--txt3);
+  flex-shrink:0;display:inline-block;
+}
+.ws-status.is-on .ws-dot{background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb,var(--ok) 20%,transparent)}
+.ws-status.is-idle .ws-dot{background:var(--txt3)}
+.ws-status.is-off .ws-dot{background:var(--danger);opacity:0.7}
+.ws-status.is-off{color:var(--txt2)}
+.ws-status.is-idle{color:var(--txt2);font-weight:500}
+
+.ws-task,.ws-last{
+  font-size:11px;color:var(--txt2);line-height:1.35;
+  display:flex;gap:6px;align-items:baseline;
+  border:none;padding:0;margin-top:0;
+}
+.ws-task::before,.ws-last::before{content:''}
+.ws-task .ws-k,.ws-last .ws-k{
+  font-size:9px;color:var(--txt3);font-weight:700;letter-spacing:0.5px;
+  text-transform:uppercase;min-width:26px;
+}
+.ws-last{color:var(--txt3)}
+
+.ws-meta{
+  text-align:right;display:flex;flex-direction:column;align-items:flex-end;
+  gap:2px;min-width:52px;
+}
+.ws-meta .runs{font-size:22px;font-weight:700;color:var(--txt);letter-spacing:-0.5px;line-height:1}
+.ws-meta .runs.off{color:var(--txt3)}
+.ws-node[class*="role-"].working .ws-meta .runs{color:var(--role)}
+.ws-meta .lbl{font-size:9px;color:var(--txt3);letter-spacing:0.6px;text-transform:uppercase;font-weight:700}
+.ws-activity{height:10px;gap:2px}
+.ws-activity i{width:2px}
+.ws-activity i.hi{height:10px}
+.ws-activity i.md{height:6px}
+.ws-activity i.lo{height:3px}
+
 /* ─── Page-specific styles inserted in later steps ────────── */
 </style>
 </head>
@@ -1771,63 +1848,53 @@ function renderAttention({h, a, q, w, b}){
 }
 
 /* ─── Render: AI WORKSTATIONS ─────────────────────────────── */
+/* 업무 도구형 라인 아이콘 — currentColor / stroke 1.5 / viewBox 24 / 통일 */
+const ICON_ATTR = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
 const ROLE_ICONS = {
-  // 드래프트 작성 — document frame + text lines + blinking cursor
-  DraftWriter: `<svg class="ic-pixel ic-doc" viewBox="0 0 34 34">
-    <rect x="6" y="4" width="20" height="26" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-    <rect x="22" y="4" width="4" height="4" fill="var(--accent)" opacity="0.5"/>
-    <rect x="9" y="10" width="14" height="1.5" fill="var(--accent)" opacity="0.7"/>
-    <rect x="9" y="14" width="11" height="1.5" fill="var(--accent)" opacity="0.55"/>
-    <rect x="9" y="18" width="13" height="1.5" fill="var(--accent)" opacity="0.55"/>
-    <rect x="9" y="22" width="7" height="1.5" fill="var(--accent)" opacity="0.55"/>
-    <rect class="cursor" x="17" y="22" width="2" height="2" fill="var(--accent)"/>
+  // DraftWriter — 문서 + 본문 라인 + 우하단 커서
+  DraftWriter: `<svg class="ic-work ic-doc" ${ICON_ATTR}>
+    <path d="M6 3h9l3 3v15H6z"/>
+    <path d="M15 3v3h3"/>
+    <path d="M9 10h6M9 13h6M9 16h4"/>
+    <rect class="cursor" x="13" y="15.2" width="1.3" height="1.8" fill="currentColor" stroke="none"/>
   </svg>`,
-  // 리뷰어 — magnifier (circle + handle) + inner check tick
-  Reviewer: `<svg class="ic-pixel ic-mag" viewBox="0 0 34 34">
-    <circle cx="14" cy="14" r="8" fill="none" stroke="var(--accent)" stroke-width="1.8"/>
-    <rect x="20" y="20" width="3" height="9" fill="var(--accent)" transform="rotate(-45 21.5 24.5)"/>
-    <g class="tick">
-      <rect x="11" y="14" width="2" height="2" fill="var(--accent)"/>
-      <rect x="13" y="16" width="2" height="2" fill="var(--accent)"/>
-      <rect x="15" y="14" width="2" height="2" fill="var(--accent)"/>
-      <rect x="17" y="12" width="2" height="2" fill="var(--accent)"/>
-    </g>
+  // Reviewer — 체크리스트 3줄 + 우하단 작은 돋보기
+  Reviewer: `<svg class="ic-work ic-check" ${ICON_ATTR}>
+    <rect x="3.5" y="4" width="4" height="4" rx="0.5"/>
+    <path d="M4.5 6l.8 .8L6.8 5"/>
+    <path d="M10 6h9"/>
+    <rect x="3.5" y="10" width="4" height="4" rx="0.5"/>
+    <path d="M4.5 12l.8 .8L6.8 11"/>
+    <path d="M10 12h9"/>
+    <rect x="3.5" y="16" width="4" height="4" rx="0.5"/>
+    <path d="M10 18h6"/>
+    <circle cx="18" cy="18" r="2.2"/>
+    <path d="M19.6 19.6L21 21"/>
   </svg>`,
-  // 리서처 — radar frame (corners) + sweeping line + center dot
-  Researcher: `<svg class="ic-pixel ic-radar" viewBox="0 0 34 34">
-    <rect x="4" y="4" width="6" height="2" fill="var(--accent)"/><rect x="4" y="4" width="2" height="6" fill="var(--accent)"/>
-    <rect x="24" y="4" width="6" height="2" fill="var(--accent)"/><rect x="28" y="4" width="2" height="6" fill="var(--accent)"/>
-    <rect x="4" y="28" width="6" height="2" fill="var(--accent)"/><rect x="4" y="24" width="2" height="6" fill="var(--accent)"/>
-    <rect x="24" y="28" width="6" height="2" fill="var(--accent)"/><rect x="28" y="24" width="2" height="6" fill="var(--accent)"/>
-    <circle cx="17" cy="17" r="9" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.35"/>
-    <circle cx="17" cy="17" r="5" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.35"/>
-    <rect x="16" y="16" width="2" height="2" fill="var(--accent)"/>
-    <line class="sweep" x1="17" y1="17" x2="17" y2="7" stroke="var(--accent)" stroke-width="1.5"/>
+  // Researcher — 브라우저 + 스캔 라인
+  Researcher: `<svg class="ic-work ic-browser" ${ICON_ATTR}>
+    <rect x="3" y="4" width="18" height="16" rx="1"/>
+    <path d="M3 8h18"/>
+    <circle cx="5.3" cy="6" r="0.5" fill="currentColor" stroke="none"/>
+    <circle cx="7.0" cy="6" r="0.5" fill="currentColor" stroke="none"/>
+    <circle cx="8.7" cy="6" r="0.5" fill="currentColor" stroke="none"/>
+    <path d="M10.5 6h8"/>
+    <path d="M6 12h7"/>
+    <path d="M6 15h9"/>
+    <path d="M6 18h5"/>
+    <path class="scan" d="M14 10v10" stroke-dasharray="2 2"/>
   </svg>`,
-  // 팩트체커 — stamp square + bold checkmark + baseline
-  FactChecker: `<svg class="ic-pixel ic-stamp" viewBox="0 0 34 34">
-    <rect x="5" y="6" width="24" height="20" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-    <rect x="5" y="28" width="24" height="2" fill="var(--accent)" opacity="0.6"/>
-    <g class="stampmark">
-      <rect x="9" y="16" width="3" height="3" fill="var(--accent)"/>
-      <rect x="12" y="19" width="3" height="3" fill="var(--accent)"/>
-      <rect x="15" y="16" width="3" height="3" fill="var(--accent)"/>
-      <rect x="18" y="13" width="3" height="3" fill="var(--accent)"/>
-      <rect x="21" y="10" width="3" height="3" fill="var(--accent)"/>
-    </g>
+  // FactChecker — 실드 외곽 + 내부 체크
+  FactChecker: `<svg class="ic-work ic-shield" ${ICON_ATTR}>
+    <path d="M12 3l7 2.5v5.5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V5.5L12 3z"/>
+    <path d="M8.5 12.5l2.5 2.5L16 10"/>
   </svg>`,
-  // 트렌드 헌터 — pixel waveform + tip pulse dot
-  TrendHunter: `<svg class="ic-pixel ic-wave" viewBox="0 0 34 34">
-    <rect x="3" y="20" width="3" height="3" fill="var(--accent)" opacity="0.5"/>
-    <rect x="6" y="17" width="3" height="3" fill="var(--accent)" opacity="0.6"/>
-    <rect x="9" y="14" width="3" height="3" fill="var(--accent)" opacity="0.7"/>
-    <rect x="12" y="18" width="3" height="3" fill="var(--accent)" opacity="0.7"/>
-    <rect x="15" y="11" width="3" height="3" fill="var(--accent)" opacity="0.85"/>
-    <rect x="18" y="15" width="3" height="3" fill="var(--accent)" opacity="0.85"/>
-    <rect x="21" y="8" width="3" height="3" fill="var(--accent)"/>
-    <rect x="24" y="11" width="3" height="3" fill="var(--accent)"/>
-    <rect class="tip" x="27" y="6" width="4" height="4" fill="var(--accent)"/>
-    <rect x="3" y="28" width="28" height="1" fill="var(--accent)" opacity="0.3"/>
+  // TrendHunter — 모니터 프레임 + 내부 파형 + 우상단 알림점
+  TrendHunter: `<svg class="ic-work ic-monitor" ${ICON_ATTR}>
+    <rect x="3" y="4" width="18" height="12" rx="1"/>
+    <path d="M9 20h6M12 16v4"/>
+    <path d="M6 12l2-3 2 2 3-5 2 4 2-2 2 3"/>
+    <circle class="alert" cx="19" cy="5" r="1.6" fill="currentColor" stroke="none"/>
   </svg>`,
 };
 
@@ -1878,11 +1945,30 @@ function renderAI(){
     TrendHunter:'role-watch',
   };
   const roleTask = {
-    DraftWriter:'초안 구성 · 훅 · 본문',
+    DraftWriter:'훅·본문·CTA 초안 구성',
     Reviewer:'5기준 품질 게이트',
-    Researcher:'소스 · 컨텍스트 수집',
-    FactChecker:'주장 · 출처 검증',
-    TrendHunter:'실시간 신호 감시',
+    Researcher:'소스·컨텍스트 수집',
+    FactChecker:'주장·출처 검증',
+    TrendHunter:'실시간 트렌드 모니터링',
+  };
+  const statusActive2 = {
+    DraftWriter:'초안 작성 중',
+    Reviewer:'품질 검토 중',
+    Researcher:'소스 수집 중',
+    FactChecker:'주장 검증 중',
+    TrendHunter:'신호 감시 중',
+  };
+  const statusIdle2 = {
+    DraftWriter:'작성 대기',
+    Reviewer:'검토할 항목 없음',
+    Researcher:'수집 대기',
+    FactChecker:'확인 대기',
+    TrendHunter:'신호 대기',
+  };
+  const lastLine = (r, off, working)=>{
+    if(off) return '프로바이더 연결 필요';
+    if(working) return `오늘 ${escapeHTML(r.provider||'—')}로 ${r.runs_today}회 실행`;
+    return '최근 실행 없음';
   };
   // synth activity strip 8 bars from runs (deterministic, 역할별 시드)
   const seedFor = role=>({DraftWriter:3,Reviewer:5,Researcher:7,FactChecker:11,TrendHunter:13}[role]||1);
@@ -1908,24 +1994,31 @@ function renderAI(){
     const badge = roleBadge[r.role] || '';
     const rcls = roleClass[r.role] || '';
     const working = !off && runs > 0;
-    const statusTxt = off ? (statusOff[r.role]||'미설정')
-                     : working ? (statusActive[r.role]||'동작 중')
-                     : (statusIdle[r.role]||'대기');
+    const statusTxt = off ? '프로바이더 미설정'
+                     : working ? (statusActive2[r.role]||'동작 중')
+                     : (statusIdle2[r.role]||'대기');
+    const statusKind = off ? 'off' : (working ? 'on' : 'idle');
     const taskTxt = roleTask[r.role] || '';
+    const lastTxt = lastLine(r, off, working);
     const strip = buildStrip(r.role, runs, off);
     const cls = (off ? 'off' : (working ? 'working' : '')) + ' ' + rcls;
     return `<div class="ws-node ${cls}">
-      <span class="worker-rail"></span>
       <div class="ws-icon">${icon}</div>
       <div class="ws-info">
-        <div class="ws-role">${roleName} <span class="role-badge">${badge}</span></div>
-        <div class="ws-prov">${escapeHTML(r.provider||'—')}</div>
-        <div class="ws-status">${statusTxt}</div>
-        <div class="ws-task"><b>${taskTxt}</b></div>
+        <div class="ws-top">
+          <span class="ws-role">${roleName}</span>
+          <span class="role-badge">${badge}</span>
+          <span class="ws-prov">${escapeHTML(r.provider||'—')}</span>
+        </div>
+        <div class="ws-status is-${statusKind}">
+          <span class="ws-dot"></span>${statusTxt}
+        </div>
+        <div class="ws-task"><span class="ws-k">담당</span>${taskTxt}</div>
+        <div class="ws-last"><span class="ws-k">최근</span>${lastTxt}</div>
       </div>
       <div class="ws-meta">
         <div class="runs ${runs==null||runs===0?'off':''}">${runsTxt}</div>
-        <div class="lbl">오늘 실행</div>
+        <div class="lbl">TODAY</div>
         <div class="ws-activity">${strip}</div>
       </div>
     </div>`;
