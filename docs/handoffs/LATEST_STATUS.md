@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S53 — AI 카드 아이콘 박스 확대
+## LAST COMPLETED PHASE: Dashboard S54 — AI 카드 왼쪽 시작선 8px 이동
+
+`#ws-grid.v28` padding-left 26→18, `.ws28-step` left -18→-14. 카드 전체가 viewport 기준 왼쪽으로 당겨짐. 탭 전환 로직은 S35/S50 체계 intact, 구조 점검 완료.
+
+## PREVIOUS: Dashboard S53 — AI 카드 아이콘 박스 확대
 
 S52(padding-left 축소) 되돌리고 아이콘 자체를 키움. `.ws28-icon` 52×50 → 64×58, `grid-template-columns` 52px→64px. 왼쪽 빈 공간을 영역 확대로 채움.
 

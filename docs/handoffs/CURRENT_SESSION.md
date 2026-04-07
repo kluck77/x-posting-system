@@ -1,4 +1,26 @@
-# Current Session — 2026-04-07 (Session 53)
+# Current Session — 2026-04-07 (Session 54)
+
+## S54 — AI 카드 왼쪽 시작선 이동 + 탭 전환 로직 재점검
+
+### Task 1: 탭 전환 — 구조 점검 완료, 코드 무수정
+- S35 JS handler @ 5094~5129: 단 하나, cloneNode 체인 끝에 정리. `activate()`에서 .active 토글 + scrollTop=0.
+- S35 CSS block @ 5895~5906: `.page:not(.active){display:none !important}` + `#page-*.page.active{display:flex !important}`.
+- S50에서 모든 `#page-*{display:flex}` 에 `.active` 한정사 추가 (L3888, 4998, 5007, 5028, 5034) — 모두 intact.
+- `.hud-tabs` z-index:10, pointer-events 차단 없음.
+- **구조적으로 정상**. 유저 체감 "전환 안 됨"은 브라우저 캐시 추정. 서버 reload + 하드 리프레시 필요.
+
+### Task 2: AI 카드 왼쪽 시작선 이동
+- `#ws-grid.v28 { padding-left: 26px → 18px }` (L5837) — 전체 카드가 8px 좌측 이동
+- `.ws28-step { left: -18px → -14px }` (L5859) — step 번호 rail이 카드 이동과 같이 따라감 (카드 바깥 -14px = viewport 4px 지점, 여전히 bleed 내부)
+- icon/grid-template-columns/column-gap/text/chart/tab 모두 무변경
+
+### 결과
+- 아이콘/텍스트/차트 상대 정렬 그대로
+- 카드 전체가 viewport 기준 8px 왼쪽으로 당겨져 왼쪽 빈 느낌 줄어듦
+
+---
+
+# Previous — Session 53
 
 ## S53 — AI 카드 아이콘 박스 확대 (gutter 축소가 아니라 영역 확대로 해결)
 
