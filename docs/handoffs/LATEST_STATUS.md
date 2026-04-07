@@ -1,6 +1,14 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S39 — Cat continuous walk + AI bottom cut full fix
+## LAST COMPLETED PHASE: Dashboard S40~S46 — AI bottom void + micro chart polish
+
+`static/dashboard.html` only. AI tab.
+
+**Bottom void chase**: S40 specificity bump → S41 inline JS (140px void) → S42 trim → S44 padding 0 → S45 flex space-between → S46 exact pixel height. Final: JS reads `.hud-main.clientHeight` and forces `#page-ai height` to that exact pixel value, then `#ws-grid flex:1 + justify-content:space-between` distributes the 5 cards across the full AI viewport. Last card lands exactly at the bottom edge with zero void.
+
+**Micro chart**: was 12px tall with 3px bars (crushed). Bumped to 18px height, 4px bars, lo/md/hi 5/11/17px, min-width 96px, right-aligned via margin-left:auto. Right info block baseline normalized via align-self:center.
+
+## PREVIOUS PHASE: Dashboard S39 — Cat continuous walk + AI bottom cut full fix
 
 `static/dashboard.html` only.
 

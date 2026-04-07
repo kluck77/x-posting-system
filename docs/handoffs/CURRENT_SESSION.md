@@ -1,4 +1,61 @@
-# Current Session — 2026-04-07 (Session 39)
+# Current Session — 2026-04-07 (Session 46)
+
+## S40~S46 — AI bottom void & micro chart (iterative chase)
+
+`static/dashboard.html` 만. AI 탭 한정.
+
+### S40~S45 결론
+- S40: specificity 끌어올림 (`html body .hud-main #page-ai.page`) — S35 의 `#page-ai{padding-bottom:0!important}` 가 source 뒤에 있어 같은 specificity 면 나중이 이김. 끌어올려 우회.
+- S41: inline JS `setProperty('padding-bottom','...','important')` 로 cascade 무시. 140px 줬다가 과해서
+- S42: 20px 로 축소
+- S43: 카드 키워서 채우려다 사이즈 변화 거부됨
+- S44: 카드 사이즈 복구 + padding 0 + hud-main padding 0 + 마지막 카드 margin 0
+- S45: 카드 합 < 페이지 높이라서 padding 0 만으론 부족 → flex space-between 도입
+
+### S46 — micro chart 정상화 + 정확한 높이 강제
+**1) Micro chart 찌그러진 원인**
+S37 의 `.ws28-c .strip` 가 `height:12px`, bar `width:3px`, lo/md/hi `3/7/11px`. 12px 높이에 3px 폭 막대 8개라 시각적으로 눌린 장식처럼 보임. 또 `flex:1 1 auto` + `max-width:140px` 만 있고 `min-width` 가 없어 좁은 폭에선 squeeze.
+
+**Fix**:
+- height 12 → 18px
+- bar width 3 → 4px, gap 2 → 2.5px
+- lo/md/hi 3/7/11 → 5/11/17px
+- `min-width: 96px` (절대 squeeze 안 됨)
+- `flex: 0 0 auto` + `margin-left: auto` 로 우측 고정
+- runs 18 → 19px, lbl 8.5 → 9px, padding 6/0 → 8/4 로 baseline 정돈
+
+**2) AI 우측 정보 블록 기준선**
+runs/lbl/strip 모두 `align-self:center`, `.ws28-c { align-items:center }` → 카드마다 우측 블록 baseline 일정.
+
+**3) 하단 공백 원인**
+S45 의 `min-height:100%` 가 `#page-ai` 부모(`.hud-main`)의 computed height 에 의존. iOS Safari 의 dynamic viewport 에서 부모 height 가 계산 시점에 따라 다르게 잡혀 #page-ai 가 실제 viewport 보다 작게 잡히고, flex space-between 의 분배 영역이 줄어 → 마지막 카드 아래 빈 공간 발생.
+
+**Fix (정확한 픽셀 강제)**:
+- JS 가 `.hud-main.clientHeight` 를 읽어 실제 scroll viewport 픽셀 높이 측정
+- `#page-ai { height: <hudH-14> px; min-height: <hudH-14>px }` 인라인 강제
+- `.hud-main padding-top: 14px` (헤더 호흡 유지) / padding-bottom: 0
+- `#ws-grid { flex: 1 1 auto; min-height: 0; padding-bottom: 0 }`
+- `space-between` 분배 → 5 카드가 정확한 픽셀 높이 안에서 균등 배치 → 마지막 카드 = 정확히 viewport 바닥
+
+### 수정 파일
+- `static/dashboard.html`
+
+### 커밋 (S40~S46)
+- `9c8e820` S40 specificity bump
+- `b6c1282` S41 inline JS bulletproof
+- `7dceca6` S42 trim 140→20
+- `2a26d4e` S43 enlarge cards (reverted)
+- `d28ca16` S44 size revert + padding 0
+- `82c1ab2` S45 flex space-between
+- `6fd8128` S46 micro chart restored + exact pixel height
+
+### Push
+- `claude/extract-prediction-time-n82UK` ✓
+- `claude/premium-control-room-ui-LJFba` ✓
+
+---
+
+# Previous Session — 2026-04-07 (Session 39)
 
 ## S39 — Cat continuous walk + AI bottom cut full fix
 
