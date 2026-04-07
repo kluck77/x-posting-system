@@ -1,6 +1,14 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S35 — Tab/Page Structure Recovery (critical fix)
+## LAST COMPLETED PHASE: Dashboard S36 + S36b — Home/AI Detail Polish & Final Hardening
+
+`static/dashboard.html` only. No backend, no new structure.
+
+**S36 (polish)**: Home highlight header bug (font-size:0 + ::before flex trick) replaced with JS-injected clean `.s36-title` span. Situation/KPI/cat rhythm tightened. AI ws28 cards compressed (88×62 icon, 11px padding, nowrap+ellipsis lines). Left rail/0105 markers faded (opacity 0.45/0.55). Right today/runs/strip baseline grid normalized.
+
+**S36b (hardening)**: Home section order locked via `order:1..4` (situation → highlight → KPI → system status). System status `.hero` was eating page height via `flex:1 1 auto` + leftover hero-poster/big/grid blocks → forced `flex:0 0 auto`, killed leftover blocks, padding 8×12. "이번" title fix reinforced with `writing-mode:horizontal-tb`, `word-break:keep-all`, `white-space:nowrap`, `flex:0 0 auto`, `overflow:visible` on both panel-head and .s36-title. Cat scaled 0.42 / opacity 0.42, all child animations off.
+
+## PREVIOUS PHASE: Dashboard S35 — Tab/Page Structure Recovery (critical fix)
 
 `static/dashboard.html`.
 - **Root cause**: S30/S34 에서 `#page-* { display:flex }` 를 ID 선택자로 직접 지정 → specificity 상 `.page.active` 보다 높아 비활성 페이지도 레이아웃에 계속 참여. 긴 문서처럼 스크롤되는 현상 + AI 탭 활성인데 Home 내용이 위에 남는 현상의 진짜 원인.

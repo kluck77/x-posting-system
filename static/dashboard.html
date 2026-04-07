@@ -5060,6 +5060,42 @@ body > .cat-wrap{display:none !important}
 </style>
 
 <script>
+/* ─── S36 — Highlight panel-head clean rewrite ── */
+(function(){
+  function fixHeroHead(){
+    const head = document.querySelector('#page-home .panel-hero .panel-head');
+    if(!head) return;
+    if(head.dataset.s36) return;
+    // Preserve existing #hl-count if present (so updates still flow)
+    const existingCount = head.querySelector('#hl-count');
+    const countTxt = existingCount ? existingCount.textContent : '—';
+    head.innerHTML = '';
+    const title = document.createElement('span');
+    title.className = 's36-title';
+    title.textContent = '이번 주 핵심';
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.id = 'hl-count';
+    label.textContent = countTxt;
+    head.appendChild(title);
+    head.appendChild(label);
+    head.dataset.s36 = '1';
+  }
+  fixHeroHead();
+  // Re-apply after any renderHome that might recreate elements
+  if(typeof window.renderHome === 'function'){
+    const orig = window.renderHome;
+    window.renderHome = function(){
+      const r = orig.apply(this, arguments);
+      fixHeroHead();
+      return r;
+    };
+  }
+  // Safety: late tick
+  setTimeout(fixHeroHead, 400);
+  setTimeout(fixHeroHead, 1500);
+})();
+
 /* ─── S35 — Tab/page structure recovery ── */
 (function(){
   // Single source of truth for tab switching.
@@ -5099,6 +5135,255 @@ body > .cat-wrap{display:none !important}
 </script>
 
 <style>
+/* ─── S36b — Home order lock + system status shrink + reinforced title fix ─── */
+
+/* (1) Lock Home section order: situation → highlight → KPI → system status */
+#page-home #situation-board{order:1 !important;margin-bottom:0 !important}
+#page-home .panel-hero{order:2 !important;margin-bottom:0 !important}
+#page-home .kpi-row{order:3 !important}
+#page-home .hero-compact,
+#page-home .hero{order:4 !important}
+
+/* (2) System status (hero-compact) — collapse oversized height */
+#page-home .hero-compact,
+#page-home .hero{
+  min-height:0 !important;flex:0 0 auto !important;
+  padding:8px 12px !important;
+  border:1px dashed var(--line) !important;
+  background:transparent !important;
+  display:flex !important;align-items:center;gap:12px;flex-wrap:wrap;
+}
+#page-home .hero-compact > *,
+#page-home .hero > *{flex:0 0 auto;min-height:0 !important}
+#page-home .hero-compact .hero-body,
+#page-home .hero .hero-body{
+  display:flex !important;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:0 !important;min-height:0 !important;flex:1 1 auto;
+}
+#page-home .hero-compact .hero-title,
+#page-home .hero .hero-title{
+  font-size:9px !important;letter-spacing:0.5px;color:var(--txt3) !important;
+  text-transform:uppercase;line-height:1.3;margin:0 !important;
+}
+#page-home .hero-compact .hero-state,
+#page-home .hero .hero-state{
+  margin:0 !important;display:inline-flex;gap:6px;align-items:baseline;
+  font-size:12px;
+}
+#page-home .hero-compact .hero-meta,
+#page-home .hero .hero-meta{
+  margin-left:auto !important;padding:0 !important;border:none !important;
+  gap:10px;font-size:10px;color:var(--txt3);
+}
+/* Kill any hero internal large blocks */
+#page-home .hero .hero-big,
+#page-home .hero .hero-poster,
+#page-home .hero .hero-grid{display:none !important}
+
+/* (3) Reinforced "이번" title fix — strongest possible */
+#page-home .panel-hero .panel-head,
+#page-home .panel-hero .panel-head .s36-title{
+  writing-mode:horizontal-tb !important;
+  word-break:keep-all !important;
+  white-space:nowrap !important;
+  overflow:visible !important;
+  text-orientation:mixed !important;
+}
+#page-home .panel-hero .panel-head{
+  min-width:0;width:100%;box-sizing:border-box;
+}
+#page-home .panel-hero .panel-head .s36-title{
+  display:inline-block;flex:0 0 auto;max-width:none;
+  font-size:13px !important;line-height:1.35 !important;
+}
+
+/* (4) Cat — even smaller, even calmer */
+#page-home .panel-hero .cat-wrap{
+  transform:scale(0.42) !important;transform-origin:top right !important;
+  opacity:0.42 !important;
+  right:8px !important;top:4px !important;
+}
+#page-home .panel-hero .cat-wrap *{animation:none !important}
+#page-home .panel-hero .cat-wrap.coin-rush{filter:none !important}
+
+/* ─── S36 — Final detail polish (Home + AI) ─── */
+
+/* (1) HOME — fix highlight panel-head: kill font-size:0 trick that broke "이번"
+       Force a clean horizontal title via CSS only. */
+#page-home .panel-hero .panel-head{
+  font-size:13px !important;
+  display:flex !important;align-items:baseline;gap:10px;
+  padding:13px 16px 11px 16px !important;
+  white-space:nowrap;line-height:1.35;
+  text-transform:none !important;letter-spacing:-0.1px !important;
+  color:var(--txt) !important;font-weight:700 !important;
+}
+/* hide the original text node + ::before duplicate; JS will inject a clean title span */
+#page-home .panel-hero .panel-head::before{content:none !important}
+#page-home .panel-hero .panel-head .s36-title{
+  font-size:13px;font-weight:700;color:var(--txt);
+  white-space:nowrap;flex:0 0 auto;letter-spacing:-0.1px;
+}
+#page-home .panel-hero .panel-head .label{
+  font-size:10px !important;letter-spacing:0.3px;color:var(--txt3) !important;
+  padding:2px 6px;border:1px solid var(--line);border-radius:2px;
+  font-feature-settings:"tnum";margin-left:auto;font-weight:600 !important;
+  white-space:nowrap;flex:0 0 auto;
+}
+
+/* (2) HOME — situation board inner rhythm */
+#page-home #situation-board.sb{margin-bottom:2px}
+#page-home #situation-board.sb .sb-cell{
+  padding:11px 13px 12px 13px !important;min-height:74px;
+}
+#page-home #situation-board.sb .sb-title{
+  font-size:10px;letter-spacing:0.4px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;margin-bottom:4px;line-height:1.3;
+}
+#page-home #situation-board.sb .sb-cell .sb-v{
+  font-size:17px !important;line-height:1.35;letter-spacing:-0.1px;
+  font-weight:600;
+}
+#page-home #situation-board.sb .sb-cell .sb-sub{
+  font-size:11px;color:var(--txt3);margin-top:3px;line-height:1.4;
+}
+
+/* chip row spacing (premium / b2b / cta / newsletter / lead / weekly) */
+#page-home .focus-chips,
+#page-home .sb-chips,
+#page-home #situation-board + .chips,
+#page-home .sit-chips{
+  display:flex;flex-wrap:wrap;gap:5px 6px !important;margin-top:6px;
+}
+#page-home .focus-chips .chip,
+#page-home .sb-chips .chip,
+#page-home .sit-chips .chip{
+  padding:3px 8px !important;font-size:10px;line-height:1.5;
+  letter-spacing:0.3px;border-radius:2px;
+}
+
+/* vertical rhythm between situation → hero → kpi */
+#page-home{gap:10px !important}
+#page-home #situation-board{margin-bottom:0 !important}
+#page-home .panel-hero{margin-bottom:0 !important}
+#page-home .kpi-row{margin-top:2px}
+
+/* (3) HOME — cat mascot: minimal helper, never decorative */
+#page-home .panel-hero .cat-wrap{
+  position:absolute !important;right:10px !important;top:6px !important;
+  transform:scale(0.55) !important;transform-origin:top right !important;
+  opacity:0.55 !important;filter:none !important;
+  z-index:1 !important;pointer-events:none;
+}
+#page-home .panel-hero .cat-wrap.lucky-pulse{animation:none !important}
+#page-home .panel-hero .cat-wrap.lucky-pulse .cat-tail{animation-duration:5s !important}
+#page-home .panel-hero .cat-wrap.coin-rush{
+  filter:drop-shadow(0 0 2px rgba(255,209,102,0.45)) !important;
+}
+#page-home .panel-hero .cat-wrap .cat-coin-plus{display:none !important}
+
+/* (4) HOME — KPI typography & baseline */
+#page-home .kpi-row{gap:6px !important}
+#page-home .kpi-row .kpi-mini{
+  padding:9px 11px 10px 11px !important;
+  display:grid !important;grid-template-columns:1fr auto;
+  grid-template-rows:auto auto;column-gap:8px;row-gap:1px;
+  align-items:baseline;min-height:46px;
+}
+#page-home .kpi-row .kpi-mini .k-label{
+  grid-column:1;grid-row:1;font-size:9px !important;
+  color:var(--txt3) !important;letter-spacing:0.5px;
+  text-transform:uppercase;font-weight:600;line-height:1.2;
+}
+#page-home .kpi-row .kpi-mini .k-val{
+  grid-column:2;grid-row:1 / span 2;align-self:center;
+  font-size:18px !important;font-weight:700;line-height:1;
+  font-feature-settings:"tnum";color:var(--txt);
+  margin-left:0 !important;
+}
+#page-home .kpi-row .kpi-mini .k-sub{
+  grid-column:1;grid-row:2;font-size:10px !important;
+  color:var(--txt3) !important;line-height:1.35;margin-top:0 !important;
+}
+
+/* (5) AI — station card compression: tighter padding, calmer line-height */
+#ws-grid.v28{padding-left:34px !important}
+#ws-grid.v28 .ws28{
+  padding:11px 10px 11px 0 !important;
+  grid-template-columns:88px 1fr 108px !important;
+  column-gap:12px !important;align-items:center;
+}
+.ws28-icon{width:88px !important;height:62px !important}
+.ws28-info{gap:5px !important}
+.ws28-a{gap:8px !important}
+.ws28-role{font-size:12px !important;letter-spacing:0.1px}
+.ws28-status{font-size:10px !important}
+.ws28-prov{font-size:9px !important;padding:1px 5px !important}
+.ws28-b{padding:5px 9px !important;gap:2px !important}
+.ws28-b .ln{
+  font-size:10.5px !important;line-height:1.45 !important;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:flex;align-items:baseline;gap:6px;
+}
+.ws28-b .ln .k{
+  font-size:8.5px !important;min-width:22px !important;padding-top:0 !important;
+  letter-spacing:0.4px;
+}
+.ws28-b .ln.next{font-size:9.5px !important;padding-left:0 !important}
+
+/* (6) AI — left step number + rail: less existence */
+#ws-grid.v28::before{
+  left:14px !important;top:24px !important;bottom:24px !important;
+  opacity:0.45 !important;
+  background:repeating-linear-gradient(var(--line) 0 2px, transparent 2px 5px) !important;
+}
+.ws28-step{
+  left:-22px !important;font-size:8px !important;
+  color:var(--txt3) !important;opacity:0.55;
+  padding:1px 3px !important;letter-spacing:0.3px;font-weight:500;
+}
+.ws28-step::after{
+  width:5px !important;height:5px !important;top:calc(100% + 1px) !important;
+  border-color:var(--line) !important;background:var(--bg) !important;
+}
+.ws28.working .ws28-step{color:var(--txt2) !important;opacity:0.85}
+.ws28.working .ws28-step::after{box-shadow:0 0 0 1px rgba(127,179,230,0.18) !important}
+#ws-grid.v28 .ws28:not(:last-child)::before{
+  left:0 !important;font-size:8px !important;opacity:0.35 !important;
+}
+
+/* (7) AI — right today/runs/chart alignment polish */
+.ws28-c{
+  padding-left:10px !important;gap:4px !important;
+  align-items:flex-end;justify-content:center;
+  border-left:1px dashed var(--line) !important;
+  min-height:54px;
+}
+.ws28-c .runs{
+  font-size:21px !important;line-height:1 !important;
+  font-feature-settings:"tnum";letter-spacing:-0.5px;
+}
+.ws28-c .lbl{
+  font-size:8.5px !important;letter-spacing:0.6px;
+  color:var(--txt3);margin-top:1px;
+}
+.ws28-c .strip{
+  height:12px !important;margin-top:3px !important;gap:2px !important;
+}
+.ws28-c .strip i{width:3px !important;border-radius:1px}
+.ws28-c .strip i.lo{height:3px !important}
+.ws28-c .strip i.md{height:7px !important}
+.ws28-c .strip i.hi{height:11px !important}
+
+/* (8) common typography normalization on Home + AI */
+#page-home, #page-ai{
+  font-feature-settings:"tnum" 1,"ss01" 1;
+}
+#page-home .panel-hero .hl-row .hl-hook,
+#page-home .panel-hero .hl-row .hl-id{line-height:1.45}
+#page-home .hl-row{padding:7px 10px !important}
+#page-ai .ws28-a, #page-ai .ws28-b, #page-ai .ws28-c{align-items:center}
+
 /* ─── S35 — Page display truth + layout reset ─── */
 
 /* ABSOLUTE RULE: only the active page is visible */
