@@ -257,17 +257,8 @@ class ReplyMonitor:
             return None
 
     def _mock_replies(self) -> list[IncomingReply]:
-        return [
-            IncomingReply(
-                reply_id="mock_reply_001",
-                reply_text="저도 Gate.io 봇 돌리는데 청산 당한 경험 있어요ㅠ 어떻게 리스크 관리 하세요?",
-                author_username="trader_kr_99",
-                author_followers=1200,
-                parent_tweet_id="mock_parent_001",
-                parent_tweet_text="봇이 하루에 얼마나 잃을 수 있는지 실제 경험을 공유합니다.",
-                created_at=datetime.now(timezone.utc) - timedelta(minutes=15),
-            )
-        ]
+        # Mock 답글 비활성화 (운영자 요청 — 가짜 @trader_kr_99 알림 제거)
+        return []
 
 
 async def generate_rereply_draft(reply: IncomingReply) -> str:
