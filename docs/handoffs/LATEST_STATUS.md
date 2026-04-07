@@ -1,8 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S52 — AI 카드 아이콘 왼쪽 gutter 미세 정리
+## LAST COMPLETED PHASE: Dashboard S53 — AI 카드 아이콘 박스 확대
 
-`#ws-grid.v28` padding-left 26px → 20px. 한 줄 수정.
+S52(padding-left 축소) 되돌리고 아이콘 자체를 키움. `.ws28-icon` 52×50 → 64×58, `grid-template-columns` 52px→64px. 왼쪽 빈 공간을 영역 확대로 채움.
+
+## PREVIOUS: Dashboard S52 — AI 카드 아이콘 왼쪽 gutter 미세 정리
 
 ## PREVIOUS: Dashboard S51 — AI 카드 아이콘/텍스트 충돌 수리
 
