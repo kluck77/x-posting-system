@@ -1,4 +1,37 @@
-# Current Session — 2026-04-07 (Session 47)
+# Current Session — 2026-04-07 (Session 48)
+
+## S48 — AI 탭 마감 폴리시 (micro chart + 우측 정렬 + 하단 여백)
+
+`static/dashboard.html` 만. AI 탭 한정. 버그 수정 아님, 마감 디테일.
+
+### 변경
+1. **Micro chart 폴리시** (`.ws28-c .strip`)
+   - height 18 → 16, bar 4px → 3.5px, gap 2.5 → 3px
+   - 막대 높이 단계 5/11/17 → 4/9/14 (부드러운 계단)
+   - `border-bottom:1px solid var(--line)` baseline 축 추가
+   - 막대 top radius `1px 1px 0 0`, opacity 0.55/0.75/0.95 단계
+   - min-width 96 → 104, `align-self:flex-end` 행 바닥 앵커
+   - → 장식 spark bar가 아니라 실제 activity 그래프 느낌
+
+2. **우측 정보 모듈 기준선** (`.ws28-c`)
+   - `align-items:center` → `align-items:baseline`
+   - gap 10 → 8
+   - runs / lbl `align-self:baseline`, 불필요한 padding-top 제거
+   - → provider pill / runs / label / chart 같은 baseline 공유, 카드마다 흔들림 제거
+
+3. **마지막 카드 하단 여백**
+   - `#page-ai.page` padding-bottom 16px → 10px
+   - 과공백 없이 자연스러운 마감
+
+### 결과
+- Micro chart가 작지만 "실제 activity" 축을 가진 그래프처럼 보임
+- 우측 정보 모듈이 카드 간 안정적으로 정렬됨
+- 마지막 카드 아래 10px breathing room, 화면 끝에 붙지도 뜨지도 않음
+- AI 탭 = 마감된 제품 느낌
+
+---
+
+# Previous — Session 47
 
 ## S47 — AI 탭 레이아웃 해킹 제거, 자연 흐름 복귀
 

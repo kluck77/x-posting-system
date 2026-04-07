@@ -5184,7 +5184,7 @@ body > .cat-wrap{display:none !important}
    - Single bottom margin policy: small padding-bottom on #page-ai only.
    - Specificity beats S35's later `#page-ai{padding-bottom:0!important}`. */
 html body .hud-main #page-ai.page{
-  padding-bottom: 16px !important;
+  padding-bottom: 10px !important;
   height: auto !important;
   min-height: 0 !important;
   display: block !important;
@@ -5567,34 +5567,40 @@ html body .hud-main #page-ai #ws-grid.v28{
 .ws28-c{
   grid-area:meta;min-width:0;
   display:flex !important;flex-direction:row !important;
-  align-items:center !important;justify-content:flex-start !important;
-  gap:10px !important;padding:8px 4px 4px 0 !important;
+  align-items:baseline !important;justify-content:flex-start !important;
+  gap:8px !important;padding:8px 4px 4px 0 !important;
   border-left:none !important;border-top:1px dashed var(--line) !important;
   margin-top:2px;
 }
+/* S48: right info module — provider pill / runs / label / chart share a
+   common baseline so cards don't wobble row-to-row. */
 .ws28-c .runs{
   font-size:19px !important;font-weight:700;line-height:1 !important;
   font-feature-settings:"tnum";letter-spacing:-0.3px;
-  order:1;flex:0 0 auto;align-self:center;
+  order:1;flex:0 0 auto;align-self:baseline;
 }
 .ws28-c .lbl{
   font-size:9px !important;letter-spacing:0.6px;color:var(--txt3);
   text-transform:uppercase;line-height:1;
-  order:2;flex:0 0 auto;align-self:center;padding-top:2px;
+  order:2;flex:0 0 auto;align-self:baseline;
 }
-/* S46: micro chart — was 12px tall with 3px bars, looked crushed.
-   Bumped height + bar widths and gave the strip a stable min-width so it
-   never gets squeezed by the runs/label. */
+/* S48: micro chart polish — reads as real activity, not decoration.
+   - Tighter, consistent bar rhythm (3.5px bars, 3px gap)
+   - Baseline border so bars sit on a clear axis
+   - Heights step smoothly (4/9/14) within a 16px frame
+   - Stable min-width keeps it from squeezing */
 .ws28-c .strip{
-  order:3;flex:0 0 auto;justify-content:flex-end;
-  height:18px !important;margin:0 0 0 auto !important;gap:2.5px !important;
+  order:3;flex:0 0 auto;justify-content:flex-end;align-self:flex-end;
+  height:16px !important;margin:0 0 1px auto !important;gap:3px !important;
   display:flex !important;align-items:flex-end;
-  width:auto !important;min-width:96px;max-width:140px;
+  width:auto !important;min-width:104px;max-width:140px;
+  padding-bottom:1px;
+  border-bottom:1px solid var(--line) !important;
 }
-.ws28-c .strip i{width:4px !important;border-radius:1px;display:block}
-.ws28-c .strip i.lo{height:5px !important}
-.ws28-c .strip i.md{height:11px !important}
-.ws28-c .strip i.hi{height:17px !important}
+.ws28-c .strip i{width:3.5px !important;border-radius:1px 1px 0 0;display:block}
+.ws28-c .strip i.lo{height:4px !important;opacity:0.55}
+.ws28-c .strip i.md{height:9px !important;opacity:0.75}
+.ws28-c .strip i.hi{height:14px !important;opacity:0.95}
 
 /* (C) AI card text area — restored breathing room */
 .ws28-a{
