@@ -114,12 +114,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = await orchestrator.handle_approval(draft_id, action)
 
         if result.get("success"):
-            if action == "approve" and result.get("x_post_id"):
-                response_text = (
-                    f"✅ <b>APPROVED & POSTED</b>\n\n"
-                    f"X Post ID: {result['x_post_id']}\n"
-                    f"URL: {result.get('x_post_url', 'N/A')}"
-                )
+            if action == "approve":
+                x_post_id = result.get("x_post_id", "")
+                if x_post_id and not x_post_id.startswith("mock_"):
+                    response_text = (
+                        f"✅ <b>APPROVED & POSTED</b>\n\n"
+                        f"X Post ID: {x_post_id}\n"
+                        f"URL: {result.get('x_post_url', 'N/A')}"
+                    )
+                else:
+                    response_text = "✅ <b>APPROVED — MANUAL POST PENDING</b>"
             else:
                 response_text = f"✅ {result.get('message', 'Done!')}"
         else:

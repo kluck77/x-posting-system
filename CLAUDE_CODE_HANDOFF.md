@@ -6,6 +6,14 @@
 
 ---
 
+## 변경 이력 (Change Log)
+
+| 버전 | 날짜 | 파일 | 내용 |
+|------|------|------|------|
+| v11 | 2026-04-07 | `telegram_service.py`, `telegram_bot.py` | Telegram 카드 영역 오버라이드 (v10 → v11): 카드 필드 순서 재배치 (Hook→Post→Risk→Why→Verdict 우선), mock 게시 오인 문구 수정 ("POSTED TO X" / "APPROVED & POSTED" → "APPROVED — MANUAL POST PENDING" in mock mode) |
+
+---
+
 ## 이 문서의 목적
 
 운영자 → Claude Code (또는 GPT) 전달 구조가 아래와 같다:

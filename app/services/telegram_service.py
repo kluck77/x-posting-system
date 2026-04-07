@@ -84,22 +84,25 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     if draft.thread_continuation:
         card += f"🧵 <b>Thread:</b>\n{draft.thread_continuation}\n\n"
 
-    card += (
-        f"{cat_em} <b>Category:</b> {draft.category.value}\n"
-        f"{risk_em} <b>Risk:</b> {draft.risk_level.value.upper()}\n"
-    )
+    # Judgment-critical signals first
+    card += f"{risk_em} <b>Risk:</b> {draft.risk_level.value.upper()}\n"
+
+    if draft.risk_reasoning:
+        card += f"📊 <b>Why:</b> {draft.risk_reasoning}\n"
+
+    card += f"\n💡 <b>Verdict:</b> {_recommended_action(draft)}\n"
+    card += f"{'─' * 30}\n"
+
+    # Metadata below the fold
+    card += f"{cat_em} <b>Category:</b> {draft.category.value}\n"
 
     if source_url:
         card += f"🔗 <b>Source:</b> {source_url}\n"
-
-    if draft.risk_reasoning:
-        card += f"📊 <b>Risk Reasoning:</b> {draft.risk_reasoning}\n"
 
     if draft.ai_rationale:
         card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
 
     card += (
-        f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"
         f"Draft ID: {draft.id} | Version: {draft.version}\n"
         f"Characters: {draft.text_length}"
@@ -186,13 +189,22 @@ async def send_publish_confirmation(draft: Draft) -> None:
         logger.info(f"[MOCK 텔레그램] 게시 확인: draft_id={draft.id}, x_post_id={draft.x_post_id}")
         return
 
-    text = (
-        f"✅ <b>POSTED TO X</b>\n\n"
-        f"📝 {draft.hook}\n\n"
-        f"🆔 Post ID: {draft.x_post_id}\n"
-        f"🔗 {draft.x_post_url or 'URL not available'}\n"
-        f"📊 Category: {draft.category.value} | Risk: {draft.risk_level.value}"
-    )
+    is_mock = bool(draft.x_post_id and draft.x_post_id.startswith("mock_"))
+
+    if is_mock:
+        text = (
+            f"✅ <b>APPROVED — MANUAL POST PENDING</b>\n\n"
+            f"📝 {draft.hook}\n\n"
+            f"📊 Category: {draft.category.value} | Risk: {draft.risk_level.value}"
+        )
+    else:
+        text = (
+            f"✅ <b>POSTED TO X</b>\n\n"
+            f"📝 {draft.hook}\n\n"
+            f"🆔 Post ID: {draft.x_post_id}\n"
+            f"🔗 {draft.x_post_url or 'URL not available'}\n"
+            f"📊 Category: {draft.category.value} | Risk: {draft.risk_level.value}"
+        )
 
     payload = {
         "chat_id": settings.telegram_chat_id,
