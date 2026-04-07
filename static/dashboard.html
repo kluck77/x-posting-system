@@ -5190,8 +5190,47 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
   border-bottom: none !important;
   border-top: 1px dashed var(--line) !important;
 }
+/* S41: ALSO bulletproof via inline style applied by JS below.
+   No CSS can override inline style without !important on the same property,
+   and S35's later #page-ai{padding-bottom:0!important} loses to inline+!important. */
 </style>
 <script>
+/* ─── S41 — Bulletproof AI bottom slack via inline style ── */
+(function(){
+  function forceAiBottom(){
+    const pageAi = document.getElementById('page-ai');
+    if(!pageAi) return;
+    // Inline style with !important via cssText (setProperty supports priority)
+    pageAi.style.setProperty('padding-bottom', 'calc(140px + env(safe-area-inset-bottom, 0px))', 'important');
+    // Also force last station card margin
+    const cards = pageAi.querySelectorAll('#ws-grid.v28 .ws28');
+    if(cards.length){
+      const last = cards[cards.length - 1];
+      last.style.setProperty('margin-bottom', '24px', 'important');
+      last.style.setProperty('border-bottom', 'none', 'important');
+    }
+  }
+  forceAiBottom();
+  setTimeout(forceAiBottom, 300);
+  setTimeout(forceAiBottom, 1500);
+  setTimeout(forceAiBottom, 4000);
+  // Re-apply after AI tab is rendered (renderAI rebuilds #ws-grid innerHTML)
+  if(typeof window.renderAI === 'function'){
+    const orig = window.renderAI;
+    window.renderAI = function(){
+      const r = orig.apply(this, arguments);
+      requestAnimationFrame(forceAiBottom);
+      return r;
+    };
+  }
+  // Re-apply on tab clicks (any tab — cheap)
+  document.addEventListener('click', e=>{
+    if(e.target.closest && e.target.closest('.tab-btn')){
+      setTimeout(forceAiBottom, 100);
+    }
+  });
+})();
+
 /* ─── S39 — Cat continuous walk (no teleport) ── */
 (function(){
   function setupCat39(){
