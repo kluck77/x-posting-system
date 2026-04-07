@@ -1,4 +1,32 @@
-# Current Session — 2026-04-07 (Session 46)
+# Current Session — 2026-04-07 (Session 47)
+
+## S47 — AI 탭 레이아웃 해킹 제거, 자연 흐름 복귀
+
+`static/dashboard.html` 만. AI 탭 한정. 디자인/색/타이포 무변경.
+
+### 문제 진단
+S39/S41/S46의 hack들이 void의 원인이었다:
+- JS가 `#page-ai` 높이를 `.hud-main.clientHeight`로 강제 → 뷰포트 높이로 늘림
+- `#ws-grid.v28 justify-content:space-between` → 카드 사이·하단 공백 강제 벌림
+- 마지막 카드 inline margin/border hack
+
+### 변경
+- S41 forceAiBottom IIFE 전체 제거 (주석만 남김)
+- S40 specificity CSS 블록을 S47로 교체:
+  - `#page-ai.page`: `padding-bottom:16px`, `height:auto`, `min-height:0`, `display:block`
+  - `#ws-grid.v28`: `justify-content:flex-start`, `height:auto`, `min-height:0`, `padding-bottom:0`
+- `justify-content:space-between` 금지 규정 반영
+- 마지막 카드 inline hack 제거
+- S46 micro chart CSS (height 18, 4px bars, lo/md/hi 5/11/17, min-width 96px) 보존
+
+### 결과
+- AI 탭 = 자연 블록 흐름. 카드 위→아래로 쌓임
+- 하단 공백은 16px 한 겹만
+- 뷰포트 강제 stretch 제거 → void 소멸
+
+---
+
+# Previous — Session 46
 
 ## S40~S46 — AI bottom void & micro chart (iterative chase)
 
