@@ -3885,7 +3885,7 @@ body::before, body::after{display:none !important}
 
 <style>
 /* ─── S30 — Home layout: situation board first, weekly promoted ─── */
-#page-home{display:flex;flex-direction:column;gap:12px}
+#page-home.active{display:flex;flex-direction:column;gap:12px}
 
 /* Order: situation board → weekly hero → compact health → (others hidden) */
 #page-home #situation-board{order:1;margin-bottom:0}
@@ -4993,7 +4993,7 @@ body > .cat-wrap{display:none !important}
 }
 
 /* ── Home first-screen priority (situation → weekly → kpi → system status) ── */
-#page-home{display:flex;flex-direction:column;gap:9px}
+#page-home.active{display:flex;flex-direction:column;gap:9px}
 #page-home #situation-board{order:1}
 #page-home .panel-hero{order:2}
 #page-home .kpi-row{order:3}
@@ -5002,7 +5002,7 @@ body > .cat-wrap{display:none !important}
 #page-home .strip{display:none !important}
 
 /* AI tab first-screen priority — overview first, then stations */
-#page-ai{display:flex;flex-direction:column;gap:8px}
+#page-ai.active{display:flex;flex-direction:column;gap:8px}
 #page-ai .ws-header{order:1}
 #page-ai #team-overview{order:2;margin-bottom:0 !important}
 #page-ai #ws-grid{order:3}
@@ -5023,13 +5023,13 @@ body > .cat-wrap{display:none !important}
 #team-overview.tov .tov-dm-row{font-size:9.5px}
 
 /* Intake first-screen: header → narrative → lanes */
-#page-intake{display:flex;flex-direction:column;gap:8px}
+#page-intake.active{display:flex;flex-direction:column;gap:8px}
 #page-intake .ws-header{order:1}
 #page-intake #intake-flow-narrative{order:2;margin-bottom:0 !important}
 #page-intake .flow-wrap,#page-intake #flow-wrap{order:3}
 
 /* Ops first-screen: header → readiness → summary → cards */
-#page-ops{display:flex;flex-direction:column;gap:8px}
+#page-ops.active{display:flex;flex-direction:column;gap:8px}
 #page-ops .ws-header{order:1}
 #page-ops #ops-summary{order:2;margin:0 !important}
 #page-ops #ops-readiness{order:3;margin:0 !important}
@@ -5542,15 +5542,15 @@ html body .hud-main #page-ai #ws-grid.v28{
        Frees text area from being squeezed by icon + right column. */
 #ws-grid.v28 .ws28{
   display:grid !important;
-  grid-template-columns:58px 1fr !important;
+  grid-template-columns:52px 1fr !important;
   grid-template-areas:"icon info" "icon meta" !important;
-  column-gap:12px !important;row-gap:6px !important;
-  padding:12px 10px 12px 0 !important;
+  column-gap:10px !important;row-gap:6px !important;
+  padding:12px 8px 12px 0 !important;
   align-items:start !important;
 }
 .ws28-icon{
   grid-area:icon;
-  width:58px !important;height:54px !important;
+  width:52px !important;height:50px !important;
   align-self:start;
 }
 .ws28-info{
@@ -5584,11 +5584,9 @@ html body .hud-main #page-ai #ws-grid.v28{
    - Stable min-width keeps it from squeezing */
 .ws28-c .strip{
   order:3;flex:0 0 auto;justify-content:flex-end;align-self:flex-end;
-  height:16px !important;margin:0 0 1px auto !important;gap:3px !important;
+  height:14px !important;margin:0 0 0 auto !important;gap:3px !important;
   display:flex !important;align-items:flex-end;
-  width:auto !important;min-width:104px;max-width:140px;
-  padding-bottom:1px;
-  border-bottom:1px solid var(--line) !important;
+  width:auto !important;min-width:72px;max-width:110px;
 }
 .ws28-c .strip i{width:3.5px !important;border-radius:1px 1px 0 0;display:block}
 .ws28-c .strip i.lo{height:4px !important;opacity:0.55}
@@ -5649,7 +5647,7 @@ html body .hud-main #page-ai #ws-grid.v28{
   background:repeating-linear-gradient(var(--line) 0 2px, transparent 2px 6px) !important;
 }
 .ws28-step{
-  left:-22px !important;font-size:8px !important;
+  left:-18px !important;font-size:8px !important;
   color:var(--txt3) !important;opacity:0.5;
   padding:1px 3px !important;letter-spacing:0.3px;font-weight:500;
   top:18px !important;transform:none !important;
@@ -5834,7 +5832,7 @@ html body .hud-main #page-ai #ws-grid.v28{
    S49: stale 3-col grid removed. S37 rebuild (58px 1fr, icon/info/meta areas)
    is the source of truth. The old 88px/1fr/108px left a hidden 108px dead
    column and kept .ws28-c styled as a right rail with border-left. Deleted. */
-#ws-grid.v28{padding-left:34px !important}
+#ws-grid.v28{padding-left:26px !important}
 .ws28-info{gap:5px !important}
 .ws28-a{gap:8px !important}
 .ws28-role{font-size:12px !important;letter-spacing:0.1px}
@@ -5859,7 +5857,7 @@ html body .hud-main #page-ai #ws-grid.v28{
   background:repeating-linear-gradient(var(--line) 0 2px, transparent 2px 5px) !important;
 }
 .ws28-step{
-  left:-22px !important;font-size:8px !important;
+  left:-18px !important;font-size:8px !important;
   color:var(--txt3) !important;opacity:0.55;
   padding:1px 3px !important;letter-spacing:0.3px;font-weight:500;
 }

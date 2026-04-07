@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S49 — AI 카드 stale override 포렌식 제거
+## LAST COMPLETED PHASE: Dashboard S50 — Tab 전환 / micro chart / 좌측 밀도
+
+**Tab 전환 핵심 버그**: `#page-*{display:flex}` 5개 규칙이 `.active` 한정 없이 걸려 있어 네 페이지가 상시 노출되고 있었음. `.active` 한정사 추가. Micro chart의 이중선 border-bottom axis 제거 + min-width 축소. AI 카드 `#ws-grid` padding-left 34→26, icon 58→52, column-gap 12→10, step -22→-18 로 좌측 밀도 상향.
+
+## PREVIOUS: Dashboard S49 — AI 카드 stale override 포렌식 제거
 
 `static/dashboard.html` 만. 삭제-온리. S31 블록이 S37의 2-col 재설계를 부분적으로 덮고 있었음을 포렌식으로 확인: `grid-template-columns:88px 1fr 108px` 가 108px dead column을 남기고, `.ws28-c` 를 border-left dashed 우측 rail로 재정의해 S37의 하단 meta 행과 충돌. 4820–4826, 5835–5840, 5879–5900, 5909 라인 삭제. 새 CSS 0줄 추가.
 
