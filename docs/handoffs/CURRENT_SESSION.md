@@ -1,4 +1,62 @@
-# Current Session — 2026-04-07 (Session 32)
+# Current Session — 2026-04-07 (Session 33)
+
+## S33 — 마감 디테일: 탭 UX + 밀도 압축
+
+`static/dashboard.html` 프론트만. 백엔드/승인 워크플로 무변경.
+
+### 변경 내용
+1. **탭 스크롤 메모리** — `.hud-main` scroller 기준
+   - 탭별 scrollTop Map {home/ai/intake/ops} 지속 저장
+   - scroll 이벤트 passive 리스너로 currentPage 위치 계속 반영
+   - 탭 버튼 cloneNode 로 기존 리스너 제거 후 S33 핸들러 설치
+   - 다른 탭 전환: 이전 위치 저장 → 새 탭 활성화 → rAF 후 setScrollTop(저장값)
+   - 동일 탭 재클릭: 해당 탭 위치 0 으로 리셋 (scroll-to-top)
+   - 모바일 Safari: `-webkit-overflow-scrolling:touch` (.hud-main) 유지, rAF 타이밍으로 레이아웃 확정 후 복원
+2. **Home 압축**
+   - sb-cell padding 10/12 → 7/10, min-height 제거, sb-v 18→15px
+   - sb-grid gap 10→7px, margin-bottom 10→7px
+   - 칩 줄 CSS `order` 로 우선순위 재정렬: 승인대기/병목 내장 → premium(3) → b2b(4) → weekly(5) → cta(6) → newsletter(7) → lead(8)
+   - panel-hero head 12/16 → 9/14, body 10/14 → 8/12
+   - hl-row padding 8/10 → 6/9, gap 6→4
+   - kpi-mini 8/10 → 6/9, k-val 16→14px
+   - hero-compact 8/12 → 6/10
+   - #page-home gap 12→9px
+3. **AI 스테이션 2열 실무형 압축**
+   - workflow rail 전체 제거: `#ws-grid.v28::before/after` display:none, 카드 사이 `::before` ▾ 제거
+   - ws28-step: absolute → static, 22px 첫 컬럼에 flat 9px 라벨로만
+   - grid: `22px 80px 1fr 104px` + column-gap 10px, padding 9/10
+   - ws28-icon 100×74 → 80×56
+   - ws28-role 13→12, ws28-status 11→10, ws28-prov 10→9
+   - ws28-b padding 6/10 → 4/8, gap 3→1, ln 11→10.5 (next 9.5)
+   - ws28-c runs 24→20, strip 14→11px
+   - 모바일: 3-col + ws28-c 전폭 (row flex) + icon 70×50
+4. **AI 팀 오버뷰 압축**
+   - tov 패딩 12/14 → 9/12, head margin 10→7
+   - tov-stat 9/11 → 6/10, v 17→14 (busy/bot 14→12)
+   - tov-flow padding 8/10 → 5/8, tf-node 4/8 → 2/6 (10px)
+   - tov-dotmap padding 8/10 → 5/8, gap 4→3, dots 높이 6→5
+5. **Intake 압축**
+   - ifn 패딩 12/14 → 9/12, stage 9/11 → 6/10, v 20→17
+   - flow-wrap gap 10→7, lane padding → 8/10
+   - lane-phrase 11→10.5, bar-row 10px + padding 2/0
+6. **Ops 압축**
+   - opsr 패딩 12/14 → 9/12, c 9/11 → 6/10, v 18→15
+   - opsr-cat 4/9 → 2/7 (10px)
+   - ops-summary .s26 cell 8/10 → 6/10, val 22→17
+   - ops-card padding-top 8, ops-head 11px, big 16px
+   - ops-row margin 6→4, pill 10→9.5 (1/5 padding)
+   - ops-mini-item 3/6 → 2/6, 9.5px
+7. **공통**
+   - ws-header padding 9/12, 11px, margin-bottom 8
+   - 모든 반투명도/색 토큰 유지, glow/neon 재도입 없음
+
+### Files
+- `static/dashboard.html` — S33 script (tab scroll memory + chip order hook) + S33 style (compression overrides)
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 32
 
 ## S32 — Intake 흐름 / Ops 요약 역할 분리
 

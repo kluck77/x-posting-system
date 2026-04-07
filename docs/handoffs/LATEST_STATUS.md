@@ -1,6 +1,17 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S32 — Intake Flow Narrative + Ops Readiness Summary
+## ⚠️ LAST COMPLETED PHASE: Dashboard S33 — Final Polish (tab scroll memory + density compression)
+
+`static/dashboard.html` 프론트. 백엔드 무변경.
+- **탭 스크롤 메모리**: `.hud-main` 기준 탭별 scrollTop Map, 동일 탭 재클릭 = scroll-to-top, rAF 복원 (모바일 Safari 자연스럽게)
+- **Home** 15~20% 압축: sb-cell padding/값 축소, 칩 줄 CSS order 우선순위 (premium→b2b→weekly→cta→nl→lead), panel-hero/hl-row/kpi-mini 타이트닝
+- **AI 스테이션 2열 실무형**: workflow rail 전체 제거, step 9px flat, grid 22/80/1fr/104, icon 100×74 → 80×56, runs 24→20, 모바일 ws28-c 전폭 row
+- **AI 팀 오버뷰** 높이 축소: tov-stat v 17→14, flow/dotmap 더 얇게
+- **Intake**: ifn stage v 20→17, lane padding/phrase 타이트닝
+- **Ops**: opsr v 18→15, ops-summary val 22→17, ops-card head/row/mini/ratio 전반 축소
+- glow/neon 재도입 없음, 정보 삭제 없음 (구조 압축만)
+
+## PREVIOUS: Dashboard S32 — Intake Flow Narrative + Ops Readiness Summary
 
 `static/dashboard.html` Intake + Ops 탭.
 - Intake 상단에 `#intake-flow-narrative` 주입: 01 수집 › 02 자산화 › 03 수익화 후보 › 04 연결 stage strip + active 마커 + 5s pulse rail
