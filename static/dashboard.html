@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#06070d">
-<title>X Control Room</title>
+<title>X 컨트롤 룸</title>
 <style>
 /* ─── Pixel HUD Control Room ─────────────────────────────────── */
 :root{
@@ -572,7 +572,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   <div class="hud-brand">
     <span class="dot"></span>
     <span>X·CTRL</span>
-    <span class="hud-brand-sub">// pixel-room v2</span>
+    <span class="hud-brand-sub">// 컨트롤 룸</span>
   </div>
   <div class="hud-clock">
     <div id="clk-utc">--:--:-- UTC</div>
@@ -589,50 +589,50 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
       <span class="hero-corner tl"></span><span class="hero-corner tr"></span>
       <span class="hero-corner bl"></span><span class="hero-corner br"></span>
       <div class="hero-body">
-        <div class="hero-title">SYSTEM PULSE
+        <div class="hero-title">시스템 상태
           <span class="signal"><i></i><i></i><i></i><i></i></span>
         </div>
         <div class="hero-state">
           <div class="label" id="home-state">--</div>
-          <div class="sub" id="home-state-sub">awaiting feed</div>
+          <div class="sub" id="home-state-sub">신호 대기 중</div>
         </div>
         <div class="hero-meta" id="home-meta">
-          <span>db <b>—</b></span>
-          <span>tg <b>—</b></span>
-          <span>x <b>—</b></span>
-          <span>idle <b>—</b></span>
+          <span>DB <b>—</b></span>
+          <span>텔레그램 <b>—</b></span>
+          <span>X <b>—</b></span>
+          <span>유휴 <b>—</b></span>
         </div>
       </div>
     </div>
 
     <div class="kpi-grid">
-      <div class="kpi cyan"><div class="k-label">DRAFTS · 7D</div>
+      <div class="kpi cyan"><div class="k-label">초안 · 7일</div>
         <div class="k-val" id="kpi-drafts">—</div>
-        <div class="k-sub" id="kpi-drafts-sub">published —</div></div>
-      <div class="kpi green"><div class="k-label">QUEUE</div>
+        <div class="k-sub" id="kpi-drafts-sub">발행 —</div></div>
+      <div class="kpi green"><div class="k-label">승인 대기</div>
         <div class="k-val" id="kpi-queue">—</div>
-        <div class="k-sub" id="kpi-queue-sub">pending posts</div></div>
-      <div class="kpi amber"><div class="k-label">PREMIUM</div>
+        <div class="k-sub" id="kpi-queue-sub">대기 중인 게시물</div></div>
+      <div class="kpi amber"><div class="k-label">프리미엄</div>
         <div class="k-val" id="kpi-premium">—</div>
-        <div class="k-sub" id="kpi-premium-sub">candidates</div></div>
+        <div class="k-sub" id="kpi-premium-sub">후보</div></div>
       <div class="kpi magenta"><div class="k-label">B2B</div>
         <div class="k-val" id="kpi-b2b">—</div>
-        <div class="k-sub" id="kpi-b2b-sub">candidates</div></div>
+        <div class="k-sub" id="kpi-b2b-sub">후보</div></div>
     </div>
 
     <div class="strip">
-      <div class="strip-cell"><div class="lbl">NEWSLETTER</div>
+      <div class="strip-cell"><div class="lbl">뉴스레터</div>
         <div class="val" id="strip-nl">—</div></div>
-      <div class="strip-cell"><div class="lbl">LEAD ASSETS</div>
+      <div class="strip-cell"><div class="lbl">리드 자료</div>
         <div class="val" id="strip-lead">—</div></div>
-      <div class="strip-cell"><div class="lbl">CTA LINKED</div>
+      <div class="strip-cell"><div class="lbl">연결된 CTA</div>
         <div class="val" id="strip-cta">—</div></div>
     </div>
 
-    <div class="panel"><div class="panel-head">WEEKLY HIGHLIGHTS
+    <div class="panel"><div class="panel-head">이번 주 하이라이트
       <span class="label" id="hl-count">—</span></div>
       <div class="panel-body">
-        <div class="hl-list" id="hl-list"><div class="empty">scanning…</div></div>
+        <div class="hl-list" id="hl-list"><div class="empty">불러오는 중…</div></div>
       </div>
 
       <!-- Lucky cat mascot (pixel SVG, no images) -->
@@ -693,8 +693,8 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   <!-- AI / WORKSTATIONS -->
   <div class="page" id="page-ai">
     <div class="ws-header">
-      <span>◈ NODE ARRAY · 5 ROLES</span>
-      <span class="right" id="ws-mode">mode —</span>
+      <span>◈ AI 워크스테이션 · 5 노드</span>
+      <span class="right" id="ws-mode">모드 —</span>
     </div>
     <div class="ws-grid" id="ws-grid"></div>
   </div>
@@ -702,27 +702,27 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   <!-- INTAKE / FLOW -->
   <div class="page" id="page-intake">
     <div class="ws-header">
-      <span>◇ INTAKE PIPELINE · 4 LANES</span>
-      <span class="right" id="intake-total">total —</span>
+      <span>◇ 인테이크 파이프라인 · 4 단계</span>
+      <span class="right" id="intake-total">총합 —</span>
     </div>
     <div class="flow-wrap" id="flow-wrap">
       <div class="lane" id="lane-content">
-        <div class="lane-head"><span class="stage">01</span>CONTENT<span class="num" id="lane-content-n">—</span></div>
+        <div class="lane-head"><span class="stage">01</span>소스 수집<span class="num" id="lane-content-n">—</span></div>
         <div class="lane-bars" id="lane-content-bars"></div>
       </div>
       <div class="lane-arrow">▼ ▼ ▼</div>
       <div class="lane green" id="lane-newsletter">
-        <div class="lane-head"><span class="stage">02</span>NEWSLETTER · LEAD<span class="num" id="lane-nl-n">—</span></div>
+        <div class="lane-head"><span class="stage">02</span>뉴스레터 · 리드<span class="num" id="lane-nl-n">—</span></div>
         <div class="lane-bars" id="lane-nl-bars"></div>
       </div>
       <div class="lane-arrow">▼ ▼ ▼</div>
       <div class="lane amber" id="lane-premium">
-        <div class="lane-head"><span class="stage">03</span>PREMIUM · B2B<span class="num" id="lane-pb-n">—</span></div>
+        <div class="lane-head"><span class="stage">03</span>프리미엄 · B2B<span class="num" id="lane-pb-n">—</span></div>
         <div class="lane-bars" id="lane-pb-bars"></div>
       </div>
       <div class="lane-arrow">▼ ▼ ▼</div>
       <div class="lane magenta" id="lane-cta">
-        <div class="lane-head"><span class="stage">04</span>CTA · COPY<span class="num" id="lane-cta-n">—</span></div>
+        <div class="lane-head"><span class="stage">04</span>CTA · 카피<span class="num" id="lane-cta-n">—</span></div>
         <div class="lane-bars" id="lane-cta-bars"></div>
       </div>
     </div>
@@ -731,7 +731,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   <!-- OPS / MONITORING -->
   <div class="page" id="page-ops">
     <div class="ws-header">
-      <span>◉ OPERATIONS · BUSINESS LAYER</span>
+      <span>◉ 운영 · 비즈니스 레이어</span>
       <span class="right" id="ops-stamp">— —</span>
     </div>
     <div class="ops-grid" id="ops-grid"></div>
@@ -740,10 +740,10 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 </main>
 
 <nav class="hud-tabs">
-  <button class="tab-btn active" data-page="home"><span class="ic">▣</span><span>HOME</span></button>
+  <button class="tab-btn active" data-page="home"><span class="ic">▣</span><span>홈</span></button>
   <button class="tab-btn" data-page="ai"><span class="ic">◈</span><span>AI</span></button>
-  <button class="tab-btn" data-page="intake"><span class="ic">◇</span><span>INTAKE</span></button>
-  <button class="tab-btn" data-page="ops"><span class="ic">◉</span><span>OPS</span></button>
+  <button class="tab-btn" data-page="intake"><span class="ic">◇</span><span>인테이크</span></button>
+  <button class="tab-btn" data-page="ops"><span class="ic">◉</span><span>운영</span></button>
 </nav>
 
 <script>
@@ -789,42 +789,42 @@ function renderHome(){
   // hero state
   const stateEl = $('#home-state');
   const subEl = $('#home-state-sub');
-  if(!s){ stateEl.textContent='--'; subEl.textContent='no signal'; }
-  else if(h.db_ok===false){ stateEl.textContent='DEGRADED'; stateEl.className='label warn'; subEl.textContent='db unreachable'; }
-  else if(a.is_idle){ stateEl.textContent='IDLE'; stateEl.className='label idle'; subEl.textContent=(a.hours_idle||0)+'h since last activity'; }
-  else { stateEl.textContent='OPERATIONAL'; stateEl.className='label ok'; subEl.textContent='all systems nominal'; }
+  if(!s){ stateEl.textContent='--'; subEl.textContent='신호 없음'; }
+  else if(h.db_ok===false){ stateEl.textContent='점검 필요'; stateEl.className='label warn'; subEl.textContent='DB 연결 불가'; }
+  else if(a.is_idle){ stateEl.textContent='대기 중'; stateEl.className='label idle'; subEl.textContent='마지막 활동 '+(a.hours_idle||0)+'시간 전'; }
+  else { stateEl.textContent='정상 운영 중'; stateEl.className='label ok'; subEl.textContent='모든 시스템 정상'; }
 
   // hero meta
   const metaEl = $('#home-meta');
-  const mark = v=> v ? `<b style="color:var(--green)">on</b>` : `<b style="color:var(--red)">off</b>`;
+  const mark = v=> v ? `<b style="color:var(--green)">정상</b>` : `<b style="color:var(--red)">중단</b>`;
   metaEl.innerHTML =
-    `<span>db ${h.db_ok?mark(true):mark(false)}</span>`+
-    `<span>tg ${mark(h.telegram_configured)}</span>`+
-    `<span>x ${mark(h.x_configured)}</span>`+
-    `<span>idle <b>${a.hours_idle!=null?a.hours_idle+'h':'—'}</b></span>`;
+    `<span>DB ${h.db_ok?mark(true):mark(false)}</span>`+
+    `<span>텔레그램 ${mark(h.telegram_configured)}</span>`+
+    `<span>X ${mark(h.x_configured)}</span>`+
+    `<span>유휴 <b>${a.hours_idle!=null?a.hours_idle+'시간':'—'}</b></span>`;
 
   // KPIs
   const w = b && b.weekly || {};
   $('#kpi-drafts').textContent = w.total_drafts ?? 0;
-  $('#kpi-drafts-sub').textContent = `published ${w.published ?? 0}`;
+  $('#kpi-drafts-sub').textContent = `발행 ${w.published ?? 0}건`;
   $('#kpi-queue').textContent = q.pending_count ?? 0;
-  $('#kpi-queue-sub').textContent = `total ${q.total_count ?? 0}`;
+  $('#kpi-queue-sub').textContent = `전체 ${q.total_count ?? 0}건`;
   $('#kpi-premium').textContent = (b && b.premium && b.premium.total) ?? 0;
   $('#kpi-b2b').textContent = (b && b.b2b && b.b2b.total) ?? 0;
 
   // strip
   const nl = b && b.newsletter || {};
   const cta = b && b.cta_perf || {};
-  $('#strip-nl').innerHTML = `${nl.newsletter_total ?? 0}<small>buckets ${Object.keys(nl.bucket||{}).length}</small>`;
-  $('#strip-lead').innerHTML = `${nl.lead_total ?? 0}<small>types ${Object.keys(nl.lead_types||{}).length}</small>`;
-  $('#strip-cta').innerHTML = `${cta.linked_copies ?? 0}<small>/${cta.total_copies ?? 0} copies</small>`;
+  $('#strip-nl').innerHTML = `${nl.newsletter_total ?? 0}<small>버킷 ${Object.keys(nl.bucket||{}).length}</small>`;
+  $('#strip-lead').innerHTML = `${nl.lead_total ?? 0}<small>유형 ${Object.keys(nl.lead_types||{}).length}</small>`;
+  $('#strip-cta').innerHTML = `${cta.linked_copies ?? 0}<small>/${cta.total_copies ?? 0} 카피</small>`;
 
   // highlights
   const hl = (w.highlights || []);
-  $('#hl-count').textContent = hl.length ? `${hl.length} items` : 'none';
+  $('#hl-count').textContent = hl.length ? `${hl.length}건` : '없음';
   const hlList = $('#hl-list');
   if(!hl.length){
-    hlList.innerHTML = '<div class="empty">no highlights this week</div>';
+    hlList.innerHTML = '<div class="empty">이번 주 하이라이트 없음</div>';
   } else {
     hlList.innerHTML = hl.map(h=>
       `<div class="hl-item">
@@ -880,24 +880,32 @@ const ROLE_ICONS = {
 
 function renderAI(){
   const p = state.providers;
-  if(!p){ $('#ws-grid').innerHTML = '<div class="empty">no provider data</div>'; return; }
-  $('#ws-mode').textContent = p.mock_mode ? 'mode · MOCK' : 'mode · LIVE';
+  if(!p){ $('#ws-grid').innerHTML = '<div class="empty">프로바이더 데이터 없음</div>'; return; }
+  $('#ws-mode').textContent = p.mock_mode ? '모드 · 모의' : '모드 · 운영';
+  const roleKo = {
+    DraftWriter:'드래프트 작성',
+    Reviewer:'리뷰어',
+    Researcher:'리서처',
+    FactChecker:'팩트체커',
+    TrendHunter:'트렌드 헌터',
+  };
   const roles = p.roles || [];
   $('#ws-grid').innerHTML = roles.map(r=>{
     const off = !r.configured;
     const icon = ROLE_ICONS[r.role] || '';
     const runs = r.runs_today;
     const runsTxt = runs==null ? '—' : runs;
+    const roleName = roleKo[r.role] || r.role;
     return `<div class="ws-node ${off?'off':''}">
       <div class="ws-icon">${icon}</div>
       <div class="ws-info">
-        <div class="ws-role">${r.role}</div>
-        <div class="ws-prov">${escapeHTML(r.provider||'—')} ${off?'· offline':''}</div>
+        <div class="ws-role">${roleName}</div>
+        <div class="ws-prov">${escapeHTML(r.provider||'—')} ${off?'· 미설정':''}</div>
         <div class="ws-note">${escapeHTML(r.note||'')}</div>
       </div>
       <div class="ws-meta">
         <div class="runs ${runs==null||runs===0?'off':''}">${runsTxt}</div>
-        <div class="lbl">runs · 24h</div>
+        <div class="lbl">오늘 실행</div>
       </div>
     </div>`;
   }).join('');
@@ -931,39 +939,39 @@ function renderIntake(){
   const b2b = b.b2b || {};
   const cta = b.cta_perf || {};
 
-  // Lane 1: Content (status counts from weekly)
+  // Lane 1: Content
   const contentDict = {
-    published: w.published||0,
-    approved: w.approved||0,
-    pending: w.pending||0,
-    rejected: w.rejected||0,
+    '발행됨': w.published||0,
+    '승인': w.approved||0,
+    '대기': w.pending||0,
+    '반려': w.rejected||0,
   };
   $('#lane-content-n').textContent = w.total_drafts ?? 0;
-  renderBars('lane-content-bars', contentDict, 'no drafts in window');
+  renderBars('lane-content-bars', contentDict, '기간 내 초안 없음');
 
   // Lane 2: Newsletter + Lead buckets
   const nlDict = {...(nl.bucket||{})};
-  Object.entries(nl.lead_types||{}).forEach(([k,v])=>{ nlDict['lead·'+k]=v; });
+  Object.entries(nl.lead_types||{}).forEach(([k,v])=>{ nlDict['리드·'+k]=v; });
   const nlTotal = (nl.newsletter_total||0)+(nl.lead_total||0);
   $('#lane-nl-n').textContent = nlTotal;
-  renderBars('lane-nl-bars', nlDict, 'no newsletter / lead');
+  renderBars('lane-nl-bars', nlDict, '뉴스레터/리드 없음');
 
   // Lane 3: Premium + B2B status
   const pbDict = {};
-  Object.entries(pr.status||{}).forEach(([k,v])=>{ pbDict['premium·'+k]=v; });
-  Object.entries(b2b.status||{}).forEach(([k,v])=>{ pbDict['b2b·'+k]=v; });
+  Object.entries(pr.status||{}).forEach(([k,v])=>{ pbDict['프리미엄·'+k]=v; });
+  Object.entries(b2b.status||{}).forEach(([k,v])=>{ pbDict['B2B·'+k]=v; });
   const pbTotal = (pr.total||0)+(b2b.total||0);
   $('#lane-pb-n').textContent = pbTotal;
-  renderBars('lane-pb-bars', pbDict, 'no premium / b2b');
+  renderBars('lane-pb-bars', pbDict, '프리미엄/B2B 없음');
 
   // Lane 4: CTA copies (top by linked)
   const ctaDict = {};
   (cta.top||[]).forEach(c=>{ ctaDict[`#${c.id}·${c.type}`] = c.linked; });
-  if(cta.unlinked_copies) ctaDict['unlinked'] = cta.unlinked_copies;
+  if(cta.unlinked_copies) ctaDict['미연결'] = cta.unlinked_copies;
   $('#lane-cta-n').textContent = cta.linked_copies ?? 0;
-  renderBars('lane-cta-bars', ctaDict, 'no cta copies');
+  renderBars('lane-cta-bars', ctaDict, 'CTA 카피 없음');
 
-  $('#intake-total').textContent = `total ${(w.total_drafts||0)+nlTotal+pbTotal}`;
+  $('#intake-total').textContent = `총합 ${(w.total_drafts||0)+nlTotal+pbTotal}`;
 }
 
 /* ─── Render: OPS ─────────────────────────────────────────── */
@@ -988,39 +996,38 @@ function renderOps(){
        <span class="id">#${t.id}</span>
        <span class="txt">${escapeHTML(t.hook)}</span>
        <span class="meta">💰${t.score||0}</span>
-     </div>`).join('') || '<div class="ops-empty">no candidates</div>';
-  const premiumCard = card('amber','PREMIUM CANDIDATES', pr.total||0,
-    `<div class="ops-row">${pills(pr.status)||'<span class="ops-empty">empty</span>'}</div>`,
+     </div>`).join('') || '<div class="ops-empty">후보 없음</div>';
+  const premiumCard = card('amber','프리미엄 큐', pr.total||0,
+    `<div class="ops-row">${pills(pr.status)||'<span class="ops-empty">비어 있음</span>'}</div>`,
     `<div class="ops-mini">${premiumMini}</div>`);
 
   // BRIEF
   const briefRows = `
-    <div class="ops-row">${pills(br.status)||'<span class="ops-empty">no briefs</span>'}</div>
+    <div class="ops-row">${pills(br.status)||'<span class="ops-empty">브리프 없음</span>'}</div>
     ${Object.keys(br.types||{}).length?`<div class="ops-row">${pills(br.types,3)}</div>`:''}
     ${Object.keys(br.tiers||{}).length?`<div class="ops-row">${pills(br.tiers,3)}</div>`:''}
-    ${br.ready_count?`<div class="ops-row"><span class="pill" style="border-color:var(--green)"><b style="color:var(--green)">${br.ready_count}</b>ready to publish</span></div>`:''}
+    ${br.ready_count?`<div class="ops-row"><span class="pill" style="border-color:var(--green)"><b style="color:var(--green)">${br.ready_count}</b>발행 준비 완료</span></div>`:''}
   `;
-  const briefCard = card('amber','BRIEF OFFERS', br.total||0, briefRows);
+  const briefCard = card('amber','브리프 오퍼', br.total||0, briefRows);
 
   // B2B
-  const b2bMini = '';
   const b2bRows = `
-    <div class="ops-row">${pills(bb.status)||'<span class="ops-empty">no b2b</span>'}</div>
+    <div class="ops-row">${pills(bb.status)||'<span class="ops-empty">B2B 없음</span>'}</div>
     ${Object.keys(bb.audience||{}).length?`<div class="ops-row">${pills(bb.audience,3)}</div>`:''}
     ${Object.keys(bb.use_case||{}).length?`<div class="ops-row">${pills(bb.use_case,3)}</div>`:''}
   `;
-  const b2bCard = card('magenta','B2B CANDIDATES', bb.total||0, b2bRows);
+  const b2bCard = card('magenta','B2B 후보', bb.total||0, b2bRows);
 
   // NEWSLETTER + LEAD
   const nlRows = `
     <div class="ops-row">
-      <span class="pill"><b>${nl.newsletter_total||0}</b>newsletter</span>
-      <span class="pill"><b>${nl.lead_total||0}</b>lead</span>
+      <span class="pill"><b>${nl.newsletter_total||0}</b>뉴스레터</span>
+      <span class="pill"><b>${nl.lead_total||0}</b>리드</span>
     </div>
     ${Object.keys(nl.bucket||{}).length?`<div class="ops-row">${pills(nl.bucket,4)}</div>`:''}
     ${Object.keys(nl.lead_types||{}).length?`<div class="ops-row">${pills(nl.lead_types,3)}</div>`:''}
   `;
-  const nlCard = card('green','NEWSLETTER · LEAD', (nl.newsletter_total||0)+(nl.lead_total||0), nlRows);
+  const nlCard = card('green','뉴스레터 · 리드', (nl.newsletter_total||0)+(nl.lead_total||0), nlRows);
 
   // WEEKLY HIGHLIGHTS
   const hlMini = (w.highlights||[]).slice(0,3).map(h=>
@@ -1028,15 +1035,15 @@ function renderOps(){
        <span class="id">#${h.draft_id}</span>
        <span class="txt">${escapeHTML(h.hook||'')}</span>
        <span class="meta">💰${h.monetization_score||0}</span>
-     </div>`).join('') || '<div class="ops-empty">no highlights</div>';
+     </div>`).join('') || '<div class="ops-empty">하이라이트 없음</div>';
   const weeklyRows = `
     <div class="ops-row">
-      <span class="pill"><b>${w.total_drafts||0}</b>drafts</span>
-      <span class="pill"><b>${w.published||0}</b>published</span>
-      <span class="pill"><b>${w.pending||0}</b>pending</span>
-      <span class="pill"><b>${w.followup_count||0}</b>followups</span>
+      <span class="pill"><b>${w.total_drafts||0}</b>초안</span>
+      <span class="pill"><b>${w.published||0}</b>발행</span>
+      <span class="pill"><b>${w.pending||0}</b>대기</span>
+      <span class="pill"><b>${w.followup_count||0}</b>후속</span>
     </div>`;
-  const weeklyCard = card('gold','WEEKLY HIGHLIGHTS', w.period_days?(w.period_days+'d'):'7d',
+  const weeklyCard = card('gold','주간 하이라이트', w.period_days?(w.period_days+'일'):'7일',
     weeklyRows,
     `<div class="ops-mini">${hlMini}</div>`);
 
@@ -1048,22 +1055,22 @@ function renderOps(){
        <span class="txt">${escapeHTML(c.text||'')}</span>
        <span class="meta">${c.linked}·${c.published}</span>
      </div>`;
-  }).join('') || '<div class="ops-empty">no linked copies</div>';
+  }).join('') || '<div class="ops-empty">연결된 카피 없음</div>';
   const ctaRows = `
     <div class="ops-row">
-      <span class="pill"><b>${cta.linked_copies||0}</b>linked</span>
-      <span class="pill"><b>${cta.unlinked_copies||0}</b>unlinked</span>
-      <span class="pill"><b>${cta.total_linked_drafts||0}</b>drafts</span>
-      <span class="pill"><b>${cta.total_published||0}</b>published</span>
+      <span class="pill"><b>${cta.linked_copies||0}</b>연결</span>
+      <span class="pill"><b>${cta.unlinked_copies||0}</b>미연결</span>
+      <span class="pill"><b>${cta.total_linked_drafts||0}</b>초안</span>
+      <span class="pill"><b>${cta.total_published||0}</b>발행</span>
     </div>
-    ${cta.notable_count?`<div class="ops-row"><span class="pill" style="border-color:var(--gold)"><b style="color:var(--gold)">${cta.notable_count}</b>notable</span></div>`:''}
+    ${cta.notable_count?`<div class="ops-row"><span class="pill" style="border-color:var(--gold)"><b style="color:var(--gold)">${cta.notable_count}</b>주목</span></div>`:''}
   `;
-  const ctaCard = card('magenta','CTA PERFORMANCE', cta.linked_copies||0, ctaRows,
+  const ctaCard = card('magenta','CTA 성과', cta.linked_copies||0, ctaRows,
     `<div class="ops-mini">${ctaMini}</div>`);
 
   $('#ops-grid').innerHTML = premiumCard + briefCard + b2bCard + nlCard + weeklyCard + ctaCard;
   const now = new Date();
-  $('#ops-stamp').textContent = 'sync ' + now.toTimeString().substring(0,8);
+  $('#ops-stamp').textContent = '동기화 ' + now.toTimeString().substring(0,8);
 }
 
 function escapeHTML(s){
