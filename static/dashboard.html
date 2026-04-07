@@ -3842,5 +3842,238 @@ body::before, body::after{display:none !important}
 }
 </style>
 
+<script>
+/* ─── S30 — Home as company situation board (weekly promoted) ── */
+(function(){
+  const origHome = window.renderHome;
+  window.renderHome = function(){
+    if(typeof origHome === 'function') origHome();
+    const b = state.business || {};
+    const w = b.weekly || {};
+    // promote weekly highlights: rewrite hl-list with score bars + fallback
+    const list = document.getElementById('hl-list');
+    const countEl = document.getElementById('hl-count');
+    if(list){
+      const hls = (w.highlights||[]).slice(0,5);
+      if(countEl) countEl.textContent = hls.length ? `${hls.length}건` : '없음';
+      if(hls.length){
+        const max = Math.max(...hls.map(h=>h.monetization_score||0), 1);
+        list.innerHTML = hls.map((h,i)=>{
+          const pct = Math.round(((h.monetization_score||0)/max)*100);
+          return `<div class="hl-row">
+            <span class="hl-rank">${String(i+1).padStart(2,'0')}</span>
+            <span class="hl-id">#${h.draft_id}</span>
+            <span class="hl-hook">${escapeHTML(h.hook||'')}</span>
+            <span class="hl-score-wrap"><span class="hl-bar"><i style="width:${pct}%"></i></span><span class="hl-score">${h.monetization_score||0}</span></span>
+          </div>`;
+        }).join('');
+      } else if(!(w.total_drafts||0)){
+        list.innerHTML = `<div class="hl-empty">
+          <div class="e-title">이번 주 하이라이트 없음</div>
+          <div class="e-sub">초안이 발행되면 이 자리에 자동 누적돼요</div>
+        </div>`;
+      } else {
+        list.innerHTML = `<div class="hl-empty">
+          <div class="e-title">대기 중인 초안 ${w.pending||0}건</div>
+          <div class="e-sub">발행 후 점수가 쌓이면 하이라이트로 승격</div>
+        </div>`;
+      }
+    }
+  };
+})();
+</script>
+
+<style>
+/* ─── S30 — Home layout: situation board first, weekly promoted ─── */
+#page-home{display:flex;flex-direction:column;gap:12px}
+
+/* Order: situation board → weekly hero → compact health → (others hidden) */
+#page-home #situation-board{order:1;margin-bottom:0}
+#page-home .panel-hero{order:2;margin-bottom:0;background:var(--surface-2) !important}
+#page-home .kpi-row{order:3}
+#page-home .hero-compact{order:4}
+/* Hide noise that situation board already represents */
+#page-home .focus-3{display:none !important}
+#page-home .strip{display:none !important}
+
+/* Hero poster feel — removed: demote to thin compact strip */
+#page-home .hero-compact{
+  padding:8px 12px !important;border:1px dashed var(--line) !important;
+  background:transparent !important;display:flex;align-items:center;gap:14px;
+}
+#page-home .hero-compact .hero-body{display:contents}
+#page-home .hero-compact .hero-title{
+  font-size:9px !important;letter-spacing:0.5px;color:var(--txt3) !important;
+  text-transform:uppercase;opacity:1 !important;
+}
+#page-home .hero-compact .hero-state{margin:0 !important;display:inline-flex;gap:8px;align-items:baseline}
+#page-home .hero-compact .hero-state .label{font-size:12px !important;font-weight:600}
+#page-home .hero-compact .hero-state .sub{font-size:11px;color:var(--txt2)}
+#page-home .hero-compact .hero-meta{
+  margin-left:auto !important;padding:0 !important;border:none !important;gap:12px;
+  font-size:10px;color:var(--txt3);
+}
+#page-home .hero-compact .hero-meta b{font-size:10px;color:var(--txt2)}
+
+/* KPI row — demoted to a thin chip strip (no big numbers) */
+#page-home .kpi-row{
+  display:flex;gap:6px;flex-wrap:wrap;padding:0;background:transparent;
+}
+#page-home .kpi-row .kpi-mini{
+  flex:1;min-width:120px;padding:8px 10px !important;
+  background:var(--panel) !important;border:1px solid var(--line) !important;
+  border-radius:3px;display:flex;align-items:baseline;gap:8px;min-height:0;
+}
+#page-home .kpi-row .kpi-mini .k-label{
+  font-size:9px;letter-spacing:0.5px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+#page-home .kpi-row .kpi-mini .k-val{
+  font-size:16px !important;font-weight:700;margin-left:auto;line-height:1;
+}
+#page-home .kpi-row .kpi-mini .k-sub{font-size:10px;color:var(--txt3);margin-top:0}
+
+/* Weekly highlights — PROMOTED as Home core */
+#page-home .panel-hero{
+  border:1px solid var(--line) !important;border-radius:4px;
+  position:relative;padding:0;
+}
+#page-home .panel-hero .panel-head{
+  padding:12px 16px 10px 16px;border-bottom:1px solid var(--line);
+  font-size:11px;letter-spacing:0.6px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;display:flex;align-items:baseline;gap:10px;
+}
+#page-home .panel-hero .panel-head::before{
+  content:'이번 주 핵심';color:var(--txt);font-size:13px;font-weight:700;
+  text-transform:none;letter-spacing:-0.1px;margin-right:6px;
+}
+#page-home .panel-hero .panel-head{font-size:0}
+#page-home .panel-hero .panel-head .label{
+  font-size:10px;letter-spacing:0.3px;color:var(--txt3);
+  padding:2px 6px;border:1px solid var(--line);border-radius:2px;
+  font-feature-settings:"tnum";margin-left:auto;
+}
+#page-home .panel-hero .panel-body{padding:10px 14px 14px 14px}
+
+.hl-list{display:flex;flex-direction:column;gap:6px}
+.hl-row{
+  display:grid;grid-template-columns:26px 48px 1fr 110px;gap:10px;
+  align-items:center;padding:8px 10px;
+  background:var(--panel);border:1px solid var(--line);border-radius:3px;
+}
+.hl-row .hl-rank{
+  font-size:10px;color:var(--txt3);letter-spacing:0.4px;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+.hl-row .hl-id{
+  font-size:10px;color:var(--txt2);
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";
+}
+.hl-row .hl-hook{
+  font-size:12px;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+  line-height:1.4;
+}
+.hl-row .hl-score-wrap{display:flex;align-items:center;gap:6px}
+.hl-row .hl-bar{
+  flex:1;height:3px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:2px;overflow:hidden;
+}
+.hl-row .hl-bar i{display:block;height:100%;background:var(--accent);opacity:0.7}
+.hl-row .hl-score{
+  font-size:11px;font-weight:700;min-width:24px;text-align:right;
+  font-family:ui-monospace,monospace;font-feature-settings:"tnum";color:var(--txt);
+}
+
+.hl-empty{
+  padding:28px 16px;text-align:center;border:1px dashed var(--line);
+  border-radius:3px;background:var(--panel);
+}
+.hl-empty .e-title{font-size:13px;color:var(--txt2);margin-bottom:4px}
+.hl-empty .e-sub{font-size:11px;color:var(--txt3)}
+
+/* Situation board (from S29): bring judgment sentences even larger */
+#situation-board.sb .sb-cell .sb-v{font-size:18px !important}
+#situation-board.sb .sb-cell{min-height:70px}
+#situation-board.sb .sb-title::before{
+  content:'●';margin-right:6px;color:var(--accent);font-size:8px;vertical-align:middle;
+}
+
+/* Cat — keep in weekly panel, never cover data */
+#page-home .panel-hero .cat-wrap{
+  position:absolute;right:14px;top:8px;z-index:2;
+  pointer-events:none;transform:scale(0.7);transform-origin:top right;
+  filter:none;
+}
+/* S30 cat state machine refinement */
+.cat-wrap{transition:transform 0.4s ease,filter 0.4s ease}
+.cat-wrap.alert{
+  filter:grayscale(0.85) brightness(0.65) !important;
+  animation:none !important;transform:scale(0.65) !important;
+}
+.cat-wrap.alert .cat-tail,
+.cat-wrap.alert .cat-eye-l,
+.cat-wrap.alert .cat-eye-r,
+.cat-wrap.alert .cat-ear-l,
+.cat-wrap.alert .cat-ear-r,
+.cat-wrap.alert .cat-coin{animation:none !important;opacity:0.5}
+
+.cat-wrap.warning{animation:none !important;filter:saturate(0.8)}
+.cat-wrap.warning .cat-tail{animation:none !important}
+.cat-wrap.warning .cat-ear-l{animation:s30EarTwitchL 3.6s ease-in-out infinite}
+.cat-wrap.warning .cat-ear-r{animation:s30EarTwitchR 3.6s ease-in-out infinite}
+@keyframes s30EarTwitchL{0%,88%,100%{transform:translate(0,0)}90%,94%{transform:translate(0,-1px) rotate(-4deg)}}
+@keyframes s30EarTwitchR{0%,88%,100%{transform:translate(0,0)}91%,95%{transform:translate(0,-1px) rotate(4deg)}}
+
+.cat-wrap.lucky-pulse{animation:s30CatPulse 3.4s ease-in-out infinite !important}
+@keyframes s30CatPulse{
+  0%,100%{transform:scale(0.7)}
+  50%{transform:scale(0.73)}
+}
+.cat-wrap.lucky-pulse .cat-tail{animation:s30Tail 3s ease-in-out infinite !important;transform-origin:50px 42px}
+@keyframes s30Tail{
+  0%,100%{transform:rotate(0deg)}
+  40%{transform:rotate(-6deg)}
+  60%{transform:rotate(5deg)}
+}
+.cat-wrap.lucky-pulse .cat-eye-l,
+.cat-wrap.lucky-pulse .cat-eye-r{
+  animation:s30Blink 5s steps(1,end) infinite !important;
+}
+@keyframes s30Blink{0%,94%,100%{opacity:1}95%,97%{opacity:0}}
+
+.cat-wrap.coin-rush .cat-coin{
+  animation:s30Coin 1.1s ease-in-out infinite !important;
+}
+@keyframes s30Coin{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-2px)}
+}
+.cat-wrap.lean-weekly{transform:scale(0.7) translateX(-6px) rotate(-3deg) !important}
+.cat-wrap.lean-weekly.lucky-pulse{animation:none !important}
+
+@media (prefers-reduced-motion: reduce){
+  .cat-wrap *{animation:none !important}
+}
+
+/* Mobile — fill screen, no dead space */
+@media (max-width:760px){
+  #page-home{gap:10px;padding-bottom:20px}
+  #situation-board.sb{padding:12px}
+  #situation-board.sb .sb-grid{grid-template-columns:1fr;gap:8px}
+  #situation-board.sb .sb-cell{min-height:auto;padding:10px}
+  #situation-board.sb .sb-cell .sb-v{font-size:16px !important}
+  #page-home .panel-hero .panel-body{padding:8px 10px 10px 10px}
+  .hl-row{grid-template-columns:22px 44px 1fr;row-gap:6px}
+  .hl-row .hl-score-wrap{grid-column:1/-1;margin-top:-2px}
+  #page-home .kpi-row .kpi-mini{min-width:46%;flex:1 1 46%}
+  #page-home .panel-hero .cat-wrap{transform:scale(0.55);top:4px;right:6px}
+  #page-home .panel-hero .cat-wrap.lucky-pulse{animation-name:s30CatPulseSm !important}
+  @keyframes s30CatPulseSm{0%,100%{transform:scale(0.55)}50%{transform:scale(0.58)}}
+  #page-home .hero-compact{flex-wrap:wrap}
+  #page-home .hero-compact .hero-meta{margin-left:0 !important;width:100%}
+}
+</style>
+
 </body>
 </html>

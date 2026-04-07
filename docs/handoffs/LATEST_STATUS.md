@@ -1,6 +1,17 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S29 — Direction Lock · Situation Board + Global Tone Reset
+## ⚠️ LAST COMPLETED PHASE: Dashboard S30 — Home as Company Situation Board (weekly promoted)
+
+`static/dashboard.html` Home 탭만 수정. 백엔드 무변경.
+- Home `#page-home` 을 flex column + `order` 로 재정렬: Situation Board → 이번 주 핵심 → KPI chip strip → demoted hero-compact
+- `.focus-3` / `.strip` 숨김 (situation board 와 중복)
+- Hero 포스터 제거: hero-compact 를 dashed 1줄 요약으로 demote
+- Weekly highlights 를 Home 핵심 영역으로 승격: rank(01) / #id / hook / monetization bar + score grid row, 빈 상태 2종 한국어
+- KPI row 는 thin chip strip 으로 축소 (16px 값)
+- 고양이 상태머신 재작성: healthy=pulse+tail+blink, coin-rush=코인 bounce, lean-weekly=translateX+rotate, warning=ear twitch only, alert=grayscale+정지, 랜덤 순찰 없음, pointer-events none
+- 모바일: sb-grid 1열, hl-row 2단 grid, kpi 2-col, cat scale 0.55
+
+## PREVIOUS: Dashboard S29 — Direction Lock · Situation Board + Global Tone Reset
 
 `static/dashboard.html` 단일 파일. 백엔드 무변경.
 - **Situation Board** 를 Home 최상단에 도입 — "지금 중요한 것 / 병목 / 바쁜 담당" 3-cell judgment panel + 6 business chip row (premium/b2b/newsletter/lead/cta/weekly highlight)

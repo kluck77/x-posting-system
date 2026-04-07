@@ -1,4 +1,48 @@
-# Current Session — 2026-04-07 (Session 29)
+# Current Session — 2026-04-07 (Session 30)
+
+## S30 — Home 전용 재편: 회사 메인 상황판 + 주간 핵심 승격
+
+`static/dashboard.html` Home 탭만 수정. 백엔드/다른 탭 무변경.
+
+### 변경 내용
+1. **Home 레이아웃 재정의** (`#page-home` flex column + order)
+   - order 1: Situation Board (S29 판단판)
+   - order 2: 이번 주 핵심 (panel-hero 승격)
+   - order 3: KPI chip strip (thin)
+   - order 4: hero-compact (dashed 1줄 요약으로 완전 demote)
+   - hidden: `.focus-3`, `.strip` (situation board 와 중복)
+2. **Hero 포스터 제거**
+   - hero-compact → 8×12 padding, 12px label, meta 10px inline, dashed border
+   - "시스템 상태" 라벨은 tiny uppercase hint 로
+3. **Weekly highlights 승격** — Home 핵심 영역으로
+   - panel-head 에 "이번 주 핵심" 큰 타이틀 + tiny 건수 라벨
+   - hl-list 를 grid row 로 재설계: rank(01) / #id / hook / monetization bar + score
+   - 기존 hl-bar 는 3px mini ratio bar 로 교체 (accent 70% opacity)
+   - 빈 상태 2종: "이번 주 하이라이트 없음 · 자동 누적" / "대기 중 N건 · 발행 후 승격"
+4. **KPI row 축소**
+   - kpi-mini 를 thin chip row 로: label(9px uppercase) + 16px 값 + tiny sub
+   - 큰 숫자판 사라지고 "판단 문장 → 보조 수치" 위계로
+5. **고양이 상태머신 재작성**
+   - healthy (lucky-pulse): s30CatPulse 3.4s + s30Tail 3s + s30Blink 5s
+   - coin-rush: s30Coin 1.1s (premium/b2b 있을 때)
+   - lean-weekly: translateX(-6px) rotate(-3deg) 주간 하이라이트 쪽으로
+   - warning: 전체 애니메이션 off, ear-twitch-L/R 만 3.6s 저빈도
+   - alert/danger: grayscale 0.85 + brightness 0.65, scale 0.65, 모든 animation none
+   - panel-hero 우상단 절대 위치 · pointer-events none · 데이터 가림 금지
+   - 랜덤 순찰 없음, refreshAll 사이클에서만 상태 재평가
+6. **모바일 꽉 채움**
+   - sb-grid 1열, sb-cell min-height 제거
+   - hl-row 2단 grid (score-wrap 전체폭)
+   - kpi-mini 2-col flex
+   - cat scale 0.55 로 축소, 별도 s30CatPulseSm 키프레임
+
+### Files
+- `static/dashboard.html` — S30 script (renderHome wrap · weekly rewrite) + S30 style
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 29
 
 ## S29 — 방향 고정 · Situation Board + 톤 리셋
 
