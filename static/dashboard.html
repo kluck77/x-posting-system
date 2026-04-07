@@ -1824,6 +1824,165 @@ html,body{
 .cat-wrap{opacity:0.6}
 .cat-wrap.lucky-pulse,.cat-wrap.coin-rush,.cat-wrap.warning,.cat-wrap.alert{filter:none !important;animation:none !important}
 
+/* ─── S24 · Home operator board ───────────────────────────── */
+
+/* 1. Hero compact */
+.hero-compact{padding:16px 18px 14px 18px}
+.hero-compact .hero-body{padding:0}
+.hero-compact .hero-title{font-size:10px;letter-spacing:0.7px}
+.hero-compact .hero-state{margin-top:8px;gap:10px}
+.hero-compact .hero-state .label{font-size:22px;font-weight:600;letter-spacing:-0.3px}
+.hero-compact .hero-state .sub{font-size:12px;color:var(--txt2)}
+.hero-compact .hero-meta{
+  margin-top:12px;padding-top:10px;
+  display:flex;gap:16px;flex-wrap:wrap;
+  font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:0.5px;
+}
+.hero-compact .hero-meta span{display:flex;align-items:baseline;gap:4px}
+.hero-compact .hero-meta b{font-size:11px}
+
+/* 2. Focus-3 — 오늘 운영 핵심 */
+.focus-3{margin-bottom:12px}
+.focus-head{
+  font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:0.8px;
+  font-weight:600;margin:0 4px 8px 4px;display:flex;align-items:center;gap:6px;
+}
+.focus-head::before{
+  content:'';width:4px;height:4px;border-radius:50%;background:var(--accent);display:inline-block;
+}
+.focus-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+}
+.focus-card{
+  background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--line2);border-radius:6px;
+  padding:12px 12px 11px 12px;
+  display:flex;flex-direction:column;gap:4px;min-height:96px;
+  position:relative;
+}
+.focus-card .f-lbl{
+  font-size:9px;color:var(--txt3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.focus-card .f-val{
+  font-size:20px;font-weight:600;color:var(--txt);letter-spacing:-0.5px;
+  line-height:1.1;margin-top:auto;
+  font-family:'JetBrains Mono','SF Mono',Menlo,Monaco,monospace;
+  font-variant-numeric:tabular-nums;
+}
+.focus-card .f-hint{
+  font-size:10px;color:var(--txt3);letter-spacing:0;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.focus-card.tone-danger{border-left-color:var(--danger)}
+.focus-card.tone-danger .f-val{color:var(--danger)}
+.focus-card.tone-warn{border-left-color:var(--warn)}
+.focus-card.tone-warn .f-val{color:var(--warn)}
+.focus-card.tone-ok{border-left-color:var(--ok)}
+.focus-card.tone-ok .f-val{color:var(--ok)}
+.focus-card.tone-accent{border-left-color:var(--accent)}
+.focus-card.tone-accent .f-val{color:var(--txt)}
+.focus-card.tone-cat-premium{border-left-color:var(--cat-premium)}
+.focus-card.tone-cat-premium .f-val{color:var(--cat-premium)}
+.focus-card.tone-cat-b2b{border-left-color:var(--cat-b2b)}
+.focus-card.tone-cat-b2b .f-val{color:var(--cat-b2b)}
+.focus-card.tone-cat-weekly{border-left-color:var(--cat-weekly)}
+.focus-card.tone-cat-weekly .f-val{color:var(--cat-weekly)}
+.focus-card.tone-muted{border-left-color:var(--line2)}
+.focus-card.tone-muted .f-val{color:var(--txt2)}
+
+/* 3. Weekly panel 홈 중심 승격 */
+.panel-hero{margin-bottom:12px}
+.panel-hero .panel-head{
+  font-size:11px;text-transform:uppercase;letter-spacing:0.7px;
+  padding:13px 16px;
+}
+.panel-hero .panel-body{padding:12px 16px 14px 16px}
+.panel-hero .hl-list{gap:8px}
+.panel-hero .hl-item{
+  padding:12px 14px;font-size:13px;
+  border-left-width:3px;
+}
+.panel-hero .hl-item .hook{font-weight:500;flex:1}
+.panel-hero .empty-pro{padding:14px 16px}
+.panel-hero .empty-pro .stack .t1{font-size:13px}
+
+/* 4. KPI row — 보조 stat strip */
+.kpi-row{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;
+}
+.kpi-mini{
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;
+  border-left:2px solid var(--line2);padding:12px 12px 11px 12px;
+  min-height:78px;display:flex;flex-direction:column;gap:2px;position:relative;
+}
+.kpi-mini .k-label{
+  font-size:9px;color:var(--txt3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.5px;
+}
+.kpi-mini .k-val{
+  font-size:20px;font-weight:600;color:var(--txt);letter-spacing:-0.4px;
+  margin-top:4px;line-height:1;
+  font-family:'JetBrains Mono','SF Mono',Menlo,Monaco,monospace;
+  font-variant-numeric:tabular-nums;
+}
+.kpi-mini .k-sub{font-size:10px;color:var(--txt3);margin-top:3px}
+.kpi-mini:nth-child(1){border-left-color:var(--accent)}
+.kpi-mini:nth-child(2){border-left-color:var(--ok)}
+.kpi-mini:nth-child(3){border-left-color:var(--cat-premium)}
+.kpi-mini:nth-child(4){border-left-color:var(--cat-b2b)}
+.kpi-mini:nth-child(3) .k-val{color:var(--cat-premium)}
+.kpi-mini:nth-child(4) .k-val{color:var(--cat-b2b)}
+@media (max-width:380px){
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .focus-grid{grid-template-columns:1fr}
+  .focus-card{min-height:72px}
+}
+
+/* 5. Lucky cat — 상태 마스코트 재활성 (조용하지만 살아있음) */
+.cat-wrap{opacity:0.85 !important}
+.cat-wrap.lucky-pulse{
+  animation:luckyPulseS24 3.2s ease-in-out infinite !important;
+  filter:drop-shadow(0 0 2px rgba(255,209,102,0.18)) !important;
+}
+@keyframes luckyPulseS24{
+  0%,100%{opacity:0.85}
+  50%{opacity:1}
+}
+.cat-wrap.lucky-pulse .cat-tail{animation:tailFlick 3s ease-in-out infinite}
+.cat-wrap.lucky-pulse .cat-eye-l,
+.cat-wrap.lucky-pulse .cat-eye-r{animation:catBlink 4.5s steps(1,end) infinite}
+@keyframes catBlink{
+  0%,95%,100%{transform:scaleY(1)}
+  96%,98%{transform:scaleY(0.1)}
+}
+@keyframes tailFlick{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-1px)}
+}
+.cat-wrap.warning{
+  animation:none !important;filter:none !important;opacity:0.75 !important;
+}
+.cat-wrap.warning .cat-ear-l,
+.cat-wrap.warning .cat-ear-r{animation:earTwitch 3.2s ease-in-out infinite}
+.cat-wrap.warning .cat-tail{animation:none}
+.cat-wrap.alert{
+  animation:none !important;filter:grayscale(0.75) brightness(0.7) !important;
+  opacity:0.55 !important;
+}
+.cat-wrap.alert .cat-paw,
+.cat-wrap.alert .cat-tail,
+.cat-wrap.alert .cat-coin,
+.cat-wrap.alert .cat-ear-l,
+.cat-wrap.alert .cat-ear-r{animation:none !important}
+.cat-wrap.coin-rush{filter:drop-shadow(0 0 4px rgba(255,209,102,0.55)) !important}
+.cat-wrap.coin-rush .cat-coin{animation-duration:1s !important}
+.cat-wrap.lean-weekly{transform:translateX(-8px) translateY(-2px)}
+@media (prefers-reduced-motion:reduce){
+  .cat-wrap *,.cat-wrap{animation:none !important;transform:none !important}
+}
+
 /* ─── Page-specific styles inserted in later steps ────────── */
 </style>
 </head>
@@ -1846,25 +2005,12 @@ html,body{
   <!-- HOME / STATUS -->
   <div class="page active" id="page-home">
 
-    <div class="hero">
-      <span class="hero-corner tl"></span><span class="hero-corner tr"></span>
-      <span class="hero-corner bl"></span><span class="hero-corner br"></span>
-      <div class="hero-spark" id="hero-spark" aria-hidden="true">
-        <span class="lbl">7일 흐름</span>
-      </div>
+    <div class="hero hero-compact">
       <div class="hero-body">
-        <div class="hero-title">시스템 상태
-          <span class="signal"><i></i><i></i><i></i><i></i></span>
-        </div>
+        <div class="hero-title">시스템 상태</div>
         <div class="hero-state">
           <div class="label" id="home-state">--</div>
           <div class="sub" id="home-state-sub">신호 대기 중</div>
-        </div>
-        <div class="hero-summary" id="home-summary">
-          <span>초안 <b>—</b></span>
-          <span>승인 대기 <b>—</b></span>
-          <span>프리미엄 <b>—</b></span>
-          <span>B2B <b>—</b></span>
         </div>
         <div class="hero-meta" id="home-meta">
           <span>DB <b>—</b></span>
@@ -1875,28 +2021,16 @@ html,body{
       </div>
     </div>
 
-    <div class="attn-band" id="attn-band">
-      <span class="pulse-dot"></span>
-      <span class="label">대기</span>
-      <span class="msg">신호 분석 중…</span>
+    <div class="focus-3" id="focus-3">
+      <div class="focus-head">오늘 운영 핵심</div>
+      <div class="focus-grid" id="focus-grid">
+        <div class="focus-card empty"><div class="f-lbl">—</div><div class="f-val">—</div><div class="f-hint">불러오는 중…</div></div>
+        <div class="focus-card empty"><div class="f-lbl">—</div><div class="f-val">—</div><div class="f-hint">불러오는 중…</div></div>
+        <div class="focus-card empty"><div class="f-lbl">—</div><div class="f-val">—</div><div class="f-hint">불러오는 중…</div></div>
+      </div>
     </div>
 
-    <div class="kpi-grid">
-      <div class="kpi cyan"><div class="k-label">초안 · 7일</div>
-        <div class="k-val" id="kpi-drafts">—</div>
-        <div class="k-sub" id="kpi-drafts-sub">발행 —</div></div>
-      <div class="kpi green"><div class="k-label">승인 대기</div>
-        <div class="k-val" id="kpi-queue">—</div>
-        <div class="k-sub" id="kpi-queue-sub">대기 중인 게시물</div></div>
-      <div class="kpi amber"><div class="k-label">프리미엄</div>
-        <div class="k-val" id="kpi-premium">—</div>
-        <div class="k-sub" id="kpi-premium-sub">후보</div></div>
-      <div class="kpi magenta"><div class="k-label">B2B</div>
-        <div class="k-val" id="kpi-b2b">—</div>
-        <div class="k-sub" id="kpi-b2b-sub">후보</div></div>
-    </div>
-
-    <div class="panel panel-hero"><div class="panel-head">◆ 이번 주 하이라이트
+    <div class="panel panel-hero"><div class="panel-head">이번 주 하이라이트
       <span class="label" id="hl-count">—</span></div>
       <div class="panel-body">
         <div class="hl-list" id="hl-list"><div class="empty">불러오는 중…</div></div>
@@ -1954,6 +2088,21 @@ html,body{
           </g>
         </svg>
       </div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi-mini"><div class="k-label">초안 · 7일</div>
+        <div class="k-val" id="kpi-drafts">—</div>
+        <div class="k-sub" id="kpi-drafts-sub">발행 —</div></div>
+      <div class="kpi-mini"><div class="k-label">승인 대기</div>
+        <div class="k-val" id="kpi-queue">—</div>
+        <div class="k-sub" id="kpi-queue-sub">—</div></div>
+      <div class="kpi-mini"><div class="k-label">프리미엄</div>
+        <div class="k-val" id="kpi-premium">—</div>
+        <div class="k-sub">후보</div></div>
+      <div class="kpi-mini"><div class="k-label">B2B</div>
+        <div class="k-val" id="kpi-b2b">—</div>
+        <div class="k-sub">후보</div></div>
     </div>
 
     <div class="strip">
@@ -2086,19 +2235,6 @@ function renderHome(){
     `<span>X ${mark(h.x_configured)}</span>`+
     `<span>유휴 <b>${a.hours_idle!=null?a.hours_idle+'시간':'—'}</b></span>`;
 
-  // hero summary line
-  const w0 = b && b.weekly || {};
-  const pr0 = (b && b.premium && b.premium.total) || 0;
-  const b2b0 = (b && b.b2b && b.b2b.total) || 0;
-  const sum = $('#home-summary');
-  if(sum){
-    sum.innerHTML =
-      `<span>초안 <b>${w0.total_drafts ?? 0}</b></span>`+
-      `<span>승인 대기 <b>${q.pending_count ?? 0}</b></span>`+
-      `<span>프리미엄 <b>${pr0}</b></span>`+
-      `<span>B2B <b>${b2b0}</b></span>`;
-  }
-
   // KPIs
   const w = b && b.weekly || {};
   $('#kpi-drafts').textContent = w.total_drafts ?? 0;
@@ -2131,11 +2267,64 @@ function renderHome(){
     ).join('');
   }
 
-  // hero spark — 7-day published distribution (synthetic from highlights or fallback)
-  renderHeroSpark(w);
+  // focus-3 — 오늘 운영 핵심
+  renderFocus3({h, a, q, w, b});
+}
 
-  // attention band — 자동 추론
-  renderAttention({h, a, q, w, b});
+/* ─── Focus-3: 오늘 운영 핵심 (top 3 priorities) ─────────── */
+function renderFocus3({h, a, q, w, b}){
+  const grid = $('#focus-grid'); if(!grid) return;
+  const items = [];
+  // 1. 시스템 위험 최우선
+  if(h && h.db_ok===false){
+    items.push({tone:'danger',lbl:'시스템 점검',val:'DB 중단',hint:'즉시 확인 필요'});
+  }
+  if(h && h.telegram_configured===false){
+    items.push({tone:'warn',lbl:'연결 경고',val:'텔레그램',hint:'승인 알림 불가'});
+  }
+  if(h && h.x_configured===false){
+    items.push({tone:'warn',lbl:'연결 경고',val:'X API',hint:'게시 불가'});
+  }
+  // 2. 오늘 운영 핵심
+  const pending = (q && q.pending_count) || 0;
+  if(pending > 0){
+    items.push({tone:'accent',lbl:'승인 대기',val:pending+'건',hint:'지금 검토 필요'});
+  }
+  const premium = (b && b.premium && b.premium.total) || 0;
+  if(premium > 0){
+    items.push({tone:'cat-premium',lbl:'프리미엄 후보',val:premium+'건',hint:'수익화 대상'});
+  }
+  const b2bN = (b && b.b2b && b.b2b.total) || 0;
+  if(b2bN > 0){
+    items.push({tone:'cat-b2b',lbl:'B2B 후보',val:b2bN+'건',hint:'B2B 파이프라인'});
+  }
+  const hlN = ((w && w.highlights) || []).length;
+  if(hlN > 0){
+    items.push({tone:'cat-weekly',lbl:'이번 주 하이라이트',val:hlN+'건',hint:'가치 축적 중'});
+  }
+  // 3. 유휴/평시
+  if(a && a.is_idle){
+    items.push({tone:'muted',lbl:'파이프라인',val:(a.hours_idle||0)+'시간',hint:'유휴 상태'});
+  }
+  const pub = (w && w.published) || 0;
+  if(pub > 0 && items.length < 3){
+    items.push({tone:'ok',lbl:'이번 주 발행',val:pub+'건',hint:'정상 운영 중'});
+  }
+  if(items.length === 0){
+    items.push({tone:'ok',lbl:'시스템 상태',val:'정상',hint:'모든 신호 안정'});
+    items.push({tone:'muted',lbl:'초안',val:(w.total_drafts||0)+'건',hint:'이번 주 누적'});
+    items.push({tone:'muted',lbl:'활동',val:a.hours_idle!=null?(a.hours_idle+'시간'):'—',hint:'마지막 활동'});
+  }
+  const top = items.slice(0,3);
+  while(top.length < 3){
+    top.push({tone:'muted',lbl:'—',val:'—',hint:'대기'});
+  }
+  grid.innerHTML = top.map(it=>
+    `<div class="focus-card tone-${it.tone}">
+      <div class="f-lbl">${it.lbl}</div>
+      <div class="f-val">${it.val}</div>
+      <div class="f-hint">${it.hint}</div>
+    </div>`).join('');
 }
 
 /* ─── Hero spark renderer ─────────────────────────────────── */
