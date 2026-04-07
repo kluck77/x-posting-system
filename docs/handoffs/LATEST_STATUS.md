@@ -1,11 +1,20 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Business Operating Layers + CTA Copy Library + Perf Tracking
+## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard Rebuild (S18)
 
-**DO NOT re-implement the dashboard or control room. It is already built and locked.**
 **DO NOT re-implement premium/b2b/email/lead base services. They are built and tested.**
+**DO NOT revert to portrait/Live2D dashboard — it has been replaced with a pixel HUD.**
 
-Session 15–17 complete:
+Session 18 — Full dashboard rebuild from scratch:
+- New `static/dashboard.html` (1128 lines) — pixel-digital control room, no images, no Live2D
+- 4 rebuilt pages: Home / AI Workstations / Intake Flow / Ops Monitoring
+- Lucky cat SVG mascot on Home (blink/tail/paw/patrol/lucky-pulse, prefers-reduced-motion safe)
+- Backend: `/control/business-summary` aggregates premium/brief/b2b/newsletter/weekly/cta perf
+- 5 AI workstation nodes with role-specific motion (typing/blink/scan/check/pulse)
+- 6 Ops cards surface entire business stack with monetization-ready signals
+- `static/live2d.js` deleted; old dashboard preserved as `dashboard.html.backup`
+
+Session 15–17 (still locked):
 - **B2B sample report** — `generate_sample_report()`, `/b2b report <id> [save|export]`
 - **Brief offer layer** — `BriefOfferService`, `/brief` (8 subcommands), 3 new columns
 - **Newsletter routine** — `NewsletterRoutineService`, `/newsletter` (7 subcommands)
@@ -66,6 +75,7 @@ What was built:
 | **S15** | **CTA copy library (/cta copy, CtaCopyService, CtaCopy model)** | **Locked** |
 | **S16** | **CTA copy perf tracking (/cta perf)** | **Locked** |
 | **S17** | **Weekly CTA perf section (/weekly view·export)** | **Locked** |
+| **S18** | **Pixel HUD dashboard rebuild (4 pages + mascot + business-summary)** | **Locked** |
 
 ---
 
@@ -93,10 +103,12 @@ Full operating layer stack: premium, B2B, brief, newsletter, lead, weekly report
 
 ## Last Updated
 
-- Date: 2026-04-06 (session 17 — Weekly CTA Perf Section)
+- Date: 2026-04-07 (session 18 — Pixel HUD Dashboard Rebuild)
 - Branch: claude/extract-prediction-time-n82UK (aligned to claude/premium-control-room-ui-LJFba)
 - Key commits:
-  - Weekly CTA perf section (_cta_perf_summary + /weekly 통합)
+  - Pixel HUD dashboard rebuild (dashboard.html + lucky cat mascot)
+  - `dd0190a` — /control/business-summary 단일 집계 엔드포인트
+  - `8985b62` — Weekly CTA perf section (_cta_perf_summary + /weekly 통합)
   - `7cb6e21` — CTA copy perf tracking (/cta perf + tests)
   - `9e541e5` — CTA copy library (/cta copy + draft linking)
   - `70a186f` — Weekly operating report (/weekly)
