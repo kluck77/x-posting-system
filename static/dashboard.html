@@ -14,19 +14,34 @@
   --bg2:#0a0d18;
   --panel:#0f1322;
   --panel2:#141a2c;
-  --grid:rgba(80,180,255,0.045);
-  --line:rgba(120,200,255,0.12);
-  --line2:rgba(120,200,255,0.22);
-  --txt:#dde6f5;
-  --txt2:#7e8aab;
-  --txt3:#4a546e;
-  --cyan:#5ee5ff;
-  --cyan2:#1fb8e0;
-  --green:#7cffb2;
-  --amber:#ffc857;
-  --red:#ff5c7a;
-  --magenta:#d96cff;
-  --gold:#ffd166;
+  --grid:rgba(80,180,255,0.030);
+  --line:rgba(120,200,255,0.10);
+  --line2:rgba(120,200,255,0.18);
+  --txt:#e3ebf8;
+  --txt2:#8e9ac0;
+  --txt3:#525d7a;
+  /* brand accent — single brand color */
+  --accent:#5ee5ff;
+  --accent2:#1fb8e0;
+  /* status — reserved for real system state only */
+  --ok:#7cffb2;
+  --warn:#ffc857;
+  --danger:#ff5c7a;
+  /* category accents — section identity only, must NOT compete with status */
+  --cat-premium:#c8a96a;
+  --cat-brief:#9fb6cf;
+  --cat-b2b:#b89cd6;
+  --cat-news:#8fc9b3;
+  --cat-weekly:#d6c178;
+  --cat-cta:#cfa6c5;
+  /* legacy aliases (kept so existing rules keep working) */
+  --cyan:var(--accent);
+  --cyan2:var(--accent2);
+  --green:var(--ok);
+  --amber:var(--warn);
+  --red:var(--danger);
+  --magenta:var(--cat-b2b);
+  --gold:var(--cat-weekly);
   --header-h:54px;
   --tab-h:64px;
   --pixel:'JetBrains Mono','SF Mono','Menlo','Monaco',monospace;
@@ -59,8 +74,8 @@ body::after{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   background:repeating-linear-gradient(
     180deg,
-    rgba(255,255,255,0.012) 0,
-    rgba(255,255,255,0.012) 1px,
+    rgba(255,255,255,0.008) 0,
+    rgba(255,255,255,0.008) 1px,
     transparent 1px,
     transparent 3px);
 }
@@ -124,18 +139,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 }
 .tab-btn{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:4px;font-size:11px;letter-spacing:1px;
-  color:var(--txt3);text-transform:uppercase;
+  gap:4px;font-size:12px;letter-spacing:0.2px;
+  color:var(--txt2);
   border-top:2px solid transparent;
-  transition:color 0.18s,border-color 0.18s;
-  position:relative;font-weight:700;
+  transition:color 0.18s,border-color 0.18s,background 0.18s;
+  position:relative;font-weight:600;
 }
-.tab-btn .ic{font-size:20px;line-height:1}
-.tab-btn.active{color:var(--cyan);border-top-color:var(--cyan)}
+.tab-btn .ic{font-size:20px;line-height:1;transition:font-size 0.18s}
+.tab-btn.active{
+  color:var(--accent);border-top-color:var(--accent);font-weight:800;
+  background:linear-gradient(180deg,rgba(94,229,255,0.10),transparent 70%);
+}
+.tab-btn.active .ic{font-size:22px}
 .tab-btn.active::after{
   content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);
-  width:24px;height:2px;background:var(--cyan);
-  box-shadow:0 0 12px var(--cyan);
+  width:32px;height:2px;background:var(--accent);
+  box-shadow:0 0 6px rgba(94,229,255,0.6);
 }
 
 /* ─── Panel primitive ─────────────────────────────────────── */
@@ -155,16 +174,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 }
 .panel-head{
   display:flex;align-items:center;gap:8px;
-  padding:11px 14px;
+  padding:12px 14px;
   border-bottom:1px dashed var(--line);
-  font-size:12px;letter-spacing:1.5px;text-transform:uppercase;
-  color:var(--cyan);font-weight:700;
+  font-size:13px;letter-spacing:0.3px;
+  color:var(--accent);font-weight:700;
 }
-.panel-head .label{color:var(--txt3);font-weight:500;margin-left:auto;font-size:11px}
+.panel-head .label{color:var(--txt2);font-weight:500;margin-left:auto;font-size:12px}
 .panel-body{padding:14px}
 
-.muted{color:var(--txt3);font-size:12px;letter-spacing:0.5px}
-.empty{color:var(--txt3);font-size:13px;text-align:center;padding:22px 0;letter-spacing:1px}
+.muted{color:var(--txt2);font-size:12px;letter-spacing:0.2px}
+.empty{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  color:var(--txt2);font-size:12px;text-align:center;
+  padding:10px 12px;letter-spacing:0.2px;
+  background:var(--bg2);border:1px dashed var(--line);
+}
+.empty::before{content:'▢';color:var(--txt3);font-size:11px}
 
 /* ─── Reduced motion ──────────────────────────────────────── */
 @media(prefers-reduced-motion:reduce){
@@ -206,20 +231,26 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .hero-state .label{
   font-size:34px;font-weight:700;letter-spacing:1px;color:var(--txt);line-height:1;
 }
-.hero-state .label.ok{color:var(--green);text-shadow:0 0 14px rgba(124,255,178,0.4)}
-.hero-state .label.warn{color:var(--amber);text-shadow:0 0 14px rgba(255,200,87,0.4)}
-.hero-state .label.idle{color:var(--magenta);text-shadow:0 0 14px rgba(217,108,255,0.4)}
-.hero-state .sub{font-size:12px;color:var(--txt2);letter-spacing:1px}
-.hero-meta{
-  display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;
-  font-size:12px;color:var(--txt2);letter-spacing:0.5px;
+.hero-state .label.ok{color:var(--ok);text-shadow:0 0 8px rgba(124,255,178,0.25)}
+.hero-state .label.warn{color:var(--warn);text-shadow:0 0 8px rgba(255,200,87,0.25)}
+.hero-state .label.idle{color:var(--cat-b2b);text-shadow:0 0 8px rgba(184,156,214,0.25)}
+.hero-state .sub{font-size:14px;color:var(--txt);letter-spacing:0.3px;font-weight:500}
+.hero-summary{
+  margin-top:14px;font-size:13px;color:var(--txt2);letter-spacing:0.2px;
+  display:flex;flex-wrap:wrap;gap:14px;
 }
-.hero-meta span b{color:var(--cyan);font-weight:700}
+.hero-summary span b{color:var(--accent);font-weight:700;font-size:14px}
+.hero-meta{
+  display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;
+  font-size:12px;color:var(--txt2);letter-spacing:0.2px;
+  padding-top:12px;border-top:1px dashed var(--line);
+}
+.hero-meta span b{color:var(--accent);font-weight:700}
 
 /* signal bars (HUD pulse) */
 .signal{display:inline-flex;gap:2px;align-items:flex-end;height:14px;margin-left:6px}
 .signal i{
-  display:block;width:3px;background:var(--cyan);
+  display:block;width:3px;background:var(--accent);opacity:0.7;
   animation:sigBar 1.4s ease-in-out infinite;
 }
 .signal i:nth-child(1){height:30%;animation-delay:0s}
@@ -252,15 +283,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   border-bottom:2px solid var(--cyan2);border-right:2px solid var(--cyan2);
 }
 .kpi .k-label{
-  font-size:11px;letter-spacing:1.5px;color:var(--txt3);
-  text-transform:uppercase;font-weight:700;
+  font-size:13px;letter-spacing:0.3px;color:var(--txt2);
+  font-weight:600;
 }
 .kpi .k-val{
-  font-size:46px;font-weight:700;letter-spacing:1px;
+  font-size:46px;font-weight:800;letter-spacing:-1px;
   color:var(--txt);margin-top:auto;line-height:1;
 }
-.kpi .k-val .unit{font-size:12px;color:var(--txt3);margin-left:4px}
-.kpi .k-sub{font-size:11px;color:var(--txt2);margin-top:8px;letter-spacing:0.5px}
+.kpi .k-val .unit{font-size:13px;color:var(--txt3);margin-left:4px;font-weight:500}
+.kpi .k-sub{font-size:12px;color:var(--txt2);margin-top:8px;letter-spacing:0.2px}
 .kpi.cyan .k-val{color:var(--cyan)}
 .kpi.green .k-val{color:var(--green)}
 .kpi.amber .k-val{color:var(--amber)}
@@ -277,12 +308,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   display:flex;flex-direction:column;justify-content:space-between;
 }
 .strip-cell .lbl{
-  font-size:10px;letter-spacing:1.5px;color:var(--txt3);
-  text-transform:uppercase;font-weight:700;
+  font-size:12px;letter-spacing:0.2px;color:var(--txt2);
+  font-weight:600;
 }
 .strip-cell .val{
-  font-size:24px;font-weight:700;color:var(--txt);
-  margin-top:6px;letter-spacing:0.5px;line-height:1;
+  font-size:24px;font-weight:800;color:var(--txt);
+  margin-top:6px;letter-spacing:-0.5px;line-height:1;
 }
 .strip-cell .val small{font-size:10px;color:var(--txt3);margin-left:4px;font-weight:500}
 
@@ -303,10 +334,10 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   display:flex;align-items:center;gap:8px;
   padding:12px 14px;margin-bottom:12px;
   border:1px solid var(--line);background:var(--panel);
-  font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);
+  font-size:13px;letter-spacing:0.3px;color:var(--accent);
   font-weight:700;
 }
-.ws-header .right{margin-left:auto;color:var(--txt3);font-size:11px}
+.ws-header .right{margin-left:auto;color:var(--txt2);font-size:12px;font-weight:500}
 .ws-grid{display:flex;flex-direction:column;gap:10px}
 .ws-node{
   display:grid;grid-template-columns:64px 1fr auto;gap:14px;
@@ -327,31 +358,50 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .ws-node.off{opacity:0.55}
 .ws-icon{
   width:64px;height:64px;
-  background:radial-gradient(circle at 50% 50%,rgba(94,229,255,0.18),transparent 70%);
+  background:radial-gradient(circle at 50% 50%,rgba(94,229,255,0.10),transparent 70%);
   border:1px solid var(--line2);
   display:flex;align-items:center;justify-content:center;
   position:relative;
 }
 .ws-info{min-width:0}
 .ws-role{
-  font-size:15px;font-weight:700;letter-spacing:1px;
-  color:var(--txt);text-transform:uppercase;
+  font-size:15px;font-weight:800;letter-spacing:0.2px;
+  color:var(--txt);
 }
 .ws-prov{
-  font-size:11px;color:var(--cyan);letter-spacing:1px;
-  text-transform:uppercase;margin-top:4px;
+  font-size:12px;color:var(--accent);letter-spacing:0.2px;
+  margin-top:4px;font-weight:600;
 }
-.ws-note{font-size:11px;color:var(--txt3);margin-top:4px;letter-spacing:0.3px}
+.ws-note{font-size:12px;color:var(--txt2);margin-top:3px;letter-spacing:0.2px}
 .ws-meta{text-align:right;min-width:64px}
 .ws-meta .runs{
-  font-size:30px;font-weight:700;color:var(--cyan);line-height:1;
+  font-size:30px;font-weight:800;color:var(--accent);line-height:1;letter-spacing:-0.5px;
 }
 .ws-meta .runs.off{color:var(--txt3)}
-.ws-meta .lbl{font-size:10px;color:var(--txt3);letter-spacing:1px;margin-top:6px;text-transform:uppercase}
+.ws-meta .lbl{font-size:11px;color:var(--txt2);letter-spacing:0.2px;margin-top:6px;font-weight:600}
 
 /* role-specific motion icons */
 .ic-pixel{display:block;width:42px;height:42px}
-.ic-pixel rect{fill:var(--cyan)}
+.ic-pixel rect{fill:var(--accent)}
+/* 드래프트 작성 — blinking cursor */
+.ic-doc .cursor{animation:cursorBlink 1s steps(2,end) infinite}
+@keyframes cursorBlink{0%,50%{opacity:1}51%,100%{opacity:0}}
+/* 리뷰어 — magnifier check appear */
+.ic-mag .tick rect{animation:tickIn 3s ease-in-out infinite;opacity:0}
+.ic-mag .tick rect:nth-child(1){animation-delay:0s}
+.ic-mag .tick rect:nth-child(2){animation-delay:0.12s}
+.ic-mag .tick rect:nth-child(3){animation-delay:0.24s}
+.ic-mag .tick rect:nth-child(4){animation-delay:0.36s}
+@keyframes tickIn{0%,80%,100%{opacity:0}10%,70%{opacity:1}}
+/* 리서처 — radar sweep */
+.ic-radar .sweep{transform-origin:17px 17px;animation:radarSweep 2.6s linear infinite}
+@keyframes radarSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+/* 팩트체커 — stamp mark drop */
+.ic-stamp .stampmark{animation:stampPress 2.4s ease-in-out infinite;transform-origin:17px 17px}
+@keyframes stampPress{0%,55%,100%{opacity:0.35;transform:scale(1)}60%,80%{opacity:1;transform:scale(1.08)}}
+/* 트렌드 헌터 — tip pulse */
+.ic-wave .tip{animation:tipPulse 1.4s ease-in-out infinite}
+@keyframes tipPulse{0%,100%{opacity:0.6;transform:translateY(0)}50%{opacity:1;transform:translateY(-1px)}}
 /* DraftWriter — typing pulse (3 dots) */
 .ic-typing rect{animation:typingDot 1.2s ease-in-out infinite}
 .ic-typing rect:nth-child(2){animation-delay:0.15s}
@@ -403,45 +453,44 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 }
 .lane-head{
   display:flex;align-items:center;gap:10px;
-  font-size:12px;letter-spacing:1.5px;color:var(--cyan);
-  text-transform:uppercase;font-weight:700;
+  font-size:13px;letter-spacing:0.3px;color:var(--accent);
+  font-weight:700;
   margin-bottom:12px;
 }
 .lane-head .stage{
-  font-size:10px;color:var(--txt3);background:var(--bg2);
-  padding:3px 8px;border:1px solid var(--line);letter-spacing:1px;
+  font-size:11px;color:var(--txt2);background:var(--bg2);
+  padding:3px 8px;border:1px solid var(--line);letter-spacing:0.2px;font-weight:700;
 }
-.lane-head .num{margin-left:auto;color:var(--cyan);font-weight:700;font-size:20px}
+.lane-head .num{margin-left:auto;color:var(--accent);font-weight:800;font-size:22px;letter-spacing:-0.5px}
 .lane-bars{display:flex;flex-direction:column;gap:8px}
 .bar-row{
   display:grid;grid-template-columns:110px 1fr 42px;gap:10px;
   align-items:center;font-size:12px;
 }
-.bar-row .bk{color:var(--txt);letter-spacing:0.5px}
+.bar-row .bk{color:var(--txt);letter-spacing:0.2px;font-weight:600}
 .bar-row .bv{
   background:var(--bg2);height:11px;position:relative;
   border:1px solid var(--line);
 }
 .bar-row .bv::after{
   content:'';position:absolute;top:0;left:0;bottom:0;
-  background:linear-gradient(90deg,var(--cyan2),var(--cyan));
+  background:linear-gradient(90deg,var(--accent2),var(--accent));
   width:var(--w,0%);
-  box-shadow:0 0 8px rgba(94,229,255,0.5);
+  box-shadow:0 0 4px rgba(94,229,255,0.3);
 }
 .bar-row .bn{color:var(--cyan);font-weight:700;text-align:right;font-size:13px}
-.lane.amber .lane-head{color:var(--amber)}
-.lane.amber .bv::after{background:linear-gradient(90deg,#a86b00,var(--amber));box-shadow:0 0 8px rgba(255,200,87,0.4)}
-.lane.amber .bn{color:var(--amber)}
-.lane.amber::before{border-color:var(--amber)}
-.lane.green .lane-head{color:var(--green)}
-.lane.green .bv::after{background:linear-gradient(90deg,#1f8a4a,var(--green));box-shadow:0 0 8px rgba(124,255,178,0.4)}
-.lane.green .bn{color:var(--green)}
-.lane.green::before{border-color:var(--green)}
-.lane.magenta .lane-head{color:var(--magenta)}
-.lane.magenta .bv::after{background:linear-gradient(90deg,#7a2db5,var(--magenta));box-shadow:0 0 8px rgba(217,108,255,0.4)}
-.lane.magenta .bn{color:var(--magenta)}
-.lane.magenta::before{border-color:var(--magenta)}
-.lane-empty{font-size:12px;color:var(--txt3);padding:10px 0;letter-spacing:0.5px;text-align:center}
+.lane.amber .lane-head{color:var(--cat-premium)}
+.lane.amber .bv::after{background:linear-gradient(90deg,#7a6840,var(--cat-premium));box-shadow:0 0 3px rgba(200,169,106,0.3)}
+.lane.amber .bn{color:var(--cat-premium)}
+.lane.amber::before{border-color:var(--cat-premium)}
+.lane.green .lane-head{color:var(--cat-news)}
+.lane.green .bv::after{background:linear-gradient(90deg,#3f7a64,var(--cat-news));box-shadow:0 0 3px rgba(143,201,179,0.3)}
+.lane.green .bn{color:var(--cat-news)}
+.lane.green::before{border-color:var(--cat-news)}
+.lane.magenta .lane-head{color:var(--cat-b2b)}
+.lane.magenta .bv::after{background:linear-gradient(90deg,#5f4080,var(--cat-b2b));box-shadow:0 0 3px rgba(184,156,214,0.3)}
+.lane.magenta .bn{color:var(--cat-b2b)}
+.lane.magenta::before{border-color:var(--cat-b2b)}
 .lane-arrow{
   text-align:center;color:var(--txt3);font-size:13px;
   letter-spacing:2px;line-height:1;margin:-2px 0;
@@ -452,7 +501,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .ops-card{
   background:linear-gradient(180deg,var(--panel),var(--bg2));
   border:1px solid var(--line);
-  padding:14px 14px;position:relative;
+  padding:12px 14px;position:relative;
 }
 .ops-card::before{
   content:'';position:absolute;top:0;left:0;width:10px;height:10px;
@@ -462,23 +511,32 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   content:'';position:absolute;bottom:0;right:0;width:10px;height:10px;
   border-bottom:2px solid var(--cyan2);border-right:2px solid var(--cyan2);
 }
-.ops-card.amber::before{border-color:var(--amber)}
-.ops-card.amber::after{border-color:var(--amber)}
-.ops-card.green::before{border-color:var(--green)}
-.ops-card.green::after{border-color:var(--green)}
-.ops-card.magenta::before{border-color:var(--magenta)}
-.ops-card.magenta::after{border-color:var(--magenta)}
-.ops-card.gold::before{border-color:var(--gold)}
-.ops-card.gold::after{border-color:var(--gold)}
+.ops-card.amber::before{border-color:var(--cat-premium)}
+.ops-card.amber::after{border-color:var(--cat-premium)}
+.ops-card.brief::before{border-color:var(--cat-brief)}
+.ops-card.brief::after{border-color:var(--cat-brief)}
+.ops-card.green::before{border-color:var(--cat-news)}
+.ops-card.green::after{border-color:var(--cat-news)}
+.ops-card.magenta::before{border-color:var(--cat-b2b)}
+.ops-card.magenta::after{border-color:var(--cat-b2b)}
+.ops-card.gold::before{border-color:var(--cat-weekly)}
+.ops-card.gold::after{border-color:var(--cat-weekly)}
+.ops-card.cta::before{border-color:var(--cat-cta)}
+.ops-card.cta::after{border-color:var(--cat-cta)}
+.ops-card.is-empty{padding:10px 12px}
+.ops-card.is-empty .ops-head .big{font-size:18px;color:var(--txt2)}
+.ops-card.is-empty .ops-mini{display:none}
 .ops-head{
   display:flex;align-items:center;gap:8px;margin-bottom:12px;
-  font-size:13px;letter-spacing:1.5px;text-transform:uppercase;
-  color:var(--cyan);font-weight:700;
+  font-size:13px;letter-spacing:0.3px;
+  color:var(--accent);font-weight:700;
 }
-.ops-card.amber .ops-head{color:var(--amber)}
-.ops-card.green .ops-head{color:var(--green)}
-.ops-card.magenta .ops-head{color:var(--magenta)}
-.ops-card.gold .ops-head{color:var(--gold)}
+.ops-card.amber .ops-head{color:var(--cat-premium)}
+.ops-card.brief .ops-head{color:var(--cat-brief)}
+.ops-card.green .ops-head{color:var(--cat-news)}
+.ops-card.magenta .ops-head{color:var(--cat-b2b)}
+.ops-card.gold .ops-head{color:var(--cat-weekly)}
+.ops-card.cta .ops-head{color:var(--cat-cta)}
 .ops-head .big{
   margin-left:auto;font-size:30px;font-weight:700;letter-spacing:1px;line-height:1;
 }
@@ -490,11 +548,13 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   background:var(--bg2);border:1px solid var(--line);
   padding:4px 9px;color:var(--txt);font-weight:600;font-size:12px;
 }
-.ops-row .pill b{color:var(--cyan);margin-right:4px}
-.ops-card.amber .ops-row .pill b{color:var(--amber)}
-.ops-card.green .ops-row .pill b{color:var(--green)}
-.ops-card.magenta .ops-row .pill b{color:var(--magenta)}
-.ops-card.gold .ops-row .pill b{color:var(--gold)}
+.ops-row .pill b{color:var(--accent);margin-right:4px}
+.ops-card.amber .ops-row .pill b{color:var(--cat-premium)}
+.ops-card.brief .ops-row .pill b{color:var(--cat-brief)}
+.ops-card.green .ops-row .pill b{color:var(--cat-news)}
+.ops-card.magenta .ops-row .pill b{color:var(--cat-b2b)}
+.ops-card.gold .ops-row .pill b{color:var(--cat-weekly)}
+.ops-card.cta .ops-row .pill b{color:var(--cat-cta)}
 .ops-mini{
   display:flex;flex-direction:column;gap:6px;margin-top:10px;
 }
@@ -503,13 +563,29 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   font-size:12px;padding:9px 10px;background:var(--bg2);
   border-left:3px solid var(--cyan);
 }
-.ops-card.amber .ops-mini-item{border-left-color:var(--amber)}
-.ops-card.magenta .ops-mini-item{border-left-color:var(--magenta)}
-.ops-card.gold .ops-mini-item{border-left-color:var(--gold)}
+.ops-card.amber .ops-mini-item{border-left-color:var(--cat-premium)}
+.ops-card.brief .ops-mini-item{border-left-color:var(--cat-brief)}
+.ops-card.green .ops-mini-item{border-left-color:var(--cat-news)}
+.ops-card.magenta .ops-mini-item{border-left-color:var(--cat-b2b)}
+.ops-card.gold .ops-mini-item{border-left-color:var(--cat-weekly)}
+.ops-card.cta .ops-mini-item{border-left-color:var(--cat-cta)}
 .ops-mini-item .id{color:var(--txt3);font-weight:700;font-size:11px;min-width:34px}
 .ops-mini-item .txt{color:var(--txt);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .ops-mini-item .meta{color:var(--gold);font-weight:700;font-size:12px}
-.ops-empty{font-size:12px;color:var(--txt3);text-align:center;padding:14px 0;letter-spacing:1px}
+.ops-empty{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;color:var(--txt2);
+  padding:5px 10px;background:var(--bg2);border:1px dashed var(--line);
+  letter-spacing:0.2px;
+}
+.ops-empty::before{content:'▢';color:var(--txt3);font-size:10px}
+.lane-empty{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;color:var(--txt2);
+  padding:6px 10px;background:var(--bg2);border:1px dashed var(--line);
+  margin-top:4px;
+}
+.lane-empty::before{content:'▢';color:var(--txt3);font-size:10px}
 
 /* ─── Lucky Cat Mascot (pixel SVG, no images) ─────────────── */
 .cat-wrap{
@@ -613,6 +689,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
           <div class="label" id="home-state">--</div>
           <div class="sub" id="home-state-sub">신호 대기 중</div>
         </div>
+        <div class="hero-summary" id="home-summary">
+          <span>초안 <b>—</b></span>
+          <span>승인 대기 <b>—</b></span>
+          <span>프리미엄 <b>—</b></span>
+          <span>B2B <b>—</b></span>
+        </div>
         <div class="hero-meta" id="home-meta">
           <span>DB <b>—</b></span>
           <span>텔레그램 <b>—</b></span>
@@ -635,15 +717,6 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
       <div class="kpi magenta"><div class="k-label">B2B</div>
         <div class="k-val" id="kpi-b2b">—</div>
         <div class="k-sub" id="kpi-b2b-sub">후보</div></div>
-    </div>
-
-    <div class="strip">
-      <div class="strip-cell"><div class="lbl">뉴스레터</div>
-        <div class="val" id="strip-nl">—</div></div>
-      <div class="strip-cell"><div class="lbl">리드 자료</div>
-        <div class="val" id="strip-lead">—</div></div>
-      <div class="strip-cell"><div class="lbl">연결된 CTA</div>
-        <div class="val" id="strip-cta">—</div></div>
     </div>
 
     <div class="panel"><div class="panel-head">이번 주 하이라이트
@@ -703,6 +776,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
           </g>
         </svg>
       </div>
+    </div>
+
+    <div class="strip">
+      <div class="strip-cell"><div class="lbl">뉴스레터</div>
+        <div class="val" id="strip-nl">—</div></div>
+      <div class="strip-cell"><div class="lbl">리드 자료</div>
+        <div class="val" id="strip-lead">—</div></div>
+      <div class="strip-cell"><div class="lbl">연결된 CTA</div>
+        <div class="val" id="strip-cta">—</div></div>
     </div>
 
   </div>
@@ -820,6 +902,19 @@ function renderHome(){
     `<span>X ${mark(h.x_configured)}</span>`+
     `<span>유휴 <b>${a.hours_idle!=null?a.hours_idle+'시간':'—'}</b></span>`;
 
+  // hero summary line
+  const w0 = b && b.weekly || {};
+  const pr0 = (b && b.premium && b.premium.total) || 0;
+  const b2b0 = (b && b.b2b && b.b2b.total) || 0;
+  const sum = $('#home-summary');
+  if(sum){
+    sum.innerHTML =
+      `<span>초안 <b>${w0.total_drafts ?? 0}</b></span>`+
+      `<span>승인 대기 <b>${q.pending_count ?? 0}</b></span>`+
+      `<span>프리미엄 <b>${pr0}</b></span>`+
+      `<span>B2B <b>${b2b0}</b></span>`;
+  }
+
   // KPIs
   const w = b && b.weekly || {};
   $('#kpi-drafts').textContent = w.total_drafts ?? 0;
@@ -855,43 +950,62 @@ function renderHome(){
 
 /* ─── Render: AI WORKSTATIONS ─────────────────────────────── */
 const ROLE_ICONS = {
-  DraftWriter: `<svg class="ic-pixel ic-typing" viewBox="0 0 34 34">
-    <rect x="6" y="22" width="4" height="4"/>
-    <rect x="15" y="22" width="4" height="4"/>
-    <rect x="24" y="22" width="4" height="4"/>
-    <rect x="4" y="6" width="26" height="2" fill="rgba(94,229,255,0.4)"/>
-    <rect x="4" y="11" width="20" height="2" fill="rgba(94,229,255,0.3)"/>
-    <rect x="4" y="16" width="14" height="2" fill="rgba(94,229,255,0.3)"/>
+  // 드래프트 작성 — document frame + text lines + blinking cursor
+  DraftWriter: `<svg class="ic-pixel ic-doc" viewBox="0 0 34 34">
+    <rect x="6" y="4" width="20" height="26" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+    <rect x="22" y="4" width="4" height="4" fill="var(--accent)" opacity="0.5"/>
+    <rect x="9" y="10" width="14" height="1.5" fill="var(--accent)" opacity="0.7"/>
+    <rect x="9" y="14" width="11" height="1.5" fill="var(--accent)" opacity="0.55"/>
+    <rect x="9" y="18" width="13" height="1.5" fill="var(--accent)" opacity="0.55"/>
+    <rect x="9" y="22" width="7" height="1.5" fill="var(--accent)" opacity="0.55"/>
+    <rect class="cursor" x="17" y="22" width="2" height="2" fill="var(--accent)"/>
   </svg>`,
-  Reviewer: `<svg class="ic-pixel ic-eye" viewBox="0 0 34 34">
-    <rect x="6" y="14" width="22" height="6" fill="none" stroke="rgba(94,229,255,0.6)" stroke-width="2"/>
-    <rect x="14" y="13" width="6" height="8" fill="var(--cyan)"/>
-    <rect x="6" y="13" width="22" height="3" class="lid" fill="var(--bg2)" style="transform-origin:center"/>
-  </svg>`,
-  Researcher: `<svg class="ic-pixel ic-scan" viewBox="0 0 34 34" overflow="hidden">
-    <rect x="4" y="6" width="26" height="22" fill="none" stroke="rgba(94,229,255,0.4)" stroke-width="1"/>
-    <rect x="7" y="10" width="3" height="3"/><rect x="13" y="10" width="3" height="3"/>
-    <rect x="19" y="10" width="3" height="3" fill="rgba(94,229,255,0.3)"/>
-    <rect x="7" y="16" width="3" height="3" fill="rgba(94,229,255,0.3)"/>
-    <rect x="13" y="16" width="3" height="3"/><rect x="19" y="16" width="3" height="3"/>
-    <rect x="7" y="22" width="3" height="3" fill="rgba(94,229,255,0.3)"/>
-    <rect x="4" y="6" width="2" height="22" class="line" fill="rgba(94,229,255,0.7)"/>
-  </svg>`,
-  FactChecker: `<svg class="ic-pixel ic-check" viewBox="0 0 34 34">
-    <rect x="5" y="5" width="24" height="24" fill="none" stroke="rgba(94,229,255,0.4)" stroke-width="1"/>
-    <g class="check">
-      <rect x="9" y="16" width="3" height="3"/>
-      <rect x="12" y="19" width="3" height="3"/>
-      <rect x="15" y="16" width="3" height="3"/>
-      <rect x="18" y="13" width="3" height="3"/>
-      <rect x="21" y="10" width="3" height="3"/>
+  // 리뷰어 — magnifier (circle + handle) + inner check tick
+  Reviewer: `<svg class="ic-pixel ic-mag" viewBox="0 0 34 34">
+    <circle cx="14" cy="14" r="8" fill="none" stroke="var(--accent)" stroke-width="1.8"/>
+    <rect x="20" y="20" width="3" height="9" fill="var(--accent)" transform="rotate(-45 21.5 24.5)"/>
+    <g class="tick">
+      <rect x="11" y="14" width="2" height="2" fill="var(--accent)"/>
+      <rect x="13" y="16" width="2" height="2" fill="var(--accent)"/>
+      <rect x="15" y="14" width="2" height="2" fill="var(--accent)"/>
+      <rect x="17" y="12" width="2" height="2" fill="var(--accent)"/>
     </g>
   </svg>`,
-  TrendHunter: `<svg class="ic-pixel ic-pulse" viewBox="0 0 34 34">
-    <rect x="15" y="15" width="4" height="4" fill="var(--cyan)"/>
-    <circle cx="17" cy="17" r="6" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
-    <circle cx="17" cy="17" r="6" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
-    <circle cx="17" cy="17" r="6" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+  // 리서처 — radar frame (corners) + sweeping line + center dot
+  Researcher: `<svg class="ic-pixel ic-radar" viewBox="0 0 34 34">
+    <rect x="4" y="4" width="6" height="2" fill="var(--accent)"/><rect x="4" y="4" width="2" height="6" fill="var(--accent)"/>
+    <rect x="24" y="4" width="6" height="2" fill="var(--accent)"/><rect x="28" y="4" width="2" height="6" fill="var(--accent)"/>
+    <rect x="4" y="28" width="6" height="2" fill="var(--accent)"/><rect x="4" y="24" width="2" height="6" fill="var(--accent)"/>
+    <rect x="24" y="28" width="6" height="2" fill="var(--accent)"/><rect x="28" y="24" width="2" height="6" fill="var(--accent)"/>
+    <circle cx="17" cy="17" r="9" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.35"/>
+    <circle cx="17" cy="17" r="5" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.35"/>
+    <rect x="16" y="16" width="2" height="2" fill="var(--accent)"/>
+    <line class="sweep" x1="17" y1="17" x2="17" y2="7" stroke="var(--accent)" stroke-width="1.5"/>
+  </svg>`,
+  // 팩트체커 — stamp square + bold checkmark + baseline
+  FactChecker: `<svg class="ic-pixel ic-stamp" viewBox="0 0 34 34">
+    <rect x="5" y="6" width="24" height="20" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+    <rect x="5" y="28" width="24" height="2" fill="var(--accent)" opacity="0.6"/>
+    <g class="stampmark">
+      <rect x="9" y="16" width="3" height="3" fill="var(--accent)"/>
+      <rect x="12" y="19" width="3" height="3" fill="var(--accent)"/>
+      <rect x="15" y="16" width="3" height="3" fill="var(--accent)"/>
+      <rect x="18" y="13" width="3" height="3" fill="var(--accent)"/>
+      <rect x="21" y="10" width="3" height="3" fill="var(--accent)"/>
+    </g>
+  </svg>`,
+  // 트렌드 헌터 — pixel waveform + tip pulse dot
+  TrendHunter: `<svg class="ic-pixel ic-wave" viewBox="0 0 34 34">
+    <rect x="3" y="20" width="3" height="3" fill="var(--accent)" opacity="0.5"/>
+    <rect x="6" y="17" width="3" height="3" fill="var(--accent)" opacity="0.6"/>
+    <rect x="9" y="14" width="3" height="3" fill="var(--accent)" opacity="0.7"/>
+    <rect x="12" y="18" width="3" height="3" fill="var(--accent)" opacity="0.7"/>
+    <rect x="15" y="11" width="3" height="3" fill="var(--accent)" opacity="0.85"/>
+    <rect x="18" y="15" width="3" height="3" fill="var(--accent)" opacity="0.85"/>
+    <rect x="21" y="8" width="3" height="3" fill="var(--accent)"/>
+    <rect x="24" y="11" width="3" height="3" fill="var(--accent)"/>
+    <rect class="tip" x="27" y="6" width="4" height="4" fill="var(--accent)"/>
+    <rect x="3" y="28" width="28" height="1" fill="var(--accent)" opacity="0.3"/>
   </svg>`,
 };
 
@@ -1000,8 +1114,8 @@ function renderOps(){
   const pills = (obj,limit=4)=>Object.entries(obj||{}).slice(0,limit)
     .map(([k,v])=>`<span class="pill"><b>${v}</b>${escapeHTML(k)}</span>`).join('');
 
-  const card = (cls,title,big,rowsHTML,miniHTML='')=>`
-    <div class="ops-card ${cls}">
+  const card = (cls,title,big,rowsHTML,miniHTML='',isEmpty=false)=>`
+    <div class="ops-card ${cls}${isEmpty?' is-empty':''}">
       <div class="ops-head">${title}<span class="big">${big}</span></div>
       ${rowsHTML}
       ${miniHTML}
@@ -1016,7 +1130,7 @@ function renderOps(){
      </div>`).join('') || '<div class="ops-empty">후보 없음</div>';
   const premiumCard = card('amber','프리미엄 큐', pr.total||0,
     `<div class="ops-row">${pills(pr.status)||'<span class="ops-empty">비어 있음</span>'}</div>`,
-    `<div class="ops-mini">${premiumMini}</div>`);
+    `<div class="ops-mini">${premiumMini}</div>`, !(pr.total));
 
   // BRIEF
   const briefRows = `
@@ -1025,7 +1139,7 @@ function renderOps(){
     ${Object.keys(br.tiers||{}).length?`<div class="ops-row">${pills(br.tiers,3)}</div>`:''}
     ${br.ready_count?`<div class="ops-row"><span class="pill" style="border-color:var(--green)"><b style="color:var(--green)">${br.ready_count}</b>발행 준비 완료</span></div>`:''}
   `;
-  const briefCard = card('amber','브리프 오퍼', br.total||0, briefRows);
+  const briefCard = card('brief','브리프 오퍼', br.total||0, briefRows, '', !(br.total));
 
   // B2B
   const b2bRows = `
@@ -1033,7 +1147,7 @@ function renderOps(){
     ${Object.keys(bb.audience||{}).length?`<div class="ops-row">${pills(bb.audience,3)}</div>`:''}
     ${Object.keys(bb.use_case||{}).length?`<div class="ops-row">${pills(bb.use_case,3)}</div>`:''}
   `;
-  const b2bCard = card('magenta','B2B 후보', bb.total||0, b2bRows);
+  const b2bCard = card('magenta','B2B 후보', bb.total||0, b2bRows, '', !(bb.total));
 
   // NEWSLETTER + LEAD
   const nlRows = `
@@ -1044,7 +1158,8 @@ function renderOps(){
     ${Object.keys(nl.bucket||{}).length?`<div class="ops-row">${pills(nl.bucket,4)}</div>`:''}
     ${Object.keys(nl.lead_types||{}).length?`<div class="ops-row">${pills(nl.lead_types,3)}</div>`:''}
   `;
-  const nlCard = card('green','뉴스레터 · 리드', (nl.newsletter_total||0)+(nl.lead_total||0), nlRows);
+  const nlTotal = (nl.newsletter_total||0)+(nl.lead_total||0);
+  const nlCard = card('green','뉴스레터 · 리드', nlTotal, nlRows, '', !nlTotal);
 
   // WEEKLY HIGHLIGHTS
   const hlMini = (w.highlights||[]).slice(0,3).map(h=>
@@ -1062,7 +1177,7 @@ function renderOps(){
     </div>`;
   const weeklyCard = card('gold','주간 하이라이트', w.period_days?(w.period_days+'일'):'7일',
     weeklyRows,
-    `<div class="ops-mini">${hlMini}</div>`);
+    `<div class="ops-mini">${hlMini}</div>`, !(w.total_drafts));
 
   // CTA PERFORMANCE
   const ctaMini = (cta.top||[]).slice(0,3).map(c=>{
@@ -1082,8 +1197,8 @@ function renderOps(){
     </div>
     ${cta.notable_count?`<div class="ops-row"><span class="pill" style="border-color:var(--gold)"><b style="color:var(--gold)">${cta.notable_count}</b>주목</span></div>`:''}
   `;
-  const ctaCard = card('magenta','CTA 성과', cta.linked_copies||0, ctaRows,
-    `<div class="ops-mini">${ctaMini}</div>`);
+  const ctaCard = card('cta','CTA 성과', cta.linked_copies||0, ctaRows,
+    `<div class="ops-mini">${ctaMini}</div>`, !(cta.linked_copies));
 
   $('#ops-grid').innerHTML = premiumCard + briefCard + b2bCard + nlCard + weeklyCard + ctaCard;
   const now = new Date();

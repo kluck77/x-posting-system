@@ -1,6 +1,20 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard Refinement (S19)
+## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard Final Polish (S20)
+
+**S20 — Final product polish on top of S18(rebuild)+S19(refinement). `static/dashboard.html` only.**
+- **Color tokens redesigned with semantic separation**: single brand `--accent`, status colors (`--ok/--warn/--danger`) reserved for real system state, six lite category tokens (`--cat-premium/-brief/-b2b/-news/-weekly/-cta`) for section identity. Status and category colors no longer compete.
+- **Glow / effect intensity reduced**: scanline 0.012→0.008, grid lines 0.045→0.030, text-shadow 14px·0.4→8px·0.25, bar glow 8px→4px, ws-icon radial 0.18→0.10. Less amateur-HUD, more polished product.
+- **Typography for scan speed**: small labels above large numbers enlarged + brightened (KPI label 11→13px, txt3→txt2/600), weights bumped (kpi-val/strip-val/ws-role 700→800), letter-spacing tightened to 0.2–0.3px (Korean-friendly), uppercase removed.
+- **AI icons replaced** with role-distinct pixel HUD shapes: document+cursor / magnifier+tick / radar sweep / stamp+check / waveform+pulse. Single accent color, distinction by shape.
+- **Empty-state compression**: unified `▢` chip with dashed border for empty/ops-empty/lane-empty. Ops cards auto-collapse to `.is-empty` (smaller padding, dimmed big number, mini hidden) when zero.
+- **Home hierarchy refined**: new hero summary line (초안·승인 대기·프리미엄·B2B), Weekly Highlights moved up above strip, hero meta separated by dashed border.
+- **Active tab strengthened**: weight 700→800, icon 20→22px, top-line 24→32px, subtle background gradient.
+- Lucky cat S19 state machine preserved unchanged.
+
+Branches synced: `claude/extract-prediction-time-n82UK` and `claude/premium-control-room-ui-LJFba`.
+
+## ⚠️ PREVIOUS PHASE: Pixel HUD Dashboard Refinement (S19)
 
 **S19 — Refinement on top of S18 dashboard (`static/dashboard.html` only):**
 - Full Korean UI localization (chrome / Home / AI / Intake / Ops, all operator-facing text)
