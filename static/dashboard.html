@@ -4816,14 +4816,7 @@ body::before, body::after{display:none !important}
 #ws-grid.v28 .ws28-b .ln .k{font-size:8px;min-width:22px;padding-top:3px}
 #ws-grid.v28 .ws28-b .ln.next{font-size:9.5px !important}
 
-/* zone c */
-#ws-grid.v28 .ws28-c{padding-left:6px !important;gap:2px !important}
-#ws-grid.v28 .ws28-c .runs{font-size:20px !important}
-#ws-grid.v28 .ws28-c .lbl{font-size:8px}
-#ws-grid.v28 .ws28-c .strip{height:11px;margin-top:2px}
-#ws-grid.v28 .ws28-c .strip i.hi{height:11px}
-#ws-grid.v28 .ws28-c .strip i.md{height:7px}
-#ws-grid.v28 .ws28-c .strip i.lo{height:3px}
+/* zone c — S49: stale overrides removed, S37 rebuild is the source of truth */
 
 /* ── Intake ── */
 #intake-flow-narrative.ifn{padding:9px 12px !important;margin-bottom:9px !important}
@@ -5837,14 +5830,11 @@ html body .hud-main #page-ai #ws-grid.v28{
   color:var(--txt3) !important;line-height:1.35;margin-top:0 !important;
 }
 
-/* (5) AI — station card compression: tighter padding, calmer line-height */
+/* (5) AI — station card compression: tighter padding, calmer line-height
+   S49: stale 3-col grid removed. S37 rebuild (58px 1fr, icon/info/meta areas)
+   is the source of truth. The old 88px/1fr/108px left a hidden 108px dead
+   column and kept .ws28-c styled as a right rail with border-left. Deleted. */
 #ws-grid.v28{padding-left:34px !important}
-#ws-grid.v28 .ws28{
-  padding:11px 10px 11px 0 !important;
-  grid-template-columns:88px 1fr 108px !important;
-  column-gap:12px !important;align-items:center;
-}
-.ws28-icon{width:88px !important;height:62px !important}
 .ws28-info{gap:5px !important}
 .ws28-a{gap:8px !important}
 .ws28-role{font-size:12px !important;letter-spacing:0.1px}
@@ -5883,28 +5873,11 @@ html body .hud-main #page-ai #ws-grid.v28{
   left:0 !important;font-size:8px !important;opacity:0.35 !important;
 }
 
-/* (7) AI — right today/runs/chart alignment polish */
-.ws28-c{
-  padding-left:10px !important;gap:4px !important;
-  align-items:flex-end;justify-content:center;
-  border-left:1px dashed var(--line) !important;
-  min-height:54px;
-}
-.ws28-c .runs{
-  font-size:21px !important;line-height:1 !important;
-  font-feature-settings:"tnum";letter-spacing:-0.5px;
-}
-.ws28-c .lbl{
-  font-size:8.5px !important;letter-spacing:0.6px;
-  color:var(--txt3);margin-top:1px;
-}
-.ws28-c .strip{
-  height:12px !important;margin-top:3px !important;gap:2px !important;
-}
-.ws28-c .strip i{width:3px !important;border-radius:1px}
-.ws28-c .strip i.lo{height:3px !important}
-.ws28-c .strip i.md{height:7px !important}
-.ws28-c .strip i.hi{height:11px !important}
+/* (7) AI — right today/runs/chart alignment polish
+   S49: deleted. The entire .ws28-c right-rail block (border-left dashed,
+   min-height:54px, align-items:flex-end, smaller runs/lbl/strip) was
+   defining .ws28-c as a left-bordered right rail while S37 had already
+   moved .ws28-c to a bottom meta row under .ws28-info. Stale. */
 
 /* (8) common typography normalization on Home + AI */
 #page-home, #page-ai{
@@ -5913,7 +5886,9 @@ html body .hud-main #page-ai #ws-grid.v28{
 #page-home .panel-hero .hl-row .hl-hook,
 #page-home .panel-hero .hl-row .hl-id{line-height:1.45}
 #page-home .hl-row{padding:7px 10px !important}
-#page-ai .ws28-a, #page-ai .ws28-b, #page-ai .ws28-c{align-items:center}
+/* S49: removed `#page-ai .ws28-a, .ws28-b, .ws28-c{align-items:center}` —
+   higher-specificity override was silently killing S37/S48 baseline alignment
+   and the 2-col grid's `align-items:start`. */
 
 /* ─── S35 — Page display truth + layout reset ─── */
 

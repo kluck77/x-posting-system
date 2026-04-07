@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S48 — AI 탭 마감 폴리시
+## LAST COMPLETED PHASE: Dashboard S49 — AI 카드 stale override 포렌식 제거
+
+`static/dashboard.html` 만. 삭제-온리. S31 블록이 S37의 2-col 재설계를 부분적으로 덮고 있었음을 포렌식으로 확인: `grid-template-columns:88px 1fr 108px` 가 108px dead column을 남기고, `.ws28-c` 를 border-left dashed 우측 rail로 재정의해 S37의 하단 meta 행과 충돌. 4820–4826, 5835–5840, 5879–5900, 5909 라인 삭제. 새 CSS 0줄 추가.
+
+## PREVIOUS: Dashboard S48 — AI 탭 마감 폴리시
 
 `static/dashboard.html` 만. AI 탭 한정. Micro chart 재튜닝(16px frame, 3.5px bars, baseline axis, 4/9/14 계단, opacity 단계), 우측 정보 모듈 baseline 공유 정렬(runs/lbl/chart), `#page-ai` 하단 여백 16→10px. 디자인/색/타이포 무변경.
 
