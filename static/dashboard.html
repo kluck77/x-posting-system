@@ -3135,5 +3135,132 @@ setInterval(refreshAll,30000);
   50%{box-shadow:0 0 0 3px rgba(127,179,230,0.28)}
 }
 </style>
+
+<script>
+/* ─── S27 — Demo mode (?demo=1) ───────────────────────────── */
+(function(){
+  const params = new URLSearchParams(location.search);
+  if(params.get('demo') !== '1') return;
+
+  // Replace fetchJSON to serve mock data, then refreshAll picks it up
+  const providers = ['grok','perplexity','gemini','openai','anthropic'];
+  const rand = (min,max)=>Math.floor(Math.random()*(max-min+1))+min;
+  const pick = a=>a[Math.floor(Math.random()*a.length)];
+
+  function mockStatus(){
+    return {
+      health:{db_ok:true, telegram_configured:true, x_configured:true},
+      activity:{is_idle:false, hours_idle:1},
+      queue:{pending:rand(2,6), approved:rand(1,4)},
+    };
+  }
+  function mockProviders(){
+    const tick = Math.floor(Date.now()/4000);
+    const roles = ['DraftWriter','Reviewer','Researcher','FactChecker','TrendHunter'];
+    return {
+      mock_mode:true,
+      roles: roles.map((role,i)=>({
+        role,
+        provider: providers[i],
+        configured: true,
+        runs_today: ((tick+i*2)%9) + (i===0?3:1),
+      })),
+    };
+  }
+  function mockBusiness(){
+    const tick = Math.floor(Date.now()/6000);
+    const jitter = (n,j)=>Math.max(0, n + ((tick+n)%j) - Math.floor(j/2));
+    return {
+      weekly:{
+        period_days:7,
+        total_drafts: jitter(34,6),
+        published: jitter(12,4),
+        approved: jitter(8,3),
+        pending: jitter(9,4),
+        rejected: jitter(5,3),
+        followup_count: jitter(4,2),
+        highlights:[
+          {draft_id:1042, hook:'Korea just flipped its semis playbook', monetization_score:87},
+          {draft_id:1048, hook:'Why Seoul startups are quietly eating Tokyo', monetization_score:79},
+          {draft_id:1051, hook:'The 3-line briefing US funds are saving', monetization_score:72},
+        ],
+      },
+      premium:{
+        total: jitter(7,3),
+        status:{candidate:4, reviewing:2, ready:1},
+        top:[
+          {id:1042, hook:'Korea just flipped its semis playbook', score:87},
+          {id:1048, hook:'Why Seoul startups are quietly eating Tokyo', score:79},
+        ],
+      },
+      brief:{
+        total: jitter(5,3),
+        ready_count: jitter(2,2),
+        status:{draft:3, ready:2},
+        types:{macro:2, sector:2, deal:1},
+        tiers:{standard:3, pro:2},
+      },
+      b2b:{
+        total: jitter(4,3),
+        status:{draft:2, sampled:1, pitched:1},
+        audience:{'US funds':2, 'JP desks':1, 'SEA VC':1},
+        use_case:{'weekly brief':2, 'deal memo':1, 'market map':1},
+      },
+      newsletter:{
+        newsletter_total: jitter(9,3),
+        lead_total: jitter(6,3),
+        bucket:{'macro':3,'tech':3,'policy':2,'deal':1},
+        lead_types:{'fund':2,'corp':2,'media':2},
+      },
+      cta_perf:{
+        linked_copies: jitter(6,3),
+        unlinked_copies: jitter(3,2),
+        total_linked_drafts: jitter(14,4),
+        total_published: jitter(9,3),
+        notable_count: jitter(2,2),
+        top:[
+          {id:21, type:'newsletter', text:'주간 브리프 무료 구독', linked:5, published:4, active:true},
+          {id:23, type:'b2b', text:'샘플 리포트 요청하기', linked:3, published:2, active:true},
+          {id:27, type:'premium', text:'프리미엄 대기열 합류', linked:2, published:1, active:false},
+        ],
+      },
+    };
+  }
+  function mockNews(){
+    return {items:[
+      {title:'Samsung HBM4 ramp earlier than expected', source:'Reuters'},
+      {title:'BOK holds; flags FX volatility', source:'Bloomberg'},
+      {title:'Coupang logistics margin surprise', source:'FT'},
+    ]};
+  }
+  function mockFlow(){
+    return {items:[]};
+  }
+
+  const origFetch = window.fetchJSON;
+  window.fetchJSON = async function(url){
+    if(url.startsWith('/control/status')) return mockStatus();
+    if(url.startsWith('/control/providers')) return mockProviders();
+    if(url.startsWith('/control/business-summary')) return mockBusiness();
+    if(url.startsWith('/control/recent-news')) return mockNews();
+    if(url.startsWith('/control/flow-trace')) return mockFlow();
+    return origFetch ? origFetch(url) : null;
+  };
+
+  // visible demo badge
+  const badge = document.createElement('div');
+  badge.textContent = 'DEMO MODE · 목 데이터';
+  badge.style.cssText = 'position:fixed;top:6px;right:8px;z-index:9999;'
+    +'font-size:10px;letter-spacing:0.4px;padding:3px 8px;'
+    +'background:var(--warn);color:#1a1408;border-radius:2px;'
+    +'font-weight:700;opacity:0.85';
+  document.body.appendChild(badge);
+
+  // force an immediate refresh with new mock fetcher
+  if(typeof refreshAll === 'function') refreshAll();
+  // faster tick in demo so 숫자가 살아 움직이게
+  setInterval(()=>{ if(typeof refreshAll==='function') refreshAll(); }, 4000);
+})();
+</script>
 </body>
 </html>
