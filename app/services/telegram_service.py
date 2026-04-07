@@ -266,6 +266,35 @@ async def send_approval_card(draft: Draft, source_url: str | None = None) -> int
         return None
 
 
+async def _translate_to_korean(text: str) -> str | None:
+    """
+    Gemini Flash로 영문 텍스트를 한국어로 번역합니다. (Layer 2 — 실패 시 None)
+    """
+    if not settings.has_gemini or not text:
+        return None
+    try:
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.0-flash:generateContent?key={settings.gemini_api_key}"
+        )
+        prompt = (
+            "Translate the following English X/Twitter post into natural, concise Korean. "
+            "Output ONLY the Korean translation — no quotes, no explanation.\n\n"
+            f"{text}"
+        )
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                url,
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+            )
+            r.raise_for_status()
+            data = r.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        logger.warning(f"[Translate] 한국어 번역 실패: {e}")
+        return None
+
+
 async def send_publish_confirmation(draft: Draft) -> None:
     """
     X에 게시 완료 후 텔레그램으로 확인 메시지를 보냅니다.
@@ -274,9 +303,17 @@ async def send_publish_confirmation(draft: Draft) -> None:
         logger.info(f"[MOCK 텔레그램] 게시 확인: draft_id={draft.id}, x_post_id={draft.x_post_id}")
         return
 
+    # 본문(hook + body)을 한국어로 번역 (Layer 2, 실패해도 진행)
+    original_text = f"{draft.hook}\n\n{draft.body}"
+    ko_translation = await _translate_to_korean(original_text)
+
     text = (
         f"✅ <b>POSTED TO X</b>\n\n"
-        f"📝 {draft.hook}\n\n"
+        f"📝 <b>원문:</b>\n{draft.hook}\n\n{draft.body}\n\n"
+    )
+    if ko_translation:
+        text += f"🇰🇷 <b>한국어:</b>\n{ko_translation}\n\n"
+    text += (
         f"🆔 Post ID: {draft.x_post_id}\n"
         f"🔗 {draft.x_post_url or 'URL not available'}\n"
         f"📊 Category: {draft.category.value} | Risk: {draft.risk_level.value}"
