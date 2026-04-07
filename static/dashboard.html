@@ -885,6 +885,65 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   .ops-summary{grid-template-columns:repeat(2,1fr)}
 }
 
+/* ─── Intake · flow feel (S21c) ───────────────────────────── */
+.flow-wrap{position:relative}
+.flow-wrap::before{
+  /* connector rail 전체 세로선 */
+  content:'';position:absolute;left:11px;top:14px;bottom:14px;width:2px;
+  background:linear-gradient(180deg,var(--cat-news),var(--cat-brief) 35%,var(--cat-premium) 65%,var(--cat-b2b));
+  opacity:0.25;
+  z-index:0;
+}
+.flow-wrap::after{
+  /* flowing pulse dot */
+  content:'';position:absolute;left:9px;width:6px;height:6px;
+  background:var(--accent);border-radius:0;
+  box-shadow:0 0 6px rgba(94,229,255,0.7);
+  animation:flowPulse 4s linear infinite;
+  z-index:1;
+}
+@keyframes flowPulse{
+  0%{top:14px;opacity:0}
+  10%{opacity:1}
+  90%{opacity:1}
+  100%{top:calc(100% - 20px);opacity:0}
+}
+@media (prefers-reduced-motion:reduce){
+  .flow-wrap::after{animation:none;display:none}
+}
+.lane{z-index:1}
+.lane .stage-dot{
+  box-shadow:0 0 0 3px var(--bg),0 0 8px color-mix(in srgb,var(--accent) 40%,transparent);
+}
+.lane.amber .stage-dot{box-shadow:0 0 0 3px var(--bg),0 0 8px color-mix(in srgb,var(--cat-premium) 50%,transparent)}
+.lane.green .stage-dot{box-shadow:0 0 0 3px var(--bg),0 0 8px color-mix(in srgb,var(--cat-news) 50%,transparent)}
+.lane.magenta .stage-dot{box-shadow:0 0 0 3px var(--bg),0 0 8px color-mix(in srgb,var(--cat-b2b) 50%,transparent)}
+.lane-head .flag{
+  font-size:10px;color:var(--txt3);font-weight:600;letter-spacing:0.2px;
+  padding:2px 6px;border:1px solid var(--line);background:var(--surface-2);
+  margin-left:6px;
+}
+.lane-head .flag.ok{color:var(--ok);border-color:rgba(124,255,178,0.35)}
+.lane-head .flag.wait{color:var(--warn);border-color:rgba(255,200,87,0.35)}
+
+/* Intake empty-pro specifically — tighter */
+.lane .empty-pro{margin-top:2px;padding:8px 10px}
+
+/* ─── Ops · operator summary (S21c) ───────────────────────── */
+@media (min-width:560px){
+  .ops-grid{grid-template-columns:repeat(2,1fr)}
+}
+.ops-card{display:flex;flex-direction:column}
+.ops-head{align-items:baseline}
+.ops-head .big{font-feature-settings:"tnum" 1}
+.ops-card .ops-row:last-of-type{margin-bottom:0}
+.ops-card.is-empty{min-height:auto}
+.ops-card .empty-pro{margin-top:2px;padding:9px 11px}
+
+/* ops mini list — compact */
+.ops-mini-item{padding:8px 10px}
+.ops-mini-item .id{font-size:10px}
+
 /* ─── AI workstation — role differentiation (S21b) ────────── */
 .ws-node{grid-template-columns:72px 1fr auto;gap:16px;padding:14px 16px 14px 20px;min-height:112px}
 .ws-node .ws-icon{width:72px;height:72px;border-width:1px;position:relative;overflow:hidden}
@@ -1490,12 +1549,12 @@ function renderAI(){
 }
 
 /* ─── Render: INTAKE FLOW ─────────────────────────────────── */
-function renderBars(containerId, dict, emptyText){
+function renderBars(containerId, dict, emptyText, emptyHint){
   const el = $('#'+containerId);
   if(!el) return;
   const entries = Object.entries(dict||{}).sort((a,b)=>b[1]-a[1]);
   if(!entries.length){
-    el.innerHTML = `<div class="lane-empty">${emptyText}</div>`;
+    el.innerHTML = `<div class="empty-pro"><div class="stack"><div class="t1">${emptyText}</div><div class="t2">${emptyHint||'데이터가 쌓이면 자동 표시'}</div></div></div>`;
     return;
   }
   const max = Math.max(...entries.map(e=>e[1])) || 1;
@@ -1525,14 +1584,14 @@ function renderIntake(){
     '반려': w.rejected||0,
   };
   $('#lane-content-n').textContent = w.total_drafts ?? 0;
-  renderBars('lane-content-bars', contentDict, '기간 내 초안 없음');
+  renderBars('lane-content-bars', contentDict, '기간 내 초안 없음', '소스 수집·작성 시 자동 누적');
 
   // Lane 2: Newsletter + Lead buckets
   const nlDict = {...(nl.bucket||{})};
   Object.entries(nl.lead_types||{}).forEach(([k,v])=>{ nlDict['리드·'+k]=v; });
   const nlTotal = (nl.newsletter_total||0)+(nl.lead_total||0);
   $('#lane-nl-n').textContent = nlTotal;
-  renderBars('lane-nl-bars', nlDict, '뉴스레터/리드 없음');
+  renderBars('lane-nl-bars', nlDict, '뉴스레터·리드 자산 없음', '버킷 또는 리드가 들어오면 표시');
 
   // Lane 3: Premium + B2B status
   const pbDict = {};
@@ -1540,14 +1599,14 @@ function renderIntake(){
   Object.entries(b2b.status||{}).forEach(([k,v])=>{ pbDict['B2B·'+k]=v; });
   const pbTotal = (pr.total||0)+(b2b.total||0);
   $('#lane-pb-n').textContent = pbTotal;
-  renderBars('lane-pb-bars', pbDict, '프리미엄/B2B 없음');
+  renderBars('lane-pb-bars', pbDict, '프리미엄·B2B 후보 없음', '수익 후보가 생기면 자동 노출');
 
   // Lane 4: CTA copies (top by linked)
   const ctaDict = {};
   (cta.top||[]).forEach(c=>{ ctaDict[`#${c.id}·${c.type}`] = c.linked; });
   if(cta.unlinked_copies) ctaDict['미연결'] = cta.unlinked_copies;
   $('#lane-cta-n').textContent = cta.linked_copies ?? 0;
-  renderBars('lane-cta-bars', ctaDict, 'CTA 카피 없음');
+  renderBars('lane-cta-bars', ctaDict, 'CTA 카피 연결 없음', '카피를 초안에 연결하면 표시');
 
   $('#intake-total').textContent = `총합 ${(w.total_drafts||0)+nlTotal+pbTotal}`;
 }
@@ -1561,40 +1620,67 @@ function renderOps(){
   const pills = (obj,limit=4)=>Object.entries(obj||{}).slice(0,limit)
     .map(([k,v])=>`<span class="pill"><b>${v}</b>${escapeHTML(k)}</span>`).join('');
 
-  const card = (cls,title,big,rowsHTML,miniHTML='',isEmpty=false)=>`
+  const chip = (state)=>{
+    const map = {ready:['ready','준비'],wait:['wait','대기'],empty:['empty','없음']};
+    const [cls,txt] = map[state]||map.empty;
+    return `<span class="state-chip ${cls}">${txt}</span>`;
+  };
+  const emptyBlock = (t1,t2)=>`<div class="empty-pro"><div class="stack"><div class="t1">${t1}</div><div class="t2">${t2}</div></div></div>`;
+
+  const card = (cls,title,big,rowsHTML,miniHTML='',isEmpty=false,chipState='',emptyHTML='')=>`
     <div class="ops-card ${cls}${isEmpty?' is-empty':''}">
-      <div class="ops-head">${title}<span class="big">${big}</span></div>
-      ${rowsHTML}
-      ${miniHTML}
+      <div class="ops-head">${title}${chipState?chip(chipState):''}<span class="big">${big}</span></div>
+      ${isEmpty?emptyHTML:(rowsHTML+miniHTML)}
     </div>`;
 
+  // summary bar
+  const totCand = (pr.total||0)+(bb.total||0);
+  const totReady = (w.published||0)+(br.ready_count||0);
+  const totWeek = (w.total_drafts||0);
+  $('#ops-sum-cand').textContent = totCand;
+  $('#ops-sum-cand').classList.toggle('dim', totCand===0);
+  $('#ops-sum-ready').textContent = totReady;
+  $('#ops-sum-ready').classList.toggle('dim', totReady===0);
+  $('#ops-sum-week').textContent = totWeek;
+  $('#ops-sum-week').classList.toggle('dim', totWeek===0);
+
   // PREMIUM
+  const prEmpty = !(pr.total);
   const premiumMini = (pr.top||[]).slice(0,3).map(t=>
     `<div class="ops-mini-item">
        <span class="id">#${t.id}</span>
        <span class="txt">${escapeHTML(t.hook)}</span>
        <span class="meta">💰${t.score||0}</span>
-     </div>`).join('') || '<div class="ops-empty">후보 없음</div>';
+     </div>`).join('');
   const premiumCard = card('amber','프리미엄 큐', pr.total||0,
-    `<div class="ops-row">${pills(pr.status)||'<span class="ops-empty">비어 있음</span>'}</div>`,
-    `<div class="ops-mini">${premiumMini}</div>`, !(pr.total));
+    `<div class="ops-row">${pills(pr.status)||''}</div>`,
+    premiumMini?`<div class="ops-mini">${premiumMini}</div>`:'',
+    prEmpty,
+    prEmpty?'empty':((pr.top||[]).length?'ready':'wait'),
+    emptyBlock('프리미엄 후보 없음','수익화 점수가 쌓이면 자동 승격'));
 
   // BRIEF
-  const briefRows = `
-    <div class="ops-row">${pills(br.status)||'<span class="ops-empty">브리프 없음</span>'}</div>
+  const brEmpty = !(br.total);
+  const briefRows = brEmpty ? '' : `
+    <div class="ops-row">${pills(br.status)||''}</div>
     ${Object.keys(br.types||{}).length?`<div class="ops-row">${pills(br.types,3)}</div>`:''}
     ${Object.keys(br.tiers||{}).length?`<div class="ops-row">${pills(br.tiers,3)}</div>`:''}
-    ${br.ready_count?`<div class="ops-row"><span class="pill" style="border-color:var(--green)"><b style="color:var(--green)">${br.ready_count}</b>발행 준비 완료</span></div>`:''}
+    ${br.ready_count?`<div class="ops-row"><span class="pill" style="border-color:var(--green)"><b style="color:var(--green)">${br.ready_count}</b>발행 준비</span></div>`:''}
   `;
-  const briefCard = card('brief','브리프 오퍼', br.total||0, briefRows, '', !(br.total));
+  const briefCard = card('brief','브리프 오퍼', br.total||0, briefRows, '', brEmpty,
+    brEmpty?'empty':(br.ready_count?'ready':'wait'),
+    emptyBlock('브리프 오퍼 없음','가격 티어 설정 후 자동 생성'));
 
   // B2B
-  const b2bRows = `
-    <div class="ops-row">${pills(bb.status)||'<span class="ops-empty">B2B 없음</span>'}</div>
+  const bbEmpty = !(bb.total);
+  const b2bRows = bbEmpty ? '' : `
+    <div class="ops-row">${pills(bb.status)||''}</div>
     ${Object.keys(bb.audience||{}).length?`<div class="ops-row">${pills(bb.audience,3)}</div>`:''}
     ${Object.keys(bb.use_case||{}).length?`<div class="ops-row">${pills(bb.use_case,3)}</div>`:''}
   `;
-  const b2bCard = card('magenta','B2B 후보', bb.total||0, b2bRows, '', !(bb.total));
+  const b2bCard = card('magenta','B2B 후보', bb.total||0, b2bRows, '', bbEmpty,
+    bbEmpty?'empty':'wait',
+    emptyBlock('B2B 후보 없음','샘플 리포트 작성 시 자동 등록'));
 
   // NEWSLETTER + LEAD
   const nlRows = `
@@ -1606,15 +1692,19 @@ function renderOps(){
     ${Object.keys(nl.lead_types||{}).length?`<div class="ops-row">${pills(nl.lead_types,3)}</div>`:''}
   `;
   const nlTotal = (nl.newsletter_total||0)+(nl.lead_total||0);
-  const nlCard = card('green','뉴스레터 · 리드', nlTotal, nlRows, '', !nlTotal);
+  const nlEmpty = !nlTotal;
+  const nlCard = card('green','뉴스레터 · 리드', nlTotal, nlRows, '', nlEmpty,
+    nlEmpty?'empty':'ready',
+    emptyBlock('뉴스레터·리드 자산 없음','버킷/리드가 들어오면 집계'));
 
   // WEEKLY HIGHLIGHTS
+  const weeklyEmpty = !(w.total_drafts);
   const hlMini = (w.highlights||[]).slice(0,3).map(h=>
     `<div class="ops-mini-item">
        <span class="id">#${h.draft_id}</span>
        <span class="txt">${escapeHTML(h.hook||'')}</span>
        <span class="meta">💰${h.monetization_score||0}</span>
-     </div>`).join('') || '<div class="ops-empty">하이라이트 없음</div>';
+     </div>`).join('');
   const weeklyRows = `
     <div class="ops-row">
       <span class="pill"><b>${w.total_drafts||0}</b>초안</span>
@@ -1624,9 +1714,13 @@ function renderOps(){
     </div>`;
   const weeklyCard = card('gold','주간 하이라이트', w.period_days?(w.period_days+'일'):'7일',
     weeklyRows,
-    `<div class="ops-mini">${hlMini}</div>`, !(w.total_drafts));
+    hlMini?`<div class="ops-mini">${hlMini}</div>`:'',
+    weeklyEmpty,
+    weeklyEmpty?'empty':((w.highlights||[]).length?'ready':'wait'),
+    emptyBlock('이번 주 하이라이트 없음','발행 후 점수가 누적되면 표시'));
 
   // CTA PERFORMANCE
+  const ctaEmpty = !(cta.linked_copies);
   const ctaMini = (cta.top||[]).slice(0,3).map(c=>{
     const status = c.active?'✦':'⏸';
     return `<div class="ops-mini-item">
@@ -1634,7 +1728,7 @@ function renderOps(){
        <span class="txt">${escapeHTML(c.text||'')}</span>
        <span class="meta">${c.linked}·${c.published}</span>
      </div>`;
-  }).join('') || '<div class="ops-empty">연결된 카피 없음</div>';
+  }).join('');
   const ctaRows = `
     <div class="ops-row">
       <span class="pill"><b>${cta.linked_copies||0}</b>연결</span>
@@ -1645,7 +1739,10 @@ function renderOps(){
     ${cta.notable_count?`<div class="ops-row"><span class="pill" style="border-color:var(--gold)"><b style="color:var(--gold)">${cta.notable_count}</b>주목</span></div>`:''}
   `;
   const ctaCard = card('cta','CTA 성과', cta.linked_copies||0, ctaRows,
-    `<div class="ops-mini">${ctaMini}</div>`, !(cta.linked_copies));
+    ctaMini?`<div class="ops-mini">${ctaMini}</div>`:'',
+    ctaEmpty,
+    ctaEmpty?'empty':(cta.notable_count?'ready':'wait'),
+    emptyBlock('CTA 카피 연결 없음','카피를 초안에 연결하면 성과 집계'));
 
   $('#ops-grid').innerHTML = premiumCard + briefCard + b2bCard + nlCard + weeklyCard + ctaCard;
   const now = new Date();
