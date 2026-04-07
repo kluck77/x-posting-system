@@ -1,4 +1,14 @@
-# Current Session — 2026-04-07 (Session 51 — Forensic)
+# Current Session — 2026-04-07 (Session 52)
+
+## S52 — AI 카드 아이콘 왼쪽 gutter 미세 정리 (1줄)
+
+**원인**: `#ws-grid.v28 { padding-left:26px !important }` @ L5837. step 번호 rail용 여분이 과했음.
+**수정**: 26px → 20px. step(`.ws28-step { left:-18px }`)은 그대로. 카드가 viewport 20px에서 시작, step은 2px 지점에 위치.
+**영향**: 아이콘/텍스트/차트/탭 로직 모두 무영향.
+
+---
+
+# Previous — Session 51 — Forensic
 
 ## S51 — AI 카드 아이콘/텍스트 충돌 수리 (역할명 첫 글자 잘림)
 

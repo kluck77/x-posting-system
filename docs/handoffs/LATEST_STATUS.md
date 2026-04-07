@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S51 — AI 카드 아이콘/텍스트 충돌 수리
+## LAST COMPLETED PHASE: Dashboard S52 — AI 카드 아이콘 왼쪽 gutter 미세 정리
+
+`#ws-grid.v28` padding-left 26px → 20px. 한 줄 수정.
+
+## PREVIOUS: Dashboard S51 — AI 카드 아이콘/텍스트 충돌 수리
 
 역할명 첫 글자 잘림(뷰어/서처/트체커/렌드 헌터) 원인: S28 L4804 `.ws28-icon{width:80px !important}` 가 specificity로 S37 52px를 이겨 52px grid 컬럼을 28px 오버플로우. L4804 + 미디어쿼리 L4888(70px) 두 줄 삭제. S37 canonical 52px가 유일 규칙으로 남음.
 
