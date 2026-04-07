@@ -5182,7 +5182,10 @@ html body .hud-main #page-ai.page{
   padding-bottom: 10px !important;
   height: auto !important;
   min-height: 0 !important;
-  display: block !important;
+  /* S55: `display: block !important` removed — its high specificity
+     (1 ID + 2 class + 3 elements) was beating S35's `.active`-scoped rule
+     and forcing #page-ai to stay visible regardless of active state,
+     breaking tab switching for Home/Intake/Ops. */
 }
 html body .hud-main #page-ai #ws-grid.v28{
   justify-content: flex-start !important;

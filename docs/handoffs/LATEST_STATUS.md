@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S54 — AI 카드 왼쪽 시작선 8px 이동
+## LAST COMPLETED PHASE: Dashboard S55 — 탭 전환 진짜 원인 수정
+
+S47 블록의 `html body .hud-main #page-ai.page { display:block !important }` (specificity 1,2,3) 가 S35의 `.active`-scoped rule (1,2,0)을 이겨서 `#page-ai`가 상시 visible이었음. `display:block` 한 줄만 삭제. 네 탭 정상 전환 복구.
+
+## PREVIOUS: Dashboard S54 — AI 카드 왼쪽 시작선 8px 이동
 
 `#ws-grid.v28` padding-left 26→18, `.ws28-step` left -18→-14. 카드 전체가 viewport 기준 왼쪽으로 당겨짐. 탭 전환 로직은 S35/S50 체계 intact, 구조 점검 완료.
 
