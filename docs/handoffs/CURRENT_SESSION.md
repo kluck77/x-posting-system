@@ -1,6 +1,22 @@
-# Current Session — 2026-04-07 (Session 52)
+# Current Session — 2026-04-07 (Session 53)
 
-## S52 — AI 카드 아이콘 왼쪽 gutter 미세 정리 (1줄)
+## S53 — AI 카드 아이콘 박스 확대 (gutter 축소가 아니라 영역 확대로 해결)
+
+`static/dashboard.html` AI 탭만. S52 접근(padding-left 26→20 축소)을 되돌리고 아이콘 박스 자체를 키움.
+
+### 수정 (2 selector)
+- `#ws-grid.v28 .ws28 { grid-template-columns: 52px 1fr → 64px 1fr }` @ L5545
+- `.ws28-icon { width:52 → 64; height:50 → 58 }` @ L5553
+- `#ws-grid.v28 { padding-left }` 20 → **26px 복귀** (S52 revert)
+
+### 영향
+- 아이콘 영역 12px 확대
+- 텍스트 시작선: 아이콘 끝+column-gap(10) 기준 → 자동으로 12px 우측 이동 (카드별 정렬 일관성 유지)
+- 우측 chart, provider pill, 탭 로직 무영향
+
+---
+
+# Previous — Session 52
 
 **원인**: `#ws-grid.v28 { padding-left:26px !important }` @ L5837. step 번호 rail용 여분이 과했음.
 **수정**: 26px → 20px. step(`.ws28-step { left:-18px }`)은 그대로. 카드가 viewport 20px에서 시작, step은 2px 지점에 위치.
