@@ -885,6 +885,71 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   .ops-summary{grid-template-columns:repeat(2,1fr)}
 }
 
+/* ─── AI workstation — role differentiation (S21b) ────────── */
+.ws-node{grid-template-columns:72px 1fr auto;gap:16px;padding:14px 16px 14px 20px;min-height:112px}
+.ws-node .ws-icon{width:72px;height:72px;border-width:1px;position:relative;overflow:hidden}
+.ws-node .ws-icon::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent,rgba(94,229,255,0.04));
+  pointer-events:none;
+}
+.ws-node .ws-icon::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:currentColor;opacity:0.25;
+}
+/* role tinting — each role has its own accent color */
+.ws-node.role-write  { --role:var(--cat-news) }
+.ws-node.role-review { --role:var(--cat-premium) }
+.ws-node.role-scan   { --role:var(--cat-brief) }
+.ws-node.role-verify { --role:var(--ok) }
+.ws-node.role-watch  { --role:var(--cat-b2b) }
+.ws-node[class*="role-"] .worker-rail{background:var(--rail)}
+.ws-node[class*="role-"].working .worker-rail{
+  background:linear-gradient(180deg,var(--role),transparent);
+  box-shadow:0 0 6px color-mix(in srgb,var(--role) 50%,transparent);
+}
+.ws-node[class*="role-"] .ws-icon{color:var(--role);border-color:color-mix(in srgb,var(--role) 45%,var(--line))}
+.ws-node[class*="role-"] .ws-icon svg rect,
+.ws-node[class*="role-"] .ws-icon svg circle,
+.ws-node[class*="role-"] .ws-icon svg line{fill:var(--role);stroke:var(--role)}
+.ws-node[class*="role-"] .ws-icon svg [fill="none"]{fill:none}
+.ws-node[class*="role-"] .role-badge{color:var(--role);border-color:color-mix(in srgb,var(--role) 45%,var(--line))}
+.ws-node[class*="role-"] .ws-prov{color:var(--role)}
+.ws-node[class*="role-"] .ws-status::before{background:var(--role)}
+.ws-node[class*="role-"].working .ws-meta .runs{color:var(--role)}
+.ws-node.off[class*="role-"] .ws-icon{color:var(--txt3);border-color:var(--line)}
+.ws-node.off[class*="role-"] .ws-icon svg rect,
+.ws-node.off[class*="role-"] .ws-icon svg circle,
+.ws-node.off[class*="role-"] .ws-icon svg line{fill:var(--txt3);stroke:var(--txt3)}
+
+/* current task line — role responsibility */
+.ws-task{
+  font-size:11px;color:var(--txt3);margin-top:6px;
+  letter-spacing:0.1px;display:flex;align-items:center;gap:6px;
+  padding-top:6px;border-top:1px dashed var(--line);
+}
+.ws-task::before{content:'▸';color:var(--role,var(--accent));font-weight:700}
+.ws-task b{color:var(--txt2);font-weight:600}
+
+/* activity strip — 8 micro bars, synthesized from runs */
+.ws-activity{
+  display:flex;gap:2px;align-items:flex-end;height:14px;
+  margin-top:6px;justify-content:flex-end;
+}
+.ws-activity i{
+  display:block;width:3px;background:var(--rail);
+}
+.ws-activity i.on{background:var(--role,var(--accent));box-shadow:0 0 3px color-mix(in srgb,var(--role,var(--accent)) 40%,transparent)}
+.ws-activity i.hi{height:12px}
+.ws-activity i.md{height:8px}
+.ws-activity i.lo{height:4px}
+.ws-node.off .ws-activity i{background:var(--rail);box-shadow:none}
+
+/* runs label tightening */
+.ws-meta{min-width:72px}
+.ws-meta .runs{font-size:32px;font-feature-settings:"tnum" 1}
+.ws-meta .lbl{text-transform:uppercase;letter-spacing:0.4px;font-size:10px;color:var(--txt3)}
+
 /* ─── Page-specific styles inserted in later steps ────────── */
 </style>
 </head>
@@ -1362,6 +1427,34 @@ function renderAI(){
     FactChecker:'프로바이더 미설정',
     TrendHunter:'프로바이더 미설정',
   };
+  const roleClass = {
+    DraftWriter:'role-write',
+    Reviewer:'role-review',
+    Researcher:'role-scan',
+    FactChecker:'role-verify',
+    TrendHunter:'role-watch',
+  };
+  const roleTask = {
+    DraftWriter:'초안 구성 · 훅 · 본문',
+    Reviewer:'5기준 품질 게이트',
+    Researcher:'소스 · 컨텍스트 수집',
+    FactChecker:'주장 · 출처 검증',
+    TrendHunter:'실시간 신호 감시',
+  };
+  // synth activity strip 8 bars from runs (deterministic, 역할별 시드)
+  const seedFor = role=>({DraftWriter:3,Reviewer:5,Researcher:7,FactChecker:11,TrendHunter:13}[role]||1);
+  const buildStrip = (role, runs, off)=>{
+    const n = 8;
+    if(off) return Array(n).fill('<i></i>').join('');
+    const r = Math.max(0, runs||0);
+    const seed = seedFor(role);
+    const filled = Math.min(n, r); // r개 막대 on
+    return Array.from({length:n},(_,i)=>{
+      const on = i >= (n-filled);
+      const h = ['lo','md','hi','md','lo','md','hi','md'][(i+seed)%8];
+      return `<i class="${h}${on?' on':''}"></i>`;
+    }).join('');
+  };
   const roles = p.roles || [];
   $('#ws-grid').innerHTML = roles.map(r=>{
     const off = !r.configured;
@@ -1370,27 +1463,27 @@ function renderAI(){
     const runsTxt = runs==null ? '—' : runs;
     const roleName = roleKo[r.role] || r.role;
     const badge = roleBadge[r.role] || '';
+    const rcls = roleClass[r.role] || '';
     const working = !off && runs > 0;
     const statusTxt = off ? (statusOff[r.role]||'미설정')
                      : working ? (statusActive[r.role]||'동작 중')
                      : (statusIdle[r.role]||'대기');
-    // mini-trace 4 dots = runs 시각화 (0..4 → 채워짐)
-    const traceN = Math.min(4, Math.max(0, runs||0));
-    const trace = [0,1,2,3].map(i=>`<i class="${i<traceN?'on':''}"></i>`).join('');
-    const cls = off ? 'off' : (working ? 'working' : '');
+    const taskTxt = roleTask[r.role] || '';
+    const strip = buildStrip(r.role, runs, off);
+    const cls = (off ? 'off' : (working ? 'working' : '')) + ' ' + rcls;
     return `<div class="ws-node ${cls}">
       <span class="worker-rail"></span>
       <div class="ws-icon">${icon}</div>
       <div class="ws-info">
-        <div class="ws-role">${roleName}</div>
+        <div class="ws-role">${roleName} <span class="role-badge">${badge}</span></div>
         <div class="ws-prov">${escapeHTML(r.provider||'—')}</div>
         <div class="ws-status">${statusTxt}</div>
-        <span class="role-badge">${badge}</span>
+        <div class="ws-task"><b>${taskTxt}</b></div>
       </div>
       <div class="ws-meta">
         <div class="runs ${runs==null||runs===0?'off':''}">${runsTxt}</div>
         <div class="lbl">오늘 실행</div>
-        <div class="mini-trace">${trace}</div>
+        <div class="ws-activity">${strip}</div>
       </div>
     </div>`;
   }).join('');
