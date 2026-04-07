@@ -3579,5 +3579,268 @@ setInterval(refreshAll,30000);
 }
 </style>
 
+<script>
+/* ─── S29 — Global tone reset + Home situation board (judgment panel) ── */
+(function(){
+  // ensure situation board exists at top of Home
+  function ensureBoard(){
+    const home = document.getElementById('page-home'); if(!home) return null;
+    let sb = document.getElementById('situation-board');
+    if(!sb){
+      sb = document.createElement('div');
+      sb.id = 'situation-board';
+      sb.className = 'sb';
+      sb.innerHTML = `
+        <div class="sb-head">
+          <span class="sb-title">오늘 운영 상황판</span>
+          <span class="sb-stamp" id="sb-stamp">—</span>
+        </div>
+        <div class="sb-grid">
+          <div class="sb-cell sb-now"><div class="sb-k">지금 중요한 것</div><div class="sb-v" id="sb-now">—</div><div class="sb-sub" id="sb-now-sub"></div></div>
+          <div class="sb-cell sb-bot"><div class="sb-k">병목</div><div class="sb-v" id="sb-bot">—</div><div class="sb-sub" id="sb-bot-sub"></div></div>
+          <div class="sb-cell sb-busy"><div class="sb-k">바쁜 담당</div><div class="sb-v" id="sb-busy">—</div><div class="sb-sub" id="sb-busy-sub"></div></div>
+        </div>
+        <div class="sb-row">
+          <div class="sb-chip"><span class="k">프리미엄</span><span class="v" id="sb-c-premium">—</span></div>
+          <div class="sb-chip"><span class="k">B2B</span><span class="v" id="sb-c-b2b">—</span></div>
+          <div class="sb-chip"><span class="k">뉴스레터</span><span class="v" id="sb-c-nl">—</span></div>
+          <div class="sb-chip"><span class="k">리드</span><span class="v" id="sb-c-lead">—</span></div>
+          <div class="sb-chip"><span class="k">CTA 연결</span><span class="v" id="sb-c-cta">—</span></div>
+          <div class="sb-chip weekly"><span class="k">주간 하이라이트</span><span class="v" id="sb-c-week">—</span></div>
+        </div>`;
+      home.insertBefore(sb, home.firstChild);
+    }
+    return sb;
+  }
+
+  const origHome = window.renderHome;
+  window.renderHome = function(){
+    if(typeof origHome === 'function') origHome();
+    ensureBoard();
+    const s = state.status || {};
+    const b = state.business || {};
+    const p = state.providers || {};
+    const h = s.health || {}, a = s.activity || {}, q = s.queue || {};
+    const w = b.weekly || {}, pr = b.premium || {}, bb = b.b2b || {}, nl = b.newsletter || {}, cta = b.cta_perf || {};
+
+    // 지금 중요한 것
+    let nowTxt='정상 운영 중', nowSub='시스템 이상 없음', nowCls='ok';
+    if(h.db_ok===false){ nowTxt='DB 연결 불가'; nowSub='점검 필요'; nowCls='danger'; }
+    else if(h.telegram_configured===false || h.x_configured===false){
+      nowTxt='채널 미설정'; nowSub='텔레그램/X 설정 확인'; nowCls='warn';
+    } else if((q.pending||0) >= 3){
+      nowTxt=`승인 대기 ${q.pending}건`; nowSub='오퍼레이터 승인 필요'; nowCls='warn';
+    } else if((pr.total||0) >= 3){
+      nowTxt=`프리미엄 후보 ${pr.total}건`; nowSub='수익화 검토 대기'; nowCls='accent';
+    } else if(a.is_idle){
+      nowTxt='유휴 상태'; nowSub=`마지막 활동 ${a.hours_idle||0}시간 전`; nowCls='idle';
+    } else if((w.published||0) > 0){
+      nowTxt=`이번 주 ${w.published}건 발행`; nowSub='페이스 유지 중'; nowCls='ok';
+    }
+    const now = document.getElementById('sb-now');
+    const nowSubEl = document.getElementById('sb-now-sub');
+    if(now){ now.textContent = nowTxt; now.className = 'sb-v tone-'+nowCls; }
+    if(nowSubEl) nowSubEl.textContent = nowSub;
+
+    // 병목
+    let botTxt='없음', botSub='흐름 정상', botCls='muted';
+    if(h.db_ok===false){ botTxt='DB'; botSub='연결 실패'; botCls='danger'; }
+    else if((q.pending||0) >= 5){ botTxt='승인 큐'; botSub=`${q.pending}건 대기 중`; botCls='warn'; }
+    else if((cta.unlinked_copies||0) >= 3){ botTxt='CTA 연결'; botSub=`미연결 ${cta.unlinked_copies}건`; botCls='warn'; }
+    else if((w.pending||0) >= 5){ botTxt='초안 대기'; botSub=`${w.pending}건 검토 대기`; botCls='warn'; }
+    else if((w.rejected||0) > 0 && (w.published||0)===0){ botTxt='품질 게이트'; botSub=`반려 ${w.rejected}건`; botCls='warn'; }
+    else if((w.total_drafts||0)===0){ botTxt='초안 없음'; botSub='소스 수집 대기'; botCls='idle'; }
+    const bot = document.getElementById('sb-bot');
+    const botSubEl = document.getElementById('sb-bot-sub');
+    if(bot){ bot.textContent = botTxt; bot.className = 'sb-v tone-'+botCls; }
+    if(botSubEl) botSubEl.textContent = botSub;
+
+    // 바쁜 담당
+    let busyTxt='—', busySub='AI 대기 중', busyCls='muted';
+    const roles = (p.roles||[]).slice().sort((x,y)=>(y.runs_today||0)-(x.runs_today||0));
+    const ROLE_KO = {DraftWriter:'드래프트 작성',Reviewer:'리뷰어',Researcher:'리서처',FactChecker:'팩트체커',TrendHunter:'트렌드 헌터'};
+    if(roles.length){
+      const top = roles[0];
+      if((top.runs_today||0) > 0){
+        busyTxt = ROLE_KO[top.role] || top.role;
+        const active = roles.filter(r=>r.configured && (r.runs_today||0)>0).length;
+        const total = roles.reduce((s,r)=>s+(r.runs_today||0),0);
+        busySub = `가동 ${active}/${roles.length} · 오늘 ${total}회`;
+        busyCls = 'accent';
+      } else {
+        const unconf = roles.filter(r=>!r.configured).length;
+        if(unconf) { busyTxt='프로바이더 미설정'; busySub=`${unconf}/${roles.length} 미연결`; busyCls='warn'; }
+      }
+    }
+    const busy = document.getElementById('sb-busy');
+    const busySubEl = document.getElementById('sb-busy-sub');
+    if(busy){ busy.textContent = busyTxt; busy.className = 'sb-v tone-'+busyCls; }
+    if(busySubEl) busySubEl.textContent = busySub;
+
+    // chips
+    const set = (id,v)=>{ const el=document.getElementById(id); if(el){ el.textContent = v; el.classList.toggle('dim', !v || v==='0'); } };
+    set('sb-c-premium', String(pr.total||0));
+    set('sb-c-b2b', String(bb.total||0));
+    set('sb-c-nl', String(nl.newsletter_total||0));
+    set('sb-c-lead', String(nl.lead_total||0));
+    set('sb-c-cta', String(cta.linked_copies||0));
+    const hl = (w.highlights||[])[0];
+    set('sb-c-week', hl ? `#${hl.draft_id} ${(hl.hook||'').slice(0,28)}` : (w.published ? `발행 ${w.published}건` : '없음'));
+
+    const stamp = document.getElementById('sb-stamp');
+    if(stamp){
+      const d = new Date();
+      stamp.textContent = d.toTimeString().substring(0,5) + ' KST 기준';
+    }
+  };
+})();
+</script>
+
+<style>
+/* ─── S29 — Global tone reset toward quiet SaaS backoffice ─── */
+body{
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif !important;
+  background:var(--bg) !important;
+}
+/* numbers only: mono + tabular */
+.num,.k-val,.ws-meta .runs,.ops-head .big,.lane-head .num,.strip-cell .val,
+.hero-state .label,.ws28-c .runs,.kpi-mini .k-val,.sb-v,.sb-chip .v,
+.hud-header .clk,.ws28-prov{
+  font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !important;
+  font-feature-settings:"tnum" !important;
+  letter-spacing:0 !important;
+}
+
+/* kill residual HUD decoration */
+body::before, body::after{display:none !important}
+.hud-corners,.hud-corner,.corner-mark,.scan-overlay,.grid-overlay,.bg-grid{
+  display:none !important;
+}
+/* neutralize big radial glows on cards */
+.panel,.panel-hero,.kpi,.ops-card,.lane,.hero,.hero-compact,
+.ws-icon,.ws-header,.attn-band,.strip,.strip-cell{
+  background:var(--panel) !important;
+  box-shadow:none !important;
+  text-shadow:none !important;
+}
+.page, main{background:var(--bg) !important}
+/* panel-hero still slightly elevated */
+.panel-hero{background:var(--surface-2) !important}
+
+/* tab hierarchy — Home primary, others secondary */
+.hud-tabs .tab-btn[data-page="home"]{
+  color:var(--txt);
+}
+.hud-tabs .tab-btn:not([data-page="home"]){
+  color:var(--txt3);
+}
+.hud-tabs .tab-btn.active{color:var(--txt);border-color:var(--line2)}
+.hud-tabs .tab-btn .ic{opacity:0.55}
+.hud-tabs .tab-btn.active .ic{opacity:1}
+
+/* ─── Situation Board (main judgment panel) ─── */
+#situation-board.sb{
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:14px 16px 12px 16px;
+  margin-bottom:14px;
+  position:relative;
+}
+.sb-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.sb-title{
+  font-size:11px;letter-spacing:0.6px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.sb-stamp{
+  margin-left:auto;font-size:10px;color:var(--txt3);
+  font-feature-settings:"tnum";font-family:ui-monospace,monospace;
+}
+
+.sb-grid{
+  display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;
+  margin-bottom:10px;
+}
+.sb-cell{
+  padding:10px 12px;border:1px solid var(--line);
+  border-radius:3px;background:var(--panel);
+  display:flex;flex-direction:column;gap:4px;min-height:62px;
+  position:relative;
+}
+.sb-cell .sb-k{
+  font-size:10px;letter-spacing:0.5px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.sb-cell .sb-v{
+  font-size:17px;font-weight:600;color:var(--txt);
+  line-height:1.25;letter-spacing:-0.1px;
+}
+.sb-cell .sb-sub{font-size:11px;color:var(--txt2);line-height:1.35}
+
+/* tone colors — applied ONLY to sb-v */
+.sb-v.tone-ok{color:var(--ok)}
+.sb-v.tone-warn{color:var(--warn)}
+.sb-v.tone-danger{color:var(--danger)}
+.sb-v.tone-accent{color:var(--accent)}
+.sb-v.tone-idle{color:var(--txt2)}
+.sb-v.tone-muted{color:var(--txt2)}
+
+/* left state bar on each cell — thin accent */
+.sb-cell::before{
+  content:'';position:absolute;left:0;top:10px;bottom:10px;width:2px;
+  background:var(--line2);border-radius:2px;
+}
+.sb-now::before{background:var(--accent);opacity:0.55}
+.sb-bot::before{background:var(--warn);opacity:0.5}
+.sb-busy::before{background:var(--cat-brief);opacity:0.55}
+
+/* chip row — business summary at a glance */
+.sb-row{
+  display:flex;gap:6px;flex-wrap:wrap;
+  padding-top:10px;border-top:1px dashed var(--line);
+}
+.sb-chip{
+  display:inline-flex;align-items:baseline;gap:6px;
+  padding:4px 9px;border:1px solid var(--line);border-radius:2px;
+  background:var(--panel);
+}
+.sb-chip .k{
+  font-size:9px;letter-spacing:0.4px;color:var(--txt3);
+  text-transform:uppercase;font-weight:600;
+}
+.sb-chip .v{
+  font-size:12px;color:var(--txt);font-weight:600;
+}
+.sb-chip .v.dim{color:var(--txt3);font-weight:400}
+.sb-chip.weekly{flex:1;min-width:180px}
+.sb-chip.weekly .v{
+  font-family:system-ui,-apple-system,sans-serif !important;
+  font-weight:500;font-size:11px;color:var(--txt2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* demote old hero since situation board is the new main */
+#page-home .hero-compact{
+  padding:10px 14px 8px 14px !important;
+  background:transparent !important;
+  border:1px dashed var(--line) !important;
+}
+#page-home .hero-compact .hero-title{opacity:0.6}
+#page-home .hero-compact .hero-state .label{font-size:14px !important}
+
+/* category accents — softened to 2px left rule only (not fills) */
+.ops-card.amber{border-left:2px solid var(--cat-premium) !important;background:var(--panel) !important}
+.ops-card.brief{border-left:2px solid var(--cat-brief) !important;background:var(--panel) !important}
+.ops-card.magenta{border-left:2px solid var(--cat-b2b) !important;background:var(--panel) !important}
+.ops-card.green{border-left:2px solid var(--cat-news) !important;background:var(--panel) !important}
+.ops-card.gold{border-left:2px solid var(--cat-weekly) !important;background:var(--panel) !important}
+.ops-card.cta{border-left:2px solid var(--cat-cta) !important;background:var(--panel) !important}
+
+@media (max-width:760px){
+  .sb-grid{grid-template-columns:1fr}
+  .sb-chip.weekly{flex-basis:100%}
+}
+</style>
+
 </body>
 </html>

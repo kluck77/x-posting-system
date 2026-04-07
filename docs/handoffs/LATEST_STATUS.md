@@ -1,6 +1,38 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S25 — AI Workstations Collab + Pipe Trace
+## ⚠️ LAST COMPLETED PHASE: Dashboard S29 — Direction Lock · Situation Board + Global Tone Reset
+
+`static/dashboard.html` 단일 파일. 백엔드 무변경.
+- **Situation Board** 를 Home 최상단에 도입 — "지금 중요한 것 / 병목 / 바쁜 담당" 3-cell judgment panel + 6 business chip row (premium/b2b/newsletter/lead/cta/weekly highlight)
+- 기존 hero-compact 는 dashed 보조 요약으로 demote, focus-3/panel-hero/kpi-row 유지
+- 판단 로직: db/telegram/x → pending queue → premium candidates → idle → published 순 우선순위
+- 병목: DB > 승인 큐 > CTA 미연결 > 초안 대기 > 품질 게이트 > 초안 없음
+- 바쁜 담당: AI runs_today 최고치 + 가동 N/5 + 총 M회 요약
+- body font-family 를 system-ui 계열로 강제, 숫자만 ui-monospace + tnum
+- 카테고리 색 (premium/brief/b2b/newsletter/weekly/cta) 은 ops-card 좌측 2px 힌트로만 축소
+- 상태색 (ok/warn/danger/accent/idle) 은 sb-v 와 실제 상태에만
+- 탭 계층: Home primary, 나머지 secondary (txt3)
+- body::before / hud-corners / grid-overlay / scan-overlay 전부 display:none
+- 카드 radial glow / text-shadow / box-shadow 전부 제거 (!important)
+
+## Previous Phases
+
+### S28 — AI Tab Redesign (3-zone workstations)
+- 3-zone grid (icon module | info | meta), UI panel icons (로고 X), role-specific live traces
+- workflow shared rail + step numbers + flow arrow (Draft→Review→Research→Fact→Trend)
+- "다음" 라인으로 협업 전달 경로 명시
+
+### S27 — Demo Mode (?demo=1)
+- fetchJSON 을 mock 으로 교체, 4초 틱, DEMO 배지
+
+### S26 — Intake Flow + Ops Operator Board
+- lane 에 상태 문구 + mini ratio bar + soft connector + pulse rail
+- Ops 카드 head signal bars + 하단 ratio bar + compact empty state
+
+### S25 — AI Workstations Collab + Pipe Trace
+- ws-header 협업 요약 배지, 3-stage 파이프 마이크로 트레이스
+
+## S23 — SaaS Backoffice Tone Overhaul
 
 `static/dashboard.html` 단일 파일. 백엔드 무변경.
 - ws-header 협업 요약 배지 (`가동 N/5 · 총 M회 · 주도 {role}`)

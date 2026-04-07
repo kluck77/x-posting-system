@@ -1,4 +1,44 @@
-# Current Session — 2026-04-07 (Session 25)
+# Current Session — 2026-04-07 (Session 29)
+
+## S29 — 방향 고정 · Situation Board + 톤 리셋
+
+`static/dashboard.html` 단일 파일 프론트 수정. 백엔드/승인 워크플로 무변경.
+
+### 목표
+대시보드를 "게임 HUD" 가 아닌 **AI 회사 내부 운영툴** 로 고정. 숫자판이 아닌 **판단판(judgment panel)** 중심.
+
+### 변경 내용
+1. **Situation Board** (`#situation-board`) 을 Home 최상단에 신규 도입
+   - 3-cell judgment panel: 지금 중요한 것 / 병목 / 바쁜 담당
+   - 6-chip business summary row: premium · b2b · newsletter · lead · CTA 연결 · 주간 하이라이트
+   - 각 cell 좌측 2px state bar (accent/warn/cat-brief), sub line 으로 근거 1줄
+   - sb-stamp: HH:MM KST 기준 시간
+2. **판단 로직**
+   - Now: db_ok=false → 채널 미설정 → pending≥3 → premium≥3 → idle → published>0 → 정상
+   - 병목: DB > 승인 큐 > CTA 미연결 > 초안 대기 > 품질 게이트 > 초안 없음
+   - 바쁜 담당: AI runs_today 최상위 + 가동 N/5 · 오늘 M회
+3. **전체 톤 리셋**
+   - body font-family: system-ui 계열
+   - 숫자 전용 mono tabular (ui-monospace, tnum)
+   - body::before/::after, hud-corners, grid-overlay, scan-overlay 모두 display:none
+   - panel/kpi/card radial glow, text-shadow, box-shadow 전부 제거
+4. **탭 계층화**
+   - Home primary, 나머지 secondary (txt3), 아이콘 opacity 0.55 → 활성 1
+5. **색 역할 체계 명확화**
+   - 상태색: sb-v tone-ok/warn/danger/accent/idle, .ws28-status dot — 실제 상태에만
+   - 카테고리색: ops-card 좌측 2px border-left 힌트로만 (fill 제거)
+   - 배경/패널/텍스트/강조 토큰은 S23 값 유지
+6. **기존 hero-compact demote**
+   - dashed border, 패딩 축소, label 14px, title opacity 0.6 — 보조 상태 카드로
+
+### Files
+- `static/dashboard.html` — S29 script (renderHome wrap + situation board 주입) + S29 style
+- `docs/handoffs/CURRENT_SESSION.md` (이 파일)
+- `docs/handoffs/LATEST_STATUS.md`
+
+---
+
+# Previous Session (Session 25)
 
 ## S25 — AI 탭 협업/스테이션 감각 강화
 
