@@ -1,4 +1,45 @@
-# Current Session — 2026-04-07 (Session 48)
+# Current Session — 2026-04-07 (Session 49 — Forensic)
+
+## S49 — AI 카드 우측 모듈, stale override 제거 (삭제-온리)
+
+`static/dashboard.html` 만. AI 탭 한정. 새 CSS 추가 없음. 원인 라인 삭제만.
+
+### 포렌식 결과
+AI 카드 레이아웃 CSS가 4겹 누적:
+1. 원본 (3398, 3561)
+2. S28 compact (4796~4826)
+3. **S31 — 오염원 (5833~5900, 5909)**: 3-col 그리드 `88px 1fr 108px` + `.ws28-c`를 우측 rail로 정의 (border-left dashed, min-height 54, align-items flex-end)
+4. S37/S46/S48 (5550~5603): 2-col 그리드 `58px 1fr` + `grid-template-areas:"icon info"/"icon meta"` — `.ws28-c`를 하단 meta 행으로 재배치
+
+### Root Cause
+S31 블록이 S37 재설계를 부분적으로 덮고 있었음:
+- `grid-template-columns:88px 1fr 108px` 가 source order로 S37의 2-col을 이김
+- `grid-template-areas` 는 그대로라 **108px 3번째 컬럼이 dead column으로 버려짐** → 우측 모듈이 "붕 뜬" 체감의 정체
+- `.ws28-c` 를 좌측 세로 rail 스타일(border-left dashed)로 재정의 → S37의 하단 meta 행과 충돌
+- `#page-ai .ws28-c{align-items:center}` 가 specificity로 S48 baseline 정렬을 **말없이 무효화**
+- `#ws-grid.v28 .ws28-c{padding-left:6px;gap:2px}` (S28) 가 specificity로 S37을 이기고 있었음
+
+### 실제 삭제
+1. `#ws-grid.v28 .ws28-c {...}` + `.runs/.lbl/.strip` 서브룰 @ 4820–4826 → 전체 삭제
+2. `#ws-grid.v28 .ws28 { grid-template-columns:88px 1fr 108px; align-items:center }` + `.ws28-icon{88×62}` @ 5835–5840 → 삭제
+3. `.ws28-c { border-left:1px dashed; min-height:54 ... }` + `.runs/.lbl/.strip` @ 5879–5900 → 블록 전체 삭제
+4. `#page-ai .ws28-a, .ws28-b, .ws28-c { align-items:center }` @ 5909 → 삭제
+
+### Do Not Touch (건드리지 않음)
+- S37 canonical block @ 5550–5603 (2-col + grid-areas)
+- S48 micro chart @ 5585–5596
+- S47 `#page-ai.page` padding-bottom @ 5184
+- `@media (max-width:760px)` .ws28-c 재정의 @ 4874–4887 (S37과 호환)
+- 다른 탭의 어떤 selector
+
+### 왜 최소 수정인가
+- 새 CSS 한 줄도 추가하지 않음. 순수 삭제.
+- S31 유령 블록만 걷어내면 S37/S48이 자동 활성화.
+- 다른 layer 무영향.
+
+---
+
+# Previous — Session 48
 
 ## S48 — AI 탭 마감 폴리시 (micro chart + 우측 정렬 + 하단 여백)
 
