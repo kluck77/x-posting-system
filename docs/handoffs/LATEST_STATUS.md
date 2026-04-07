@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S50 — Tab 전환 / micro chart / 좌측 밀도
+## LAST COMPLETED PHASE: Dashboard S51 — AI 카드 아이콘/텍스트 충돌 수리
+
+역할명 첫 글자 잘림(뷰어/서처/트체커/렌드 헌터) 원인: S28 L4804 `.ws28-icon{width:80px !important}` 가 specificity로 S37 52px를 이겨 52px grid 컬럼을 28px 오버플로우. L4804 + 미디어쿼리 L4888(70px) 두 줄 삭제. S37 canonical 52px가 유일 규칙으로 남음.
+
+## PREVIOUS: Dashboard S50 — Tab 전환 / micro chart / 좌측 밀도
 
 **Tab 전환 핵심 버그**: `#page-*{display:flex}` 5개 규칙이 `.active` 한정 없이 걸려 있어 네 페이지가 상시 노출되고 있었음. `.active` 한정사 추가. Micro chart의 이중선 border-bottom axis 제거 + min-width 축소. AI 카드 `#ws-grid` padding-left 34→26, icon 58→52, column-gap 12→10, step -22→-18 로 좌측 밀도 상향.
 

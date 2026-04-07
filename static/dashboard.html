@@ -4800,8 +4800,10 @@ body::before, body::after{display:none !important}
 }
 #ws-grid.v28 .ws28 + .ws28{border-top:1px solid var(--line) !important}
 
-/* icon shrink */
-#ws-grid.v28 .ws28-icon{width:80px !important;height:56px !important}
+/* icon shrink — S51: L4804 `#ws-grid.v28 .ws28-icon{width:80px}` deleted.
+   Higher specificity than S37's `.ws28-icon{width:52px}`, so 80px was
+   winning and overflowing the 52px grid column, cropping role name first
+   characters. S37 width rule now applies cleanly. */
 #ws-grid.v28 .ws28-icon .mod-bar{padding:3px 5px}
 #ws-grid.v28 .ws28-icon .mod-body{padding:4px 5px;gap:3px}
 
@@ -4883,7 +4885,7 @@ body::before, body::after{display:none !important}
     gap:8px !important;
   }
   #ws-grid.v28 .ws28-c .strip{margin-top:0;margin-left:auto}
-  #ws-grid.v28 .ws28-icon{width:70px !important;height:50px !important}
+  /* S51: icon width override removed — was 70px on a 52px grid column, cropping role text */
   #intake-flow-narrative.ifn .ifn-stages{flex-direction:column}
 }
 </style>
