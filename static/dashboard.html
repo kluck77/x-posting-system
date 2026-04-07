@@ -2120,6 +2120,7 @@ html,body{
   <div class="page" id="page-ai">
     <div class="ws-header">
       <span>◈ AI 워크스테이션 · 5 노드</span>
+      <span class="ws-collab" id="ws-collab">협업 —</span>
       <span class="right" id="ws-mode">모드 —</span>
     </div>
     <div class="ws-grid" id="ws-grid"></div>
@@ -2527,7 +2528,20 @@ function renderAI(){
       return `<i class="${h}${on?' on':''}"></i>`;
     }).join('');
   };
+  const rolePipe = {
+    DraftWriter:['소스','초안','검토 대기'],
+    Reviewer:['초안','5기준','통과·재작성'],
+    Researcher:['주제','수집','컨텍스트'],
+    FactChecker:['주장','대조','검증 결과'],
+    TrendHunter:['피드','신호','알림'],
+  };
   const roles = p.roles || [];
+  // ws-collab: 총 실행 + 가장 바쁜 역할
+  const totalRuns = roles.reduce((s,r)=>s+(r.runs_today||0),0);
+  const activeCount = roles.filter(r=>r.configured && (r.runs_today||0)>0).length;
+  const busiest = roles.slice().sort((a,b)=>(b.runs_today||0)-(a.runs_today||0))[0];
+  const busiestTxt = busiest && (busiest.runs_today||0)>0 ? (roleKo[busiest.role]||busiest.role) : '—';
+  $('#ws-collab').textContent = `협업 · 가동 ${activeCount}/${roles.length} · 총 ${totalRuns}회 · 주도 ${busiestTxt}`;
   $('#ws-grid').innerHTML = roles.map(r=>{
     const off = !r.configured;
     const icon = ROLE_ICONS[r.role] || '';
@@ -2545,6 +2559,12 @@ function renderAI(){
     const lastTxt = lastLine(r, off, working);
     const strip = buildStrip(r.role, runs, off);
     const cls = (off ? 'off' : (working ? 'working' : '')) + ' ' + rcls;
+    const pipeStages = rolePipe[r.role] || ['입력','처리','출력'];
+    const pipeActive = off ? -1 : (working ? 1 : 0);
+    const pipeHTML = pipeStages.map((s,i)=>{
+      const st = off ? 'off' : (i<pipeActive?'done':(i===pipeActive?'live':'wait'));
+      return `<span class="pp pp-${st}"><i></i>${escapeHTML(s)}</span>`;
+    }).join('<span class="pp-sep">›</span>');
     return `<div class="ws-node ${cls}">
       <div class="ws-icon">${icon}</div>
       <div class="ws-info">
@@ -2558,6 +2578,7 @@ function renderAI(){
         </div>
         <div class="ws-task"><span class="ws-k">담당</span>${taskTxt}</div>
         <div class="ws-last"><span class="ws-k">최근</span>${lastTxt}</div>
+        <div class="ws-pipe">${pipeHTML}</div>
       </div>
       <div class="ws-meta">
         <div class="runs ${runs==null||runs===0?'off':''}">${runsTxt}</div>
@@ -2852,5 +2873,50 @@ setInterval(refreshAll,30000);
   applyCatState();
 })();
 </script>
+
+<style>
+/* S25 — AI workstations: collab header + pipe micro-trace */
+#page-ai .ws-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#page-ai .ws-header .ws-collab{
+  font-size:10px;letter-spacing:0.4px;color:var(--txt2);
+  padding:2px 6px;border:1px solid var(--line);border-radius:3px;
+  font-feature-settings:"tnum";background:var(--surface-2);
+}
+#page-ai .ws-header .right{margin-left:auto}
+
+.ws-node .ws-pipe{
+  display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+  margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);
+  font-size:10px;letter-spacing:0.3px;color:var(--txt3);
+}
+.ws-node .ws-pipe .pp{display:inline-flex;align-items:center;gap:4px}
+.ws-node .ws-pipe .pp i{
+  width:5px;height:5px;border-radius:50%;
+  background:transparent;border:1px solid var(--line2);
+}
+.ws-node .ws-pipe .pp-wait{color:var(--txt3)}
+.ws-node .ws-pipe .pp-wait i{border-color:var(--line2)}
+.ws-node .ws-pipe .pp-done{color:var(--txt2)}
+.ws-node .ws-pipe .pp-done i{background:var(--txt3);border-color:var(--txt3)}
+.ws-node .ws-pipe .pp-live{color:var(--txt);font-weight:600}
+.ws-node .ws-pipe .pp-live i{
+  background:var(--accent);border-color:var(--accent);
+  box-shadow:0 0 0 2px rgba(127,179,230,0.18);
+}
+.ws-node .ws-pipe .pp-off{color:var(--txt3);opacity:0.5}
+.ws-node .ws-pipe .pp-off i{border-style:dashed}
+.ws-node .ws-pipe .pp-sep{color:var(--txt3);opacity:0.5;margin:0 1px}
+
+.ws-node.off .ws-pipe{opacity:0.55}
+@media (prefers-reduced-motion: no-preference){
+  .ws-node.working .ws-pipe .pp-live i{
+    animation: wsPipeLive 1.8s ease-in-out infinite;
+  }
+}
+@keyframes wsPipeLive{
+  0%,100%{box-shadow:0 0 0 2px rgba(127,179,230,0.12)}
+  50%{box-shadow:0 0 0 3px rgba(127,179,230,0.28)}
+}
+</style>
 </body>
 </html>

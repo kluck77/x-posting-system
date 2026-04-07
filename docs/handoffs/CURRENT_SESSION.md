@@ -1,4 +1,28 @@
-# Current Session — 2026-04-07 (Session 22)
+# Current Session — 2026-04-07 (Session 25)
+
+## S25 — AI 탭 협업/스테이션 감각 강화
+
+`static/dashboard.html` 단일 파일. 백엔드/스키마/승인 흐름 변경 없음.
+
+### 변경 내용
+1. **ws-header 협업 요약** (`#ws-collab`): `협업 · 가동 N/5 · 총 M회 · 주도 {role}` — 5 노드가 한 팀처럼 보이도록 헤더에 집계 배지 추가
+2. **역할별 파이프 마이크로 트레이스** (`.ws-pipe`): 각 카드 하단에 3단계 점선 구분 스테이지
+   - DW: 소스 › 초안 › 검토 대기
+   - RV: 초안 › 5기준 › 통과·재작성
+   - RS: 주제 › 수집 › 컨텍스트
+   - FC: 주장 › 대조 › 검증 결과
+   - TH: 피드 › 신호 › 알림
+   - 상태: wait(빈 점선) / live(accent 글로우 펄스) / done(채운 회색) / off(dashed 흐림)
+3. **문장으로 역할 구분**: 기존 statusActive2/statusIdle2/roleTask/lastLine 유지 — 카드는 모양(아이콘)·문장(상태/담당)·상태(파이프)로 차별화, 색은 좌측 3px 힌트만
+4. **micro-visual**: live 스테이지 dot 1.8s 부드러운 펄스(prefers-reduced-motion 존중), 8-bar activity strip 유지
+
+### Files
+- `static/dashboard.html` — ws-header collab span, renderAI pipe/collab 로직, S25 CSS 블록
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 22
 
 ## What Was Done This Session
 

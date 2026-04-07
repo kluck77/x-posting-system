@@ -1,6 +1,14 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S23 — SaaS Backoffice Tone Overhaul
+## ⚠️ LAST COMPLETED PHASE: Dashboard S25 — AI Workstations Collab + Pipe Trace
+
+`static/dashboard.html` 단일 파일. 백엔드 무변경.
+- ws-header 협업 요약 배지 (`가동 N/5 · 총 M회 · 주도 {role}`)
+- 5 역할 카드 하단에 3-stage 파이프 마이크로 트레이스 (wait/live/done/off)
+- 역할 차이는 아이콘 모양 + 한국어 상태/담당 문장 + 파이프 단계로 표현, 색은 좌측 3px 힌트만
+- live 스테이지 dot 부드러운 펄스 (reduced-motion 존중)
+
+## ⚠️ PREVIOUS PHASE: Dashboard S23 — SaaS Backoffice Tone Overhaul
 
 전역 토큰 재정의 + 전체 컴포넌트 톤 오버라이드. 해커 HUD → 조용한 내부 SaaS 백오피스 룩.
 - 팔레트: 네온 시안 → 차분한 sky(#7fb3e6), 배경 중립 슬레이트(#0b0d12), 카테고리 한 단계 낮춤
