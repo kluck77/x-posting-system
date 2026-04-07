@@ -4895,5 +4895,169 @@ body::before, body::after{display:none !important}
 }
 </style>
 
+<script>
+/* ─── S34 — Tab switching stabilization + scroll policy unification ── */
+(function(){
+  const scroller = document.querySelector('.hud-main');
+  if(!scroller) return;
+
+  // Unified scroll memory: one policy for all tabs
+  const saved = {home:0, ai:0, intake:0, ops:0};
+  let current = 'home';
+  // initialize current from existing active page
+  const initActive = document.querySelector('.page.active');
+  if(initActive) current = initActive.id.replace('page-','');
+
+  // continuously track scroll for current tab
+  scroller.addEventListener('scroll', ()=>{
+    saved[current] = scroller.scrollTop;
+  }, {passive:true});
+
+  function switchTo(target, reclick){
+    // save outgoing
+    saved[current] = scroller.scrollTop;
+    // activate new page
+    document.querySelectorAll('.hud-tabs .tab-btn').forEach(b=>{
+      b.classList.toggle('active', b.dataset.page===target);
+    });
+    document.querySelectorAll('.page').forEach(p=>{
+      p.classList.toggle('active', p.id===`page-${target}`);
+    });
+    current = target;
+    // reset or restore — in two rAFs for iOS Safari layout settle
+    const targetY = reclick ? 0 : Math.max(0, saved[target]||0);
+    if(reclick) saved[target] = 0;
+    requestAnimationFrame(()=>{
+      scroller.scrollTop = targetY;
+      requestAnimationFrame(()=>{
+        // clamp if target exceeds new content
+        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        if(scroller.scrollTop > max) scroller.scrollTop = max;
+        saved[current] = scroller.scrollTop;
+      });
+    });
+  }
+
+  // Replace existing tab listeners (from original + S33) with S34 single handler
+  document.querySelectorAll('.hud-tabs .tab-btn').forEach(btn=>{
+    const clone = btn.cloneNode(true);
+    btn.parentNode.replaceChild(clone, btn);
+  });
+  document.querySelectorAll('.hud-tabs .tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const target = btn.dataset.page;
+      const reclick = (target === current);
+      switchTo(target, reclick);
+    });
+  });
+
+  // Initial boot: ensure current tab starts at top
+  requestAnimationFrame(()=>{ scroller.scrollTop = 0; saved[current] = 0; });
+})();
+</script>
+
+<style>
+/* ─── S34 — layout finalization ─── */
+
+/* Remove page fadeIn transform (prevents iOS top jitter on tab switch) */
+.page.active{animation:none !important}
+
+/* Unified bottom padding: tab bar height already reserved by .hud-main bottom; add safe area */
+.hud-main{
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  scroll-padding-top:0 !important;
+}
+.hud-tabs{
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Kill stray bottom margins on last children of each page */
+#page-home > *:last-child,
+#page-ai > *:last-child,
+#page-intake > *:last-child,
+#page-ops > *:last-child{
+  margin-bottom:0 !important;
+}
+#page-home,#page-ai,#page-intake,#page-ops{padding-bottom:0 !important}
+
+/* Cat mascot: Home only, strictly inside weekly highlight panel */
+#page-ai .cat-wrap,
+#page-intake .cat-wrap,
+#page-ops .cat-wrap{display:none !important}
+/* safety: if cat ever attached outside panel-hero, hide */
+#page-home > .cat-wrap,
+body > .cat-wrap{display:none !important}
+#page-home .panel-hero .cat-wrap{
+  transform:scale(0.62) !important;opacity:0.9;
+}
+#page-home .panel-hero .cat-wrap.lucky-pulse{
+  animation:s34CatPulse 3.4s ease-in-out infinite !important;
+}
+@keyframes s34CatPulse{
+  0%,100%{transform:scale(0.62)}
+  50%{transform:scale(0.65)}
+}
+
+/* ── Home first-screen priority (situation → weekly → kpi → system status) ── */
+#page-home{display:flex;flex-direction:column;gap:9px}
+#page-home #situation-board{order:1}
+#page-home .panel-hero{order:2}
+#page-home .kpi-row{order:3}
+#page-home .hero-compact{order:4}
+#page-home .focus-3,
+#page-home .strip{display:none !important}
+
+/* AI tab first-screen priority — overview first, then stations */
+#page-ai{display:flex;flex-direction:column;gap:8px}
+#page-ai .ws-header{order:1}
+#page-ai #team-overview{order:2;margin-bottom:0 !important}
+#page-ai #ws-grid{order:3}
+
+/* Even tighter AI overview for first screen */
+#team-overview.tov{padding:8px 11px !important;margin-bottom:0 !important}
+#team-overview.tov .tov-head{margin-bottom:6px}
+#team-overview.tov .tov-stats{gap:5px;margin-bottom:6px}
+#team-overview.tov .tov-stat{padding:5px 9px !important;min-height:0}
+#team-overview.tov .tov-stat .v{font-size:13px !important}
+#team-overview.tov .tov-stat:nth-child(2) .v,
+#team-overview.tov .tov-stat:nth-child(3) .v{font-size:11.5px !important}
+#team-overview.tov .tov-stat .k{font-size:8.5px}
+#team-overview.tov .tov-stat .s{font-size:9.5px}
+#team-overview.tov .tov-stat::before{top:6px;bottom:6px}
+#team-overview.tov .tov-flow{padding:4px 7px !important;margin-bottom:6px !important}
+#team-overview.tov .tov-dotmap{padding:4px 7px !important}
+#team-overview.tov .tov-dm-row{font-size:9.5px}
+
+/* Intake first-screen: header → narrative → lanes */
+#page-intake{display:flex;flex-direction:column;gap:8px}
+#page-intake .ws-header{order:1}
+#page-intake #intake-flow-narrative{order:2;margin-bottom:0 !important}
+#page-intake .flow-wrap,#page-intake #flow-wrap{order:3}
+
+/* Ops first-screen: header → readiness → summary → cards */
+#page-ops{display:flex;flex-direction:column;gap:8px}
+#page-ops .ws-header{order:1}
+#page-ops #ops-summary{order:2;margin:0 !important}
+#page-ops #ops-readiness{order:3;margin:0 !important}
+#page-ops #ops-grid{order:4}
+
+/* Tab bar active state more obvious (single policy feedback) */
+.hud-tabs .tab-btn{
+  transition:color 0.15s ease;
+}
+.hud-tabs .tab-btn.active{
+  color:var(--txt) !important;
+  border-top:1px solid var(--accent) !important;
+}
+
+@media (max-width:760px){
+  .hud-main{padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px)) 10px !important}
+  #page-home .panel-hero .cat-wrap{transform:scale(0.5) !important;top:2px !important;right:4px !important}
+  #page-home .panel-hero .cat-wrap.lucky-pulse{animation:s34CatPulseSm 3.4s ease-in-out infinite !important}
+  @keyframes s34CatPulseSm{0%,100%{transform:scale(0.5)}50%{transform:scale(0.53)}}
+}
+</style>
+
 </body>
 </html>

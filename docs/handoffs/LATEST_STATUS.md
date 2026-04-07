@@ -1,6 +1,17 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Dashboard S33 — Final Polish (tab scroll memory + density compression)
+## ⚠️ LAST COMPLETED PHASE: Dashboard S34 — Tab Switching Stabilization + Layout Finalization
+
+`static/dashboard.html` 프론트만.
+- 탭 전환 단일 핸들러: `.hud-main` scroller, saved 4-tab scrollTop, 2x rAF 복원, scrollHeight clamp, 재클릭 = top
+- `.page.active` fadeIn transform 제거 (iOS jitter 방지)
+- 하단 빈 공간: `.hud-main` padding-bottom → `calc(16 + env(safe-area-inset-bottom))`, `.hud-tabs` 높이에 safe-area 포함
+- Home CSS order: 상황판 → 주간 → KPI → 시스템 상태 한 줄
+- AI CSS order: header → team-overview → ws-grid, tov 더 압축 (stat 13px)
+- Intake/Ops order 재확정
+- 고양이: Home panel-hero 내부 only, 다른 탭 display:none 강제, scale 0.62
+
+## PREVIOUS: Dashboard S33 — Final Polish (tab scroll memory + density compression)
 
 `static/dashboard.html` 프론트. 백엔드 무변경.
 - **탭 스크롤 메모리**: `.hud-main` 기준 탭별 scrollTop Map, 동일 탭 재클릭 = scroll-to-top, rAF 복원 (모바일 Safari 자연스럽게)

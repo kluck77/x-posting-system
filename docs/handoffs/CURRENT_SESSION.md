@@ -1,4 +1,53 @@
-# Current Session — 2026-04-07 (Session 33)
+# Current Session — 2026-04-07 (Session 34)
+
+## S34 — 탭 전환 안정화 + 레이아웃 마감
+
+`static/dashboard.html` 프론트만. 백엔드/승인 워크플로 무변경.
+
+### 변경 내용
+1. **탭 전환 정책 단일화**
+   - S33 핸들러를 S34 단일 핸들러로 교체 (cloneNode 재설치)
+   - scroller = `.hud-main` 고정, `saved = {home,ai,intake,ops}` scrollTop Map
+   - passive scroll 리스너로 currentPage 위치 계속 반영
+   - switchTo(target, reclick): outgoing 저장 → 탭/페이지 active 토글 → 2x rAF 후 scrollTop 설정
+   - 다른 탭 클릭: `saved[target]||0` 복원 + scrollHeight/clientHeight 기반 clamp
+   - 동일 탭 재클릭: target 0 리셋
+   - 부팅 시 current 탭 top 강제 정렬
+2. **페이지 루트 경계 정리**
+   - `.page.active` fadeIn transform 제거 (iOS top jitter 방지)
+   - 각 `#page-*` padding-bottom:0, 마지막 자식 margin-bottom:0
+3. **하단 빈 공간 원인 수정**
+   - `.hud-main` padding-bottom 을 `calc(16px + env(safe-area-inset-bottom))` 로 재설정
+   - `.hud-tabs` 높이를 `var(--tab-h) + env(safe-area-inset-bottom)` 로 확장 + padding-bottom
+   - 원인: S26/S28 중첩 오버라이드의 padding-bottom 24 와 safe-area 미고려가 겹쳐 iPhone Safari 에서 탭바 아래 여백이 과해짐
+4. **Home 첫 화면 순서 재정렬** (CSS order)
+   1. #situation-board (오늘 운영 상황판)
+   2. .panel-hero (이번 주 하이라이트)
+   3. .kpi-row (보조 KPI)
+   4. .hero-compact (시스템 상태 한 줄)
+   - .focus-3 / .strip 숨김 (상황판과 중복)
+5. **AI 첫 화면 순서 재정렬** (CSS order)
+   1. .ws-header
+   2. #team-overview (3-stat + flow + dotmap)
+   3. #ws-grid (5 스테이션)
+   - tov 더 압축: stat 13px, flow/dotmap padding 4/7, dm-row 9.5px
+   - 첫 screenful 에 총 실행/가장 바쁨/병목 + 역할별 분포가 다 들어오도록
+6. **Intake/Ops 순서 재정렬** (CSS order)
+   - Intake: ws-header → #intake-flow-narrative → #flow-wrap
+   - Ops: ws-header → #ops-summary → #ops-readiness → #ops-grid
+7. **고양이 마스코트 정리**
+   - `#page-ai .cat-wrap, #page-intake .cat-wrap, #page-ops .cat-wrap { display:none }` 강제
+   - Home 에서도 `.panel-hero .cat-wrap` 안에만 허용, `> .cat-wrap` / `body > .cat-wrap` 전역 숨김
+   - scale 0.62 + opacity 0.9 로 축소, s34CatPulse 3.4s (0.62↔0.65)
+   - 모바일 scale 0.50 → s34CatPulseSm
+
+### Files
+- `static/dashboard.html` — S34 script (unified tab handler) + S34 style
+- `docs/handoffs/CURRENT_SESSION.md` / `LATEST_STATUS.md`
+
+---
+
+# Previous — Session 33
 
 ## S33 — 마감 디테일: 탭 UX + 밀도 압축
 
