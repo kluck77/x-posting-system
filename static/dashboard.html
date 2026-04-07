@@ -1009,6 +1009,111 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .ws-meta .runs{font-size:32px;font-feature-settings:"tnum" 1}
 .ws-meta .lbl{text-transform:uppercase;letter-spacing:0.4px;font-size:10px;color:var(--txt3)}
 
+/* ─── S21d · final polish overrides (색감/마감) ───────────── */
+
+/* 1. 차분한 서피스 — 그리드/스캔라인 더 줄이기 */
+:root{
+  --grid:rgba(90,170,230,0.018);
+  --txt2:#9ea9c9;   /* 보조 텍스트 대비 소폭 상향 */
+  --txt3:#6a7694;   /* 3차 텍스트 대비 상향 */
+  --line:rgba(130,190,240,0.085);
+  --line2:rgba(130,190,240,0.15);
+}
+body::before{background-size:28px 28px}
+body::after{
+  background:repeating-linear-gradient(
+    180deg,
+    rgba(255,255,255,0.005) 0,
+    rgba(255,255,255,0.005) 1px,
+    transparent 1px,
+    transparent 3px);
+}
+
+/* 2. 헤더 브랜드 dot — 상태색(ok)이 아니라 accent 로 (status 색 예약) */
+.hud-brand .dot{background:var(--accent);box-shadow:0 0 6px rgba(94,229,255,0.45)}
+
+/* 3. 탭 활성 — 더 또렷하게, 그러나 glow는 절제 */
+.tab-btn{color:#aab4d0}
+.tab-btn.active{
+  background:linear-gradient(180deg,rgba(94,229,255,0.10),transparent 80%);
+}
+.tab-btn.active .ic{filter:drop-shadow(0 0 2px rgba(94,229,255,0.55))}
+.tab-btn.active::after{
+  width:36px;height:2px;box-shadow:0 0 2px rgba(94,229,255,0.6);
+}
+
+/* 4. 패널/카드 neon 억제 */
+.panel-hero{
+  box-shadow:inset 0 0 16px rgba(94,229,255,0.022);
+  border-color:rgba(94,229,255,0.20);
+}
+.panel-hero .panel-head{border-bottom-color:rgba(94,229,255,0.15)}
+.hero-state .label.ok{text-shadow:0 0 6px rgba(124,255,178,0.18)}
+.hero-state .label.warn{text-shadow:0 0 6px rgba(255,200,87,0.18)}
+.hero-state .label.idle{text-shadow:0 0 6px rgba(184,156,214,0.18)}
+
+/* signal bars 절제 */
+.signal i{opacity:0.55}
+
+/* 5. KPI 상단 코너 — 한쪽만 남기고 반대쪽 절제 (카드 리듬) */
+.kpi::before{opacity:0.85}
+.kpi::after{opacity:0.55}
+.kpi.cyan::before,.kpi.cyan::after{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.kpi.green::before,.kpi.green::after{border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.kpi.amber::before,.kpi.amber::after{border-color:color-mix(in srgb,var(--cat-premium) 60%,var(--line))}
+.kpi.magenta::before,.kpi.magenta::after{border-color:color-mix(in srgb,var(--cat-b2b) 60%,var(--line))}
+/* KPI 카테고리 숫자도 카테고리 토큰으로 (상태색 오용 방지) */
+.kpi.amber .k-val{color:var(--cat-premium)}
+.kpi.magenta .k-val{color:var(--cat-b2b)}
+.kpi.green .k-val{color:var(--txt)} /* 승인 대기: 중립 */
+.kpi.green .k-label::before{
+  content:'';display:inline-block;width:6px;height:6px;
+  background:var(--ok);margin-right:6px;vertical-align:1px;
+}
+
+/* 6. ops 카드 — 카테고리 상단 2px 얇은 띠로 리듬 차이 */
+.ops-card{border-top:2px solid var(--line)}
+.ops-card.amber{border-top-color:color-mix(in srgb,var(--cat-premium) 55%,var(--line))}
+.ops-card.brief{border-top-color:color-mix(in srgb,var(--cat-brief) 55%,var(--line))}
+.ops-card.green{border-top-color:color-mix(in srgb,var(--cat-news) 55%,var(--line))}
+.ops-card.magenta{border-top-color:color-mix(in srgb,var(--cat-b2b) 55%,var(--line))}
+.ops-card.gold{border-top-color:color-mix(in srgb,var(--cat-weekly) 55%,var(--line))}
+.ops-card.cta{border-top-color:color-mix(in srgb,var(--cat-cta) 55%,var(--line))}
+.ops-card::before,.ops-card::after{opacity:0.5}
+
+/* 7. state-chip 대비 개선 (읽기 쉽게) */
+.state-chip{background:transparent}
+.state-chip.ready{background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.state-chip.wait{background:color-mix(in srgb,var(--warn) 10%,transparent)}
+
+/* 8. AI 노드 배경 — 아주 미세한 역할 색 wash 로 카드 리듬 */
+.ws-node{
+  background:linear-gradient(180deg,var(--panel),var(--bg2));
+}
+.ws-node[class*="role-"]::before{border-color:color-mix(in srgb,var(--role) 55%,var(--line))}
+.ws-node[class*="role-"]::after{border-color:color-mix(in srgb,var(--role) 40%,var(--line));opacity:0.6}
+
+/* 9. bar-row 강도 절제 */
+.bar-row .bv::after{box-shadow:none}
+.lane.amber .bv::after,
+.lane.green .bv::after,
+.lane.magenta .bv::after{box-shadow:none}
+
+/* 10. ws-icon/kpi 라디얼 약화 */
+.ws-icon{background:radial-gradient(circle at 50% 50%,rgba(94,229,255,0.06),transparent 70%)}
+
+/* 11. 작은 라벨 가독성 */
+.k-label,.strip-cell .lbl,.ops-head,.panel-head,.lane-head,.ws-header{color-scheme:dark}
+.strip-cell .lbl,.k-label{color:var(--txt2)}
+
+/* 12. 고양이 glow 한 단계 더 절제 */
+.cat-wrap.lucky-pulse{filter:drop-shadow(0 0 3px rgba(255,209,102,0.30))}
+@keyframes luckyPulse{
+  0%,100%{filter:drop-shadow(0 0 2px rgba(255,209,102,0.22))}
+  50%{filter:drop-shadow(0 0 5px rgba(255,209,102,0.48))}
+}
+.cat-wrap.coin-rush{filter:drop-shadow(0 0 7px rgba(255,209,102,0.65))}
+
 /* ─── Page-specific styles inserted in later steps ────────── */
 </style>
 </head>
