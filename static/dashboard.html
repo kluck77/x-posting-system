@@ -5203,13 +5203,26 @@ html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
     // Inline style with !important via cssText (setProperty supports priority)
     // Just enough slack: small breathing room above tab bar, no big void.
     pageAi.style.setProperty('padding-bottom', '0px', 'important');
+    pageAi.style.setProperty('flex', '1 1 auto', 'important');
+    pageAi.style.setProperty('min-height', '100%', 'important');
+    // Make ws-grid fill the AI page and distribute cards evenly so no
+    // empty void appears below the last card.
+    const grid = pageAi.querySelector('#ws-grid.v28');
+    if(grid){
+      grid.style.setProperty('flex', '1 1 auto', 'important');
+      grid.style.setProperty('display', 'flex', 'important');
+      grid.style.setProperty('flex-direction', 'column', 'important');
+      grid.style.setProperty('justify-content', 'space-between', 'important');
+      grid.style.setProperty('min-height', '100%', 'important');
+    }
     const cards = pageAi.querySelectorAll('#ws-grid.v28 .ws28');
     if(cards.length){
       const last = cards[cards.length - 1];
       last.style.setProperty('margin-bottom', '0px', 'important');
       last.style.setProperty('border-bottom', 'none', 'important');
     }
-    // Also kill .hud-main's own padding-bottom on AI tab so void disappears
+    // Also kill .hud-main's own padding-bottom so the scroll area ends
+    // exactly at the tab bar with no extra void.
     const hud = document.querySelector('.hud-main');
     if(hud) hud.style.setProperty('padding-bottom', '0px', 'important');
   }
