@@ -34,6 +34,9 @@
   --cat-news:#8fc9b3;
   --cat-weekly:#d6c178;
   --cat-cta:#cfa6c5;
+  /* surfaces / rails */
+  --surface-2:#0d1120;
+  --rail:#1c2238;
   /* legacy aliases (kept so existing rules keep working) */
   --cyan:var(--accent);
   --cyan2:var(--accent2);
@@ -54,6 +57,10 @@ html{
   font-size:15px;
   -webkit-font-smoothing:antialiased;
   -webkit-text-size-adjust:100%;
+  font-feature-settings:"tnum" 1,"ss01" 1;
+}
+.num,.k-val,.ws-meta .runs,.ops-head .big,.lane-head .num,.strip-cell .val,.hero-state .label{
+  font-feature-settings:"tnum" 1;font-variant-numeric:tabular-nums;
 }
 body{
   height:100dvh;
@@ -140,21 +147,21 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .tab-btn{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:4px;font-size:12px;letter-spacing:0.2px;
-  color:var(--txt2);
+  color:#a4afcb;
   border-top:2px solid transparent;
   transition:color 0.18s,border-color 0.18s,background 0.18s;
   position:relative;font-weight:600;
 }
-.tab-btn .ic{font-size:20px;line-height:1;transition:font-size 0.18s}
+.tab-btn .ic{font-size:20px;line-height:1;transition:font-size 0.18s,filter 0.18s}
 .tab-btn.active{
   color:var(--accent);border-top-color:var(--accent);font-weight:800;
-  background:linear-gradient(180deg,rgba(94,229,255,0.10),transparent 70%);
+  background:linear-gradient(180deg,rgba(94,229,255,0.13),transparent 70%);
 }
-.tab-btn.active .ic{font-size:22px}
+.tab-btn.active .ic{font-size:22px;filter:drop-shadow(0 0 4px rgba(94,229,255,0.5))}
 .tab-btn.active::after{
   content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);
   width:32px;height:2px;background:var(--accent);
-  box-shadow:0 0 6px rgba(94,229,255,0.6);
+  box-shadow:0 0 4px rgba(94,229,255,0.5);
 }
 
 /* ─── Panel primitive ─────────────────────────────────────── */
@@ -181,6 +188,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 }
 .panel-head .label{color:var(--txt2);font-weight:500;margin-left:auto;font-size:12px}
 .panel-body{padding:14px}
+.panel-hero{
+  margin-bottom:14px;
+  border-color:rgba(94,229,255,0.28);
+  box-shadow:0 0 0 1px rgba(94,229,255,0.05),inset 0 0 24px rgba(94,229,255,0.03);
+}
+.panel-hero .panel-head{
+  font-size:14px;letter-spacing:0.4px;padding:14px 16px;
+  border-bottom:1px solid rgba(94,229,255,0.22);
+}
+.panel-hero .panel-head .label{font-size:13px;color:var(--txt);font-weight:700}
+.panel-hero .panel-body{padding:14px 16px 16px 16px}
+.panel-hero .hl-item{
+  padding:12px 14px;font-size:14px;
+  border-left-width:4px;
+}
+.panel-hero .hl-item .hook{font-weight:600}
 
 .muted{color:var(--txt2);font-size:12px;letter-spacing:0.2px}
 .empty{
@@ -229,17 +252,33 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   display:flex;align-items:baseline;gap:12px;margin-top:10px;flex-wrap:wrap;
 }
 .hero-state .label{
-  font-size:34px;font-weight:700;letter-spacing:1px;color:var(--txt);line-height:1;
+  font-size:38px;font-weight:800;letter-spacing:-0.5px;color:var(--txt);line-height:1;
 }
-.hero-state .label.ok{color:var(--ok);text-shadow:0 0 8px rgba(124,255,178,0.25)}
-.hero-state .label.warn{color:var(--warn);text-shadow:0 0 8px rgba(255,200,87,0.25)}
-.hero-state .label.idle{color:var(--cat-b2b);text-shadow:0 0 8px rgba(184,156,214,0.25)}
-.hero-state .sub{font-size:14px;color:var(--txt);letter-spacing:0.3px;font-weight:500}
+.hero-state .label.ok{color:var(--ok);text-shadow:0 0 10px rgba(124,255,178,0.30)}
+.hero-state .label.warn{color:var(--warn);text-shadow:0 0 10px rgba(255,200,87,0.30)}
+.hero-state .label.idle{color:var(--cat-b2b);text-shadow:0 0 10px rgba(184,156,214,0.28)}
+.hero-state .sub{font-size:14px;color:var(--txt2);letter-spacing:0.2px;font-weight:500}
 .hero-summary{
-  margin-top:14px;font-size:13px;color:var(--txt2);letter-spacing:0.2px;
-  display:flex;flex-wrap:wrap;gap:14px;
+  margin-top:14px;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
 }
-.hero-summary span b{color:var(--accent);font-weight:700;font-size:14px}
+.hero-summary span{
+  display:flex;flex-direction:column;gap:2px;
+  padding:9px 10px;background:var(--surface-2,#0d1120);
+  border:1px solid var(--line);border-left:2px solid var(--accent);
+  font-size:11px;color:var(--txt3);letter-spacing:0.2px;font-weight:600;
+}
+.hero-summary span b{
+  color:var(--txt);font-weight:800;font-size:20px;letter-spacing:-0.5px;
+  font-feature-settings:"tnum" 1;line-height:1;
+}
+.hero-summary span:nth-child(1){border-left-color:var(--cat-news)}
+.hero-summary span:nth-child(2){border-left-color:var(--ok)}
+.hero-summary span:nth-child(3){border-left-color:var(--cat-premium)}
+.hero-summary span:nth-child(4){border-left-color:var(--cat-b2b)}
+@media (max-width:380px){
+  .hero-summary{grid-template-columns:repeat(2,1fr)}
+}
 .hero-meta{
   display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;
   font-size:12px;color:var(--txt2);letter-spacing:0.2px;
@@ -615,12 +654,29 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   filter:drop-shadow(0 0 10px rgba(255,209,102,0.85));
 }
 .cat-wrap.lucky-pulse{
-  filter:drop-shadow(0 0 6px rgba(255,209,102,0.55));
-  animation:luckyPulse 2.4s ease-in-out infinite;
+  filter:drop-shadow(0 0 4px rgba(255,209,102,0.4));
+  animation:luckyPulse 2.6s ease-in-out infinite;
 }
 @keyframes luckyPulse{
-  0%,100%{filter:drop-shadow(0 0 4px rgba(255,209,102,0.45))}
-  50%{filter:drop-shadow(0 0 12px rgba(255,209,102,0.85))}
+  0%,100%{filter:drop-shadow(0 0 3px rgba(255,209,102,0.30))}
+  50%{filter:drop-shadow(0 0 7px rgba(255,209,102,0.65))}
+}
+.cat-wrap.warning .cat-paw,
+.cat-wrap.warning .cat-coin{animation-duration:6s !important}
+.cat-wrap.warning .cat-tail{animation-duration:7s !important}
+.cat-wrap.warning{filter:drop-shadow(0 0 3px rgba(255,200,87,0.4))}
+.cat-coin-plus{
+  position:absolute;left:8px;top:8px;
+  font-size:9px;color:#ffd166;font-weight:800;
+  opacity:0;pointer-events:none;
+}
+.cat-wrap.coin-rush .cat-coin-plus{
+  animation:coinPlus 1.4s ease-out infinite;
+}
+@keyframes coinPlus{
+  0%{opacity:0;transform:translateY(0)}
+  20%{opacity:1}
+  100%{opacity:0;transform:translateY(-8px)}
 }
 .cat-svg{width:100%;height:100%;image-rendering:pixelated}
 .cat-paw{
@@ -656,6 +712,179 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
   50%{transform:translateY(-1.5px)}
 }
 
+/* ─── S21 polish components ───────────────────────────────── */
+
+/* attention band — "지금 주목" 1줄 (Home) */
+.attn-band{
+  display:flex;align-items:center;gap:10px;
+  background:linear-gradient(90deg,rgba(94,229,255,0.07),transparent 70%);
+  border:1px solid var(--line);
+  border-left:3px solid var(--accent);
+  padding:11px 12px;margin-bottom:14px;
+  font-size:13px;color:var(--txt);letter-spacing:0.2px;
+}
+.attn-band.warn{
+  background:linear-gradient(90deg,rgba(255,200,87,0.07),transparent 70%);
+  border-left-color:var(--warn);
+}
+.attn-band.danger{
+  background:linear-gradient(90deg,rgba(255,92,122,0.08),transparent 70%);
+  border-left-color:var(--danger);
+}
+.attn-band.idle{
+  background:linear-gradient(90deg,rgba(184,156,214,0.07),transparent 70%);
+  border-left-color:var(--cat-b2b);
+}
+.attn-band .pulse-dot{
+  width:8px;height:8px;background:var(--accent);
+  box-shadow:0 0 6px rgba(94,229,255,0.5);
+  flex-shrink:0;
+  animation:attnPulse 2s ease-in-out infinite;
+}
+.attn-band.warn .pulse-dot{background:var(--warn);box-shadow:0 0 6px rgba(255,200,87,0.5)}
+.attn-band.danger .pulse-dot{background:var(--danger);box-shadow:0 0 6px rgba(255,92,122,0.5)}
+.attn-band.idle .pulse-dot{background:var(--cat-b2b);box-shadow:0 0 6px rgba(184,156,214,0.4)}
+@keyframes attnPulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:0.55;transform:scale(0.85)}
+}
+.attn-band .label{font-weight:700;color:var(--accent)}
+.attn-band.warn .label{color:var(--warn)}
+.attn-band.danger .label{color:var(--danger)}
+.attn-band.idle .label{color:var(--cat-b2b)}
+.attn-band .msg{flex:1;color:var(--txt)}
+.attn-band .meta{color:var(--txt2);font-size:12px;font-weight:600}
+
+/* hero mini sparkline (top-right) */
+.hero-spark{
+  position:absolute;top:14px;right:14px;
+  display:flex;align-items:flex-end;gap:3px;height:22px;
+  pointer-events:none;opacity:0.85;
+}
+.hero-spark i{
+  display:block;width:4px;background:var(--accent);
+  box-shadow:0 0 3px rgba(94,229,255,0.4);
+}
+.hero-spark .lbl{
+  position:absolute;top:-12px;right:0;
+  font-size:9px;color:var(--txt2);letter-spacing:1px;font-weight:600;
+}
+
+/* ops summary bar — 6 카드 위 가로 1줄 합계 */
+.ops-summary{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:1px;background:var(--line);
+  border:1px solid var(--line);
+  margin-bottom:12px;
+}
+.ops-summary .cell{
+  background:var(--panel);padding:10px 12px;
+  display:flex;flex-direction:column;gap:3px;
+}
+.ops-summary .cell .lbl{
+  font-size:10px;color:var(--txt2);letter-spacing:0.2px;font-weight:600;
+}
+.ops-summary .cell .val{
+  font-size:20px;font-weight:800;color:var(--txt);letter-spacing:-0.5px;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.ops-summary .cell .val.dim{color:var(--txt3)}
+
+/* state chip on ops card head */
+.state-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:700;letter-spacing:0.2px;
+  padding:3px 7px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--txt2);
+  margin-left:6px;
+}
+.state-chip.ready{color:var(--ok);border-color:rgba(124,255,178,0.35)}
+.state-chip.empty{color:var(--txt3);border-color:var(--line)}
+.state-chip.wait{color:var(--warn);border-color:rgba(255,200,87,0.35)}
+.state-chip::before{content:'●';font-size:7px}
+.state-chip.empty::before{color:var(--txt3)}
+.state-chip.ready::before{color:var(--ok)}
+.state-chip.wait::before{color:var(--warn)}
+
+/* productized empty (drop-in everywhere) */
+.empty-pro{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 12px;background:var(--surface-2);
+  border:1px dashed var(--line);
+  font-size:12px;color:var(--txt2);
+  letter-spacing:0.2px;
+}
+.empty-pro::before{
+  content:'▢';color:var(--txt3);font-size:11px;margin-top:1px;
+}
+.empty-pro .stack{display:flex;flex-direction:column;gap:2px}
+.empty-pro .stack .t1{color:var(--txt);font-weight:600;font-size:12px}
+.empty-pro .stack .t2{color:var(--txt3);font-size:11px;letter-spacing:0.1px}
+
+/* AI worker presence — left status rail + role badge + mini-trace */
+.ws-node{position:relative}
+.ws-node .worker-rail{
+  position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--rail);
+}
+.ws-node.working .worker-rail{
+  background:linear-gradient(180deg,var(--accent),var(--accent2));
+  box-shadow:0 0 6px rgba(94,229,255,0.4);
+}
+.ws-node.off .worker-rail{background:var(--rail);opacity:0.5}
+.role-badge{
+  display:inline-block;font-size:10px;font-weight:700;
+  padding:2px 6px;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--accent);
+  letter-spacing:0.2px;margin-top:5px;
+}
+.ws-node.off .role-badge{color:var(--txt3);border-color:var(--line)}
+.ws-status{
+  font-size:11px;color:var(--txt2);margin-top:4px;
+  letter-spacing:0.1px;display:flex;align-items:center;gap:5px;
+}
+.ws-status::before{
+  content:'';width:5px;height:5px;background:var(--accent);
+  flex-shrink:0;
+  animation:wsBlink 1.8s ease-in-out infinite;
+}
+.ws-node.off .ws-status::before{background:var(--txt3);animation:none}
+@keyframes wsBlink{0%,100%{opacity:1}50%{opacity:0.35}}
+.ws-meta{position:relative}
+.mini-trace{
+  display:flex;gap:3px;justify-content:flex-end;margin-top:6px;
+}
+.mini-trace i{
+  display:block;width:5px;height:5px;background:var(--rail);
+}
+.mini-trace i.on{background:var(--accent);box-shadow:0 0 3px rgba(94,229,255,0.5)}
+
+/* intake pipeline rail (left vertical line + stage dot) */
+.lane{padding-left:24px}
+.lane::after{
+  content:'';position:absolute;left:11px;top:14px;bottom:14px;
+  width:2px;background:var(--rail);
+}
+.lane .stage-dot{
+  position:absolute;left:7px;top:14px;
+  width:10px;height:10px;background:var(--bg);
+  border:2px solid var(--accent);
+  z-index:1;
+}
+.lane.amber .stage-dot{border-color:var(--cat-premium)}
+.lane.green .stage-dot{border-color:var(--cat-news)}
+.lane.magenta .stage-dot{border-color:var(--cat-b2b)}
+.lane-arrow{display:none}
+
+/* ops empty card variant (productized) */
+.ops-card.is-empty .empty-pro{margin-top:6px}
+.ops-card.is-empty .ops-row{display:none}
+
+/* attention band (Home) — also used on Ops as compact summary if needed */
+@media(max-width:380px){
+  .ops-summary{grid-template-columns:repeat(2,1fr)}
+}
+
 /* ─── Page-specific styles inserted in later steps ────────── */
 </style>
 </head>
@@ -681,6 +910,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
     <div class="hero">
       <span class="hero-corner tl"></span><span class="hero-corner tr"></span>
       <span class="hero-corner bl"></span><span class="hero-corner br"></span>
+      <div class="hero-spark" id="hero-spark" aria-hidden="true">
+        <span class="lbl">7일 흐름</span>
+      </div>
       <div class="hero-body">
         <div class="hero-title">시스템 상태
           <span class="signal"><i></i><i></i><i></i><i></i></span>
@@ -704,6 +936,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
       </div>
     </div>
 
+    <div class="attn-band" id="attn-band">
+      <span class="pulse-dot"></span>
+      <span class="label">대기</span>
+      <span class="msg">신호 분석 중…</span>
+    </div>
+
     <div class="kpi-grid">
       <div class="kpi cyan"><div class="k-label">초안 · 7일</div>
         <div class="k-val" id="kpi-drafts">—</div>
@@ -719,7 +957,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
         <div class="k-sub" id="kpi-b2b-sub">후보</div></div>
     </div>
 
-    <div class="panel"><div class="panel-head">이번 주 하이라이트
+    <div class="panel panel-hero"><div class="panel-head">◆ 이번 주 하이라이트
       <span class="label" id="hl-count">—</span></div>
       <div class="panel-body">
         <div class="hl-list" id="hl-list"><div class="empty">불러오는 중…</div></div>
@@ -727,6 +965,7 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 
       <!-- Lucky cat mascot (pixel SVG, no images) -->
       <div class="cat-wrap" id="cat" aria-hidden="true">
+        <span class="cat-coin-plus">+</span>
         <svg class="cat-svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
           <!-- coin (lucky charm above paw) -->
           <g class="cat-coin">
@@ -806,21 +1045,22 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
     </div>
     <div class="flow-wrap" id="flow-wrap">
       <div class="lane" id="lane-content">
+        <span class="stage-dot"></span>
         <div class="lane-head"><span class="stage">01</span>소스 수집<span class="num" id="lane-content-n">—</span></div>
         <div class="lane-bars" id="lane-content-bars"></div>
       </div>
-      <div class="lane-arrow">▼ ▼ ▼</div>
       <div class="lane green" id="lane-newsletter">
+        <span class="stage-dot"></span>
         <div class="lane-head"><span class="stage">02</span>뉴스레터 · 리드<span class="num" id="lane-nl-n">—</span></div>
         <div class="lane-bars" id="lane-nl-bars"></div>
       </div>
-      <div class="lane-arrow">▼ ▼ ▼</div>
       <div class="lane amber" id="lane-premium">
+        <span class="stage-dot"></span>
         <div class="lane-head"><span class="stage">03</span>프리미엄 · B2B<span class="num" id="lane-pb-n">—</span></div>
         <div class="lane-bars" id="lane-pb-bars"></div>
       </div>
-      <div class="lane-arrow">▼ ▼ ▼</div>
       <div class="lane magenta" id="lane-cta">
+        <span class="stage-dot"></span>
         <div class="lane-head"><span class="stage">04</span>CTA · 카피<span class="num" id="lane-cta-n">—</span></div>
         <div class="lane-bars" id="lane-cta-bars"></div>
       </div>
@@ -832,6 +1072,11 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
     <div class="ws-header">
       <span>◉ 운영 · 비즈니스 레이어</span>
       <span class="right" id="ops-stamp">— —</span>
+    </div>
+    <div class="ops-summary" id="ops-summary">
+      <div class="cell"><div class="lbl">총 후보</div><div class="val" id="ops-sum-cand">—</div></div>
+      <div class="cell"><div class="lbl">발행 준비</div><div class="val" id="ops-sum-ready">—</div></div>
+      <div class="cell"><div class="lbl">주간 누적</div><div class="val" id="ops-sum-week">—</div></div>
     </div>
     <div class="ops-grid" id="ops-grid"></div>
   </div>
@@ -936,7 +1181,7 @@ function renderHome(){
   $('#hl-count').textContent = hl.length ? `${hl.length}건` : '없음';
   const hlList = $('#hl-list');
   if(!hl.length){
-    hlList.innerHTML = '<div class="empty">이번 주 하이라이트 없음</div>';
+    hlList.innerHTML = '<div class="empty-pro"><div class="stack"><div class="t1">이번 주 하이라이트 없음</div><div class="t2">발행 후 점수가 누적되면 자동 표시</div></div></div>';
   } else {
     hlList.innerHTML = hl.map(h=>
       `<div class="hl-item">
@@ -946,6 +1191,75 @@ function renderHome(){
        </div>`
     ).join('');
   }
+
+  // hero spark — 7-day published distribution (synthetic from highlights or fallback)
+  renderHeroSpark(w);
+
+  // attention band — 자동 추론
+  renderAttention({h, a, q, w, b});
+}
+
+/* ─── Hero spark renderer ─────────────────────────────────── */
+function renderHeroSpark(w){
+  const el = $('#hero-spark'); if(!el) return;
+  // 데이터 소스: weekly highlights 점수 분포 또는 published 단순 막대
+  let bars = [];
+  const hl = w && w.highlights || [];
+  if(hl.length){
+    bars = hl.slice(0,7).map(h=>Math.min(22, Math.max(3, (h.monetization_score||0)*1.6)));
+  } else {
+    const pub = (w && w.published) || 0;
+    const total = (w && w.total_drafts) || 0;
+    // simple bar showing publish ratio
+    const r = total ? Math.round(pub/total*22) : 0;
+    bars = [4, Math.max(4,r-2), Math.max(4,r), Math.max(4,r+1), Math.max(4,r), Math.max(4,r-1), Math.max(4,r-2)];
+  }
+  const labelEl = el.querySelector('.lbl');
+  el.innerHTML = '';
+  if(labelEl) el.appendChild(labelEl);
+  bars.forEach(h=>{
+    const i = document.createElement('i');
+    i.style.height = Math.max(3, Math.min(22, h)) + 'px';
+    el.appendChild(i);
+  });
+}
+
+/* ─── Attention band — auto pick the most important signal ── */
+function renderAttention({h, a, q, w, b}){
+  const band = $('#attn-band'); if(!band) return;
+  const set = (cls,label,msg,meta='')=>{
+    band.className = 'attn-band' + (cls?' '+cls:'');
+    band.innerHTML =
+      `<span class="pulse-dot"></span>`+
+      `<span class="label">${label}</span>`+
+      `<span class="msg">${msg}</span>`+
+      (meta?`<span class="meta">${meta}</span>`:'');
+  };
+  // 우선순위: danger → idle → warn(설정 미비) → 승인 대기 → 프리미엄 → 주간 → 기본
+  if(h && h.db_ok===false){
+    return set('danger','경고','DB 연결이 끊어졌습니다');
+  }
+  if(a && a.is_idle){
+    return set('idle','휴식','파이프라인 유휴 상태', `${a.hours_idle||0}시간`);
+  }
+  if(h && (h.telegram_configured===false || h.x_configured===false)){
+    const which = !h.x_configured ? 'X' : '텔레그램';
+    return set('warn','주의', `${which} 설정 필요`);
+  }
+  const pending = (q && q.pending_count) || 0;
+  if(pending > 0){
+    return set('','지금 주목',`승인 대기 ${pending}건이 검토를 기다립니다`);
+  }
+  const premium = (b && b.premium && b.premium.total) || 0;
+  const b2bN = (b && b.b2b && b.b2b.total) || 0;
+  if(premium > 0 || b2bN > 0){
+    return set('','지금 주목',`수익 후보 ${premium+b2bN}건 누적`, `프리미엄 ${premium} · B2B ${b2bN}`);
+  }
+  const hlN = (w && w.highlights || []).length;
+  if(hlN > 0){
+    return set('','지금 주목',`이번 주 하이라이트 ${hlN}건 확인`);
+  }
+  set('','정상','시스템 모든 신호 안정');
 }
 
 /* ─── Render: AI WORKSTATIONS ─────────────────────────────── */
@@ -1011,7 +1325,7 @@ const ROLE_ICONS = {
 
 function renderAI(){
   const p = state.providers;
-  if(!p){ $('#ws-grid').innerHTML = '<div class="empty">프로바이더 데이터 없음</div>'; return; }
+  if(!p){ $('#ws-grid').innerHTML = '<div class="empty-pro"><div class="stack"><div class="t1">프로바이더 데이터 없음</div><div class="t2">설정 후 자동 표시</div></div></div>'; return; }
   $('#ws-mode').textContent = p.mock_mode ? '모드 · 모의' : '모드 · 운영';
   const roleKo = {
     DraftWriter:'드래프트 작성',
@@ -1020,6 +1334,34 @@ function renderAI(){
     FactChecker:'팩트체커',
     TrendHunter:'트렌드 헌터',
   };
+  const roleBadge = {
+    DraftWriter:'WRITE',
+    Reviewer:'REVIEW',
+    Researcher:'SCAN',
+    FactChecker:'VERIFY',
+    TrendHunter:'WATCH',
+  };
+  const statusActive = {
+    DraftWriter:'초안 정리 중',
+    Reviewer:'검토 진행',
+    Researcher:'소스 탐색 중',
+    FactChecker:'검증 진행',
+    TrendHunter:'신호 감시 중',
+  };
+  const statusIdle = {
+    DraftWriter:'작성 대기',
+    Reviewer:'검토할 항목 없음',
+    Researcher:'수집 대기',
+    FactChecker:'확인할 항목 없음',
+    TrendHunter:'신호 대기',
+  };
+  const statusOff = {
+    DraftWriter:'프로바이더 미설정',
+    Reviewer:'프로바이더 미설정',
+    Researcher:'프로바이더 미설정',
+    FactChecker:'프로바이더 미설정',
+    TrendHunter:'프로바이더 미설정',
+  };
   const roles = p.roles || [];
   $('#ws-grid').innerHTML = roles.map(r=>{
     const off = !r.configured;
@@ -1027,16 +1369,28 @@ function renderAI(){
     const runs = r.runs_today;
     const runsTxt = runs==null ? '—' : runs;
     const roleName = roleKo[r.role] || r.role;
-    return `<div class="ws-node ${off?'off':''}">
+    const badge = roleBadge[r.role] || '';
+    const working = !off && runs > 0;
+    const statusTxt = off ? (statusOff[r.role]||'미설정')
+                     : working ? (statusActive[r.role]||'동작 중')
+                     : (statusIdle[r.role]||'대기');
+    // mini-trace 4 dots = runs 시각화 (0..4 → 채워짐)
+    const traceN = Math.min(4, Math.max(0, runs||0));
+    const trace = [0,1,2,3].map(i=>`<i class="${i<traceN?'on':''}"></i>`).join('');
+    const cls = off ? 'off' : (working ? 'working' : '');
+    return `<div class="ws-node ${cls}">
+      <span class="worker-rail"></span>
       <div class="ws-icon">${icon}</div>
       <div class="ws-info">
         <div class="ws-role">${roleName}</div>
-        <div class="ws-prov">${escapeHTML(r.provider||'—')} ${off?'· 미설정':''}</div>
-        <div class="ws-note">${escapeHTML(r.note||'')}</div>
+        <div class="ws-prov">${escapeHTML(r.provider||'—')}</div>
+        <div class="ws-status">${statusTxt}</div>
+        <span class="role-badge">${badge}</span>
       </div>
       <div class="ws-meta">
         <div class="runs ${runs==null||runs===0?'off':''}">${runsTxt}</div>
         <div class="lbl">오늘 실행</div>
+        <div class="mini-trace">${trace}</div>
       </div>
     </div>`;
   }).join('');
@@ -1253,7 +1607,7 @@ setInterval(refreshAll,30000);
     const b2bCount = (b.b2b && b.b2b.total) || 0;
     const weeklyHl = (b.weekly && b.weekly.highlights || []).length;
 
-    const classes = ['alert','idle','coin-rush','lean-weekly','lucky-pulse'];
+    const classes = ['alert','warning','idle','coin-rush','lean-weekly','lucky-pulse'];
     classes.forEach(c=>cat.classList.remove(c));
 
     if(h.db_ok === false){
@@ -1262,6 +1616,10 @@ setInterval(refreshAll,30000);
     }
     if(a.is_idle){
       cat.classList.add('idle');
+      return;
+    }
+    if(h.telegram_configured===false || h.x_configured===false){
+      cat.classList.add('warning');
       return;
     }
     // healthy baseline

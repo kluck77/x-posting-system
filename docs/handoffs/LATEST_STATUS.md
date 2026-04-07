@@ -1,6 +1,16 @@
 # Latest Status
 
-## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard Final Polish (S20)
+## ⚠️ LAST COMPLETED PHASE: Pixel HUD Dashboard S21 — Human-level + Home focus
+
+**S21 — Human-level polish + Home-focused refinement on top of S20. `static/dashboard.html` only.**
+- **Hero 위계 강화**: state 라벨 34→38px/800/-0.5px, sub 색을 txt2로 내려 주·보조 분리
+- **hero-summary 칩화**: flex → 4-column grid (모바일 2-col), surface-2 배경 + 좌측 2px 카테고리 보더, 라벨 11/600/txt3 · 숫자 20/800/tnum/-0.5px — 숫자+라벨이 한 단위로 스캔됨
+- **Weekly Highlights를 홈 중심으로 승격** (`.panel-hero`): accent 알파 테두리, 인셋 글로우, 헤더 ◆ 강조, hl-item 크기 및 보더 강화
+- **Lucky cat warning 분기 연결**: 텔레그램/X 미설정 시 cat이 `warning` (felow paw/tail, amber 글로우). alert/idle/coin-rush/lean-weekly/healthy 상태머신에 warning 합류
+- 이전 S21 (a) 단계에서 이미 적용: semantic 토큰 + --surface-2/--rail, tnum 숫자 피처, tab 활성 강화, 새 컴포넌트(attn-band/hero-spark/ops-summary/empty-pro/worker-rail/role-badge/ws-status/mini-trace/stage-dot), Home hero-spark + attention-band JS, AI 워커 프레즌스 (working/off 상태 + 역할 배지 + 마이크로 트레이스)
+- 백엔드/스키마/승인 워크플로/자동 발행 변경 없음
+
+## ⚠️ PREVIOUS PHASE: Pixel HUD Dashboard Final Polish (S20)
 
 **S20 — Final product polish on top of S18(rebuild)+S19(refinement). `static/dashboard.html` only.**
 - **Color tokens redesigned with semantic separation**: single brand `--accent`, status colors (`--ok/--warn/--danger`) reserved for real system state, six lite category tokens (`--cat-premium/-brief/-b2b/-news/-weekly/-cta`) for section identity. Status and category colors no longer compete.
