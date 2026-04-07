@@ -1,6 +1,16 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S38 — Cat visibility fix + AI bottom cut fix
+## LAST COMPLETED PHASE: Dashboard S39 — Cat continuous walk + AI bottom cut full fix
+
+`static/dashboard.html` only.
+
+**Cat teleport root cause**: S38 toggled CSS classes that switched between `top/right` and `bottom/left` anchors. CSS transitions cannot interpolate between explicit values and `auto` → property changes were instant despite transition declaration. Looked like teleport.
+
+**Fix**: single coordinate system. Cat anchored at `top:0;left:0` and moved via `transform: translate(--tx,--ty) scaleX(--flip)` only. transform interpolates smoothly. JS walks 6 perimeter waypoints (TR→MR→BR→BL→ML→TL) at ~60px/s = 4.5–9s slow walks separated by 3.5–7.5s rests. Direction flip applied via rAF before walk starts. No opacity/display toggles. Visibility delegated to `#page-home.active` cascade.
+
+**AI bottom slack**: bumped `#page-ai { padding-bottom: calc(72px + env(safe-area-inset-bottom)) }` to absorb iPhone Safari dynamic toolbar; last `.ws28` margin-bottom 16, border-top dashed.
+
+## PREVIOUS PHASE: Dashboard S38 — Cat visibility fix + AI bottom cut fix
 
 `static/dashboard.html` only.
 

@@ -1,4 +1,49 @@
-# Current Session — 2026-04-07 (Session 38)
+# Current Session — 2026-04-07 (Session 39)
+
+## S39 — Cat continuous walk + AI bottom cut full fix
+
+### 1) 고양이 순간이동 실제 원인
+S38 은 6개 perch CSS 클래스를 토글하는 방식이었음. 각 클래스가 `top/right` 또는 `bottom/left` 를 사용. 클래스가 바뀔 때 예: `top:8;right:10;left:auto;bottom:auto` → `top:auto;right:auto;left:10;bottom:14`. **CSS transition 은 `auto` 값을 보간하지 못함** → top/right/left/bottom 사이 전환이 즉시 일어남 → 순간이동처럼 보임. transition 은 선언했지만 실제로는 jump.
+
+### 2) 이동 방식 재설계 (transform interpolation)
+- **단일 좌표계**: cat 을 `top:0; left:0` 에 고정. 이동은 **`transform: translate(var(--tx), var(--ty)) scaleX(var(--flip))`** 로만 처리.
+- transform 은 CSS transition 이 완벽히 보간 → 진짜 연속 이동.
+- waypoint 를 좌표(px)로 계산: `bounds()` 가 home 의 안전 roaming 영역(외곽 margin 8 + bottom 60px 보호) 을 산출.
+- waypoints: 6개 가장자리 점 (TR → MR → BR → BL → ML → TL) — 카드 본문 위를 절대 가로지르지 않음 (외곽선만 따라 걷는 느낌).
+- 이동 시간: 거리 ÷ 60 (px/s) 로 4.5~9초. 매우 느린 걸음.
+- 정지(rest): 3.5~7.5초 랜덤. "걸었다 → 쉬었다 → 또 걷는" 펫 리듬.
+- 방향 반전: `--flip` 는 walk 시작 직전 즉시 적용 (rAF 분리) → 걷는 방향과 face 방향이 자연스럽게 일치.
+- 첫 spawn: TR 좌표에 즉시 보임. 4.5초 후 첫 walk 시작.
+- resize: 300ms debounce 후 path 재계산만, 현재 위치 jump 안 함.
+
+### 3) 표시/숨김 정리
+- opacity/display 토글 완전 제거. cat 은 항상 `opacity:0.92`, `display:block`.
+- 가시 정책은 부모 `#page-home.active` cascade 에 위임 (S35 truth rule). MutationObserver 없음, 깜빡임 없음.
+- `cat.dataset.s37/s38/s39 = '1'` 로 이전 IIFE 들 early return 보장.
+
+### 4) AI 하단 잘림 원인 (S38 부족분)
+S38 에서 `.hud-main { bottom: calc(--tab-h + safe-area) }` 만 적용. 그런데 iPhone Safari 의 dynamic toolbar (스크롤 시 나타나는 하단 바) 가 추가로 viewport 를 침범하고, `#page-ai padding-bottom:24px` 로는 마지막 카드의 chart/숫자가 여전히 가려짐.
+
+### 5) 하단 여백 조정 (충분한 슬랙)
+- `.hud-main { bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) }` 유지
+- `#page-ai { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important }` — AI 한정 강한 슬랙. iPhone Safari dynamic toolbar 까지 흡수.
+- `#page-ai #ws-grid.v28 { padding-bottom:8px }` 추가
+- `#page-ai .ws28:last-child { margin-bottom:16px; border-top:1px dashed; border-bottom:none }`
+- 다른 탭은 영향 없음 (AI scope only).
+
+### 수정 파일
+- `static/dashboard.html`
+
+### 커밋
+- `dashboard S39: cat continuous walk via transform interpolation + AI hard bottom slack`
+
+### Push
+- `claude/extract-prediction-time-n82UK` ✓
+- `claude/premium-control-room-ui-LJFba` ✓
+
+---
+
+# Previous Session — 2026-04-07 (Session 38)
 
 ## S38 — Cat visibility fix + AI bottom cut fix
 

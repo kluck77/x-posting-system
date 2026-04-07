@@ -5136,7 +5136,173 @@ body > .cat-wrap{display:none !important}
 
 <style>
 /* ─── S37 — Cat as free-roaming pet + AI card layout rebuild (see script below) ─── */
-/* ─── S38 — Cat visibility fix + AI bottom cut fix ─── */
+/* ─── S39 — Cat continuous walk (transform interpolation) + AI bottom cut full fix ─── */
+
+/* (1) Cat: SINGLE coordinate system. Anchor at top:0;left:0 and move via
+       transform:translate() — only transform interpolates smoothly. Old S38
+       toggled top/right/bottom/left/auto which cannot animate -> teleport. */
+#page-home > .cat-wrap{
+  position:absolute !important;
+  top:0 !important;left:0 !important;
+  right:auto !important;bottom:auto !important;
+  width:60px !important;height:60px !important;
+  z-index:9 !important;
+  opacity:0.92 !important;
+  filter:none !important;
+  pointer-events:none;
+  display:block !important;
+  /* JS sets --tx/--ty/--flip; transform interpolates */
+  transform: translate(var(--tx, 0px), var(--ty, 8px)) scaleX(var(--flip, 1)) !important;
+  transition: transform 6.5s cubic-bezier(0.45,0.05,0.55,0.95), opacity 0.4s ease !important;
+  will-change: transform;
+}
+/* kill any previous S38 perch classes */
+#page-home > .cat-wrap.s38-tr,
+#page-home > .cat-wrap.s38-tl,
+#page-home > .cat-wrap.s38-br,
+#page-home > .cat-wrap.s38-bl,
+#page-home > .cat-wrap.s38-mr,
+#page-home > .cat-wrap.s38-ml{
+  top:0 !important;left:0 !important;right:auto !important;bottom:auto !important;
+  transform: translate(var(--tx,0px), var(--ty,8px)) scaleX(var(--flip,1)) !important;
+}
+#page-home > .cat-wrap .cat-coin-plus{display:none !important}
+#page-home > .cat-wrap .cat-tail{animation:tailFlick 5.5s ease-in-out infinite !important}
+#page-home > .cat-wrap .cat-eye-l,
+#page-home > .cat-wrap .cat-eye-r{animation:catBlink 6s steps(1,end) infinite !important}
+
+/* (2) AI bottom cut — full fix.
+       Previous S38 only added safe-area to .hud-main bottom; on iPhone Safari
+       the dynamic toolbar still ate the last card. Bump #page-ai bottom slack
+       hard so last card is always 100% visible. */
+.hud-main{
+  bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) !important;
+}
+#page-ai{
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+}
+#page-ai #ws-grid.v28{padding-bottom: 8px !important}
+#page-ai #ws-grid.v28 .ws28:last-child{
+  margin-bottom: 16px !important;
+  border-bottom: none !important;
+  border-top: 1px dashed var(--line) !important;
+}
+</style>
+<script>
+/* ─── S39 — Cat continuous walk (no teleport) ── */
+(function(){
+  function setupCat39(){
+    const cat = document.getElementById('cat');
+    const home = document.getElementById('page-home');
+    if(!cat || !home) return;
+    if(cat.dataset.s39) return;
+
+    if(cat.parentNode !== home){
+      home.appendChild(cat);
+    }
+    home.style.position = 'relative';
+
+    // Disable any prior S37/S38 logic
+    cat.dataset.s37 = '1';
+    cat.dataset.s38 = '1';
+    cat.dataset.s39 = '1';
+
+    // Strip any inline left/top/right/bottom that earlier scripts may have set
+    cat.style.left = '';
+    cat.style.top = '';
+    cat.style.right = '';
+    cat.style.bottom = '';
+    // Clean S38 perch classes
+    ['s38-tr','s38-tl','s38-br','s38-bl','s38-mr','s38-ml'].forEach(c=>cat.classList.remove(c));
+
+    const CAT_W = 60;
+    const CAT_H = 60;
+    const MARGIN = 8;
+
+    // Compute safe roaming coordinates inside #page-home
+    function bounds(){
+      const w = home.clientWidth  || home.offsetWidth  || 360;
+      const h = home.clientHeight || home.offsetHeight || 640;
+      return {
+        minX: MARGIN,
+        maxX: Math.max(MARGIN, w - CAT_W - MARGIN),
+        minY: MARGIN,
+        maxY: Math.max(MARGIN, h - CAT_H - MARGIN - 60), // leave room above tab bar zone
+      };
+    }
+
+    // Walking path: a sequence of safe edge waypoints, all visible.
+    // The cat walks the perimeter slowly so it never crosses card content.
+    function waypoints(){
+      const b = bounds();
+      // edge-following path: TR -> MR -> BR -> BL -> ML -> TL -> TR
+      return [
+        {x:b.maxX,        y:b.minY,                  flip:1},
+        {x:b.maxX,        y:Math.round((b.minY+b.maxY)/2), flip:1},
+        {x:b.maxX,        y:b.maxY,                  flip:1},
+        {x:b.minX,        y:b.maxY,                  flip:-1},
+        {x:b.minX,        y:Math.round((b.minY+b.maxY)/2), flip:-1},
+        {x:b.minX,        y:b.minY,                  flip:-1},
+      ];
+    }
+
+    let path = waypoints();
+    let i = 0;
+    let cur = {x: path[0].x, y: path[0].y, flip: path[0].flip};
+
+    function applyVars(x, y, flip){
+      cat.style.setProperty('--tx', x + 'px');
+      cat.style.setProperty('--ty', y + 'px');
+      cat.style.setProperty('--flip', flip);
+    }
+    // Initial visible spawn
+    applyVars(cur.x, cur.y, cur.flip);
+
+    function distance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+
+    function step(){
+      i = (i + 1) % path.length;
+      const next = path[i];
+      // Walking duration scales with distance: ~80px/sec → very slow walk
+      const d = distance(cur, next);
+      const dur = Math.max(4.5, Math.min(9, d / 60));
+      cat.style.transition = `transform ${dur}s cubic-bezier(0.45,0.05,0.55,0.95), opacity 0.4s ease`;
+      // Flip first (instant), then walk
+      cat.style.setProperty('--flip', next.flip);
+      // Use rAF to ensure flip applied before walk transition starts
+      requestAnimationFrame(()=>{
+        applyVars(next.x, next.y, next.flip);
+        cur = {x:next.x, y:next.y, flip:next.flip};
+      });
+      // Rest at next waypoint, then continue
+      const rest = 3500 + Math.floor(Math.random()*4000);
+      setTimeout(step, dur*1000 + rest);
+    }
+    // First walk after a pause (let user see initial spawn)
+    setTimeout(step, 4500);
+
+    // Recompute path on resize without teleporting
+    let rt;
+    window.addEventListener('resize', ()=>{
+      clearTimeout(rt);
+      rt = setTimeout(()=>{
+        path = waypoints();
+        // do not jump current — next step() will move toward updated path
+      }, 250);
+    });
+  }
+
+  // Try multiple times so it runs after layout settles
+  setupCat39();
+  requestAnimationFrame(()=>requestAnimationFrame(setupCat39));
+  setTimeout(setupCat39, 200);
+  setTimeout(setupCat39, 800);
+  setTimeout(setupCat39, 2000);
+})();
+</script>
+
+<style>
+/* ─── S38 (replaced by S39) — keeping placeholder block for tag balance ─── */
 
 /* (1) hud-main bottom must clear tab bar + iPhone home indicator safe-area
        Original used only --tab-h, ignoring env(safe-area-inset-bottom) which
