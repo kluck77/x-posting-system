@@ -5178,12 +5178,15 @@ body > .cat-wrap{display:none !important}
 .hud-main{
   bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) !important;
 }
-#page-ai{
-  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+/* S40: specificity bump — S35 has `#page-ai{padding-bottom:0!important}` later
+   in source. Same specificity → S35 wins. Use `html body .hud-main #page-ai`
+   to outrank it (1 ID vs 1 ID + class + 2 elements). */
+html body .hud-main #page-ai.page{
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
 }
-#page-ai #ws-grid.v28{padding-bottom: 8px !important}
-#page-ai #ws-grid.v28 .ws28:last-child{
-  margin-bottom: 16px !important;
+html body .hud-main #page-ai #ws-grid.v28{padding-bottom: 8px !important}
+html body .hud-main #page-ai #ws-grid.v28 .ws28:last-child{
+  margin-bottom: 20px !important;
   border-bottom: none !important;
   border-top: 1px dashed var(--line) !important;
 }
