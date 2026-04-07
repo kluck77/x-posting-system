@@ -1,6 +1,10 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S47 — AI 레이아웃 해킹 제거, 자연 흐름 복귀
+## LAST COMPLETED PHASE: Dashboard S48 — AI 탭 마감 폴리시
+
+`static/dashboard.html` 만. AI 탭 한정. Micro chart 재튜닝(16px frame, 3.5px bars, baseline axis, 4/9/14 계단, opacity 단계), 우측 정보 모듈 baseline 공유 정렬(runs/lbl/chart), `#page-ai` 하단 여백 16→10px. 디자인/색/타이포 무변경.
+
+## PREVIOUS: Dashboard S47 — AI 레이아웃 해킹 제거, 자연 흐름 복귀
 
 `static/dashboard.html` 만. S39/S41/S46에서 쌓인 높이·flex 강제 해킹이 void 원인으로 확인되어 전부 제거. `#page-ai`는 `display:block` + `padding-bottom:16px`, `#ws-grid.v28`은 `justify-content:flex-start`로 카드 자연 쌓임. S46 micro chart CSS는 유지. 디자인·색·타이포 무변경.
 
