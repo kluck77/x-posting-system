@@ -5136,6 +5136,117 @@ body > .cat-wrap{display:none !important}
 
 <style>
 /* ─── S37 — Cat as free-roaming pet + AI card layout rebuild (see script below) ─── */
+/* ─── S38 — Cat visibility fix + AI bottom cut fix ─── */
+
+/* (1) hud-main bottom must clear tab bar + iPhone home indicator safe-area
+       Original used only --tab-h, ignoring env(safe-area-inset-bottom) which
+       is added as padding to .hud-tabs → tab bar visually grows but scroll
+       area didn't, causing last AI card to be hidden behind home indicator. */
+.hud-main{
+  bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) !important;
+  padding-bottom: 16px !important;
+}
+
+/* (2) AI tab — extra slack so last station card never touches the tab bar */
+#page-ai{
+  padding-bottom: 24px !important;
+}
+#page-ai #ws-grid.v28 .ws28:last-child{
+  margin-bottom: 12px !important;
+  border-bottom: none !important;
+}
+
+/* (3) Cat — use right/bottom anchors so it does not depend on clientWidth
+       (which is 0 before #page-home becomes .active). Inline left/top from
+       JS would otherwise place the cat off-screen at boot. */
+#page-home > .cat-wrap{
+  position:absolute !important;
+  width:60px !important;height:60px !important;
+  z-index:9 !important;
+  opacity:0.92 !important;
+  filter:none !important;
+  pointer-events:none;
+  display:block !important;
+  /* default visible perch — top right corner of Home */
+  top:8px !important;
+  right:10px !important;
+  left:auto !important;bottom:auto !important;
+}
+/* perch classes set by JS — anchor with right/bottom, not left/top */
+#page-home > .cat-wrap.s38-tr{top:8px !important;right:10px !important;left:auto !important;bottom:auto !important;transform:none !important}
+#page-home > .cat-wrap.s38-tl{top:8px !important;left:10px !important;right:auto !important;bottom:auto !important;transform:scaleX(-1) !important}
+#page-home > .cat-wrap.s38-br{bottom:14px !important;right:10px !important;left:auto !important;top:auto !important;transform:none !important}
+#page-home > .cat-wrap.s38-bl{bottom:14px !important;left:10px !important;right:auto !important;top:auto !important;transform:scaleX(-1) !important}
+#page-home > .cat-wrap.s38-mr{top:48% !important;right:8px !important;left:auto !important;bottom:auto !important;transform:none !important}
+#page-home > .cat-wrap.s38-ml{top:52% !important;left:8px !important;right:auto !important;bottom:auto !important;transform:scaleX(-1) !important}
+#page-home > .cat-wrap{
+  transition: top 2.2s ease-in-out, right 2.2s ease-in-out, left 2.2s ease-in-out, bottom 2.2s ease-in-out, transform 0.6s ease, opacity 0.4s ease !important;
+}
+
+/* keep blink + slow tail; nothing else */
+#page-home > .cat-wrap .cat-coin-plus{display:none !important}
+#page-home > .cat-wrap .cat-tail{animation:tailFlick 5.5s ease-in-out infinite !important}
+#page-home > .cat-wrap .cat-eye-l,
+#page-home > .cat-wrap .cat-eye-r{animation:catBlink 6s steps(1,end) infinite !important}
+
+/* hide on non-home tabs — relies on parent display:none (S35 truth rule) */
+#page-ai .cat-wrap, #page-intake .cat-wrap, #page-ops .cat-wrap{display:none !important}
+</style>
+<script>
+/* ─── S38 — Cat free-roam fix (right/bottom anchored, no clientWidth dep) ── */
+(function(){
+  function setupCat38(){
+    const cat = document.getElementById('cat');
+    const home = document.getElementById('page-home');
+    if(!cat || !home) return;
+    if(cat.dataset.s38) return;
+
+    // Move cat into #page-home if not there yet
+    if(cat.parentNode !== home){
+      home.appendChild(cat);
+    }
+    home.style.position = 'relative';
+
+    // Strip any inline left/top from S37 that may have placed cat off-screen
+    cat.style.left = '';
+    cat.style.top = '';
+    cat.style.right = '';
+    cat.style.bottom = '';
+    cat.style.transform = '';
+    cat.style.display = '';
+    cat.dataset.s37 = '1'; // disable S37 re-run
+    cat.dataset.s38 = '1';
+
+    const PERCHES = ['s38-tr','s38-bl','s38-mr','s38-tl','s38-br','s38-ml'];
+    function clearPerch(){
+      PERCHES.forEach(c=>cat.classList.remove(c));
+    }
+    function perchTo(name){
+      clearPerch();
+      cat.classList.add(name);
+    }
+    // Initial: top-right (always visible regardless of layout state)
+    perchTo('s38-tr');
+
+    let i = 0;
+    function wander(){
+      i = (i + 1) % PERCHES.length;
+      perchTo(PERCHES[i]);
+      const next = 24000 + Math.floor(Math.random()*14000);
+      setTimeout(wander, next);
+    }
+    setTimeout(wander, 9000);
+  }
+  setupCat38();
+  // Re-run after layout settles & after S35 activates a page
+  requestAnimationFrame(()=>requestAnimationFrame(setupCat38));
+  setTimeout(setupCat38, 300);
+  setTimeout(setupCat38, 1200);
+})();
+</script>
+
+<style>
+/* ─── S37 — Cat pet styling + AI layout rebuild ─── */
 </style>
 <script>
 (function(){

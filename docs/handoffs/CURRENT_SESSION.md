@@ -1,4 +1,44 @@
-# Current Session — 2026-04-07 (Session 37)
+# Current Session — 2026-04-07 (Session 38)
+
+## S38 — Cat visibility fix + AI bottom cut fix
+
+`static/dashboard.html` 만.
+
+### 1) Home 고양이가 안 보였던 실제 원인
+S37 의 setupCat 은 `home.clientWidth/clientHeight` 를 읽어 perch 좌표를 계산했음. 그런데 S37 IIFE 가 실행되는 시점에 `#page-home` 은 아직 `.active` 클래스가 없는 상태 → S35 의 `.page:not(.active){display:none}` 규칙으로 `display:none` → `clientWidth/Height = 0` → perch 가 모두 `left: w-64 = -64px`, `top: 6px` 같은 음수/화면 밖 좌표로 계산됨. 결과: 인라인 `style.left = -64px` 가 박힌 채 cat 이 화면 왼쪽 밖으로 사라짐. 이후 S35 가 home 을 active 로 만들고 MutationObserver 가 display 를 풀어줘도, 잘못된 인라인 left/top 은 그대로 남아 cat 은 영영 안 보임.
+
+### 2) Home 고양이 복구
+- **right/bottom anchor 방식**: `clientWidth` 의존 제거. 6개 perch 를 CSS class (`s38-tr/tl/br/bl/mr/ml`) 로 정의, 각 class 가 `top/right` 또는 `bottom/left` 만 사용. 어떤 layout 상태에서도 화면 안에 자동 배치됨.
+- 초기 perch: `s38-tr` (top-right) — 항상 즉시 보임. 첫 렌더 invisible 금지 조건 충족.
+- JS: S37 의 인라인 `left/top` 다 제거 후 `cat.dataset.s37 = '1'` 로 표시해 S37 IIFE 가 early return 되도록 막음 (중복 실행 방지).
+- 60×60, opacity 0.92, z-index 9, glow 없음.
+- 9초 후 wander 시작, 24~38초 간격으로 다음 perch 로 천천히 이동 (`transition: top/right/left/bottom 2.2s ease-in-out`).
+- 좌측 perch 도착 시 `transform: scaleX(-1)` 로 방향 자동 반전.
+- 표시 가시 정책: `#page-home` 자체가 `display:none` 일 때 자식인 cat 도 자동 숨김 (S35 truth rule 에 위임). MutationObserver 같은 가짜 게이트 제거.
+- Home 진입 = 무조건 cat 보임. 다른 탭에서는 부모가 hidden 이라 자동 숨김.
+
+### 3) AI 탭 하단 잘림 원인
+`.hud-main` 은 `position:fixed; bottom:var(--tab-h)`. 하지만 `.hud-tabs` 는 `padding-bottom:env(safe-area-inset-bottom)` 로 iPhone 홈 인디케이터 영역만큼 더 아래까지 차지함. 즉 실제 가시 탭바 높이 = `--tab-h + safe-area-inset-bottom`. 그런데 hud-main 의 bottom 은 `--tab-h` 만 빼고 끝 → 스크롤 영역 마지막 ~20-34px 가 탭바 뒤에 깔림. 마지막 AI 카드의 chart/숫자가 가려짐.
+
+### 4) 하단 여백 수정
+- `.hud-main { bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) !important; padding-bottom:16px !important }` — 스크롤 컨테이너 자체를 safe-area 만큼 더 위로 밀어 올림. 전역 보정.
+- `#page-ai { padding-bottom:24px !important }` — AI 탭 한정 추가 슬랙. 마지막 카드와 탭바 사이 호흡.
+- `#page-ai #ws-grid.v28 .ws28:last-child { margin-bottom:12px; border-bottom:none }` — 마지막 카드 dashed 보더 제거 + 추가 margin.
+- 과한 빈 공간 X / 잘림 X.
+
+### 수정 파일
+- `static/dashboard.html` (S38 style + script 블록을 S37 위에 prepend, 태그 균형 OK)
+
+### 커밋
+- `dashboard S38: cat visibility fix (right/bottom anchored perches) + AI bottom cut fix (safe-area)`
+
+### Push
+- `claude/extract-prediction-time-n82UK` ✓
+- `claude/premium-control-room-ui-LJFba` ✓
+
+---
+
+# Previous Session — 2026-04-07 (Session 37)
 
 ## S37 — Cat free-roaming pet + AI card layout rebuild
 

@@ -1,6 +1,18 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S37 — Cat free-roaming pet + AI card layout rebuild
+## LAST COMPLETED PHASE: Dashboard S38 — Cat visibility fix + AI bottom cut fix
+
+`static/dashboard.html` only.
+
+**Cat invisible root cause**: S37 setupCat read `home.clientWidth/Height` to compute perches, but at IIFE boot `#page-home` was still `display:none` (S35 hadn't fired yet) → clientWidth=0 → cat got inline `left:-64px` and stayed off-screen forever even after S35 activated home.
+
+**Fix**: switched to right/bottom CSS anchors via 6 perch classes (`s38-tr/tl/br/bl/mr/ml`), no `clientWidth` dependency. Initial perch `s38-tr` always renders inside viewport. JS sets `cat.dataset.s37='1'` to early-return the legacy S37 IIFE. Visibility delegated to parent `#page-home` display state (S35 truth rule) — no MutationObserver gate.
+
+**AI bottom cut root cause**: `.hud-main` used `bottom:var(--tab-h)` but `.hud-tabs` padded `env(safe-area-inset-bottom)` → real tab height exceeded scroll-area bottom by ~20-34px on iPhone, hiding last AI card behind the home indicator.
+
+**Fix**: `.hud-main { bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px)) }` + `#page-ai { padding-bottom:24px }` + last `.ws28` margin-bottom 12px / no border-bottom.
+
+## PREVIOUS PHASE: Dashboard S37 — Cat free-roaming pet + AI card layout rebuild
 
 `static/dashboard.html` only.
 
