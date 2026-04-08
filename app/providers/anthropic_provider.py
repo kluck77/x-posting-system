@@ -82,8 +82,8 @@ class AnthropicDraftWriter(BaseDraftWriter):
         content = await self._call_claude(DRAFT_SYSTEM_PROMPT, user_msg)
         data = json.loads(content)
         return DraftResult(
-            hook=data.get("hook", title),
-            body=data.get("body", ""),
+            hook=data.get("hook") or title,
+            body=data.get("body") or "",
             thread_continuation=data.get("thread_continuation"),
             category_suggestion=data.get("category_suggestion", "evergreen"),
             tone_notes=data.get("tone_notes", ""),
@@ -162,8 +162,8 @@ class AnthropicReviewer(BaseReviewer):
 
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
             return ReviewResult(
-                hook=data.get("hook", draft.hook),
-                body=data.get("body", draft.body),
+                hook=data.get("hook") or draft.hook,
+                body=data.get("body") or draft.body,
                 thread_continuation=data.get("thread_continuation"),
                 category=data.get("category", "evergreen"),
                 risk_level=data.get("risk_level", "medium"),
