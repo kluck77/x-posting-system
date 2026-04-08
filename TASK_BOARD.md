@@ -6,16 +6,16 @@
 ---
 
 ## Updated At
-2026-04-09 08:10 KST
+2026-04-09 08:22 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-실측 / 원인 분리 단계 (수정 단계 아님)
+관측 패치 적용 완료. **다음 Reviewer 호출 1회 대기 중** (preview 캡처 단계).
 
 ## Current Priority
-P0 — Reviewer JSON 파싱 실패 원인 분리
+P0 — Reviewer JSON 파싱 실패 원인 분리 (preview 캡처로 H1~H5 확정)
 
 ---
 
@@ -38,6 +38,11 @@ P0 — Reviewer JSON 파싱 실패 원인 분리
 - `963b626` fix(providers): restore phase-8α kwargs + keep null-guard
 - `dc141f7` session(2026-04-08): provider phase-8α hotfix 종결
 - 브랜치: `claude/x-posting-ops-review-7hlxK`
+
+### 본 세션 (관측 패치) 커밋
+- `cecd4ab` 동등본 수동 반영 — `app/providers/anthropic_provider.py` 1파일, 36+/1-
+- 진단 로그 5종 추가, 동작 변경 0
+- 옵션 (1) 채택 — sanitize 미반영, dd49fd3 미반영
 
 ---
 
@@ -78,7 +83,7 @@ Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
 ---
 
 ## Minimal Scope
-이번 단계는 **수정 0**. 무수정 원인 분리만 한다.
+관측 패치 적용 완료. 다음 단계는 **수집 + 분기 확정**. 코드 수정 0.
 
 원인 후보 (코드 실측 + git 히스토리 기반):
 - **H1** 마크다운 코드 펜스 prefix (\`\`\`json …) — 가능성 높음
@@ -95,19 +100,21 @@ Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
 - **R5** 본 hotfix 가 원인 → 시간선상 무관
 
 확정에 필요한 단 1가지:
-- Reviewer 응답 raw_content 첫 200~300 chars 의 1회 캡처
-- 현재 코드에는 해당 로그 0줄 → 관측 수단 없음
+- Reviewer 응답 raw_content 첫 200 chars 의 1회 캡처
+- **관측 수단 부착 완료** (`[Phase8α][Claude Reviewer] raw_content_preview=...` DEBUG 로그)
+- 다음 Reviewer 호출 1회만 발생하면 분기 확정 가능
 
 ---
 
 ## Exact Files To Change
-이번 단계: **없음** (수정 0)
+이번 단계: **없음** (수정 0). 관측 패치는 이미 본 세션에서 반영됨.
 
-다음 단계 (관측 패치 적용 시) 후보:
-- `app/providers/anthropic_provider.py` (1파일)
-  - 옵션 A: `cecd4ab` cherry-pick — 진단 로그만
-  - 옵션 B: `cecd4ab` + `dd49fd3` cherry-pick — 진단 로그 + sanitize
-- 두 옵션 모두 1파일, 동작 무변경 (sanitize 는 clean 입력에 pass-through)
+다음 단계 (preview 확보 후) 후보:
+- preview 첫 글자가 \`\`\` 또는 ` 면 → H1 (코드 펜스) 확정 → sanitize 패치
+- preview 첫 글자가 알파벳/한글 면 → H2 (preamble) 확정 → strip 또는 prompt 보강
+- preview 가 빈 문자열이면 → H3 (정책 거부 / max_tokens) 확정 → max_tokens 조정 검토
+- preview 첫 글자가 BOM/공백 면 → H4 확정 → strip
+- 어떤 분기든 수정은 `app/providers/anthropic_provider.py` **1파일** 만
 
 ---
 
@@ -128,37 +135,42 @@ Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
 ---
 
 ## Validation Steps
-이번 단계 (무수정): preflight 불필요
+이번 단계 (관측 패치 본 커밋에 반영됨):
+- 로컬 `python3 -m py_compile app/providers/anthropic_provider.py` → OK
+- 로컬 AST 시그니처 실측 → 무변경 확인 완료
+- diff stat: `1 file changed, 36 insertions(+), 1 deletion(-)` — cecd4ab 와 동일
 
-다음 단계 (관측 패치 적용 시):
-1. `python3 -m py_compile app/providers/anthropic_provider.py`
+다음 단계 (서버 적용 + preview 캡처):
+1. 서버에서 1파일 surgical checkout
+   ```
+   cd /root/x-posting-system
+   git fetch origin claude/x-posting-ops-review-7hlxK
+   git checkout origin/claude/x-posting-ops-review-7hlxK -- app/providers/anthropic_provider.py
+   ```
 2. venv import smoke
    ```
    /root/x-posting-system/venv/bin/python -c "from app.providers.anthropic_provider import AnthropicReviewer; import inspect; print(inspect.signature(AnthropicReviewer.review_and_refine))"
    ```
 3. `systemctl restart xdashboard.service && systemctl is-active xdashboard.service`
-4. 다음 Reviewer 호출 1회 발생까지 대기
-5. `grep -nE "Phase8α.*Reviewer.*raw_content_preview" /root/x-posting-system/server.log | tail -5`
-6. preview 첫 글자로 H1~H5 분기 확정
+4. 로그 레벨 점검: `raw_content_preview` 는 DEBUG. 운영 로그가 INFO 라면 임시로 DEBUG 승격 필요
+5. 다음 Reviewer 호출 1회 발생까지 대기 (`/ingest` 실측)
+6. `grep -nE "Phase8α.*Reviewer" /root/x-posting-system/server.log | tail -20`
+7. `raw_content_preview` 첫 글자로 H1~H5 분기 확정 → 다음 세션 fix 결정
 
 ---
 
 ## Recommendation
-**NEEDS_HUMAN**
+**APPROVE** — 옵션 (1) 채택 완료. 본 세션에서 관측 패치 반영 끝.
 
-운영자가 다음 3가지 중 1개를 선택해야 다음 세션이 진행된다.
+운영자 결정 기록:
+- 채택: **(1) 가장 안전 — 관측만**
+- 거절: (2) sanitize 동반은 prior evidence 인용 단계가 섞여 단계 분리 원칙 위반
+- 거절: (3) 카드 품질 저하 만성화 유지
 
-- **(1) 가장 안전 — 관측만**
-  `cecd4ab` 1커밋 cherry-pick → 진단 로그 5줄 추가 → 다음 호출 1회로 H1~H5 확정 → 그 다음 세션에서 fix.
-  수정 1파일, 동작 변경 0.
-
-- **(2) 한 번에 끝내기**
-  `cecd4ab` + `dd49fd3` cherry-pick → 관측 + F2(코드 펜스/preamble) 자동 해소 동시 적용.
-  수정 1파일, sanitize 는 clean 입력에 pass-through.
-  단, prior evidence 인용 단계가 1개 섞임.
-
-- **(3) 유지**
-  현재 fallback 으로 운영은 굴러간다. 단, 카드 품질 저하 만성화.
+다음 세션 트리거:
+- 서버 surgical checkout + 재시작 + Reviewer 호출 1회 발생 후
+- preview 가 server.log 에 잡히면 H1~H5 중 하나 확정
+- 그 분기에 맞는 최소 fix 1파일을 다음 세션에서 적용
 
 ---
 

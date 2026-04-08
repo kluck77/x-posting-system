@@ -95,6 +95,11 @@ class AnthropicDraftWriter(BaseDraftWriter):
         )
 
     async def _call_claude(self, system: str, user_msg: str) -> str:
+        # [Phase8α] diagnostic: log request parameters before HTTP call
+        logger.info(
+            f"[Phase8α][Claude DraftWriter] request model={CLAUDE_MODEL} "
+            f"max_tokens=1024 user_msg_len={len(user_msg)}"
+        )
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 CLAUDE_API_URL,
@@ -111,7 +116,16 @@ class AnthropicDraftWriter(BaseDraftWriter):
                 },
             )
             resp.raise_for_status()
-            return resp.json()["content"][0]["text"]
+            content = resp.json()["content"][0]["text"]
+            # [Phase8α] diagnostic: log raw response metadata + preview
+            logger.info(
+                f"[Phase8α][Claude DraftWriter] response http={resp.status_code} "
+                f"content_len={len(content)}"
+            )
+            logger.debug(
+                f"[Phase8α][Claude DraftWriter] raw_content_preview={content[:200]!r}"
+            )
+            return content
 
 
 class AnthropicReviewer(BaseReviewer):
@@ -146,6 +160,13 @@ class AnthropicReviewer(BaseReviewer):
             )
         user_msg += "Review and refine. Respond in JSON only."
 
+        # [Phase8α] diagnostic: log request parameters before HTTP call
+        logger.info(
+            f"[Phase8α][Claude Reviewer] request model={CLAUDE_MODEL} "
+            f"max_tokens=1024 title='{title[:50]}' user_msg_len={len(user_msg)} "
+            f"has_research={research is not None} has_factcheck={factcheck is not None}"
+        )
+
         try:
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(
@@ -164,7 +185,21 @@ class AnthropicReviewer(BaseReviewer):
                 )
                 resp.raise_for_status()
                 content = resp.json()["content"][0]["text"]
+                # [Phase8α] diagnostic: log raw response metadata + preview
+                logger.info(
+                    f"[Phase8α][Claude Reviewer] response http={resp.status_code} "
+                    f"content_len={len(content)}"
+                )
+                logger.debug(
+                    f"[Phase8α][Claude Reviewer] raw_content_preview={content[:200]!r}"
+                )
                 data = json.loads(content)
+                # [Phase8α] diagnostic: log parsed fields for observation
+                logger.info(
+                    f"[Phase8α][Claude Reviewer] parsed risk={data.get('risk_level')} "
+                    f"category={data.get('category')} action={data.get('recommended_action')} "
+                    f"body_len={len(data.get('body', '') or '')}"
+                )
 
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
             return ReviewResult(

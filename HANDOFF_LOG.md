@@ -5,6 +5,71 @@
 
 ---
 
+## 2026-04-09 08:22 KST — Reviewer 진단 로그 적용 (옵션 1)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 운영자 결정 (1) 채택 → `cecd4ab` 1커밋 동등본 수동 반영. `app/providers/anthropic_provider.py` 1파일에 진단 로그만 추가. 동작 변경 0. sanitize 추가 0. dd49fd3 미반영.
+- **Changed Files** :
+  - `app/providers/anthropic_provider.py`
+- **Diff Stat** : `1 file changed, 36 insertions(+), 1 deletion(-)` — cecd4ab 와 완전 동일
+- **Syntax Check Result** : `python3 -m py_compile app/providers/anthropic_provider.py` → OK
+- **Signature Compatibility Check Result** :
+  - `AnthropicDraftWriter.generate_draft(self, title, source_text, language, source_type, criteria_context)` defaults=3 ✓ (직전 hotfix 와 동일)
+  - `AnthropicDraftWriter._call_claude(self, system, user_msg)` defaults=0 ✓ (시그니처 무변경)
+  - `AnthropicReviewer.review_and_refine(self, title, source_text, draft, research, factcheck, criteria_context)` defaults=3 ✓ (직전 hotfix 와 동일)
+  - 호출부 (`app/orchestrator.py`) 무변경, 호출 시그니처와 호환
+- **Test Result** : 로컬 pytest 미설치 → AST 시그니처 실측 + py_compile 로 대체
+- **Runtime Risk Remaining** :
+  - 본 변경: 0 — `logger.info` / `logger.debug` 5줄 추가뿐. 동작 / 분기 / 반환값 무변경.
+  - 별개: Reviewer JSON 파싱 실패 자체는 미해결 (의도) — 본 세션은 관측 수단 부착이 목표.
+- **Server Apply Risk** : 낮음. 1파일 surgical checkout. 재시작 후 다음 Reviewer 호출 1회만 발생하면 raw_content_preview 수집 가능.
+- **Recommendation** : APPROVE
+- **Next Operator Action** :
+  1. 서버에서 `app/providers/anthropic_provider.py` 1파일만 surgical checkout (아래 명령)
+  2. `xdashboard.service` 재시작 + active 확인
+  3. 다음 Reviewer 호출 1회 발생까지 대기 (`/ingest` 실측)
+  4. `grep -nE "Phase8α.*Reviewer.*raw_content_preview" /root/x-posting-system/server.log` 로 preview 캡처
+  5. preview 첫 글자로 H1~H5 확정 → 다음 세션에서 fix 결정
+
+### 적용 이유
+- 운영자가 TASK_BOARD 의 Recommendation (1) 선택: 가장 안전, 관측만, 동작 변경 0
+- (2) 는 sanitize 가 함께 들어가 prior evidence 인용 단계가 1개 섞임 → 거절
+- (3) 은 운영 품질 저하 만성화 유지 → 거절
+- 본 세션은 **fix 가 아니라 관측** 세션. H1~H5 확정 전 어떤 추정도 코드에 반영하지 않는다.
+
+### 적용 방식 결정 근거
+- `cecd4ab` 는 별도 브랜치 `claude/phase-8-alpha-logging-Ju1nF` 에 있음 → 직접 cherry-pick 시 부모 commit 차이로 충돌 가능
+- 로컬 작업 브랜치는 직전 hotfix `963b626` 후속 → cecd4ab 의 diff 컨텍스트와 다름
+- 따라서 cherry-pick 대신 **동등본 수동 반영** (4개 surgical edit) 선택
+- diff stat 으로 cecd4ab 와 완전 동일성 검증 완료 (`36 insertions(+), 1 deletion(-)`)
+
+### 추가된 로그 (5줄)
+- `[Phase8α][Claude DraftWriter] request model=... user_msg_len=...` (INFO)
+- `[Phase8α][Claude DraftWriter] response http=... content_len=...` (INFO)
+- `[Phase8α][Claude DraftWriter] raw_content_preview=...` (DEBUG)
+- `[Phase8α][Claude Reviewer] request model=... title=... user_msg_len=... has_research=... has_factcheck=...` (INFO)
+- `[Phase8α][Claude Reviewer] response http=... content_len=...` (INFO)
+- `[Phase8α][Claude Reviewer] raw_content_preview=...` (DEBUG)
+- `[Phase8α][Claude Reviewer] parsed risk=... category=... action=... body_len=...` (INFO)
+
+주의: `raw_content_preview` 는 DEBUG 레벨. 운영 로그가 INFO 라면 DEBUG 로 임시 승격이 필요할 수 있음 — 단, 이번 세션 범위 밖. 운영자 판단.
+
+### 보호 영역 무변경 확인
+- `app/orchestrator.py` 무변경 ✓
+- `app/api/admin.py` 무변경 ✓
+- `app/providers/base.py` 무변경 ✓
+- `app/providers/mock_providers.py` 무변경 ✓
+- `app/providers/ai_provider.py` 무변경 ✓
+- `app/providers/openai_provider.py` 무변경 ✓
+- `app/services/*` 무변경 ✓
+- `app/models/*` 무변경 ✓
+- `dashboard/` 무변경 ✓
+- `.env` 무변경 ✓
+- `main` 브랜치 무변경 ✓
+- prompt / max_tokens / config 무변경 ✓
+
+---
+
 ## 2026-04-09 08:10 KST — 운영 문서 체계 도입
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
