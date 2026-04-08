@@ -252,6 +252,49 @@ def parse_callback_data(callback_data: str) -> tuple[str, int] | None:
 # "24h표시" 버튼은 "표시만" 하는 용도이며 실제 자동 처리는 하지 않는다.
 
 
+def _korean_section_for_hold(source_item: SourceItem) -> str:
+    """
+    Hold 카드용 한국어 보조 섹션 (Phase A.1).
+
+    원칙:
+      - AI 호출 금지 (Phase A 철학: 0 비용).
+      - source_item 에 이미 있는 값(language, source_text) 만 사용.
+      - 기존 영어 섹션은 삭제하지 않는다. "추가" 만.
+
+    동작:
+      - language == "ko":
+          source_text 앞 120자를 발췌하여 "한국어 원문 발췌" 섹션으로 노출.
+          첫 문장 종결부(다./요./!/?/.)에서 잘라 가독성 우선.
+          (Preview 섹션과 일부 중복될 수 있으나 의도적 시선 anchor)
+      - language != "ko":
+          "원문 비한국어 — 자동 번역 없음" 경고 문구만 노출.
+          운영자가 Preview 섹션을 영어 기준으로 재해석하도록 명시.
+    """
+    lang = (source_item.language or "").strip().lower()
+    text = (source_item.source_text or "").strip()
+
+    if lang == "ko":
+        head = text[:120]
+        for stop in ("다.", "요.", "음.", "까.", "!", "?", "."):
+            idx = head.find(stop)
+            if 20 <= idx < 120:
+                head = head[:idx + len(stop)]
+                break
+        if len(text) > len(head):
+            head += " ..."
+        if not head:
+            head = "(원문 비어 있음)"
+        return (
+            f"🇰🇷 <b>한국어 원문 발췌:</b>\n{head}\n"
+        )
+
+    lang_label = lang if lang else "unknown"
+    return (
+        f"🇰🇷 <b>한국어:</b>\n"
+        f"⚠️ 원문 비한국어 (language={lang_label}) — 자동 번역 없음\n"
+    )
+
+
 def build_hold_card(source_item: SourceItem) -> str:
     """
     Hold 상태 source_item 에 대한 텔레그램 카드 텍스트.
@@ -272,6 +315,7 @@ def build_hold_card(source_item: SourceItem) -> str:
         f"{'─' * 30}\n\n"
         f"📰 <b>Title:</b>\n{title}\n\n"
         f"📝 <b>Preview:</b>\n{preview}\n\n"
+        f"{_korean_section_for_hold(source_item)}\n"
         f"📊 <b>Heuristic Score:</b> {score_text} / 85\n"
     )
 
