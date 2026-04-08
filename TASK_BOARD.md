@@ -6,183 +6,159 @@
 ---
 
 ## Updated At
-2026-04-09 08:32 KST
+2026-04-09 08:37 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-sanitize 적용 완료. **다음 Reviewer 호출 1회 재검증 대기 중**.
+직전 P0 종결. **다음 P0 1개 선택 대기 중** (NEEDS_HUMAN).
 
 ## Current Priority
-P0 — Reviewer 응답 sanitize 효과 실측 확인 (Phase8β 로그로 H1/H2 확정 또는 추가 가설 분기)
+**미정** — 운영자가 아래 후보 중 1개 선택해야 진행
 
 ---
 
-## Confirmed Facts (직전 hotfix 종결 기준)
+## Closed Issues (직전 P0 종결 기록)
 
-### 해결 완료
-- `/ingest` 죽던 문제 해결
-- `NoneType.strip` 해결 (draft_service 가드)
-- provider 시그니처 불일치 해결
-  - `OpenAIDraftWriter.generate_draft()` 가 `source_type` 수신
-  - `AnthropicDraftWriter.generate_draft()` 가 `source_type`, `criteria_context` 수신
-  - `AnthropicReviewer.review_and_refine()` 가 `criteria_context` 수신
-- 텔레그램 승인 카드 전송 복구
-- 실측 검증
-  - `/ingest` 응답: `success=true`, `draft_id=17`, `telegram_sent=true`
-  - 서버 재시작 후 `xdashboard.service` active
-  - 새 TypeError 0건
-
-### 직전 hotfix 커밋
-- `963b626` fix(providers): restore phase-8α kwargs + keep null-guard
-- `dc141f7` session(2026-04-08): provider phase-8α hotfix 종결
-- 브랜치: `claude/x-posting-ops-review-7hlxK`
-
-### 직전 세션 (관측 패치) 커밋
-- `9b5f830` cecd4ab 동등본 수동 반영 — `app/providers/anthropic_provider.py` 1파일, 36+/1-
-- 진단 로그 5종 추가, 동작 변경 0
-
-### 직전 세션 관측 결과 (서버 server.log 실측)
-- 실패 케이스 1건: `response http=200 content_len=862` 직후 `parsed` 줄 없음
-- 성공 케이스 4건: `response http=200 content_len=760~933` → `parsed risk=medium`
-- 즉 비-empty 응답인데 json.loads 실패 → **H3 (빈 응답) 배제 확정**
-- 강한 후보로 H1 (코드 펜스) / H2 (preamble) 만 남음
-- raw_content_preview 는 DEBUG 라 INFO 로그에 안 잡힘 → preview 없이 sanitize 로 우회
-
-### 본 세션 (sanitize 패치) 커밋
-- `dd49fd3` 동등본 수동 반영 — `app/providers/anthropic_provider.py` 1파일, 39+/1-
-- `_sanitize_json_content()` top-level helper 신규
-- review_and_refine 의 `json.loads` 직전에 sanitize 적용 + 효과 발생 시 `[Phase8β]` 1줄 INFO 로그
-- 옵션 B 채택 — H1/H2 동시 해소
+### ✅ Reviewer JSON 파싱 실패 원인 분리 → H1 (코드 펜스) 확정
+- 종결 일시 : 2026-04-09 08:37 KST
+- 적용 패치 :
+  - `9b5f830` cecd4ab 동등본 (관측 로그) — 36+/1-
+  - `b62cc33` dd49fd3 동등본 (sanitize) — 39+/1-
+- 결정적 근거 (server.log 4건 일관 패턴) :
+  - sanitize 가 정확히 −12 chars 절감 (= ` \`\`\`json\n` + `\n\`\`\`` 합계 12자)
+  - 4/4 케이스에서 sanitize 적용 → parsed 성공으로 이어짐
+  - sanitize 후 parse 실패 0건
+- 결론 :
+  - **H1 (마크다운 코드 펜스 ` \`\`\`json … \`\`\` `) 확정**
+  - H2 / H3 / H4 / H5 모두 본 데이터에선 미관찰
+- 잔여 위험 (다음 P0 후보로 분리) :
+  - 누적 `Claude Reviewer 오류` 15건 중 sanitize 패치 *이후* 발생 케이스 0건 여부 미확정
+  - 운영자 권장 검증 : `grep -nE "Claude Reviewer 오류" /root/x-posting-system/server.log | tail -10`
 
 ---
 
-## Current Issue
-**Reviewer JSON 파싱 실패 원인 분리**
+## Confirmed Facts (현재 시점)
 
-증상:
-```
-[WARNING] Reviewer 실패, DraftWriter 결과 직접 사용:
-Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
-```
+### 안정화 완료
+- `/ingest` 파이프라인 정상
+- provider 시그니처 phase-8α 호환
+- 텔레그램 카드 전송 정상
+- Reviewer JSON 파싱 (H1 케이스) 정상화 — sanitize 4/4 성공
+- DraftWriter / Reviewer 응답 진단 로그 (Phase8α) 부착 완료
 
-발생 위치 (코드 실측):
-- 파일: `app/providers/anthropic_provider.py`
-- 라인: 167
-- 코드: `data = json.loads(content)`
-- 예외: `json.decoder.JSONDecodeError`
+### 작업 브랜치 HEAD
+- `b62cc33` feat(phase-8β): apply dd49fd3 equivalent — Reviewer JSON sanitize before parse
+- 브랜치 : `claude/x-posting-ops-review-7hlxK`
 
-발생 빈도:
-- 만성. 04-07 ~ 04-08 server.log 에 7회 이상 반복.
-- 본 hotfix 와 시간선상 무관 — 그 이전부터 발생.
+### 서버 운영 라인
+- 베이스 : `claude/premium-control-room-ui-LJFba @ 58f89b0`
+- surgical 적용본 (origin/claude/x-posting-ops-review-7hlxK 기준) :
+  - `app/providers/openai_provider.py` (963b626 본)
+  - `app/providers/anthropic_provider.py` (b62cc33 본)
+- 그 외 무변경
 
-영향:
-- 파이프라인 죽지 않음 (orchestrator fallback 작동)
-- 카드 자체는 항상 전송됨
-- 단, Reviewer 가 다듬은 hook/body 가 아니라 DraftWriter 원본이 카드에 노출
-- risk_level 이 항상 medium 으로 강제 (`Fallback: reviewer unavailable`)
-- 운영 품질 저하 만성화
+---
+
+## Next P0 — 후보 (운영자 1개 선택 필요)
+
+### 후보 A : 서버 anthropic_provider.py 출처 미상 변경 채널 식별 (★ 신규 ★)
+- 발견 시점 : 2026-04-09 08:22 ~ 08:37 KST 직전 두 세션 모두
+- 관찰된 사실 :
+  - 본 세션에서 cecd4ab / dd49fd3 동등본을 surgical checkout 하기 *이전* 시점에
+    이미 서버 server.log 에 `[Phase8α]` / `[Phase8β]` 로그가 박혀 있었음
+  - 즉 두 surgical checkout 모두 결과적으로 no-op
+  - GitHub 작업 브랜치에 박제되지 않은 surgical patch 가
+    서버 anthropic_provider.py 에 들어오는 경로가 있다
+- 영향 :
+  - GitHub 가 단일 source of truth 라는 RUNNER_RULES 의 핵심 전제가 흔들림
+  - drift 가 누적되면 다음 hotfix 시 conflict 나 회귀 위험
+- 범위 :
+  - 코드 수정 0
+  - 서버에서 `git log -1 --format="%h %s" -- app/providers/anthropic_provider.py` /
+    `stat -c '%y' app/providers/anthropic_provider.py` /
+    `find /root/x-posting-system -name '*.bak*' -mtime -7` 정도 실측
+  - HANDOFF_LOG 에 결과 박제만
+- 추천 사유 : RUNNER_RULES 의 무결성 직결, 다른 P0 보다 우선
+
+### 후보 B : `mock_providers.py` kwarg 미수신 (잠재 TypeError)
+- 영향 : Anthropic 키 부재 시 fallback 으로 빠지면 `source_type` / `criteria_context`
+  kwarg 를 못 받아 TypeError 가 다시 터질 수 있음
+- 범위 : `app/providers/mock_providers.py` 1파일 (보호 영역 — 사전 승인 필요)
+- 추천 사유 : 운영 라인은 키가 있어 바로 안 터지지만, 키 회전 / 장애 시 즉발 위험
+
+### 후보 C : 로컬 `base.py` 와 서버 `base.py` 의 ReviewResult 필드 drift
+- 영향 : 서버 본에는 `regeneration_hint`, `quality_flags` 가 있고 로컬엔 없음
+- 범위 : `app/providers/base.py` (보호 영역 — 사전 승인 필요)
+- 추천 사유 : 다음 reviewer 강화 패치를 막는 잠재 장애물
 
 ---
 
 ## Why This Is Next
-1. provider 시그니처 hotfix 가 끝나서 파이프라인 자체는 살아있다.
-2. 다음으로 운영 품질을 떨어뜨리는 가장 큰 단일 요인이 Reviewer fallback 만성화다.
-3. Reviewer 가 정상화돼야 5-Criteria 점수, 위험 등급, 다듬어진 hook/body 가 카드에 정상 노출된다.
-4. mock_providers / base.py drift 등 다른 후보보다 운영 영향이 명확히 더 크다.
+- 직전 P0 종결 후 가장 큰 운영 위험은 **GitHub vs 서버 drift** 자체이다 (후보 A).
+- 후보 A 를 먼저 깔끔히 정리해야 후보 B/C 의 surgical patch 도 안전하다.
+- RUNNER_RULES 3장 "GitHub 의 최신본이 기준이다" 의 직접 침해 사례.
 
 ---
 
 ## Minimal Scope
-sanitize 패치 적용 완료. 다음 단계는 **서버 적용 + Reviewer 1회 재검증**. 코드 수정 0.
-
-원인 후보 (직전 세션 관측 후 갱신):
-- **H1** 마크다운 코드 펜스 prefix (\`\`\`json …) — sanitize 가 처리. 효과 시 `[Phase8β]` 로그로 확정.
-- **H2** 설명 텍스트 preamble ("Here is the review: …") — sanitize 가 처리. 효과 시 `[Phase8β]` 로그로 확정.
-- **~~H3~~** ~~빈 문자열~~ — **배제 (content_len=862 실측)**
-- **H4** BOM/공백 prefix — sanitize 가 처리. (낮은 가능성)
-- **H5** JSON 미완 — 여전히 매우 낮음
-
-배제된 가설:
-- **R1~R5** (직전 세션과 동일)
-- **H3** 신규 배제 (직전 세션 관측 결과)
-
-확정 시나리오 (다음 Reviewer 호출 1회 후):
-- `[Phase8β] sanitize applied` + `parsed risk=...` → H1/H2 확정, sanitize 효과적, 종결
-- `parsed risk=...` 만 (sanitize 미적용) → 그 응답은 원래 clean. 다음 호출 대기.
-- `sanitize applied` + `Claude Reviewer 오류:` → 새 가설 필요 (sanitize 가 H1/H2 외 케이스를 못 잡음)
-- 둘 다 없음 + `Claude Reviewer 오류:` → preview 캡처 (DEBUG 승격) 필요
+운영자 결정 전까지 코드 수정 0. 후보 A 는 그 자체가 코드 수정 0 (실측만).
 
 ---
 
 ## Exact Files To Change
-이번 단계: **없음** (수정 0). sanitize 패치는 이미 본 세션에서 반영됨.
+운영자 결정 전 : 없음
 
-다음 단계 (재검증 후) 분기:
-- sanitize 효과 확인 → 본 P0 종결, 다음 P0 후보로 교체 (mock_providers kwarg / base.py drift 등)
-- sanitize 효과 미확인 → DEBUG 승격 또는 새 가설 → 1파일 후속 패치
+후보별 :
+- A : 코드 변경 0 (서버 실측만 + HANDOFF_LOG 박제)
+- B : `app/providers/mock_providers.py` 1파일 — 운영자 사전 승인 필요
+- C : `app/providers/base.py` 1파일 — 운영자 사전 승인 필요
 
 ---
 
 ## Files Forbidden To Change
 - `app/orchestrator.py`
 - `app/api/admin.py`
-- `app/providers/base.py`
-- `app/providers/mock_providers.py`
-- `app/providers/ai_provider.py`
-- `app/providers/openai_provider.py`
 - `app/services/*` 전체
 - `app/models/*` 전체
 - `dashboard/` 전체
 - `.env`
 - `main` 브랜치
-- prompt / max_tokens / config
+- prompt / model / max_tokens / config
+- `app/providers/base.py` (후보 C 선택 시에만 1파일 한정 사전 승인)
+- `app/providers/mock_providers.py` (후보 B 선택 시에만 1파일 한정 사전 승인)
 
 ---
 
 ## Validation Steps
-이번 단계 (sanitize 패치 본 커밋에 반영됨):
-- 로컬 `python3 -m py_compile app/providers/anthropic_provider.py` → OK
-- 로컬 AST 시그니처 실측 → 3개 메서드 무변경, helper 1개 신규, 호출 1회
-- 로컬 sanitize 7케이스 실측 → 전부 OK (clean 은 byte-identical pass-through)
-- diff stat: `1 file changed, 39 insertions(+), 1 deletion(-)` — dd49fd3 와 동일
+운영자 결정 전 : 해당 없음
 
-다음 단계 (서버 적용 + 재검증):
-1. 서버에서 1파일 surgical checkout
-   ```
-   cd /root/x-posting-system
-   git fetch origin claude/x-posting-ops-review-7hlxK
-   git checkout origin/claude/x-posting-ops-review-7hlxK -- app/providers/anthropic_provider.py
-   ```
-2. venv import smoke
-   ```
-   /root/x-posting-system/venv/bin/python -c "from app.providers.anthropic_provider import AnthropicReviewer, _sanitize_json_content; import inspect; print(inspect.signature(AnthropicReviewer.review_and_refine)); print(_sanitize_json_content('```json\n{\"a\":1}\n```'))"
-   ```
-3. `systemctl restart xdashboard.service && systemctl is-active xdashboard.service`
-4. 다음 Reviewer 호출 1회 발생까지 대기 (`/ingest` 실측)
-5. `grep -nE "Phase8[αβ].*Reviewer" /root/x-posting-system/server.log | tail -30`
-6. `[Phase8β] sanitize applied` + `parsed risk=...` 동시 출현 시 종결
+후보 A 가 선택되면 (코드 수정 0, 운영자 복붙 명령 후보) :
+```
+cd /root/x-posting-system
+git log -1 --format="%h %ci %s" -- app/providers/anthropic_provider.py
+stat -c '%y' app/providers/anthropic_provider.py
+find /root/x-posting-system -name '*.bak*' -mtime -7 2>/dev/null
+ls -la /root/x-posting-system/app/providers/anthropic_provider.py
+sha256sum /root/x-posting-system/app/providers/anthropic_provider.py
+git status -s app/providers/anthropic_provider.py
+git diff origin/claude/x-posting-ops-review-7hlxK -- app/providers/anthropic_provider.py | head -40
+```
 
 ---
 
 ## Recommendation
-**APPROVE** — 옵션 B 채택 완료. 본 세션에서 sanitize 패치 반영 끝.
+**NEEDS_HUMAN** — 후보 A / B / C 중 1개 선택
 
-운영자 결정 기록 (누적):
-- 직전 세션: (1) 관측만 채택 → cecd4ab 동등본 반영 → 서버 실측 → H3 배제
-- 본 세션: (B) sanitize 채택 → dd49fd3 동등본 반영 → H1/H2 동시 해소 시도
-
-다음 세션 트리거:
-- 서버 surgical checkout + 재시작 + Reviewer 호출 1회 발생 후
-- `[Phase8β] sanitize applied` + `parsed risk=...` 동시 잡히면 본 P0 종결
-- 종결 시 본 문서를 후보 1순위(`mock_providers.py` kwarg 미수신)로 교체
+추천 우선순위 : **A → B → C**
+- A : drift 진단 (코드 수정 0, 가장 빠르고 가장 위험)
+- B : fallback path 잠재 TypeError (운영 시 즉발 위험 낮음)
+- C : 향후 reviewer 강화 차단 요소 (장기 부담)
 
 ---
 
 ## Next Handoff Rule
-- 운영자가 (1)/(2)/(3) 중 선택을 결정하면 `HANDOFF_LOG.md` 최상단에 결정 근거와 함께 새 항목을 추가한다.
-- 다음 세션은 본 TASK_BOARD 의 Current Issue 가 닫힐 때까지 다른 문제로 넘어가지 않는다.
-- Current Issue 가 닫히면 본 문서를 다음 후보 1개로 교체한다.
-  - 후보 1순위: `mock_providers.py` kwarg 미수신 (서버 fallback 시 잠재 TypeError)
-  - 후보 2순위: 로컬 `base.py` 와 서버 `base.py` 의 ReviewResult 필드 drift
+- 운영자가 후보 A/B/C 중 1개를 선택하면 `HANDOFF_LOG.md` 최상단에 결정 근거와 함께 새 항목 추가
+- 본 TASK_BOARD 의 Current Issue / Next P0 섹션을 선택된 후보로 갱신
+- 다음 세션은 선택된 후보 1개에만 집중

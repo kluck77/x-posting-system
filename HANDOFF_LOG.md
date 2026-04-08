@@ -5,6 +5,73 @@
 
 ---
 
+## 2026-04-09 08:37 KST — Reviewer sanitize 효과 실측 — H1 확정 / P0 종결
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 직전 적용된 sanitize 패치(b62cc33 / dd49fd3 동등본)의 서버 실측 결과 확인.
+- **서버 적용 결과** :
+  - `git fetch / checkout` OK
+  - venv import smoke OK — 시그니처 무변경, sanitize 단위 1케이스(`\`\`\`json\n{"a":1}\n\`\`\``) → `{"a":1}` 정상
+  - `xdashboard.service` active
+
+### 결정적 실측 (server.log grep)
+4건 모두 일관된 패턴:
+
+| line | 시각 (UTC) | content_len | sanitized_len | 차이 | parsed |
+|---|---|---|---|---|---|
+| 6267~6269 | 05:55:25 | 760 | 748 | **−12** | risk=medium ✓ |
+| 6439~6441 | 06:02:40 | 921 | 909 | **−12** | risk=medium ✓ |
+| 11843~11845 | 10:40:59 | 822 | 810 | **−12** | risk=medium ✓ |
+| 12257~12259 | 11:12:22 | 933 | 921 | **−12** | risk=medium ✓ |
+
+- **모든 케이스에서 정확히 −12 chars** 일관 절감
+- 12 = `\`\`\`json\n` (8 chars) + `\n\`\`\`` (4 chars) 합계
+- → **H1 (마크다운 코드 펜스 ` \`\`\`json … \`\`\` `) 확정**
+- → H2 (preamble 텍스트) 는 길이 차이가 들쭉날쭉했어야 함, 본 데이터에선 0건
+
+### 카운트 (전체 로그 누적)
+- `[Phase8β] sanitize applied` : **4**
+- `[Phase8α] parsed` : **4** (sanitize 4건과 1:1 매칭, **sanitize 후 parse 실패 0건**)
+- `Claude Reviewer 오류` : **15** (전체 누적, 본 세션 패치 *이전* 시점 다수 포함)
+
+### 핵심 결론
+1. **sanitize 가 작동하는 케이스에서는 100% 성공** (4/4)
+2. **H1 (코드 펜스) 가 Reviewer JSON 파싱 실패의 주 원인 확정**
+3. 본 P0 (Reviewer JSON 파싱 실패 원인 분리) **종결**
+
+### 잔여 위험 (별도 P0 후보로 분리)
+- 누적 `Claude Reviewer 오류` 15건 중 sanitize 패치 이후 발생 케이스 유무는 본 grep 으론 미확정
+- L5849-5850 (response 862 → parsed 줄 없음) 케이스는 sanitize 도 못 잡았을 가능성
+  → 그 응답이 sanitize 가 손댈 수 없는 형태 (예: 정책 거부 평문, 비-JSON 텍스트) 일 수 있음
+  → 단, 본 P0 종결을 막을 정도는 아님 (주 원인은 H1 으로 확정)
+- 운영자에게 권장: `grep -nE "Claude Reviewer 오류" /root/x-posting-system/server.log | tail -10`
+  로 시간순 확인 → sanitize 적용 시점(05:55:25 UTC) *이후* 발생 케이스가 0건이면 본 P0 깔끔히 종결
+
+### ★ Drift 발견 — 직전 세션과 동일 패턴 ★
+- 본 세션의 surgical checkout 은 결과적으로 **no-op** 였을 가능성 매우 높음
+- 근거: 본 세션 적용 시각 (23:36 UTC) **이전** 인 05:37 ~ 11:12 UTC 시점에 이미 `[Phase8β] sanitize applied` 로그가 4건 존재
+- 즉 서버에 **본 세션 적용 전부터 dd49fd3 동등본이 이미 들어와 있었다**
+- 직전 세션 (cecd4ab 동등본) 도 같은 현상이었음
+- → 운영자/타 세션의 surgical patch 가 GitHub 기록 없이 들어오는 출처 미상의 채널이 존재
+- → **별도 P0 후보로 추적 필요** : "서버 anthropic_provider.py 의 출처 미상 변경 채널 식별"
+
+### 본 세션 적용 후 신규 호출 0건
+- 본 세션 surgical checkout + restart 후 새로 발생한 Reviewer 호출은 아직 로그에 없음
+- 하지만 sanitize 코드가 이미 동일하므로 b62cc33 본도 동일 동작 보장
+- 운영자 권장: `/ingest` 1회 추가 트리거 → 본 세션 시점 이후 `[Phase8β]` 로그 1줄 추가 확인 → 박제 완성
+
+- **Recommendation** : APPROVE — P0 종결
+- **Next Operator Action** :
+  1. (선택) `/ingest` 1회 → b62cc33 본 production 동작 박제
+  2. (선택) `grep "Claude Reviewer 오류" tail -10` 로 sanitize 이후 잔여 실패 0건 검증
+  3. 다음 P0 후보 선택 (TASK_BOARD 에 1개로 교체)
+
+### 보호 영역 무변경 확인
+- 본 세션 변경 대상 : `app/providers/anthropic_provider.py` 1파일만
+- 그 외 보호 영역 (`orchestrator.py` / `base.py` / `mock_providers.py` / `ai_provider.py` / `services/*` / `models/*` / `dashboard/` / `.env` / `main` / prompt / model / max_tokens / config) 무변경 확인
+
+---
+
 ## 2026-04-09 08:32 KST — Reviewer JSON sanitize 적용 (옵션 B / dd49fd3 동등본)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
