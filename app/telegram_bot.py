@@ -16,6 +16,15 @@ from telegram.ext import (
 )
 from app.config import settings
 from app.services.telegram_service import parse_callback_data
+# 서버 측 telegram_service 에는 hold 전용 파서 parse_hold_callback_data 가
+# 별도로 존재할 수 있다 (서버/로컬 drift). 없으면 None 으로 두고
+# callback_handler 에서 조건부 fallback 으로만 사용한다.
+try:
+    from app.services.telegram_service import (
+        parse_hold_callback_data as _parse_hold_callback_data,
+    )
+except ImportError:
+    _parse_hold_callback_data = None
 from app.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -194,8 +203,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     logger.info(f"텔레그램 콜백 수신: {callback_data}")
 
-    # callback_data 파싱: "action:draft_id"
+    # callback_data 파싱: "action:id"
+    # 1차: 기본 파서 (approval + 로컬 확장 hold 포함)
     parsed = parse_callback_data(callback_data)
+    # 2차 fallback: 서버 측 전용 파서 parse_hold_callback_data (있을 때만)
+    # 서버는 hold_* 를 기본 파서에서 허용하지 않고 별도 함수로 처리하므로,
+    # 1차가 None 일 때만 hold 전용 파서를 시도한다.
+    if not parsed and _parse_hold_callback_data is not None:
+        try:
+            parsed = _parse_hold_callback_data(callback_data)
+        except Exception as e:
+            logger.warning(f"parse_hold_callback_data 호출 실패 (무시): {e}")
+            parsed = None
     if not parsed:
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("⚠️ 잘못된 요청입니다.")
