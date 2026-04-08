@@ -5,6 +5,64 @@
 
 ---
 
+## 2026-04-09 08:41 KST — P0 후보 A 진입 (서버 drift 채널 실측 — 명령 발신 단계)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 운영자 결정 — 직전 P0 종결 후 다음 P0 로 **후보 A** (서버 anthropic_provider.py 의 출처 미상 변경 채널 식별) 채택. 본 세션은 코드 수정 0, 서버 실측 명령 발신 + 박제만.
+- **Changed Files** :
+  - `HANDOFF_LOG.md` (최상단 본 항목)
+  - `TASK_BOARD.md` (Current P0 를 후보 A 로 갱신)
+- **Code Changes** : 0 (앱 코드 무변경)
+- **Syntax Check Result** : N/A (문서만)
+- **Signature Compatibility Check Result** : N/A (코드 변경 0)
+- **Test Result** : N/A
+- **Runtime Risk Remaining** : 0 (앱 코드 무변경)
+- **Server Apply Risk** : 0 (서버 적용 대상 아님 — 운영자 실측 명령은 read-only)
+- **Recommendation** : APPROVE (진입 박제)
+
+### 진입 근거 (직전 두 세션 누적 관찰)
+- 2026-04-09 08:22 KST 세션 (cecd4ab 동등본 적용) :
+  - surgical checkout 적용 *이전* 시점인 2026-04-08 05:37 ~ 11:12 UTC 의 server.log 에
+    이미 `[Phase8α]` 로그 다수 존재
+- 2026-04-09 08:32 KST 세션 (dd49fd3 동등본 적용) :
+  - 동일 패턴 — surgical checkout 적용 이전 시점에 이미 `[Phase8β]` 로그 4건 존재
+- 즉 두 patch 모두 **GitHub 작업 브랜치 push 이전 시점에** 서버에 같은 코드가 들어와 있었음
+- → GitHub 작업 브랜치를 거치지 않는 patch 채널이 실재한다는 강한 정황
+
+### 영향
+- RUNNER_RULES 3장 "GitHub 의 최신본이 기준이다" 의 직접 침해
+- drift 누적 시 다음 hotfix 시 conflict / 회귀 / 책임 불명
+- surgical patch 의 무결성 자체가 검증 불가
+
+### 본 세션 산출물
+1. 운영자에게 read-only 실측 명령 7개 발신 (코드블록으로 본 보고 마지막에 첨부)
+2. 본 HANDOFF_LOG 진입 박제
+3. TASK_BOARD 갱신 (Current P0 = 후보 A)
+4. 운영자 출력 수신 후 다음 세션에서 분석 + 결론 박제
+
+### 보호 영역 무변경 확인
+- `app/providers/anthropic_provider.py` 무변경 ✓
+- 그 외 보호 영역 전체 무변경 ✓
+- destructive 명령 0 (실측 명령 7개 모두 read-only — git log / stat / find / ls / sha256sum / git status / git diff)
+
+### Drift 채널 후보 (사전 가설, 실측 결과로 좁혀야 함)
+- **D1** : 운영자 본인이 텔레그램/SSH 에서 직접 surgical checkout 을 다른 브랜치에서 수행 (예: `claude/phase-8-alpha-logging-Ju1nF` 등)
+  → `git log -1 --format='%h ...'` 결과로 해당 commit sha 노출되면 확정
+- **D2** : 다른 Claude Code 세션이 동일 서버에 동시에 surgical checkout
+  → 여러 세션이 같은 서버에 접근 가능하다면 가능
+- **D3** : `.bak` 또는 stash 기반 수동 복원
+  → `find ... '*.bak*' -mtime -7` 결과로 확인
+- **D4** : 파일 매니저 / IDE / scp 직접 업로드
+  → mtime 과 git tracking 상태 비교로 추정
+- **D5** : 자동화된 deploy hook (cron / systemd timer / git pull)
+  → cron / timer 추가 실측 필요 (본 세션 명령엔 미포함, 후속 분기 가능)
+
+### 다음 세션에 운영자가 줄 입력
+- 본 보고 마지막 코드블록 7개 명령의 출력 (가능한 한 그대로)
+- 추가로 본인이 기억하는 "최근 24시간 내 anthropic_provider.py 직접 수정 여부" 1줄
+
+---
+
 ## 2026-04-09 08:37 KST — Reviewer sanitize 효과 실측 — H1 확정 / P0 종결
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
