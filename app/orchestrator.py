@@ -158,6 +158,12 @@ class Orchestrator:
             logger.warning("중복 텍스트 감지!")
 
         # 초안 저장
+        # [KR]...[/KR] 마커로 한국어 요약을 ai_rationale 컬럼에 내장.
+        # Draft.korean_summary / Draft.ai_rationale_en @property가 분리 접근.
+        composed_rationale = (
+            f"[KR]\n{review.korean_summary}\n[/KR]\n{review.ai_rationale}"
+            if getattr(review, "korean_summary", "") else review.ai_rationale
+        )
         draft = self.draft_service.create_draft(
             source_item=source_item,
             hook=review.hook,
@@ -165,7 +171,7 @@ class Orchestrator:
             category=category,
             risk_level=risk_level,
             risk_reasoning=risk_reasoning,
-            ai_rationale=review.ai_rationale,
+            ai_rationale=composed_rationale,
             thread_continuation=review.thread_continuation,
         )
 

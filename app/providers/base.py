@@ -42,6 +42,7 @@ class ReviewResult:
     risk_reasoning: str = ""
     ai_rationale: str = ""
     recommended_action: str = "review"
+    korean_summary: str = ""
 
 
 @dataclass

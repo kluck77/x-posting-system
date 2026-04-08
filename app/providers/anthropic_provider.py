@@ -61,7 +61,8 @@ Respond in JSON ONLY:
   "risk_level": "low|medium|high",
   "risk_reasoning": "why this risk level",
   "ai_rationale": "why this draft serves the audience well",
-  "recommended_action": "approve|review|reject"
+  "recommended_action": "approve|review|reject",
+  "korean_summary": "2-3 sentence Korean summary for Korean operator (한국어로 작성)"
 }"""
 
 
@@ -170,6 +171,7 @@ class AnthropicReviewer(BaseReviewer):
                 risk_reasoning=data.get("risk_reasoning", ""),
                 ai_rationale=data.get("ai_rationale", ""),
                 recommended_action=data.get("recommended_action", "review"),
+                korean_summary=data.get("korean_summary", ""),
             )
         except Exception as e:
             logger.error(f"Claude Reviewer 오류: {e}")

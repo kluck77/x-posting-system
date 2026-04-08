@@ -95,8 +95,13 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     if draft.risk_reasoning:
         card += f"📊 <b>Risk Reasoning:</b> {draft.risk_reasoning}\n"
 
-    if draft.ai_rationale:
-        card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
+    rationale_en = draft.ai_rationale_en
+    if rationale_en:
+        card += f"🤖 <b>AI Rationale:</b> {rationale_en}\n"
+
+    korean = draft.korean_summary
+    if korean:
+        card += f"🇰🇷 <b>운영자 요약 (한국어):</b>\n{korean}\n"
 
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"

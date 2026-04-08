@@ -62,6 +62,7 @@ class MockReviewer(BaseReviewer):
             risk_reasoning="Mock mode: default medium risk for safety.",
             ai_rationale="Mock review — draft explains Korean topic for international audience.",
             recommended_action="review",
+            korean_summary="목업: 한국 이슈를 해외 독자에게 설명하는 초안.",
         )
 
 
