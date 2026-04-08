@@ -58,6 +58,47 @@ def _recommended_action(draft: Draft) -> str:
         return "✅ Looks safe to approve"
 
 
+# 운영자 한국어 요약 블록용 라벨 맵 (render-time only, 스키마/프롬프트 무변경)
+_CATEGORY_KR = {
+    "politics": "정치",
+    "policy": "정책",
+    "economy": "경제",
+    "society": "사회",
+    "kpop_culture": "K-POP/문화",
+    "evergreen": "에버그린",
+}
+_RISK_KR = {"low": "낮음", "medium": "중간", "high": "높음"}
+_RECOMMEND_KR = {
+    "low": "✅ 승인 안전",
+    "medium": "👀 검토 후 승인",
+    "high": "⚠️ 신중 검토 권장",
+}
+
+
+def _korean_summary_block(draft: Draft) -> str:
+    """
+    승인 카드용 한국어 요약 블록 (render-time only).
+
+    기존 영어 섹션을 건드리지 않고, 카테고리/위험도/추천의 한국어 라벨을
+    1줄로 표시한다. risk_reasoning / ai_rationale 이 있으면 있는 그대로
+    pass-through 2차 라인에 덧붙인다 (영어이면 영어 그대로 노출).
+
+    저장/스키마/프롬프트 변경 없음. Draft 의 기존 컬럼만 사용.
+    """
+    cat_ko = _CATEGORY_KR.get(draft.category.value, draft.category.value)
+    risk_ko = _RISK_KR.get(draft.risk_level.value, draft.risk_level.value.upper())
+    rec_ko = _RECOMMEND_KR.get(draft.risk_level.value, "검토")
+    lines = [
+        "🇰🇷 <b>운영자 요약 (한국어)</b>",
+        f"카테고리: {cat_ko} · 위험도: {risk_ko} · 추천: {rec_ko}",
+    ]
+    if getattr(draft, "risk_reasoning", None):
+        lines.append(f"사유: {draft.risk_reasoning}")
+    if getattr(draft, "ai_rationale", None):
+        lines.append(f"판단: {draft.ai_rationale}")
+    return "\n".join(lines)
+
+
 def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     """
     텔레그램으로 보낼 승인 카드 텍스트를 생성합니다.
@@ -97,6 +138,9 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
 
     if draft.ai_rationale:
         card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
+
+    # 운영자 한국어 요약 블록 (render-time, 스키마/프롬프트 무변경)
+    card += f"\n{_korean_summary_block(draft)}\n"
 
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
