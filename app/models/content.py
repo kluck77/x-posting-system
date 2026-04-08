@@ -54,6 +54,21 @@ class ApprovalStatus(str, enum.Enum):
     FAILED = "failed"             # 게시 실패
 
 
+class CandidateStatus(str, enum.Enum):
+    """
+    후보 선별 상태 (Phase A - heuristic only).
+
+    초안 생성 전 pre-filter 단계에서 source_item에 부여되는 상태값.
+    rejected_l2 는 Phase A에서 사용하지 않는다.
+    """
+    PENDING = "pending"                   # 아직 선별 전
+    PASSED = "passed"                     # 컷라인 통과 (초안 생성 대상)
+    HOLD = "hold"                         # 보류 (텔레그램 hold queue)
+    REJECTED_L1 = "rejected_l1"           # L1 키워드 블랙리스트 즉시 탈락
+    REJECTED_SCORE = "rejected_score"     # heuristic 점수 컷라인 미달
+    REJECTED_MANUAL = "rejected_manual"   # 운영자 수동 폐기
+
+
 # =============================================================================
 # SQLAlchemy 모델 (데이터베이스 테이블)
 # =============================================================================
@@ -73,6 +88,20 @@ class SourceItem(Base):
     language = Column(String(10), default="ko", comment="원본 언어")
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc), comment="생성 시간"
+    )
+
+    # Phase A 후보 선별 (heuristic only, nullable)
+    candidate_status = Column(
+        Enum(CandidateStatus), nullable=True, default=None,
+        comment="Phase A 선별 상태 (pending/passed/hold/rejected_l1/rejected_score/rejected_manual)",
+    )
+    candidate_score = Column(
+        Integer, nullable=True, default=None,
+        comment="Phase A heuristic 점수 (0~85)",
+    )
+    candidate_score_breakdown = Column(
+        Text, nullable=True, default=None,
+        comment="Phase A heuristic 점수 상세 (JSON 문자열)",
     )
 
     # 이 소스에서 만들어진 초안들 (1:N 관계)
