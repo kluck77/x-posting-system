@@ -99,7 +99,14 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         card += f"📊 <b>Risk Reasoning:</b> {draft.risk_reasoning}\n"
 
     if draft.ai_rationale:
-        card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
+        if draft.ai_rationale.startswith("🇰🇷 "):
+            parts = draft.ai_rationale.split("\n\n", 1)
+            ko_part = parts[0].removeprefix("🇰🇷 ").strip()
+            card += f"🇰🇷 <b>한국어 요약:</b> {ko_part}\n"
+            if len(parts) > 1 and parts[1].strip():
+                card += f"🤖 <b>AI Rationale:</b> {parts[1].strip()}\n"
+        else:
+            card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
 
     # topic tags (Layer 2, advisory)
     try:

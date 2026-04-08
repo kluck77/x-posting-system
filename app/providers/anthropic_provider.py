@@ -232,6 +232,8 @@ After both frameworks, score each flag true/false:
 - sounds_human: Does it sound like a real person with a real opinion — not AI-generated filler? (no banned phrases, no hedging, no essay tone)
 - tone_clean: Is the tone analytical, not sensational or propagandistic? (no outrage bait, no political editorializing)
 
+Also write a 2-3 sentence Korean summary of the FINAL hook+body so the operator can judge the card at a glance. Plain Korean, no English, no quotes.
+
 Respond in JSON ONLY:
 {
   "hook": "final hook",
@@ -241,6 +243,7 @@ Respond in JSON ONLY:
   "risk_level": "low|medium|high",
   "risk_reasoning": "why this risk level",
   "ai_rationale": "what makes this post worth the account's reputation",
+  "korean_summary": "최종 hook+body를 2-3문장 한국어로 요약 — 운영자 판단용",
   "recommended_action": "approve|review|regenerate|reject",
   "regeneration_hint": "MUST be non-empty when recommended_action is regenerate. State which criterion failed, what angle to take instead, and the one fix that would make this pass. Example: 'Marketability fail — reframe around USD/KRW impact, not domestic policy. Add exchange rate number in the hook.' Empty string ONLY when action is not regenerate.",
   "criteria_scores": {
@@ -424,6 +427,11 @@ class AnthropicReviewer(BaseReviewer):
                 fails = [f"{k}: {v}" for k, v in criteria.items() if "fail" in str(v).lower()]
                 if fails:
                     rationale += f" | REGENERATE 이유: {'; '.join(fails)}"
+
+            # 운영자용 한국어 요약을 ai_rationale 앞에 prepend (텔레그램 카드에서 분리 렌더)
+            korean_summary = (data.get("korean_summary") or "").strip()
+            if korean_summary:
+                rationale = f"🇰🇷 {korean_summary}\n\n{rationale}" if rationale else f"🇰🇷 {korean_summary}"
 
             regen_hint = data.get("regeneration_hint", "")
             return ReviewResult(
