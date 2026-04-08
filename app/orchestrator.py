@@ -21,12 +21,17 @@ from app.config import settings
 from app.db import get_db
 from app.models.content import (
     SourceItem, Draft, ContentCategory, RiskLevel, ApprovalStatus,
-    SourceItemCreate,
+    CandidateStatus, SourceItemCreate,
 )
 from app.services.source_service import SourceService
 from app.services.draft_service import DraftService
 from app.services.classifier import classify_category, classify_risk
-from app.services.telegram_service import send_approval_card, send_publish_confirmation
+from app.services.candidate_filter import (
+    apply_result_to_source, evaluate_source_item,
+)
+from app.services.telegram_service import (
+    send_approval_card, send_hold_card, send_publish_confirmation,
+)
 from app.services.x_publisher import XPublisher
 from app.services.rate_limiter import RateLimiter
 from app.providers.ai_provider import AITeam, create_ai_team
@@ -52,18 +57,23 @@ class Orchestrator:
         self.rate_limiter = RateLimiter(self.db)
         self.ai: AITeam = create_ai_team()
 
-    async def ingest_and_generate(self, data: SourceItemCreate) -> Draft:
+    async def ingest_and_generate(self, data: SourceItemCreate) -> Draft | None:
         """
         소스를 입력받아 전체 AI 파이프라인을 실행합니다.
 
         Steps:
         1. 소스 DB 저장
+        1.5. Phase A 후보 선별 (hard gate)
         2. Researcher: 배경 리서치
         3. DraftWriter: 초안 생성
         4. FactChecker: 팩트체크 (v1: mock)
         5. Reviewer: 최종 판단 & 다듬기
         6. 분류 & 위험도 확정
         7. 초안 DB 저장
+
+        Returns:
+            Draft  — passed 경로 (기존 동작)
+            None   — rejected_l1 / rejected_score / hold 로 차단된 경우
         """
         logger.info(f"=== 파이프라인 시작: '{data.title[:50]}' ===")
 
@@ -75,6 +85,39 @@ class Orchestrator:
         # Step 1: 소스 저장
         logger.info("[1/6] 소스 DB 저장")
         source_item = self.source_service.ingest_manual(data)
+
+        # Step 1.5: Phase A 후보 선별 (heuristic only, hard gate)
+        cand_result = evaluate_source_item(source_item)
+        apply_result_to_source(source_item, cand_result)
+        self.db.commit()
+        self.db.refresh(source_item)
+        logger.info(
+            f"[1.5/6] candidate_filter: status={cand_result.status.value}, "
+            f"score={cand_result.score}"
+        )
+
+        if cand_result.status in (
+            CandidateStatus.REJECTED_L1,
+            CandidateStatus.REJECTED_SCORE,
+        ):
+            logger.info(
+                f"Phase A reject → 초안 생성 차단: source_id={source_item.id}, "
+                f"status={cand_result.status.value}"
+            )
+            return None
+
+        if cand_result.status == CandidateStatus.HOLD:
+            logger.info(
+                f"Phase A hold → 텔레그램 후보 보류: source_id={source_item.id}, "
+                f"score={cand_result.score}"
+            )
+            try:
+                await send_hold_card(source_item)
+            except Exception as e:
+                logger.warning(f"Hold 카드 전송 실패 (무시): {e}")
+            return None
+
+        # 여기까지 왔으면 CandidateStatus.PASSED — 기존 draft 생성 경로 유지
 
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")
@@ -260,6 +303,12 @@ class Orchestrator:
                 source_type=source.source_type, language=source.language,
             )
             new_draft = await self.ingest_and_generate(new_data)
+            if new_draft is None:
+                return {
+                    "success": False,
+                    "filtered": True,
+                    "error": "재생성 차단 (candidate_filter)",
+                }
             await self.send_for_approval(new_draft.id)
             return {
                 "success": True,
@@ -286,6 +335,15 @@ class Orchestrator:
         """전체 파이프라인: 소스 입력 → AI 생성 → 텔레그램 승인카드 전송"""
         try:
             draft = await self.ingest_and_generate(data)
+            if draft is None:
+                # Phase A pre-filter 에서 차단된 경우 (rejected / hold)
+                # 여기서는 draft 가 없음 → success=False, 이유만 돌려줌
+                return {
+                    "success": False,
+                    "draft_id": None,
+                    "filtered": True,
+                    "error": "candidate_filter blocked draft creation",
+                }
             sent = await self.send_for_approval(draft.id)
             return {
                 "success": True,

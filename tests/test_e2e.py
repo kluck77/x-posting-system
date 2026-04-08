@@ -18,12 +18,19 @@ class TestEndToEnd:
         """전체 파이프라인 (Mock 모드) 테스트"""
         orchestrator = Orchestrator(db=db_session)
 
+        # Phase A 필터 통과를 위해 입력 문자열만 교체 (assertion/구조 무변경)
         data = SourceItemCreate(
-            title="한국 출산율 세계 최저",
+            title="Korea demographic decline shapes global semiconductor policy",
             url="https://example.com/test",
-            source_text="한국의 합계출산율이 0.72명으로 세계 최저를 기록했다.",
+            source_text=(
+                "Korea's structural demographic decline is reshaping global "
+                "semiconductor policy. Samsung and SK hynix face US tariff "
+                "pressure while the government proposes policy reform. "
+                "This analysis explains why Korea matters for the global "
+                "chip supply chain."
+            ),
             source_type="manual",
-            language="ko",
+            language="en",
         )
 
         # 파이프라인 실행
@@ -39,10 +46,15 @@ class TestEndToEnd:
         """승인 → Mock 게시 테스트"""
         orchestrator = Orchestrator(db=db_session)
 
-        # 1. 파이프라인 실행
+        # 1. 파이프라인 실행 (Phase A 필터 통과용 입력)
         data = SourceItemCreate(
-            title="테스트 뉴스",
-            source_text="테스트용 뉴스 내용입니다.",
+            title="Samsung chip export to US amid China tariff pressure",
+            source_text=(
+                "Samsung semiconductor export to the US faces new tariff "
+                "pressure from China trade policy. Korea chaebol structure "
+                "and AI chip demand shape the outlook. Analysts explain "
+                "why this matters for global supply."
+            ),
         )
         result = await orchestrator.full_pipeline(data)
         draft_id = result["draft_id"]
@@ -62,9 +74,15 @@ class TestEndToEnd:
         """거절 테스트"""
         orchestrator = Orchestrator(db=db_session)
 
+        # Phase A 필터 통과용 입력 (거절 테스트 목적은 유지)
         data = SourceItemCreate(
-            title="거절 테스트",
-            source_text="이 초안은 거절될 것입니다.",
+            title="Korea chaebol reform and structural analysis for global investors",
+            source_text=(
+                "Korea proposes structural chaebol reform policy amid US "
+                "China semiconductor competition. This analysis explains "
+                "why Samsung and Hyundai face regulation while global "
+                "investors watch the policy outlook."
+            ),
         )
         result = await orchestrator.full_pipeline(data)
         draft_id = result["draft_id"]
@@ -80,9 +98,15 @@ class TestEndToEnd:
         """보류 테스트"""
         orchestrator = Orchestrator(db=db_session)
 
+        # Phase A 필터 통과용 입력 (보류 테스트 목적은 유지)
         data = SourceItemCreate(
-            title="보류 테스트",
-            source_text="이 초안은 보류될 것입니다.",
+            title="Korea AI chip policy outlook for US China trade",
+            source_text=(
+                "Korea AI chip policy outlook is shaped by US China trade "
+                "tension. Samsung and SK hynix navigate export regulation "
+                "while the government proposes structural reform. "
+                "Analysis explains why global readers should care."
+            ),
         )
         result = await orchestrator.full_pipeline(data)
         draft_id = result["draft_id"]
