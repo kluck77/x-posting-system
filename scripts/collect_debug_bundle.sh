@@ -1,105 +1,102 @@
 #!/usr/bin/env bash
 # collect_debug_bundle.sh
-# One-command debug snapshot for x-posting-system.
-# Run: bash scripts/collect_debug_bundle.sh
-# Output: debug_YYYYMMDD_HHMMSS.txt in the project root
+# Usage: bash scripts/collect_debug_bundle.sh
+# Collects a one-shot debug snapshot and writes it to a timestamped file.
 
-set -euo pipefail
-
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BUNDLE="debug_${TIMESTAMP}.txt"
 SERVICE="xdashboard.service"
 DB="x_poster.db"
 
-# Resolve project root (script lives in scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-section() { echo; echo "━━━ $1 ━━━"; }
-fail()    { echo "[FAILED] $1"; }
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BUNDLE="$PROJECT_ROOT/debug_${TIMESTAMP}.txt"
+
+section() { printf '\n━━━ %s ━━━\n' "$1"; }
+try()     { "$@" 2>/dev/null || echo "[FAILED] $*"; }
 
 {
-  echo "x-posting-system debug bundle"
-  echo "Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-  echo "Host: $(hostname)"
 
-  # ── 1. Git state ───────────────────────────────────────────
-  section "GIT STATE"
-  git branch --show-current          2>/dev/null || fail "git branch"
-  git rev-parse --short HEAD         2>/dev/null || fail "git rev-parse"
-  git status --short                 2>/dev/null || fail "git status"
+# ── 1. Timestamp ────────────────────────────────────────────
+section "TIMESTAMP"
+date -u '+%Y-%m-%d %H:%M:%S UTC'
 
-  # ── 2. Service status ──────────────────────────────────────
-  section "SERVICE STATUS"
-  systemctl is-active "$SERVICE"     2>/dev/null || fail "systemctl is-active"
-  systemctl show "$SERVICE" \
-    --property=ActiveState,SubState,ExecMainPID,MainPID \
-    2>/dev/null                                  || fail "systemctl show"
+# ── 2. Current working directory ────────────────────────────
+section "PWD"
+echo "$PROJECT_ROOT"
 
-  # ── 3. Running process ─────────────────────────────────────
-  section "RUNNING PROCESS"
-  pgrep -a -f "run.py\|uvicorn\|gunicorn\|xdashboard" \
-    2>/dev/null || echo "(no matching process found)"
+# ── 3. Git branch ───────────────────────────────────────────
+section "GIT BRANCH"
+try git branch --show-current
 
-  # ── 4. Last 100 log lines ──────────────────────────────────
-  section "JOURNAL LOG (last 100 lines)"
-  journalctl -u "$SERVICE" -n 100 --no-pager \
-    2>/dev/null || fail "journalctl"
+# ── 4. Git commit ───────────────────────────────────────────
+section "GIT COMMIT"
+try git rev-parse HEAD
 
-  # ── 5. Error / Exception lines (last 24 h) ─────────────────
-  section "ERROR / EXCEPTION LINES (last 24h)"
-  journalctl -u "$SERVICE" --since "24h ago" --no-pager \
-    2>/dev/null \
-    | grep -E "ERROR|Exception|Traceback|raise |criteria_context|fallback|실패" \
-    || echo "(none found)"
+# ── 5. Git status --short ───────────────────────────────────
+section "GIT STATUS"
+try git status --short
 
-  # ── 6. Environment variable presence (NO values) ───────────
-  section "ENV VAR PRESENCE CHECK"
-  for var in \
-    OPENAI_API_KEY \
-    ANTHROPIC_API_KEY \
-    TELEGRAM_BOT_TOKEN \
-    TELEGRAM_CHAT_ID \
-    X_API_KEY \
-    X_API_SECRET \
-    X_ACCESS_TOKEN \
-    X_ACCESS_TOKEN_SECRET \
-    DATABASE_URL \
-    ACTIVE_DRAFT_PROVIDER \
-    DEFAULT_LANGUAGE; do
-    if systemctl show "$SERVICE" --property=Environment 2>/dev/null \
-        | grep -q "${var}="; then
-      echo "  ${var}: OK"
-    elif printenv "$var" &>/dev/null; then
-      echo "  ${var}: OK (shell env)"
-    else
-      echo "  ${var}: MISSING"
-    fi
-  done
+# ── 6. Service status summary ───────────────────────────────
+section "SERVICE STATUS: $SERVICE"
+try systemctl status "$SERVICE" --no-pager -l
 
-  # ── 7. Recent drafts from SQLite ───────────────────────────
-  section "RECENT DRAFTS (SQLite)"
-  if command -v sqlite3 &>/dev/null && [ -f "$DB" ]; then
-    sqlite3 "$DB" \
-      "SELECT id, substr(hook,1,60), risk_level, approval_status,
-              created_at
-       FROM drafts
-       ORDER BY id DESC
-       LIMIT 10;" \
-      2>/dev/null || fail "sqlite3 query"
-  elif [ ! -f "$DB" ]; then
-    echo "(DB not found at $PROJECT_ROOT/$DB)"
+# ── 7. Last 100 journal lines ───────────────────────────────
+section "JOURNAL LOG (last 100 lines)"
+try journalctl -u "$SERVICE" -n 100 --no-pager
+
+# ── 8. Error / Exception / traceback lines (last 24h) ───────
+section "ERROR / EXCEPTION LINES (last 24h)"
+journalctl -u "$SERVICE" --since "24h ago" --no-pager 2>/dev/null \
+  | grep -iE "error|exception|traceback|raise |criteria_context|fallback|실패" \
+  || echo "(none found)"
+
+# ── 9. Running Python process check ─────────────────────────
+section "RUNNING PYTHON PROCESS"
+pgrep -a -f "python\|uvicorn\|gunicorn\|run\.py" 2>/dev/null \
+  || echo "(no matching python process found)"
+
+# ── 10. Env var presence check (no values printed) ──────────
+section "ENV VAR PRESENCE"
+for var in \
+  OPENAI_API_KEY \
+  ANTHROPIC_API_KEY \
+  TELEGRAM_BOT_TOKEN \
+  TELEGRAM_CHAT_ID \
+  X_API_KEY; do
+  if systemctl show "$SERVICE" --property=Environment 2>/dev/null \
+      | grep -q "${var}="; then
+    echo "  ${var}: OK"
+  elif printenv "$var" &>/dev/null; then
+    echo "  ${var}: OK (shell env)"
   else
-    echo "(sqlite3 not installed — skipped)"
+    echo "  ${var}: MISSING"
   fi
+done
 
-  # ── 8. Disk space (sanity check) ───────────────────────────
-  section "DISK SPACE"
-  df -h "$PROJECT_ROOT" 2>/dev/null || fail "df"
+# ── 11. Recent drafts from SQLite ───────────────────────────
+section "RECENT DRAFTS (SQLite)"
+if ! command -v sqlite3 &>/dev/null; then
+  echo "(sqlite3 not installed — skipped)"
+elif [ ! -f "$PROJECT_ROOT/$DB" ]; then
+  echo "(DB not found: $PROJECT_ROOT/$DB)"
+else
+  sqlite3 "$PROJECT_ROOT/$DB" \
+    "SELECT id, substr(hook,1,60), risk_level, approval_status, created_at
+     FROM drafts ORDER BY id DESC LIMIT 10;" \
+    2>/dev/null || echo "[FAILED] sqlite3 query"
+fi
+
+# ── 12. Output file path ─────────────────────────────────────
+section "BUNDLE OUTPUT"
+echo "$BUNDLE"
 
 } > "$BUNDLE" 2>&1
 
 echo ""
-echo "✓ Debug bundle saved: $PROJECT_ROOT/$BUNDLE"
-echo "  Share this file or paste its contents into chat."
+echo "✓ Debug bundle saved:"
+echo "  $BUNDLE"
+echo ""
+echo "Paste the contents into chat:"
+echo "  cat $BUNDLE"
