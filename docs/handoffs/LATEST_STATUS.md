@@ -1,6 +1,29 @@
 # Latest Status
 
-## LAST COMPLETED PHASE: Dashboard S55 — 탭 전환 진짜 원인 수정
+## LAST COMPLETED PHASE: v11d — 텔레그램 카드 한국어 요약 + Phase 1 설계 확정 (2026-04-08)
+
+**코드 산출물 (커밋 1건, 서버 적용 대기)**
+커밋 `8616d01` "feat(telegram): add Korean summary to approval card (problem #6)"
+— `app/providers/anthropic_provider.py` (+8/-0), `app/services/telegram_service.py` (+8/-1).
+Reviewer 프롬프트에 `korean_summary` JSON 필드 추가 → 응답 파싱 시 `🇰🇷 {요약}\n\n{rationale}`
+형태로 `ai_rationale` prepend → `build_approval_card` 가 `🇰🇷` 접두 감지 시 "🇰🇷 한국어 요약"
++ "🤖 AI Rationale" 두 섹션 분리 렌더. 후방 호환 — Reviewer 실패/필드 없음 시 기존 단일 블록 그대로.
+로컬 구문/렌더링 단위 테스트 4케이스 통과. **서버 적용은 `NEEDS_HUMAN` (SSH 권한 없음)**.
+
+**설계 산출물 (코드 0건, 문서로만 고정)**
+Phase 1 = 네이버 1차 탐지기 → 텔레그램 후보 다이제스트 → 운영자 Pick → AI 호출 게이트 구조 확정.
+저장 구조 `Option B'` 확정 — `source_items` 재사용 + nullable 컬럼 3개만 추가
+(`candidate_status`, `candidate_score`, `fetched_at`). 새 테이블 0건. Sprint-0 (읽기 전용 실사) →
+Sprint-1~6 순차 계획. 배포 전략 Round 1 (DB/필터/수집 저장부만, 비활성) → Round 2 (다이제스트 + 콜백
++ 스케줄러 활성) 2단계. Perplexity/Gemini/xAI 조건부 라우팅 및 일일 AI 호출 카운터는 Phase 2 이관.
+
+**고정 운영 규칙 (다음 세션 이후에도 유지)**
+1) 문제 6 서버 적용 결과 확인부터 → 2) Sprint-0 읽기 전용 실사 → 3) 실사 결과 보고 Sprint-1 착수 여부 판단.
+문제 7/8/9 절대 섞지 말 것. `.env` / `orchestrator.py` / `dashboard/**` / `main` 브랜치 보호.
+전체 pull / 전체 재배포 금지. 수정 파일만 선택 적용. 새 DB 테이블 추가 금지. 작업 브랜치 push 시 반드시
+`git push -u origin claude/setup-opus-model-1tWC7`. 상세 인수인계는 `docs/handoffs/CURRENT_SESSION.md` 참조.
+
+## PREVIOUS: Dashboard S55 — 탭 전환 진짜 원인 수정
 
 S47 블록의 `html body .hud-main #page-ai.page { display:block !important }` (specificity 1,2,3) 가 S35의 `.active`-scoped rule (1,2,0)을 이겨서 `#page-ai`가 상시 visible이었음. `display:block` 한 줄만 삭제. 네 탭 정상 전환 복구.
 
