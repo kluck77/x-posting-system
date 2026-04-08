@@ -5,6 +5,112 @@
 
 ---
 
+## 2026-04-09 08:49 KST — P0 후보 A 1차 실측 — 후보 2개 그룹으로 좁힘 (D3 강 / D1·D2 가능)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 직전 세션에서 발신한 7개 read-only 명령의 운영자 출력을 받아 drift 채널 가설 D1~D5 를 좁힘. 코드 수정 0.
+- **Changed Files** :
+  - `HANDOFF_LOG.md` (최상단 본 항목)
+  - `TASK_BOARD.md` (Current Stage / Drift 후보 갱신)
+- **Code Changes** : 0
+- **Recommendation** : APPROVE (1차 좁힘 박제) — 본 P0 는 추가 1단계 후 종결 예정
+
+### 운영자 서버 출력 (그대로 박제)
+
+```
+git log -1 --format="%h %ci %s" -- app/providers/anthropic_provider.py
+→ bde95b8 2026-04-05 22:24:41 +0000 feat(v10): internal quality hardening — rate limiter, prompt refresh, quality_flags
+
+stat -c '%y' app/providers/anthropic_provider.py
+→ 2026-04-08 23:36:14.019939990 +0000
+
+find /root/x-posting-system -name '*.bak*' -mtime -7
+→ /root/x-posting-system/.env.bak.promotetest
+   /root/x-posting-system/.env.bak.krapproval2
+   /root/x-posting-system/.env.bak.approvalkr
+   /root/x-posting-system/app/providers/openai_provider.py.bak
+   /root/x-posting-system/app/providers/anthropic_provider.py.bak  ← ★
+   /root/x-posting-system/app/telegram_bot.py.bak
+   /root/x-posting-system/app/services/telegram_service.py.bak
+
+ls -la /root/x-posting-system/app/providers/anthropic_provider.py
+→ -rw-r--r-- 1 root root 10178 Apr  8 23:36
+
+sha256sum /root/x-posting-system/app/providers/anthropic_provider.py
+→ 78498dd018777e4dc6118a5549f8c346e72c93c135613652d4e93b3276b7990c
+
+git status -s app/providers/anthropic_provider.py
+→ M  app/providers/anthropic_provider.py
+
+git diff origin/claude/x-posting-ops-review-7hlxK -- app/providers/anthropic_provider.py | head -40
+→ (빈 출력)
+```
+
+### 로컬 교차 검증
+- 로컬 작업 브랜치 HEAD : `890f5193` (직전 세션 docs commit)
+- 로컬 `app/providers/anthropic_provider.py` :
+  - sha256 : `78498dd018777e4dc6118a5549f8c346e72c93c135613652d4e93b3276b7990c`
+  - size : `10178` bytes
+- ★ 서버 sha256 == 로컬 sha256 == 10178 bytes : **100% byte-identical** ★
+
+### 핵심 사실 (실측 정리)
+1. **서버 파일은 현재 GitHub b62cc33 본과 byte-identical**
+   - 3개 독립 검증 (sha256, size, `git diff origin/...` 빈 출력) 모두 일치
+2. **mtime 23:36:14 UTC = 본 세션 surgical checkout 시각**
+   - 직전 세션의 `git checkout origin/... -- file` 작업이 정상 적용된 결과
+3. **`git status -s = M`**
+   - surgical checkout 의 정상 부산물 (working tree 변경 + staged)
+4. **git tracked 마지막 anthropic_provider.py commit = `bde95b8` (2026-04-05)**
+   - "feat(v10): internal quality hardening — rate limiter, prompt refresh, quality_flags"
+   - 서버 git history 가 04-05 v10 에서 멈춰 있음 (premium-control-room-ui-LJFba 베이스의 v10 commit)
+   - 그 이후 phase8 진단 / sanitize 패치는 **git tracked commit 으로 들어온 적이 한 번도 없다**
+   - 즉 서버에 있던 phase8 코드는 항상 "working tree only / commit 없음" 상태였음
+5. **★ `app/providers/anthropic_provider.py.bak` 실재 ★**
+   - 운영자 또는 다른 세션이 과거 어느 시점에 백업 파일을 만든 흔적
+   - 같은 디렉토리에 `openai_provider.py.bak` 도 동시 존재
+   - 다른 영역에도 `telegram_bot.py.bak`, `telegram_service.py.bak`, `.env.bak.*` 3종 존재
+   - → 서버는 운영 중 surgical / .bak 작업이 일상적으로 행해지는 환경
+
+### 가설 좁히기 (D1~D5)
+
+| 가설 | 정의 | 본 실측 결과 | 결론 |
+|---|---|---|---|
+| **D1** | 운영자가 다른 브랜치에서 직접 surgical checkout 후 commit 안 함 | `git log` 에 phase8 commit 없음, surgical checkout 은 commit 안 만들므로 정합 | **가능** |
+| **D2** | 다른 Claude Code 세션이 같은 서버에 surgical checkout | 운영자 본인이 다른 채팅 세션에서 동일 작업 했을 가능성 | **가능** |
+| **D3** | `.bak` / stash 기반 수동 복원 | ★ `anthropic_provider.py.bak` 실재 ★ — 강한 정황 | **가장 강한 후보** |
+| **D4** | 파일 매니저 / IDE / scp 직접 업로드 | 시그널 0 (mtime / git status 모두 surgical checkout 패턴과 일치) | **사실상 배제** |
+| **D5** | 자동화 deploy hook (cron / systemd timer / git pull) | 시그널 0, .bak 산재 패턴은 사람 작업과 더 일치 | **사실상 배제** |
+
+→ **남은 후보 2개 그룹** :
+- ★ **D3** (.bak 기반 수동 복원) — 가장 강한 정황
+- **D1 / D2** (직접 surgical checkout 후 commit 누락) — 가능
+
+### 본 세션 목표 달성도
+- 운영자 목표 : "drift 경로 후보를 최소 2개 이하로 좁혀서 보고"
+- 본 세션 결과 : **2개 그룹으로 좁힘** ✓ → 목표 달성
+- 단, D3 vs D1·D2 단정은 추가 1단계 (.bak 내용 / mtime 비교 + 운영자 회신) 필요
+
+### 본 P0 종결 조건
+- D3 와 D1·D2 둘 중 하나를 단정할 수 있는 추가 증거 1개
+- 또는 양쪽 모두 가능성을 인정하고 본 P0 는 "원인 후보 2개 식별" 까지로 종결
+- 운영자 판단 사항
+
+### 미수신 항목 (재요청)
+- "최근 24시간 내 anthropic_provider.py 를 운영자 본인이 직접 손댄 적이 있다 / 없다" (1줄 회신)
+- 직전 세션에서 요청했으나 운영자 회신 미포함 — 본 세션 답변에서 다시 요청
+
+### 잔여 위험
+- 본 P0 종결 전에는 다음 hotfix 의 무결성 보장 약함
+- 단, 현재 시점 서버 == GitHub 본 byte-identical 이므로 *지금* drift 는 0
+- 다음 hotfix 까지는 운영자가 .bak 생성 / 직접 surgical checkout 을 자제하면 drift 추가 없음
+
+### 보호 영역 무변경 확인
+- `app/providers/anthropic_provider.py` 무변경 ✓ (실측만)
+- 그 외 보호 영역 전체 무변경 ✓
+- destructive 명령 0 (read-only 만 운영자가 실행)
+
+---
+
 ## 2026-04-09 08:41 KST — P0 후보 A 진입 (서버 drift 채널 실측 — 명령 발신 단계)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
