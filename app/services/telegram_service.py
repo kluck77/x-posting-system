@@ -100,7 +100,13 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         card += f"🔗 <b>Source:</b> {source_url}\n"
 
     if draft.ai_rationale:
-        card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
+        if draft.ai_rationale.startswith("🇰🇷 "):
+            parts = draft.ai_rationale.split("\n\n", 1)
+            card += f"🇰🇷 <b>한국어 요약:</b> {parts[0][3:]}\n"
+            if len(parts) > 1 and parts[1]:
+                card += f"🤖 <b>AI 검토:</b> {parts[1]}\n"
+        else:
+            card += f"🤖 <b>AI 검토:</b> {draft.ai_rationale}\n"
 
     card += (
         f"{'─' * 30}\n"

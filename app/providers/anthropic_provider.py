@@ -110,6 +110,7 @@ Respond in JSON ONLY:
   "category": "politics|policy|economy|society|kpop_culture|evergreen",
   "risk_level": "low|medium|high",
   "risk_reasoning": "safety and credibility risk factors",
+  "korean_summary": "한국어로 된 최종 포스트 요약 (hook + body를 2-3문장으로 번역, 운영자 검토용)",
   "ai_rationale": "quality issues found + what was changed + why final version serves international readers",
   "recommended_action": "approve|review|reject"
 }"""
@@ -215,6 +216,12 @@ class AnthropicReviewer(BaseReviewer):
                 content = resp.json()["content"][0]["text"]
                 data = json.loads(content)
 
+            korean_summary = data.get("korean_summary", "")
+            en_rationale = data.get("ai_rationale", "")
+            combined_rationale = (
+                f"🇰🇷 {korean_summary}\n\n{en_rationale}" if korean_summary else en_rationale
+            )
+
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
             return ReviewResult(
                 hook=data.get("hook", draft.hook),
@@ -223,7 +230,7 @@ class AnthropicReviewer(BaseReviewer):
                 category=data.get("category", "evergreen"),
                 risk_level=data.get("risk_level", "medium"),
                 risk_reasoning=data.get("risk_reasoning", ""),
-                ai_rationale=data.get("ai_rationale", ""),
+                ai_rationale=combined_rationale,
                 recommended_action=data.get("recommended_action", "review"),
             )
         except Exception as e:

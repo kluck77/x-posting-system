@@ -48,6 +48,7 @@ DO NOT:
 - Sensationalise or editorialize politically
 - Open with "South Korea update:" or "🇰🇷 Here's what you need to know:"
 - Add fake certainty about anything unconfirmed in the source
+- End with a call-to-action: "Follow for...", "Follow to stay...", "Follow us for...", "Like and follow", "Stay tuned", "Subscribe for more"
 
 THREAD CONTINUATION:
 Add thread_continuation ONLY when essential background genuinely cannot fit the main post AND the topic requires it to make sense. Most posts do not need a thread. If you add one, it must give concrete new information — not restate or pad the hook.
