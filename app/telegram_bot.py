@@ -180,7 +180,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     사용자가 Approve/Reject/Defer/Regenerate 버튼을 누르면 실행됩니다.
     """
     query = update.callback_query
-    await query.answer()  # 텔레그램에 콜백 수신 확인
+
+    # === ACK 우선 + 실패 내성 ===
+    # query.answer()는 "이 콜백 수신했음"을 텔레그램에 알리는 호출이다.
+    # 늦거나 실패하면 클라이언트가 실패 팝업을 띄운다.
+    # 네트워크/만료/타이밍으로 예외가 날 수 있으므로 try/except 로 감싸고,
+    # 실패해도 본문(로그/파싱/라우팅/회신)은 계속 진행한다.
+    try:
+        await query.answer()
+    except Exception as e:
+        logger.warning(f"query.answer() 실패 (무시하고 진행): {e}")
 
     callback_data = query.data
     logger.info(f"텔레그램 콜백 수신: {callback_data}")
@@ -244,7 +253,16 @@ def create_telegram_app() -> Application | None:
         logger.warning("텔레그램 설정 없음. 봇을 시작하지 않습니다.")
         return None
 
-    app = Application.builder().token(settings.telegram_bot_token).build()
+    # concurrent_updates=True: ptb 기본은 직렬 처리라, approve 등 느린 콜백이
+    # 진행 중이면 뒤이은 Hold/Approval 콜백이 큐에 밀려 query.answer()가
+    # 늦어지고 텔레그램 클라이언트가 "실패 팝업"을 띄운다. 동시 처리로 전환해
+    # 각 콜백이 독립 태스크에서 즉시 ACK 되도록 한다.
+    app = (
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .concurrent_updates(True)
+        .build()
+    )
 
     # 명령어 핸들러 등록
     app.add_handler(CommandHandler("start", start_command))
