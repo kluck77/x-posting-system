@@ -27,14 +27,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     봇이 처음 시작될 때 안내 메시지를 보냅니다.
     """
     await update.message.reply_text(
-        "🇰🇷 <b>X Posting System Bot</b>\n\n"
+        "🇰🇷 <b>X 포스팅 시스템 봇</b>\n\n"
         "이 봇은 한국 이슈 영문 X 포스팅 시스템의 승인 봇입니다.\n\n"
         "📨 초안이 생성되면 이 채팅으로 승인 카드가 옵니다.\n"
-        "✅ Approve = X에 게시\n"
-        "❌ Reject = 거절\n"
-        "⏸️ Defer = 나중에\n"
-        "🔄 Regenerate = 다시 생성\n\n"
-        "Commands:\n"
+        "✅ 승인 = X에 게시\n"
+        "❌ 거절 = 삭제\n"
+        "⏸️ 보류 = 나중에\n"
+        "🔄 재생성 = 다시 생성\n\n"
+        "명령어:\n"
         "/status - 시스템 상태\n"
         "/pending - 대기 중인 초안\n",
         parse_mode="HTML",
@@ -45,10 +45,11 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/status 명령어 - 시스템 상태 표시"""
     ai_status = settings.ai_status_summary()
     status_lines = [f"  {name}: {status}" for name, status in ai_status.items()]
+    status_body = "\n".join(status_lines)
     text = (
-        "📊 <b>System Status</b>\n\n"
-        f"{'\\n'.join(status_lines)}\n\n"
-        f"Auto-post: {'ON ⚠️' if settings.enable_auto_post_low_risk else 'OFF ✅'}"
+        "📊 <b>시스템 상태</b>\n\n"
+        f"{status_body}\n\n"
+        f"자동 게시: {'켜짐 ⚠️' if settings.enable_auto_post_low_risk else '꺼짐 ✅'}"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -67,7 +68,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("📭 대기 중인 초안이 없습니다.")
             return
 
-        text = "📋 <b>Pending Drafts</b>\n\n"
+        text = "📋 <b>대기 중인 초안</b>\n\n"
         for d in drafts[:10]:  # 최대 10개만
             text += (
                 f"• ID {d.id}: {d.hook[:50]}...\n"
@@ -118,16 +119,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 x_post_id = result.get("x_post_id", "")
                 if x_post_id and not x_post_id.startswith("mock_"):
                     response_text = (
-                        f"✅ <b>APPROVED & POSTED</b>\n\n"
-                        f"X Post ID: {x_post_id}\n"
-                        f"URL: {result.get('x_post_url', 'N/A')}"
+                        f"✅ <b>승인 완료 — X 게시됨</b>\n\n"
+                        f"게시물 ID: {x_post_id}\n"
+                        f"URL: {result.get('x_post_url', '정보 없음')}"
                     )
                 else:
-                    response_text = "✅ <b>APPROVED — MANUAL POST PENDING</b>"
+                    response_text = "✅ <b>승인 완료 — 수동 게시 필요</b>"
             else:
-                response_text = f"✅ {result.get('message', 'Done!')}"
+                response_text = f"✅ {result.get('message', '처리 완료')}"
         else:
-            response_text = f"⚠️ {result.get('error', 'Unknown error')}"
+            response_text = f"⚠️ {result.get('error', '알 수 없는 오류')}"
 
         await query.message.reply_text(response_text, parse_mode="HTML")
 
