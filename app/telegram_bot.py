@@ -79,6 +79,51 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def _handle_hold_callback(query, action: str, item_id: int) -> None:
+    """
+    Hold 카드 버튼 콜백 처리 (옵션 A: 라우팅 + 안내 회신만).
+
+    현재 세션 범위:
+      - "잘못된 요청입니다" 차단
+      - 버튼별 수신 확인 메시지 회신
+      - DB 상태 변경 없음 (candidate 스키마 확정 전)
+
+    다음 세션에서 promote/discard 실제 상태 변경을 별도로 구현한다.
+    """
+    logger.info(f"Hold 콜백 수신: action={action}, item_id={item_id}")
+
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception as e:
+        logger.warning(f"Hold 카드 키보드 제거 실패 (무시): {e}")
+
+    if action == "hold_promote":
+        text = (
+            "📥 <b>Promote 요청 수신</b>\n\n"
+            f"ID: {item_id}\n"
+            "상태 변경 로직은 다음 세션에서 연결됩니다."
+        )
+    elif action == "hold_discard":
+        text = (
+            "🗑️ <b>Discard 요청 수신</b>\n\n"
+            f"ID: {item_id}\n"
+            "상태 변경 로직은 다음 세션에서 연결됩니다."
+        )
+    elif action == "hold_mark24":
+        text = (
+            "⏱️ <b>24h 표시 요청 수신</b>\n\n"
+            f"ID: {item_id}\n"
+            "스케줄러 미연결. 표시용 처리만 수행됩니다."
+        )
+    else:
+        text = f"⚠️ 알 수 없는 hold action: {action}"
+
+    try:
+        await query.message.reply_text(text, parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Hold 안내 메시지 전송 실패: {e}", exc_info=True)
+
+
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     인라인 버튼 콜백 처리.
@@ -98,6 +143,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     action, draft_id = parsed
+
+    # Hold 카드 콜백은 전용 분기로 처리 (옵션 A: 라우팅 + 안내 회신만)
+    # 실제 candidate 상태 변경은 스키마 확정 후 별도 세션에서 구현.
+    if action.startswith("hold_"):
+        await _handle_hold_callback(query, action, draft_id)
+        return
 
     # 처리 중 표시
     action_labels = {

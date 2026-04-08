@@ -214,25 +214,33 @@ async def send_publish_confirmation(draft: Draft) -> None:
         logger.error(f"게시 확인 메시지 전송 오류: {e}")
 
 
+_APPROVAL_ACTIONS = ("approve", "reject", "defer", "regenerate")
+_HOLD_ACTIONS = ("hold_promote", "hold_discard", "hold_mark24")
+
+
 def parse_callback_data(callback_data: str) -> tuple[str, int] | None:
     """
     텔레그램 인라인 버튼의 callback_data를 파싱합니다.
 
-    Args:
-        callback_data: "action:draft_id" 형식의 문자열
+    지원 형식: "action:item_id"
+      - 승인 카드:  approve / reject / defer / regenerate
+      - Hold 카드:  hold_promote / hold_discard / hold_mark24
+
+    item_id는 카드 종류에 따라 draft_id 또는 candidate_id를 의미할 수 있으며,
+    본 함수는 정수 파싱까지만 담당합니다 (호출부가 해석).
 
     Returns:
-        (action, draft_id) 튜플, 파싱 실패 시 None
+        (action, item_id) 튜플, 파싱 실패 시 None
     """
     try:
         parts = callback_data.split(":")
         if len(parts) != 2:
             return None
         action = parts[0]
-        draft_id = int(parts[1])
-        if action not in ("approve", "reject", "defer", "regenerate"):
+        item_id = int(parts[1])
+        if action not in _APPROVAL_ACTIONS and action not in _HOLD_ACTIONS:
             return None
-        return (action, draft_id)
+        return (action, item_id)
     except (ValueError, IndexError):
         logger.warning(f"잘못된 callback_data: {callback_data}")
         return None
