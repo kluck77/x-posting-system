@@ -6,16 +6,16 @@
 ---
 
 ## Updated At
-2026-04-09 08:22 KST
+2026-04-09 08:32 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-관측 패치 적용 완료. **다음 Reviewer 호출 1회 대기 중** (preview 캡처 단계).
+sanitize 적용 완료. **다음 Reviewer 호출 1회 재검증 대기 중**.
 
 ## Current Priority
-P0 — Reviewer JSON 파싱 실패 원인 분리 (preview 캡처로 H1~H5 확정)
+P0 — Reviewer 응답 sanitize 효과 실측 확인 (Phase8β 로그로 H1/H2 확정 또는 추가 가설 분기)
 
 ---
 
@@ -39,10 +39,22 @@ P0 — Reviewer JSON 파싱 실패 원인 분리 (preview 캡처로 H1~H5 확정
 - `dc141f7` session(2026-04-08): provider phase-8α hotfix 종결
 - 브랜치: `claude/x-posting-ops-review-7hlxK`
 
-### 본 세션 (관측 패치) 커밋
-- `cecd4ab` 동등본 수동 반영 — `app/providers/anthropic_provider.py` 1파일, 36+/1-
+### 직전 세션 (관측 패치) 커밋
+- `9b5f830` cecd4ab 동등본 수동 반영 — `app/providers/anthropic_provider.py` 1파일, 36+/1-
 - 진단 로그 5종 추가, 동작 변경 0
-- 옵션 (1) 채택 — sanitize 미반영, dd49fd3 미반영
+
+### 직전 세션 관측 결과 (서버 server.log 실측)
+- 실패 케이스 1건: `response http=200 content_len=862` 직후 `parsed` 줄 없음
+- 성공 케이스 4건: `response http=200 content_len=760~933` → `parsed risk=medium`
+- 즉 비-empty 응답인데 json.loads 실패 → **H3 (빈 응답) 배제 확정**
+- 강한 후보로 H1 (코드 펜스) / H2 (preamble) 만 남음
+- raw_content_preview 는 DEBUG 라 INFO 로그에 안 잡힘 → preview 없이 sanitize 로 우회
+
+### 본 세션 (sanitize 패치) 커밋
+- `dd49fd3` 동등본 수동 반영 — `app/providers/anthropic_provider.py` 1파일, 39+/1-
+- `_sanitize_json_content()` top-level helper 신규
+- review_and_refine 의 `json.loads` 직전에 sanitize 적용 + 효과 발생 시 `[Phase8β]` 1줄 INFO 로그
+- 옵션 B 채택 — H1/H2 동시 해소
 
 ---
 
@@ -83,38 +95,33 @@ Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
 ---
 
 ## Minimal Scope
-관측 패치 적용 완료. 다음 단계는 **수집 + 분기 확정**. 코드 수정 0.
+sanitize 패치 적용 완료. 다음 단계는 **서버 적용 + Reviewer 1회 재검증**. 코드 수정 0.
 
-원인 후보 (코드 실측 + git 히스토리 기반):
-- **H1** 마크다운 코드 펜스 prefix (\`\`\`json …) — 가능성 높음
-- **H2** 설명 텍스트 preamble ("Here is the review: …") — 가능성 중간
-- **H3** 빈 문자열 (정책 거부 / max_tokens 컷오프) — 가능성 중간
-- **H4** BOM/공백 prefix — 가능성 낮음
-- **H5** JSON 미완 (`}` 누락) — 가능성 매우 낮음 (col 0 char 0 와 불일치)
+원인 후보 (직전 세션 관측 후 갱신):
+- **H1** 마크다운 코드 펜스 prefix (\`\`\`json …) — sanitize 가 처리. 효과 시 `[Phase8β]` 로그로 확정.
+- **H2** 설명 텍스트 preamble ("Here is the review: …") — sanitize 가 처리. 효과 시 `[Phase8β]` 로그로 확정.
+- **~~H3~~** ~~빈 문자열~~ — **배제 (content_len=862 실측)**
+- **H4** BOM/공백 prefix — sanitize 가 처리. (낮은 가능성)
+- **H5** JSON 미완 — 여전히 매우 낮음
 
-배제된 가설 (이미 코드 실측으로 제거):
-- **R1** mock_providers 가 reviewer 경로에 섞여 있음 → 라우팅상 불가
-- **R2** content 필드 선택 오류 → KeyError 가 먼저 났을 것
-- **R3** 전처리 함수가 payload 를 비움 → L166-L167 사이 코드 0줄
-- **R4** 다중 reviewer 동시 실행 → 클래스 1개뿐
-- **R5** 본 hotfix 가 원인 → 시간선상 무관
+배제된 가설:
+- **R1~R5** (직전 세션과 동일)
+- **H3** 신규 배제 (직전 세션 관측 결과)
 
-확정에 필요한 단 1가지:
-- Reviewer 응답 raw_content 첫 200 chars 의 1회 캡처
-- **관측 수단 부착 완료** (`[Phase8α][Claude Reviewer] raw_content_preview=...` DEBUG 로그)
-- 다음 Reviewer 호출 1회만 발생하면 분기 확정 가능
+확정 시나리오 (다음 Reviewer 호출 1회 후):
+- `[Phase8β] sanitize applied` + `parsed risk=...` → H1/H2 확정, sanitize 효과적, 종결
+- `parsed risk=...` 만 (sanitize 미적용) → 그 응답은 원래 clean. 다음 호출 대기.
+- `sanitize applied` + `Claude Reviewer 오류:` → 새 가설 필요 (sanitize 가 H1/H2 외 케이스를 못 잡음)
+- 둘 다 없음 + `Claude Reviewer 오류:` → preview 캡처 (DEBUG 승격) 필요
 
 ---
 
 ## Exact Files To Change
-이번 단계: **없음** (수정 0). 관측 패치는 이미 본 세션에서 반영됨.
+이번 단계: **없음** (수정 0). sanitize 패치는 이미 본 세션에서 반영됨.
 
-다음 단계 (preview 확보 후) 후보:
-- preview 첫 글자가 \`\`\` 또는 ` 면 → H1 (코드 펜스) 확정 → sanitize 패치
-- preview 첫 글자가 알파벳/한글 면 → H2 (preamble) 확정 → strip 또는 prompt 보강
-- preview 가 빈 문자열이면 → H3 (정책 거부 / max_tokens) 확정 → max_tokens 조정 검토
-- preview 첫 글자가 BOM/공백 면 → H4 확정 → strip
-- 어떤 분기든 수정은 `app/providers/anthropic_provider.py` **1파일** 만
+다음 단계 (재검증 후) 분기:
+- sanitize 효과 확인 → 본 P0 종결, 다음 P0 후보로 교체 (mock_providers kwarg / base.py drift 등)
+- sanitize 효과 미확인 → DEBUG 승격 또는 새 가설 → 1파일 후속 패치
 
 ---
 
@@ -135,12 +142,13 @@ Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
 ---
 
 ## Validation Steps
-이번 단계 (관측 패치 본 커밋에 반영됨):
+이번 단계 (sanitize 패치 본 커밋에 반영됨):
 - 로컬 `python3 -m py_compile app/providers/anthropic_provider.py` → OK
-- 로컬 AST 시그니처 실측 → 무변경 확인 완료
-- diff stat: `1 file changed, 36 insertions(+), 1 deletion(-)` — cecd4ab 와 동일
+- 로컬 AST 시그니처 실측 → 3개 메서드 무변경, helper 1개 신규, 호출 1회
+- 로컬 sanitize 7케이스 실측 → 전부 OK (clean 은 byte-identical pass-through)
+- diff stat: `1 file changed, 39 insertions(+), 1 deletion(-)` — dd49fd3 와 동일
 
-다음 단계 (서버 적용 + preview 캡처):
+다음 단계 (서버 적용 + 재검증):
 1. 서버에서 1파일 surgical checkout
    ```
    cd /root/x-posting-system
@@ -149,28 +157,26 @@ Claude Reviewer 오류: Expecting value: line 1 column 1 (char 0)
    ```
 2. venv import smoke
    ```
-   /root/x-posting-system/venv/bin/python -c "from app.providers.anthropic_provider import AnthropicReviewer; import inspect; print(inspect.signature(AnthropicReviewer.review_and_refine))"
+   /root/x-posting-system/venv/bin/python -c "from app.providers.anthropic_provider import AnthropicReviewer, _sanitize_json_content; import inspect; print(inspect.signature(AnthropicReviewer.review_and_refine)); print(_sanitize_json_content('```json\n{\"a\":1}\n```'))"
    ```
 3. `systemctl restart xdashboard.service && systemctl is-active xdashboard.service`
-4. 로그 레벨 점검: `raw_content_preview` 는 DEBUG. 운영 로그가 INFO 라면 임시로 DEBUG 승격 필요
-5. 다음 Reviewer 호출 1회 발생까지 대기 (`/ingest` 실측)
-6. `grep -nE "Phase8α.*Reviewer" /root/x-posting-system/server.log | tail -20`
-7. `raw_content_preview` 첫 글자로 H1~H5 분기 확정 → 다음 세션 fix 결정
+4. 다음 Reviewer 호출 1회 발생까지 대기 (`/ingest` 실측)
+5. `grep -nE "Phase8[αβ].*Reviewer" /root/x-posting-system/server.log | tail -30`
+6. `[Phase8β] sanitize applied` + `parsed risk=...` 동시 출현 시 종결
 
 ---
 
 ## Recommendation
-**APPROVE** — 옵션 (1) 채택 완료. 본 세션에서 관측 패치 반영 끝.
+**APPROVE** — 옵션 B 채택 완료. 본 세션에서 sanitize 패치 반영 끝.
 
-운영자 결정 기록:
-- 채택: **(1) 가장 안전 — 관측만**
-- 거절: (2) sanitize 동반은 prior evidence 인용 단계가 섞여 단계 분리 원칙 위반
-- 거절: (3) 카드 품질 저하 만성화 유지
+운영자 결정 기록 (누적):
+- 직전 세션: (1) 관측만 채택 → cecd4ab 동등본 반영 → 서버 실측 → H3 배제
+- 본 세션: (B) sanitize 채택 → dd49fd3 동등본 반영 → H1/H2 동시 해소 시도
 
 다음 세션 트리거:
 - 서버 surgical checkout + 재시작 + Reviewer 호출 1회 발생 후
-- preview 가 server.log 에 잡히면 H1~H5 중 하나 확정
-- 그 분기에 맞는 최소 fix 1파일을 다음 세션에서 적용
+- `[Phase8β] sanitize applied` + `parsed risk=...` 동시 잡히면 본 P0 종결
+- 종결 시 본 문서를 후보 1순위(`mock_providers.py` kwarg 미수신)로 교체
 
 ---
 

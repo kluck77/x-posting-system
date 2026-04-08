@@ -5,6 +5,87 @@
 
 ---
 
+## 2026-04-09 08:32 KST — Reviewer JSON sanitize 적용 (옵션 B / dd49fd3 동등본)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 직전 세션의 관측 결과(`response http=200 content_len=862`, parsed 줄 없음, H3 배제)에 따라 운영자가 옵션 B 채택. `dd49fd3` 1커밋 동등본을 `app/providers/anthropic_provider.py` 1파일에 수동 반영해 H1(코드 펜스) / H2(preamble) 동시 해소.
+- **Changed Files** :
+  - `app/providers/anthropic_provider.py`
+- **Diff Stat** : `1 file changed, 39 insertions(+), 1 deletion(-)` — dd49fd3 와 완전 동일
+- **Syntax Check Result** : `python3 -m py_compile app/providers/anthropic_provider.py` → OK
+- **Signature Compatibility Check Result** :
+  - `AnthropicDraftWriter.generate_draft` defaults=3 ✓ (무변경)
+  - `AnthropicDraftWriter._call_claude` defaults=0 ✓ (무변경)
+  - `AnthropicReviewer.review_and_refine` defaults=3 ✓ (무변경)
+  - `_sanitize_json_content` (top-level helper) 신규 — 호출은 review_and_refine 내부 1회만
+- **Test Result** :
+  - 로컬 pytest 미설치 → 7개 sanitize 단위 케이스로 대체 (전부 OK)
+    - clean → 입력=출력 byte-identical, parse OK
+    - ` ```json fenced ` → 펜스 제거, parse OK
+    - ` preamble + JSON ` → JSON 블록만 추출, parse OK
+    - ` ``` (no lang) ` → parse OK
+    - ` preamble + ```json fenced ``` ` → parse OK
+    - ` BOM + 공백 + JSON ` → parse OK
+    - ` 비-JSON ` → 입력=출력 pass-through, json.loads 실패 → 기존 fallback 경로 그대로 보존
+- **Runtime Risk Remaining** :
+  - 본 변경 0 — sanitize 는 clean 입력에 byte-identical pass-through, fallback 의미 무변경
+  - sanitize 후에도 parse 실패하면 기존 try/except → RuntimeError → orchestrator fallback 그대로
+- **Server Apply Risk** : 낮음. 1파일 surgical checkout. DraftWriter 경로는 의도적 미적용 (관측된 실패 0건).
+- **Recommendation** : APPROVE
+- **Next Operator Action** :
+  1. 서버 1파일 surgical checkout (아래 명령)
+  2. venv import smoke + 시그니처 확인
+  3. `xdashboard.service` 재시작 + active 확인
+  4. 다음 Reviewer 호출 1회 (`/ingest`)
+  5. `Phase8α` / `Phase8β` 로그 grep 으로 sanitize 적용 여부 + parse 성공 확인
+
+### 적용 이유
+- 직전 세션 관측에서 H3 (빈 응답) 배제 확정
+- 강한 후보 H1 / H2 만 남음 → sanitize 한 줄로 양쪽 동시 해소 가능
+- 운영자 결정: 옵션 B 채택 (관측 단계 종료, 수정 단계 진입)
+- raw_content_preview 는 DEBUG 레벨이라 INFO 로그에 안 잡히는 한계 → preview 없이도 sanitize 가 H1/H2 를 모두 처리하므로 우회 가능
+
+### 적용 방식 결정 근거
+- `dd49fd3` 는 별도 브랜치에 있어 cherry-pick 시 부모 commit drift 우려
+- 따라서 동등본 수동 반영 (2개 surgical edit)
+- 완성 후 diff stat 으로 dd49fd3 와 byte-level 동일성 검증 완료 (`39+/1-`)
+
+### 추가된 코드 (정확히 2곳)
+1. 모듈 최상단 (`CLAUDE_MODEL` 라인 직후) — top-level 함수 `_sanitize_json_content(content: str) -> str` 신규
+   - Step 1: BOM/공백 strip → 코드 펜스 ` ```json `, ` ``` ` 제거
+   - Step 2: 첫 `{` 부터 마지막 `}` 까지 추출
+   - JSON 유효성 검증 안 함, 호출 측 json.loads 가 최종 판정
+2. `AnthropicReviewer.review_and_refine()` 의 `data = json.loads(content)` 직전:
+   - `sanitized = _sanitize_json_content(content)`
+   - `if sanitized != content:` 일 때만 `[Phase8β] sanitize applied orig_len=... sanitized_len=...` (INFO) 1줄
+   - `data = json.loads(sanitized)`
+
+### 분기 확정 방법 (다음 호출 1회 후)
+- `[Phase8β] sanitize applied` 가 찍히고 `parsed risk=...` 도 찍힘
+  → H1/H2 확정. sanitize 가 효과적이었음. 종결.
+- `[Phase8β] sanitize applied` 안 찍히는데 `parsed risk=...` 만 찍힘
+  → 그 응답은 원래 clean 이었음. 다른 호출 대기.
+- `[Phase8β] sanitize applied` 찍히고도 `Claude Reviewer 오류:` 가 또 발생
+  → H1/H2 가 아님. 새 가설 필요. (예: nested fence, malformed JSON 본체 등)
+- `sanitize applied` 도 안 찍히고 `Claude Reviewer 오류:` 도 발생
+  → 응답 자체가 parse 불가한 다른 형태. preview 캡처(DEBUG 승격) 필요.
+
+### 보호 영역 무변경 확인
+- `app/orchestrator.py` 무변경 ✓
+- `app/api/admin.py` 무변경 ✓
+- `app/providers/base.py` 무변경 ✓
+- `app/providers/mock_providers.py` 무변경 ✓
+- `app/providers/ai_provider.py` 무변경 ✓
+- `app/providers/openai_provider.py` 무변경 ✓
+- `app/services/*` 무변경 ✓
+- `app/models/*` 무변경 ✓
+- `dashboard/` 무변경 ✓
+- `.env` 무변경 ✓
+- `main` 브랜치 무변경 ✓
+- prompt / model / max_tokens / config 무변경 ✓
+
+---
+
 ## 2026-04-09 08:22 KST — Reviewer 진단 로그 적용 (옵션 1)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
