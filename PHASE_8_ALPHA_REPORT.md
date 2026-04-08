@@ -226,7 +226,167 @@ Phase 8-α(진단 로깅)가 커밋 cecd4ab로 `claude/phase-8-alpha-logging-Ju1
 - [x] 문법 검사 통과
 - [x] 단위 테스트 통과 (69/69)
 - [x] 이 보고서 작성 완료
-- [ ] 운영 서버에 파일 선택 적용
-- [ ] 실제 드래프트 1건 통과시켜 로그 수집
-- [ ] GPT에 본 보고서 + 수집된 로그 전달
-- [ ] Problem 6 상태 소재 확인 (별도 과제)
+- [ ] 운영 서버에 파일 선택 적용 (Appendix A)
+- [ ] 실제 드래프트 1건 통과시켜 로그 수집 (Appendix B)
+- [ ] 다음 실패 발생 시 Appendix B.2로 분류
+- [ ] Appendix B.3 트리거 충족 시에만 Phase 8-β 요청
+- [ ] Problem 6 상태 소재 확인 (별도 트랙으로 분리됨)
+
+---
+
+## 결정 확정 (APPROVED 2026-04-08)
+
+- **Problem 6와 Phase 8-α는 별도 트랙으로 분리한다.**
+- Problem 6는 지금 재구축/배포하지 **않는다**.
+- Phase 8-α 로깅만 단독 배포한다.
+- "Observe first, decide later" 원칙에 따라 수집된 로그 기반으로 8-β 여부를 판단한다.
+
+이유:
+- Problem 6는 어디에도 실체가 없음 → 재구축은 추측 기반이 됨
+- Phase 8-α는 순수 진단 목적 → 다른 변경과 묶으면 관측 노이즈가 증가
+- 번들링 시 진단 가치 감소
+
+---
+
+## Appendix A. 서버 적용 런북 (단일 파일, file-select only)
+
+**적용 대상**: `app/providers/anthropic_provider.py` (이 파일 **하나만**)
+
+### A.1 사전 확인
+```bash
+cd /path/to/x-posting-system
+git status                    # working tree clean 이어야 함
+git rev-parse HEAD             # 현재 서버 커밋 기록해 둘 것 (롤백용)
+git log -1 -- app/providers/anthropic_provider.py
+```
+
+### A.2 원격 가져오기
+```bash
+git fetch origin claude/phase-8-alpha-logging-Ju1nF
+git rev-parse origin/claude/phase-8-alpha-logging-Ju1nF
+# 기대값: 6433ea8 이상 (PHASE_8_ALPHA_REPORT.md 포함된 상태)
+# anthropic_provider.py 변경 자체는 cecd4ab에 있음
+```
+
+### A.3 파일 하나만 체크아웃
+```bash
+git checkout origin/claude/phase-8-alpha-logging-Ju1nF -- \
+    app/providers/anthropic_provider.py
+```
+**⚠️ 다른 파일은 절대 체크아웃하지 말 것.**
+`telegram_service.py`, `orchestrator.py`, `.env`, 대시보드, 프롬프트 상수 건드리면 이번 배포 원칙 위반.
+
+### A.4 검증
+```bash
+python3 -m py_compile app/providers/anthropic_provider.py
+python3 -c "from app.providers.anthropic_provider import AnthropicReviewer, AnthropicDraftWriter; print('import OK')"
+git diff HEAD -- app/providers/anthropic_provider.py  # 변경 없어야 정상 (체크아웃 후)
+git status                    # anthropic_provider.py만 수정된 상태
+```
+
+### A.5 서비스 재시작
+운영자 표준 절차 사용 (systemctl / pm2 / docker 등). 재시작 후:
+```bash
+# 재시작 직후 로그에 [Phase8α] 라인이 나오는지 확인 (최초 드래프트 호출 시)
+tail -f <로그파일> | grep Phase8α
+```
+
+### A.6 롤백 경로
+문제 발생 시 A.1에서 기록한 이전 커밋으로 복구:
+```bash
+git checkout <이전_커밋_SHA> -- app/providers/anthropic_provider.py
+python3 -m py_compile app/providers/anthropic_provider.py
+# 서비스 재시작
+```
+
+### A.7 로그 레벨 주의
+- `raw_content_preview` 라인은 `DEBUG` 레벨.
+- 운영 로그가 `INFO` 필터인 경우 해당 라인은 **보이지 않음**.
+- 진단 기간 동안에만 `app.providers.anthropic_provider` 로거를 `DEBUG`로 승격 권장.
+- 로그 설정 변경이 부담스러우면, `raw_content_preview` 없이도 Appendix B.1의 다른 라인들로 분류 가능.
+
+---
+
+## Appendix B. 관측 체크리스트 (Observation Checklist)
+
+### B.1 무엇을 볼 것인가 (grep 패턴 + 기대 라인)
+
+**필수 1차 관측 (INFO)**
+```bash
+grep "\[Phase8α\]\[Claude Reviewer\] request"  <로그>
+grep "\[Phase8α\]\[Claude Reviewer\] response" <로그>
+grep "\[Phase8α\]\[Claude Reviewer\] parsed"   <로그>
+```
+
+기대 라인 (정상 흐름 3종 1세트):
+```
+[Phase8α][Claude Reviewer] request  model=... max_tokens=1024 title='...' user_msg_len=<N> has_research=<bool> has_factcheck=<bool>
+[Phase8α][Claude Reviewer] response http=200 content_len=<N>
+[Phase8α][Claude Reviewer] parsed   risk=<...> category=<...> action=<...> body_len=<N>
+```
+
+**2차 관측 (DEBUG, 선택)**
+```bash
+grep "\[Phase8α\]\[Claude Reviewer\] raw_content_preview" <로그>
+```
+
+**DraftWriter 경로 (참고)**
+```bash
+grep "\[Phase8α\]\[Claude DraftWriter\]" <로그>
+```
+
+**수집해야 할 최소 샘플**
+- 정상 승인 케이스 × 1건 이상
+- 실패/에러 케이스 × 1건 이상 (발생 시)
+- `risk_level`이 high 또는 reject로 분류된 케이스 × 1건 이상 (발생 시)
+
+### B.2 다음 실패를 어떻게 분류할 것인가
+
+실패 발생 시 로그를 아래 표로 분류하여 GPT에 보고한다.
+
+| 카테고리 | 진단 로그 증상 | 가능한 원인 | 8-β 필요도 |
+|---|---|---|---|
+| **F1. HTTP 실패** | `request` 라인 있음, `response` 라인 **없음**, `Claude Reviewer 오류` 로그 존재 | 네트워크 / 인증 / 레이트리밋 | **낮음** — 8-β 무관, 운영 이슈 |
+| **F2. 빈 응답** | `response http=200 content_len=0` 또는 매우 작음(<50) | Claude가 max_tokens 절단 또는 빈 본문 반환 | **중간** — max_tokens 조정 별도 판단 |
+| **F3. JSON 파싱 실패** | `response` 라인 있음, `parsed` 라인 **없음**, `Claude Reviewer 오류: ... JSONDecodeError` | Claude가 ```json ...``` 펜스로 감싸거나 프리앰블 텍스트 포함 | **높음** — **8-β 정당화 사유 #1** |
+| **F4. 필드 누락** | `parsed risk=None` 또는 `category=None` 또는 `action=None` | Claude가 JSON은 리턴했지만 스키마 위반 | **높음** — **8-β 정당화 사유 #2** (스키마 강제 또는 fallback 필요) |
+| **F5. 본문 길이 초과** | `parsed body_len > 270` | 프롬프트 준수 실패 | **중간** — 프롬프트 조정 별도 판단 (8-β와 분리) |
+| **F6. 리스크 오판** | `parsed risk=low action=approve` 인데 정치/정책/사회 카테고리 | 안전 규칙 무시 | **낮음 (8-β 무관)** — 프롬프트 강화 트랙 |
+| **F7. 관측 자체 실패** | `[Phase8α]` 라인이 하나도 안 보임 | 로깅 패치 미적용 또는 로그 레벨 필터 | **즉시** — Appendix A.7 확인 |
+
+**보고 템플릿** (GPT에 전달 시)
+```
+카테고리: F?
+발생 빈도: N/M (N=실패, M=전체 샘플)
+샘플 로그 (3줄 1세트):
+  [Phase8α][Claude Reviewer] request ...
+  [Phase8α][Claude Reviewer] response ...
+  [Phase8α][Claude Reviewer] parsed ... (있으면)
+raw_content_preview (있으면):
+  ...
+```
+
+### B.3 Phase 8-β가 정당화되는 조건 (트리거)
+
+**하나라도 충족되면** 8-β 설계 요청 가능:
+
+- [ ] **T1**. F3 (JSON 파싱 실패)가 연속 2건 이상, 또는 전체 샘플의 10% 이상
+- [ ] **T2**. F4 (필드 누락)가 연속 2건 이상, 또는 전체 샘플의 10% 이상
+- [ ] **T3**. `raw_content_preview`에서 ```` ```json ```` / ```` ``` ```` 펜스 패턴이 1건이라도 확인됨
+- [ ] **T4**. `raw_content_preview`에서 JSON 앞뒤로 설명 텍스트(프리앰블/포스트앰블)가 1건이라도 확인됨
+
+**충족되지 않으면**:
+- 8-β는 **아직 정당화되지 않음**
+- 관측을 더 수집하거나, 다른 트랙(Problem 6, 프롬프트 튜닝 등)을 진행
+- "관측 없이 sanitize 먼저 박자"는 금지 (= 원래 8-α의 존재 이유를 부정하는 행동)
+
+**정당화된 경우 8-β 요청 템플릿**:
+```
+Phase 8-β 요청:
+- 정당화 트리거: T? (근거 로그 첨부)
+- 관측 샘플: N건 (정상 N1 / 실패 N2)
+- 실패 카테고리 분포: F3=x건, F4=y건, ...
+- raw_content_preview 대표 샘플 첨부
+- 설계 요구: 로그 라인 제거 금지, max_tokens/프롬프트 변경 금지,
+  sanitize 로직은 parsed 라인 직전 단계에만 삽입
+```
