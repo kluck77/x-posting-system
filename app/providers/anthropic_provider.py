@@ -23,6 +23,38 @@ logger = logging.getLogger(__name__)
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
+
+def _sanitize_json_content(content: str) -> str:
+    """[Phase 8-β] LLM 응답을 json.loads 가능한 형태로 관대하게 정규화.
+
+    2단계 fallthrough:
+      1. 마크다운 코드 펜스 제거 (```json ... ``` / ``` ... ```)
+      2. 최소 JSON 블록 추출 (첫 '{' 부터 마지막 '}' 까지)
+
+    JSON 유효성은 검증하지 않는다. 최종 판단은 호출 측 json.loads.
+    정리할 것이 없으면 정리 전후 문자열이 동일하므로 clean 응답에 대한
+    fast path 에 영향 없음. 정리에 실패하면 원본이 반환되어 기존 fallback
+    경로가 그대로 작동한다.
+    """
+    s = content.strip().lstrip("\ufeff")  # BOM 제거
+
+    # Step 1: 마크다운 코드 펜스 제거
+    if s.startswith("```"):
+        first_nl = s.find("\n")
+        if first_nl != -1:
+            s = s[first_nl + 1:]  # 첫 줄(```json 등) 버림
+        if s.endswith("```"):
+            s = s[:-3]
+        s = s.strip()
+
+    # Step 2: 최소 JSON 블록 추출
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and last > first:
+        s = s[first : last + 1]
+
+    return s
+
 # --- Draft Writer 시스템 프롬프트 ---
 DRAFT_SYSTEM_PROMPT = """You are a draft writer for an English-language X account that explains Korean affairs to international audiences.
 Write a first draft. Keep the post body under 270 characters. Be factual and balanced.
@@ -188,7 +220,13 @@ class AnthropicReviewer(BaseReviewer):
                 logger.debug(
                     f"[Phase8α][Claude Reviewer] raw_content_preview={content[:200]!r}"
                 )
-                data = json.loads(content)
+                sanitized = _sanitize_json_content(content)
+                if sanitized != content:
+                    logger.info(
+                        f"[Phase8β][Claude Reviewer] sanitize applied "
+                        f"orig_len={len(content)} sanitized_len={len(sanitized)}"
+                    )
+                data = json.loads(sanitized)
                 # [Phase8α] diagnostic: log parsed fields for observation
                 logger.info(
                     f"[Phase8α][Claude Reviewer] parsed risk={data.get('risk_level')} "
