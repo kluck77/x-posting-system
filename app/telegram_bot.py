@@ -127,6 +127,94 @@ def _do_hold_discard(source_id: int) -> str:
     )
 
 
+async def _do_hold_promote(source_id: int) -> str:
+    """
+    hold_promote 실 처리.
+    Orchestrator.promote_from_source 를 호출하고 결과 dict 를 사용자 회신
+    텍스트로 매핑한다. full_pipeline 재진입 금지 (orchestrator 내부 메서드
+    선택 위임).
+    """
+    orch = Orchestrator()
+    try:
+        try:
+            result = await orch.promote_from_source(source_id)
+        except Exception as e:
+            logger.error(
+                f"promote_from_source 호출 실패: source_id={source_id}, "
+                f"err={e}",
+                exc_info=True,
+            )
+            return (
+                "❌ <b>Promote 실패 (호출 오류)</b>\n\n"
+                f"source_id: {source_id}\n"
+                f"서버 오류: {str(e)[:150]}"
+            )
+    finally:
+        orch.close()
+
+    reason = result.get("reason")
+
+    # 성공 경로
+    if result.get("success"):
+        if reason == "ok":
+            return (
+                "✅ <b>Promote 완료</b>\n\n"
+                f"source_id: {source_id}\n"
+                f"draft_id: {result.get('draft_id')}\n"
+                f"category: {result.get('category')}\n"
+                f"risk: {result.get('risk_level')}\n"
+                f"telegram_sent: {result.get('telegram_sent')}"
+            )
+        if reason == "draft_created_send_failed":
+            return (
+                "⚠️ <b>Promote 부분 성공</b>\n\n"
+                f"source_id: {source_id}\n"
+                f"draft_id: {result.get('draft_id')} 생성됨.\n"
+                "승인 카드 전송 실패. 서버 로그 확인 필요.\n"
+                f"error: {result.get('error', 'unknown')}"
+            )
+
+    # 실패 경로
+    if reason == "not_found":
+        return (
+            "⚠️ <b>Promote 실패 — 원본 없음</b>\n\n"
+            f"source_id={source_id} 를 찾을 수 없습니다."
+        )
+    if reason == "discarded":
+        return (
+            "⚠️ <b>Promote 실패 — 이미 discard</b>\n\n"
+            f"source_id={source_id} 는 이미 discard 처리된 소스입니다.\n"
+            "candidate_status=rejected_manual"
+        )
+    if reason == "already_promoted":
+        existing_id = result.get("existing_draft_id")
+        return (
+            "⚠️ <b>Promote 실패 — 중복</b>\n\n"
+            f"source_id={source_id} 에 이미 draft 가 존재합니다.\n"
+            f"existing_draft_id: {existing_id}"
+        )
+    if reason == "rate_limit_draft":
+        return (
+            "⏳ <b>Promote 실패 — 초안 한도 초과</b>\n\n"
+            f"{result.get('message', '오늘 초안 생성 한도 초과')}"
+        )
+    if reason == "rate_limit_telegram":
+        return (
+            "⏳ <b>Promote 실패 — 텔레그램 한도 초과</b>\n\n"
+            f"{result.get('message', '오늘 텔레그램 전송 한도 초과')}"
+        )
+    if reason == "pipeline_error":
+        return (
+            "❌ <b>Promote 실패 — 파이프라인 오류</b>\n\n"
+            f"source_id: {source_id}\n"
+            f"error: {result.get('error', 'unknown')}"
+        )
+    return (
+        "❌ <b>Promote 실패 — 알 수 없는 응답</b>\n\n"
+        f"reason={reason}, success={result.get('success')}"
+    )
+
+
 def _do_hold_mark24_notice(source_id: int) -> str:
     """
     hold_mark24 안내 메시지 (DB 변경 없음).
@@ -150,7 +238,8 @@ async def _handle_hold_callback(query, action: str, item_id: int) -> None:
     이번 세션 범위:
       - hold_discard:  source_items.candidate_status='rejected_manual' 실 처리
       - hold_mark24:   안내 + 타임스탬프만 (DB 변경 없음)
-      - hold_promote:  미구현 (DESIGN ONLY) — orchestrator 보호 / 추정 구현 금지
+      - hold_promote:  orchestrator.promote_from_source 실 호출
+                       (full_pipeline 재진입 금지, 기존 source_id 재사용)
 
     item_id 의미: source_items.id (서버 실측 확정)
     """
@@ -166,14 +255,7 @@ async def _handle_hold_callback(query, action: str, item_id: int) -> None:
     elif action == "hold_mark24":
         text = _do_hold_mark24_notice(item_id)
     elif action == "hold_promote":
-        text = (
-            "📥 <b>Promote 요청 수신</b>\n\n"
-            f"source_id: {item_id}\n"
-            "구현 보류 (DESIGN ONLY).\n"
-            "재진입 진입점은 orchestrator.full_pipeline 뿐이며,\n"
-            "보호 영역 우회 + 중복/Rate-limit 충돌 방지 설계가\n"
-            "확정된 다음 세션에서 연결됩니다."
-        )
+        text = await _do_hold_promote(item_id)
     else:
         text = f"⚠️ 알 수 없는 hold action: {action}"
 

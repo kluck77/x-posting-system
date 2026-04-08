@@ -282,6 +282,221 @@ class Orchestrator:
         draft.x_post_id = None
         return await self._handle_approve(draft)
 
+    async def promote_from_source(self, source_id: int) -> dict:
+        """
+        Hold 카드 promote 실 처리.
+        기존 source_items 행을 재사용해 AI 파이프라인을 실행하고 승인 카드를 전송.
+
+        full_pipeline 재진입 금지 사유:
+          - ingest_manual 재호출로 source_items 중복/URL 중복 위험
+          - hold 카드가 아닌 승인 카드 중복 전송 위험
+        본 메서드는 ingest_and_generate 의 Step 2~6 만 인라인 실행하고
+        Step 1(ingest_manual) 은 건너뛴다.
+
+        반환 dict 키:
+          success (bool), reason (str), 선택: draft_id / category / risk_level
+          / telegram_sent / source_id / existing_draft_id / message / error
+        """
+        logger.info(f"=== Promote 시작: source_id={source_id} ===")
+
+        # 1) 사전 검증
+        source_item, tag = self.source_service.get_for_promote(source_id)
+        if tag == "not_found":
+            return {
+                "success": False,
+                "reason": "not_found",
+                "source_id": source_id,
+            }
+        if tag == "discarded":
+            return {
+                "success": False,
+                "reason": "discarded",
+                "source_id": source_id,
+            }
+        if tag == "already_promoted":
+            existing = (
+                self.db.query(Draft)
+                .filter(Draft.source_item_id == int(source_id))
+                .order_by(Draft.id.desc())
+                .first()
+            )
+            return {
+                "success": False,
+                "reason": "already_promoted",
+                "source_id": source_id,
+                "existing_draft_id": existing.id if existing else None,
+            }
+
+        # 2) Rate limit 사전 차단 (draft + telegram 둘 다)
+        can_draft, draft_msg = self.rate_limiter.can_create_draft()
+        if not can_draft:
+            return {
+                "success": False,
+                "reason": "rate_limit_draft",
+                "message": draft_msg,
+            }
+        can_tg, tg_msg = self.rate_limiter.can_send_telegram()
+        if not can_tg:
+            return {
+                "success": False,
+                "reason": "rate_limit_telegram",
+                "message": tg_msg,
+            }
+
+        # 3) AI 파이프라인 인라인 실행 (ingest_and_generate Step 2~6 과 동일)
+        try:
+            # Step 2: Researcher
+            try:
+                research = await self.ai.researcher.research(
+                    query=source_item.title,
+                    context=source_item.source_text[:1000],
+                )
+            except Exception as e:
+                logger.warning(f"Promote Researcher 실패, 빈 결과 사용: {e}")
+                research = ResearchResult(
+                    summary=source_item.source_text[:500],
+                    sources=[source_item.url] if source_item.url else [],
+                )
+
+            # Step 3: DraftWriter
+            try:
+                draft_result = await self.ai.draft_writer.generate_draft(
+                    title=source_item.title,
+                    source_text=source_item.source_text,
+                    language=settings.default_language,
+                )
+            except Exception as e:
+                logger.warning(f"Promote DraftWriter 실패, 기본 초안 사용: {e}")
+                draft_result = DraftResult(
+                    hook=f"🇰🇷 {source_item.title[:80]}",
+                    body=f"Korea update: {source_item.title[:200]}",
+                    category_suggestion="society",
+                )
+
+            # Step 4: FactChecker
+            try:
+                factcheck = await self.ai.fact_checker.check_facts(
+                    claim=draft_result.body,
+                    context=source_item.source_text[:500],
+                )
+            except Exception as e:
+                logger.warning(f"Promote FactChecker 실패: {e}")
+                factcheck = None
+
+            # Step 5: Reviewer
+            try:
+                review = await self.ai.reviewer.review_and_refine(
+                    title=source_item.title,
+                    source_text=source_item.source_text,
+                    draft=draft_result,
+                    research=research,
+                    factcheck=factcheck,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Promote Reviewer 실패, DraftWriter 결과 직접 사용: {e}"
+                )
+                from app.providers.base import ReviewResult
+                review = ReviewResult(
+                    hook=draft_result.hook,
+                    body=draft_result.body,
+                    thread_continuation=draft_result.thread_continuation,
+                    category=draft_result.category_suggestion,
+                    risk_level="medium",
+                    risk_reasoning=(
+                        f"Reviewer 실패, 안전하게 medium 설정: {e}"
+                    ),
+                    ai_rationale="Fallback: reviewer unavailable.",
+                )
+
+            # Step 6: 분류 & 위험도 확정
+            try:
+                category = ContentCategory(review.category)
+            except ValueError:
+                category = classify_category(
+                    source_item.title, source_item.source_text
+                )
+            try:
+                risk_level = RiskLevel(review.risk_level)
+                risk_reasoning = review.risk_reasoning
+            except ValueError:
+                risk_level, risk_reasoning = classify_risk(
+                    source_item.title, source_item.source_text, category,
+                )
+
+            # Race guard: AI 호출 사이에 같은 source 로 또 promote 가 들어와
+            # Draft 가 먼저 생성되었을 가능성 방어 (연타/동시성).
+            dup = (
+                self.db.query(Draft)
+                .filter(Draft.source_item_id == int(source_id))
+                .first()
+            )
+            if dup is not None:
+                logger.warning(
+                    f"Promote 경합 감지: source_id={source_id}, "
+                    f"기존 draft_id={dup.id}"
+                )
+                return {
+                    "success": False,
+                    "reason": "already_promoted",
+                    "source_id": source_id,
+                    "existing_draft_id": dup.id,
+                }
+
+            # Draft 저장
+            draft = self.draft_service.create_draft(
+                source_item=source_item,
+                hook=review.hook,
+                body=review.body,
+                category=category,
+                risk_level=risk_level,
+                risk_reasoning=risk_reasoning,
+                ai_rationale=review.ai_rationale,
+                thread_continuation=review.thread_continuation,
+            )
+        except Exception as e:
+            logger.error(
+                f"Promote 파이프라인 실패: source_id={source_id}, err={e}",
+                exc_info=True,
+            )
+            return {
+                "success": False,
+                "reason": "pipeline_error",
+                "source_id": source_id,
+                "error": str(e)[:200],
+            }
+
+        # 4) 승인 카드 전송
+        try:
+            sent = await self.send_for_approval(draft.id)
+        except Exception as e:
+            logger.error(
+                f"Promote 승인 카드 전송 실패: draft_id={draft.id}, err={e}",
+                exc_info=True,
+            )
+            return {
+                "success": True,
+                "reason": "draft_created_send_failed",
+                "draft_id": draft.id,
+                "category": draft.category.value,
+                "risk_level": draft.risk_level.value,
+                "telegram_sent": False,
+                "error": str(e)[:200],
+            }
+
+        logger.info(
+            f"=== Promote 완료: draft_id={draft.id}, "
+            f"category={category.value}, risk={risk_level.value} ==="
+        )
+        return {
+            "success": True,
+            "reason": "ok",
+            "draft_id": draft.id,
+            "category": draft.category.value,
+            "risk_level": draft.risk_level.value,
+            "telegram_sent": sent,
+        }
+
     async def full_pipeline(self, data: SourceItemCreate) -> dict:
         """전체 파이프라인: 소스 입력 → AI 생성 → 텔레그램 승인카드 전송"""
         try:
