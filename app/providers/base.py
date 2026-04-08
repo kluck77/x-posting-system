@@ -97,6 +97,7 @@ class BaseReviewer(ABC):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str | None = None,
     ) -> ReviewResult:
         """초안을 리뷰하고 리스크 판단 + 최종 다듬기를 합니다."""
         ...

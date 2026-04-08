@@ -169,6 +169,7 @@ class AnthropicReviewer(BaseReviewer):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str | None = None,
     ) -> ReviewResult:
         logger.info(f"[Claude Reviewer] 리뷰: '{title[:50]}'")
 
