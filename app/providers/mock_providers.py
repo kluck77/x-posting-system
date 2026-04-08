@@ -60,7 +60,14 @@ class MockReviewer(BaseReviewer):
             category=draft.category_suggestion or "society",
             risk_level="medium",
             risk_reasoning="Mock mode: default medium risk for safety.",
-            ai_rationale="Mock review — draft explains Korean topic for international audience.",
+            # 한국어 요약은 [KR]...[/KR] 마커로 ai_rationale 에 내장.
+            # base.py / ReviewResult 시그니처는 건드리지 않는다.
+            ai_rationale=(
+                "[KR]\n"
+                "목업 요약: 한국 이슈를 해외 독자에게 설명하는 초안입니다.\n"
+                "[/KR]\n"
+                "Mock review — draft explains Korean topic for international audience."
+            ),
             recommended_action="review",
         )
 

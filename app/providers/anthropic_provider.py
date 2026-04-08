@@ -61,7 +61,8 @@ Respond in JSON ONLY:
   "risk_level": "low|medium|high",
   "risk_reasoning": "why this risk level",
   "ai_rationale": "why this draft serves the audience well",
-  "recommended_action": "approve|review|reject"
+  "recommended_action": "approve|review|reject",
+  "korean_summary": "2-3 sentence Korean summary for Korean operator (한국어로 작성)"
 }"""
 
 
@@ -161,6 +162,17 @@ class AnthropicReviewer(BaseReviewer):
                 data = json.loads(content)
 
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
+
+            # 한국어 요약은 별도 필드로 태우지 않고 기존 ai_rationale
+            # 문자열 안에 [KR]...[/KR] 마커로 내장한다.
+            # base.py / ReviewResult 시그니처는 절대 건드리지 않는다.
+            en_rationale = data.get("ai_rationale", "")
+            kr_summary = (data.get("korean_summary") or "").strip()
+            merged_rationale = (
+                f"[KR]\n{kr_summary}\n[/KR]\n{en_rationale}"
+                if kr_summary else en_rationale
+            )
+
             return ReviewResult(
                 hook=data.get("hook", draft.hook),
                 body=data.get("body", draft.body),
@@ -168,7 +180,7 @@ class AnthropicReviewer(BaseReviewer):
                 category=data.get("category", "evergreen"),
                 risk_level=data.get("risk_level", "medium"),
                 risk_reasoning=data.get("risk_reasoning", ""),
-                ai_rationale=data.get("ai_rationale", ""),
+                ai_rationale=merged_rationale,
                 recommended_action=data.get("recommended_action", "review"),
             )
         except Exception as e:

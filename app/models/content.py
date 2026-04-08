@@ -149,6 +149,35 @@ class Draft(Base):
         """전체 포스트 텍스트의 글자 수"""
         return len(self.full_text)
 
+    @property
+    def korean_summary(self):
+        """
+        ai_rationale 에 [KR]...[/KR] 마커가 있으면 그 사이 한국어 본문만 반환.
+        없거나 손상된 경우 None.
+        컬럼 추가 0. 마이그레이션 0.
+        """
+        raw = self.ai_rationale or ""
+        if not raw.startswith("[KR]"):
+            return None
+        end = raw.find("[/KR]")
+        if end == -1:
+            return None
+        return raw[len("[KR]"):end].strip()
+
+    @property
+    def ai_rationale_en(self) -> str:
+        """
+        [KR]...[/KR] 마커를 제거한 영어 rationale 본문을 반환.
+        마커가 없으면 원본 그대로.
+        """
+        raw = self.ai_rationale or ""
+        if not raw.startswith("[KR]"):
+            return raw
+        end = raw.find("[/KR]")
+        if end == -1:
+            return raw
+        return raw[end + len("[/KR]"):].lstrip("\n")
+
 
 class PostLog(Base):
     """
