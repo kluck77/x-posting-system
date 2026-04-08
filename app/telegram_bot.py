@@ -79,41 +79,91 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+def _do_hold_discard(source_id: int) -> str:
+    """
+    hold_discard 실 처리.
+    source_items.candidate_status='rejected_manual' 후 사용자 회신 텍스트 반환.
+    """
+    from app.db import get_db
+    from app.services.source_service import SourceService
+
+    db = get_db()
+    try:
+        svc = SourceService(db)
+        result = svc.mark_candidate_discarded(source_id)
+    finally:
+        db.close()
+
+    if result == "ok":
+        return (
+            "🗑️ <b>Discard 처리 완료</b>\n\n"
+            f"source_id: {source_id}\n"
+            "candidate_status → rejected_manual"
+        )
+    if result == "not_found":
+        return (
+            "⚠️ <b>Discard 실패</b>\n\n"
+            f"source_id={source_id} 를 찾을 수 없습니다."
+        )
+    if result == "schema_error":
+        return (
+            "⚠️ <b>Discard 실패 (스키마)</b>\n\n"
+            "source_items.candidate_status 컬럼이 없습니다.\n"
+            "서버 스키마 미배포 환경입니다."
+        )
+    return (
+        "⚠️ <b>Discard 실패 (DB 오류)</b>\n\n"
+        f"source_id={source_id}\n"
+        "서버 로그를 확인하세요."
+    )
+
+
+def _do_hold_mark24_notice(source_id: int) -> str:
+    """
+    hold_mark24 안내 메시지 (DB 변경 없음).
+    스케줄러 미연결 + candidate_status enum에 24h 전용 값이 확정되지 않아
+    이번 세션에서는 표시 전용 처리만 수행한다.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return (
+        "⏱️ <b>24h 표시 (안내 전용)</b>\n\n"
+        f"source_id: {source_id}\n"
+        f"표시 시각: {now}\n"
+        "스케줄러 미연결. 자동 삭제 없음. DB 변경 없음."
+    )
+
+
 async def _handle_hold_callback(query, action: str, item_id: int) -> None:
     """
-    Hold 카드 버튼 콜백 처리 (옵션 A: 라우팅 + 안내 회신만).
+    Hold 카드 버튼 콜백 처리.
 
-    현재 세션 범위:
-      - "잘못된 요청입니다" 차단
-      - 버튼별 수신 확인 메시지 회신
-      - DB 상태 변경 없음 (candidate 스키마 확정 전)
+    이번 세션 범위:
+      - hold_discard:  source_items.candidate_status='rejected_manual' 실 처리
+      - hold_mark24:   안내 + 타임스탬프만 (DB 변경 없음)
+      - hold_promote:  미구현 (DESIGN ONLY) — orchestrator 보호 / 추정 구현 금지
 
-    다음 세션에서 promote/discard 실제 상태 변경을 별도로 구현한다.
+    item_id 의미: source_items.id (서버 실측 확정)
     """
-    logger.info(f"Hold 콜백 수신: action={action}, item_id={item_id}")
+    logger.info(f"Hold 콜백 수신: action={action}, source_id={item_id}")
 
     try:
         await query.edit_message_reply_markup(reply_markup=None)
     except Exception as e:
         logger.warning(f"Hold 카드 키보드 제거 실패 (무시): {e}")
 
-    if action == "hold_promote":
+    if action == "hold_discard":
+        text = _do_hold_discard(item_id)
+    elif action == "hold_mark24":
+        text = _do_hold_mark24_notice(item_id)
+    elif action == "hold_promote":
         text = (
             "📥 <b>Promote 요청 수신</b>\n\n"
-            f"ID: {item_id}\n"
-            "상태 변경 로직은 다음 세션에서 연결됩니다."
-        )
-    elif action == "hold_discard":
-        text = (
-            "🗑️ <b>Discard 요청 수신</b>\n\n"
-            f"ID: {item_id}\n"
-            "상태 변경 로직은 다음 세션에서 연결됩니다."
-        )
-    elif action == "hold_mark24":
-        text = (
-            "⏱️ <b>24h 표시 요청 수신</b>\n\n"
-            f"ID: {item_id}\n"
-            "스케줄러 미연결. 표시용 처리만 수행됩니다."
+            f"source_id: {item_id}\n"
+            "구현 보류 (DESIGN ONLY).\n"
+            "재진입 진입점은 orchestrator.full_pipeline 뿐이며,\n"
+            "보호 영역 우회 + 중복/Rate-limit 충돌 방지 설계가\n"
+            "확정된 다음 세션에서 연결됩니다."
         )
     else:
         text = f"⚠️ 알 수 없는 hold action: {action}"

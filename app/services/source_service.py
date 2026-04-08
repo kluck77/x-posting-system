@@ -7,6 +7,8 @@
 
 import logging
 from datetime import datetime, timezone
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.models.content import SourceItem, SourceItemCreate
 
@@ -99,3 +101,59 @@ class SourceService:
             .order_by(SourceItem.created_at.asc())
             .all()
         )
+
+    def mark_candidate_discarded(self, source_id: int) -> str:
+        """
+        Hold 카드 discard 처리.
+        source_items.candidate_status 를 'rejected_manual' 로 변경합니다.
+
+        주의:
+            서버 측 source_items 테이블에는 candidate_status 컬럼이 존재하지만,
+            로컬 ORM 모델(SourceItem)에는 정의되어 있지 않다 (서버 직접 추가).
+            모델 변경 시 마이그레이션/init_db ripple 위험이 있어 본 세션에서는
+            ORM attribute가 아닌 raw SQL UPDATE 1문장으로만 처리한다.
+
+        Args:
+            source_id: source_items.id
+
+        Returns:
+            "ok"           1행 갱신 성공
+            "not_found"    해당 source_id 없음 (또는 이미 같은 상태)
+            "schema_error" candidate_status 컬럼 부재 (로컬 또는 미배포 환경)
+            "db_error"     그 외 DB 오류
+        """
+        try:
+            result = self.db.execute(
+                text(
+                    "UPDATE source_items "
+                    "SET candidate_status = :v "
+                    "WHERE id = :id"
+                ),
+                {"v": "rejected_manual", "id": int(source_id)},
+            )
+            if result.rowcount == 0:
+                self.db.rollback()
+                logger.warning(
+                    f"discard 대상 없음: source_id={source_id} "
+                    f"(rowcount=0)"
+                )
+                return "not_found"
+            self.db.commit()
+            logger.info(
+                f"candidate_status=rejected_manual: source_id={source_id}"
+            )
+            return "ok"
+        except OperationalError as e:
+            self.db.rollback()
+            msg = str(e).lower()
+            if "no such column" in msg or "candidate_status" in msg:
+                logger.error(
+                    f"candidate_status 컬럼 없음 (스키마 미적용): {e}"
+                )
+                return "schema_error"
+            logger.error(f"discard DB 오류: {e}")
+            return "db_error"
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(f"discard DB 오류: {e}")
+            return "db_error"
