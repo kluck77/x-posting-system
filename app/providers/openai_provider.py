@@ -44,7 +44,12 @@ class OpenAIDraftWriter(BaseDraftWriter):
     """ChatGPT를 사용한 초안 작성기."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self,
+        title: str,
+        source_text: str,
+        language: str = "en",
+        source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
         logger.info(f"[OpenAI DraftWriter] 초안 생성: '{title[:50]}'")
 
@@ -79,8 +84,8 @@ class OpenAIDraftWriter(BaseDraftWriter):
 
             logger.info("[OpenAI DraftWriter] 초안 생성 성공")
             return DraftResult(
-                hook=data.get("hook", title),
-                body=data.get("body", ""),
+                hook=data.get("hook") or title,
+                body=data.get("body") or "",
                 thread_continuation=data.get("thread_continuation"),
                 category_suggestion=data.get("category_suggestion", "evergreen"),
                 tone_notes=data.get("tone_notes", ""),
