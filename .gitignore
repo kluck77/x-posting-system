@@ -69,3 +69,4 @@ htmlcov/
 *.bak
 *.tmp
 *.temp
+debug_*.txt
