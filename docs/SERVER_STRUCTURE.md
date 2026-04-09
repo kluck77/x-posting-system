@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 KST (운영 관측성 수정 + Phase F main.py 서버 반영)
+최종 갱신 : 2026-04-09 KST (주간 고점수 CANDIDATE 즉시 알림 + 운영 관측성 수정 + Phase F main.py 서버 반영)
 
 ---
 
@@ -126,6 +126,18 @@ from app.providers.base import FactCheckResult, TrendResult
 - journalctl 로그 미출력 원인: stdout 은 systemd 파이프에서 full buffering, stderr 는 unbuffered
 - 롤백: `cp /tmp/admin.py.bak app/api/admin.py && cp /tmp/logging_config.py.bak app/utils/logging_config.py && systemctl restart xdashboard`
 
+### 주간 고점수 CANDIDATE 즉시 알림 (서버 반영 대기)
+
+| 파일 | 반영 방식 | 상태 |
+|---|---|---|
+| `app/services/daytime_alert_service.py` | `git show` 신규 배치 | ⏳ 서버 반영 대기 |
+| `app/orchestrator.py` Step 1.5c | 수술식 삽입 (~15줄, Step 1.5b 직후) | ⏳ 서버 반영 대기 |
+
+- 조건: 주간 05:00~22:00 KST + matched_keywords >= 4 + score >= 55 + 수집 후 2h 이내
+- `score_candidate()` 재사용, `[주간 주목]` 카드 형식
+- fail-open, Top5/BREAKING_NOW 무간섭
+- 롤백: `rm app/services/daytime_alert_service.py && cp /tmp/orchestrator.py.bak.daytime app/orchestrator.py && systemctl restart xdashboard`
+
 ### Phase H 서버 반영 완료 (2026-04-09 11:00 UTC)
 
 | 파일 | 반영 방식 | 상태 |
@@ -144,6 +156,7 @@ from app.providers.base import FactCheckResult, TrendResult
 ### 브랜치에만 있는 파일 (서버에 없음)
 
 - `app/services/candidate_filter.py`
+- `app/services/daytime_alert_service.py` (서버 반영 대기)
 
 ---
 
@@ -246,6 +259,7 @@ Step 0  : 일일 제한 확인
 Step 1  : 소스 DB 저장                          ← 줄 153~155
 Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ Phase C
 Step 1.5b: CANDIDATE → record_candidate()       ← 줄 175~191 ✅ Phase E
+Step 1.5c: 주간 고점수 CANDIDATE 즉시 알림       ← 줄 ~192 ⏳ 서버 반영 대기
 Step 1.6: BREAKING_NOW 텔레그램 핸드오프         ← 줄 193~209 ✅ Phase C+E
           └ record_breaking_sent() (Top5 제외)   ← 줄 200~208 ✅ Phase E
 Step 1.7: 한국어 전용 라인 분기 (early return)    ← ✅ Phase H (서버 반영 완료)

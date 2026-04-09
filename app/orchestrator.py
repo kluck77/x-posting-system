@@ -113,6 +113,25 @@ class Orchestrator:
                 except Exception:
                     pass  # fail-open, 로그는 record_candidate 내부
 
+                # Step 1.5c: 주간 고점수 CANDIDATE 즉시 알림 (fail-open)
+                # - 05:00~22:00 KST 에만 동작
+                # - 교차검증 4+ / 점수 컷라인 / 즉시성 조건 모두 충족 시 텔레그램 즉시 알림
+                # - Top5 큐 적재(1.5b)와 독립. 둘 다 동작해도 충돌 없음.
+                try:
+                    from app.services.daytime_alert_service import try_daytime_alert
+                    _daytime_sent = await try_daytime_alert(
+                        title=source_item.title,
+                        body=source_item.source_text,
+                        url=source_item.url,
+                        topic_domain=breaking_result.topic_domain,
+                        matched_keywords=breaking_result.matched_keywords,
+                        collected_at=source_item.created_at,
+                    )
+                    if _daytime_sent:
+                        logger.info("[1.5c/6] 주간 고점수 CANDIDATE 즉시 알림 전송")
+                except Exception:
+                    pass  # fail-open
+
             # Step 1.6: BREAKING_NOW 일 때만 분리된 텔레그램 알림 핸드오프
             # - 기존 approval card 흐름과 섞지 않는 분리 경로 (S3-C)
             # - 이중 fail-open : 내부 함수가 False 를 반환하거나 예외를 내더라도

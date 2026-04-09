@@ -12,12 +12,19 @@
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**운영 관측성 수정 완료 (서버 반영 대기).** database_ok=false 버그 + journalctl 로그 미출력 수정.
+**주간 고점수 CANDIDATE 즉시 알림 구현 완료 (서버 반영 대기).** 05:00~22:00 KST 주간 시간대 고점수 기사 즉시 텔레그램 알림.
 
 ## Current Priority
-**서버 반영** — admin.py + logging_config.py 2개 파일 surgical 적용 후 health + 로그 확인.
+**서버 반영** — daytime_alert_service.py 신규 배치 + orchestrator.py Step 1.5c 수술식 삽입.
 
-## ★ 운영 관측성 수정 (2026-04-09)
+## ★ 주간 고점수 CANDIDATE 즉시 알림 (2026-04-09)
+- `app/services/daytime_alert_service.py` (신규, ~264줄) — 조건 판정 + 카드 텍스트 + 텔레그램 전송
+- `app/orchestrator.py` (+15줄) — Step 1.5c 삽입 (CANDIDATE 블록 내, 1.5b 직후)
+- `tests/test_daytime_alert.py` (신규, 26 tests)
+- 206 passed, 0 regression
+- 서버 반영 대기 (2개 파일: 신규 1 + surgical 1)
+
+## ★ 운영 관측성 수정 (2026-04-09) — 서버 반영 대기
 - `app/api/admin.py` (+2/−1) — `text("SELECT 1")` 래핑 (SQLAlchemy 2.x 호환)
 - `app/utils/logging_config.py` (1줄) — stdout → stderr (systemd 버퍼링 해소)
 - 180 passed, 0 regression

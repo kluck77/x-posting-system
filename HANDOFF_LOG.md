@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-04-09 — 주간 고점수 CANDIDATE 즉시 알림 (Daytime Alert)
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : 05:00~22:00 KST 주간 시간대에 고점수 CANDIDATE 기사를 즉시 텔레그램 알림. 기존 BREAKING_NOW / Top5 흐름 무간섭.
+- **Changed Files** :
+  - `app/services/daytime_alert_service.py` (신규, ~264줄) — 조건 판정 + 카드 텍스트 + 텔레그램 전송
+  - `app/orchestrator.py` (+15줄) — Step 1.5c 삽입 (CANDIDATE 블록 내, Step 1.5b 직후)
+  - `tests/test_daytime_alert.py` (신규, 26 tests)
+  - `HANDOFF_LOG.md`, `TASK_BOARD.md`, `docs/SERVER_STRUCTURE.md` 갱신
+- **설계** :
+  - 조건 (모두 만족): a. 주간 05:00~22:00 KST, b. matched_keywords >= 4, c. score >= 55, d. 수집 후 2h 이내
+  - 점수 산정: `top5_briefing_service.score_candidate()` 재사용 (주간 freshness=0 감안, 임계값 55)
+  - 카드 형식: `[주간 주목]` 접두어, 핵심/키워드/영향 자산군/점수/원문/시각
+  - fail-open: try/except 래핑, 실패 시 파이프라인 계속
+  - Top5 큐 적재(1.5b)와 독립 — 둘 다 동작해도 충돌 없음
+  - 주간 수집 기사는 `_is_in_night_window()` 필터로 Top5 선정에서 자연 제외 → 중복 알림 없음
+- **Test Result** : 206 passed, 0 regression
+- **서버 반영** : 2개 파일 적용 필요
+  1. `daytime_alert_service.py` — `git show` 신규 배치
+  2. `orchestrator.py` — Step 1.5c (~15줄) 수술식 삽입 (Step 1.5b 직후, 서버 줄 ~191)
+- **Runtime Risk** : 0 (fail-open, 기존 흐름 무간섭, DB 스키마 무변경)
+- **Recommendation** : 서버 반영 후 주간 시간대에 고점수 기사 인입으로 알림 동작 확인.
+
+---
+
 ## 2026-04-09 — 운영 관측성 수정 (database_ok + journalctl 로그)
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
