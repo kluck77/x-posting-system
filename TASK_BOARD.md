@@ -12,10 +12,16 @@
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**Phase H 서버 반영 완료 + AI 운영 구조 문서화 완료.** 한국어 전용 라인 분기 운영 중. AI 6축 구조 + 네이버 자동수집 라인 문서 고정.
+**운영 관측성 수정 완료 (서버 반영 대기).** database_ok=false 버그 + journalctl 로그 미출력 수정.
 
 ## Current Priority
-**운영 안정화 관찰** — 금융 기사 인입 시 영어 승인 카드 미발송 + BREAKING/Top5 정상 동작 확인.
+**서버 반영** — admin.py + logging_config.py 2개 파일 surgical 적용 후 health + 로그 확인.
+
+## ★ 운영 관측성 수정 (2026-04-09)
+- `app/api/admin.py` (+2/−1) — `text("SELECT 1")` 래핑 (SQLAlchemy 2.x 호환)
+- `app/utils/logging_config.py` (1줄) — stdout → stderr (systemd 버퍼링 해소)
+- 180 passed, 0 regression
+- 서버 반영 대기 (2개 파일 surgical)
 
 ## ★ Phase H: 한국어 전용 라인 분기 — 서버 반영 완료 (2026-04-09)
 - `app/orchestrator.py` Step 1.7 수술식 삽입 (707→745줄, 3곳)

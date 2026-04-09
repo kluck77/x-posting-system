@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 KST (AI 운영 구조 문서 연결 추가)
+최종 갱신 : 2026-04-09 KST (운영 관측성 수정 + Phase F main.py 서버 반영)
 
 ---
 
@@ -104,16 +104,27 @@ from app.providers.base import FactCheckResult, TrendResult
 - orchestrator.py: 680 → 707줄 (+27)
 - 롤백: `cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py && systemctl restart xdashboard`
 
-### Phase F 구현 완료, 서버 반영 대기
+### Phase F 서버 반영 완료 (2026-04-09 20:28 UTC)
 
 | 파일 | 반영 방식 | 상태 |
 |---|---|---|
-| `app/main.py` | Phase F: `git show` 전체 교체 | ⏳ 서버 반영 대기 |
+| `app/main.py` | Phase F: `git show` 전체 교체 | ✅ 서버 반영 완료 |
 
 - `_top5_scheduler_loop()` : 매일 05:00 KST `run_top5_briefing()` 자동 실행
 - `asyncio.create_task()` 로 기존 이벤트루프에 합류 (외부 패키지 불필요)
-- 브랜치 main.py 와 서버 main.py 구조 동일 → 전체 교체 안전
+- 반영: `git fetch origin claude/x-posting-ops-review-7hlxK` → `git show origin/...:app/main.py > app/main.py`
 - 롤백: `cp /tmp/main.py.bak.phase_f app/main.py && systemctl restart xdashboard`
+
+### 운영 관측성 수정 (서버 반영 대기)
+
+| 파일 | 변경 내용 | 상태 |
+|---|---|---|
+| `app/api/admin.py` | `db.execute("SELECT 1")` → `db.execute(text("SELECT 1"))` | ⏳ 서버 반영 대기 |
+| `app/utils/logging_config.py` | `StreamHandler(sys.stdout)` → `StreamHandler(sys.stderr)` | ⏳ 서버 반영 대기 |
+
+- database_ok=false 원인: SQLAlchemy 2.x 에서 bare string SQL 은 `text()` 래핑 필수
+- journalctl 로그 미출력 원인: stdout 은 systemd 파이프에서 full buffering, stderr 는 unbuffered
+- 롤백: `cp /tmp/admin.py.bak app/api/admin.py && cp /tmp/logging_config.py.bak app/utils/logging_config.py && systemctl restart xdashboard`
 
 ### Phase H 서버 반영 완료 (2026-04-09 11:00 UTC)
 

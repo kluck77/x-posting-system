@@ -7,6 +7,7 @@ FastAPI 관리자/디버그 엔드포인트
 
 import logging
 from fastapi import FastAPI, HTTPException
+from sqlalchemy import text
 from app.config import settings, validate_settings
 from app.db import get_db, init_db
 from app.models.content import (
@@ -45,7 +46,7 @@ async def health_check():
     db_ok = False
     try:
         db = get_db()
-        db.execute("SELECT 1" if hasattr(db, 'execute') else None)
+        db.execute(text("SELECT 1"))
         db_ok = True
         db.close()
     except Exception:

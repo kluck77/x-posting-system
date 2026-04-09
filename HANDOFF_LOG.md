@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-04-09 — 운영 관측성 수정 (database_ok + journalctl 로그)
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : database_ok=false 원인 규명 + journalctl 앱 로그 미출력 수정. 기능 변경 없음.
+- **Changed Files** :
+  - `app/api/admin.py` (+2줄/−1줄) — health endpoint: `db.execute("SELECT 1")` → `db.execute(text("SELECT 1"))` (SQLAlchemy 2.x 호환)
+  - `app/utils/logging_config.py` (1줄) — `StreamHandler(sys.stdout)` → `StreamHandler(sys.stderr)` (systemd 파이프 버퍼링 해소)
+  - `HANDOFF_LOG.md`, `TASK_BOARD.md`, `docs/SERVER_STRUCTURE.md` 갱신
+- **Root Cause** :
+  - database_ok=false: SQLAlchemy 2.x 에서 bare string `"SELECT 1"` 은 `text()` 래핑 필수. `ArgumentError` 발생 → `except Exception: pass` → `db_ok=False`.
+  - 앱 로그 미출력: `logging.StreamHandler(sys.stdout)` 사용 중. systemd 파이프에서 stdout 은 full buffering. 로그가 버퍼에 쌓이고 journal 에 안 보임.
+- **Test Result** : 180 passed, 0 regression
+- **서버 반영** : 2개 파일 surgical 적용 필요 (admin.py, logging_config.py)
+- **Runtime Risk** : 0 (로그 경로 + SQL 래핑만 변경, 기능 로직 무변경)
+- **Recommendation** : 서버 반영 후 `curl health` + `journalctl` 로 즉시 확인 가능.
+
+---
+
 ## 2026-04-09 — AI 운영 구조 문서화
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
