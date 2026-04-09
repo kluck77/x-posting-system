@@ -5,6 +5,75 @@
 
 ---
 
+## 2026-04-09 09:42 KST — 계정 품질 레이어 문서화 부분 완료 (1/2) — 운영자 중단 지시
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 운영자 지시 "계정 품질 레이어 문서화 단계 전환" — `docs/ACCOUNT_CONSTITUTION.md` + `docs/AI_ROLE_PROMPTS.md` 2개 문서 생성
+- **Changed Files** :
+  - `docs/ACCOUNT_CONSTITUTION.md` (신규, 12349 bytes) — **완료**
+  - `docs/AI_ROLE_PROMPTS.md` — **미작성 (운영자 중단)**
+  - `HANDOFF_LOG.md` (최상단 본 항목)
+- **Code Changes** : 0
+- **Recommendation** : NEEDS_HUMAN (부분 완료 박제, 재개 지시 대기)
+
+### 운영자 지시 방향 전환
+- 버그 추적 세션 휴지 상태 → 계정 품질 레이어 문서화로 전환
+- 핵심 : **영어 번역 계정 → 한국어 원문 본체** 방향 선언
+- 주제 : 금융 / 투자 / 크립토 / 주식 해설
+- 목표 : "뉴스 전달" 아닌 "해석력 있는 한국어 원문 계정"
+- 본 세션 범위 : 문서 2개만 (코드 수정 0)
+
+### `docs/ACCOUNT_CONSTITUTION.md` 완료 내용
+- 12개 섹션 (운영자 spec 10개 + 사용법/갱신 규칙 2개)
+- §1 계정 정체성 (한국어 원문 본체 / 하지 않는 것 / 왜 한국어)
+- §2 핵심 주제 (금융/투자/크립토/주식 4개 × 허용/비허용 표)
+- §3 글의 목적 (해석 4축 : 왜 지금 / 누구 / 자금흐름 / 심리)
+- §4 금지사항 (가짜 긴박감 / 근거 없는 확신 / 선동 / 번역투 / 기사 복붙 등 8개 카테고리)
+- §5 좋은 글 기준 (첫 문장 규칙 + 사실+해석+시사점 3층 + 해석 축 명시)
+- §6 발행 가치 판단 4개 질문
+- §7 톤 (냉정 / 날카로움 / 과장 없음)
+- §8 문장 규칙 (한 문단 한 주장 / 40~70자 가이드)
+- §9 리스크 규칙 (단정 금지 / 조건형 표현 / 1차 출처)
+- §10 예시 (좋은 5 / 나쁜 5 / 비교 3건 모두 금융·투자·크립토·주식 원문)
+- §11 사용법 + §12 갱신 규칙
+- ★ Supersedes 선언 : `README.md`, `COMMANDER_BRIEF.md §7`, `RUNNER_RULES.md §12` 의 계정 방향성 항목 대체 ★
+- 단, 위 3개 파일은 본 세션에서 **수정하지 않음** (별 P0 분기 대상)
+
+### `docs/AI_ROLE_PROMPTS.md` 미작성 사유
+- Write 호출 실패 (content 파라미터 누락 — Claude Code 측 실수)
+- 재시도 직전 운영자 지시 : "에러안나게 다시해 / 하지마" (상충 지시)
+- Claude Code 가 확인 요청 중 stop hook trigger 로 정리 필요
+- → **운영자 재개 지시 대기** 상태로 박제
+- AI_ROLE_PROMPTS.md 의 설계 초안은 본 세션 메모리에만 존재 (재개 시 재구성 필요)
+
+### 기존 유사 문서 교차 확인 결과
+- `README.md` : 영어 X 계정 설명 (옛 방향)
+- `COMMANDER_BRIEF.md §7` : 국제 독자 / 영어 base (옛 방향)
+- `RUNNER_RULES.md §12` : 해외 독자 / 영어 base (옛 방향)
+- 위 3개 모두 본 세션에서 **무수정** (운영자 결정으로 별 P0 분기 대상)
+- 중복 생성 방지 원칙에 따라 ACCOUNT_CONSTITUTION.md 에 명시적 Supersedes 선언 삽입
+
+### 재개 시 다음 단계 (운영자 지시 대기)
+1. **경로 A — AI_ROLE_PROMPTS.md 마저 작성** : 운영자 기존 spec 그대로 재개
+2. **경로 B — 본 세션 여기서 종결** : ACCOUNT_CONSTITUTION.md 만 유효, AI_ROLE_PROMPTS.md 는 별 P0
+3. **경로 C — ACCOUNT_CONSTITUTION.md 도 롤백** : 방향 자체 재검토 시
+
+### Preflight Sweep (부분 완료)
+- **Changed Files** : `docs/ACCOUNT_CONSTITUTION.md` (신규) + `HANDOFF_LOG.md` (상단 항목)
+- **Syntax Check** : N/A (markdown only)
+- **Test Result** : N/A (docs only)
+- **Runtime Risk** : 0 (앱 코드 무변경)
+- **Server Apply Risk** : 0 (문서, 서버 적용 불필요)
+- **Recommendation** : NEEDS_HUMAN (부분 완료 commit → 재개 지시 대기)
+
+### 보호 영역 무변경 확인
+- `app/*` 전체 무변경 ✓
+- `README.md`, `COMMANDER_BRIEF.md`, `RUNNER_RULES.md`, `TASK_BOARD.md` 무변경 ✓ (TASK_BOARD 는 본 commit 에서도 무갱신 — 재개 시점에 운영자 결정 반영)
+- `main` 브랜치 무변경 ✓
+- destructive 명령 0
+
+---
+
 ## 2026-04-09 09:16 KST — 세션 휴지 (오늘 P0 4건 종결, 기준선 안정화 후 정지)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
