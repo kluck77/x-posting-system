@@ -17,7 +17,13 @@
   - `HANDOFF_LOG.md`, `TASK_BOARD.md`, `docs/SERVER_STRUCTURE.md` 갱신
 - **Test Result** : 207 passed, 0 regression
 - **Runtime Risk** : 낮음 — 짧은 본문 + STRONG 제목 키워드 조합만 HOLD→CANDIDATE 변경. 다른 모든 경로 무변경.
-- **서버 반영** : breaking_classifier.py 1개 파일 전체 교체 (`git show`)
+- **서버 반영** : ✅ 완료 (2026-04-09 22:31 UTC)
+  - breaking_classifier.py `git show` 전체 교체
+  - py_compile OK, xdashboard active (running)
+  - smoke test 1: 금융 (한국은행 기준금리) → CANDIDATE/금융, telegram_sent=false, "한국어 전용 라인으로 처리" ✅
+  - smoke test 2: 크립토 (비트코인 현물 ETF) → CANDIDATE/크립토, telegram_sent=false, "한국어 전용 라인으로 처리" ✅
+  - 영어 approval 카드 0건 확인
+  - 롤백: `cp /tmp/breaking_classifier.py.bak app/services/breaking_classifier.py && systemctl restart xdashboard`
 
 ---
 

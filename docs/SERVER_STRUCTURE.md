@@ -115,14 +115,15 @@ from app.providers.base import FactCheckResult, TrendResult
 - 반영: `git fetch origin claude/x-posting-ops-review-7hlxK` → `git show origin/...:app/main.py > app/main.py`
 - 롤백: `cp /tmp/main.py.bak.phase_f app/main.py && systemctl restart xdashboard`
 
-### KO-only 분기 미동작 수정 (서버 반영 대기)
+### KO-only 분기 미동작 수정 — 서버 반영 완료 (2026-04-09 22:31 UTC)
 
 | 파일 | 반영 방식 | 상태 |
 |---|---|---|
-| `app/services/breaking_classifier.py` | `git show` 전체 교체 | ⏳ 서버 반영 대기 |
+| `app/services/breaking_classifier.py` | `git show` 전체 교체 | ✅ 서버 반영 완료 |
 
 - Root Cause: MIN_BODY_CHARS=80 가드 → 짧은 본문 HOLD → topic_domain="none" → KO-only 실패
 - Fix: 제목에 STRONG 키워드 있으면 CANDIDATE 구제 (+7줄)
+- smoke test: 금융 + 크립토 2건 모두 KO-only 라우팅 성공
 - 롤백: `cp /tmp/breaking_classifier.py.bak app/services/breaking_classifier.py && systemctl restart xdashboard`
 
 ### /ingest 응답 문구 정합성 수정 — 서버 반영 완료 (2026-04-09 22:07 UTC)
