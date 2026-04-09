@@ -34,6 +34,7 @@ import logging
 import re
 import time
 import unicodedata
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import TYPE_CHECKING, Optional
 
@@ -48,6 +49,22 @@ logger = logging.getLogger(__name__)
 
 # 텔레그램 Bot API 기본 URL (telegram_service.py 와 동일 포맷, 재사용 금지하여 별도 정의)
 _TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}"
+
+# ---------------------------------------------------------------------------
+# 카드 포맷 상수 (TELEGRAM_BREAKING_ALERT_TEMPLATE.md §3 / §4 / §5)
+# ---------------------------------------------------------------------------
+# §4 길이 제한
+_CARD_MAX_CHARS: int = 600              # 카드 전체 권장 상한
+_TITLE_MAX_CHARS: int = 60              # 제목 상한
+_SUMMARY_MAX_CHARS: int = 200           # 핵심 요지 상한 (1~2문장 기준 대략치)
+_SUMMARY_MAX_SENTENCES: int = 2         # 핵심 요지 문장 수 상한
+_KEYWORDS_MAX: int = 3                  # 키워드 최대 3개 (§3)
+
+# §6 예시에서 추출한 시각 포맷 (수집 시각 부가 정보)
+_KST = timezone(timedelta(hours=9))
+
+# 한/영 문장 종결부호 뒤 공백 기준 분할 (숫자 내부 `.` 는 공백 없어서 분할 안 됨)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.。!?])\s+")
 
 # ---------------------------------------------------------------------------
 # Dedup 상수 (TELEGRAM_DEDUP_DATA_MODEL_SPEC §8)
@@ -65,12 +82,96 @@ def _get_api_url(method: str) -> str:
     return f"{_TELEGRAM_API_BASE.format(token=settings.telegram_bot_token)}/{method}"
 
 
-def _urgency_emoji(urgency: Optional[str]) -> str:
+# ---------------------------------------------------------------------------
+# 카드 포맷 헬퍼 (TELEGRAM_BREAKING_ALERT_TEMPLATE.md §3 / §4 / §5)
+# ---------------------------------------------------------------------------
+# §4 "이모지 금지" → 본 모듈은 어떤 헬퍼도 이모지를 생성하지 않는다.
+# §4 "단정적 투자 조언 금지" → 운영자 액션 힌트는 문서 §3 지정 3종 + 짧은 보충만.
+
+def _operator_action_hint(urgency: Optional[str]) -> str:
+    """
+    §3 필드 8 : `즉시 확인` / `정보만` / `추가 검증 필요` + 짧은 보충.
+    §6 예시 문장을 그대로 고정 템플릿으로 사용한다 (매수/매도 추천 표현 없음).
+    """
     if urgency == "high":
-        return "🚨"
+        return "즉시 확인. 코멘트 작성 검토 권장."
     if urgency == "medium":
-        return "⚠️"
-    return "🔔"
+        return "정보만. 후속 확인 권장."
+    return "추가 검증 필요."
+
+
+def _clip_title(title: str) -> str:
+    """§4 : 제목 60자 이하. 잘릴 경우 끝에 `…` 추가."""
+    t = (title or "-").strip() or "-"
+    if len(t) <= _TITLE_MAX_CHARS:
+        return t
+    return t[: _TITLE_MAX_CHARS - 1].rstrip() + "…"
+
+
+def _extract_summary(body: Optional[str], fallback_title: str) -> str:
+    """
+    §3 필드 2 : 핵심 요지 1~2문장.
+
+    - body 가 주어지면 선두 최대 2문장 추출
+    - body 가 없거나 파싱 실패 시 fallback_title (제목) 을 요지 자리로 재활용
+      (§4 "보수가 기본값" — 요약을 지어내지 않는다).
+    """
+    if body:
+        text = body.strip()
+        if text:
+            sents = _SENTENCE_SPLIT_RE.split(text)
+            picked = " ".join(s.strip() for s in sents[:_SUMMARY_MAX_SENTENCES] if s.strip())
+            if not picked:
+                picked = text
+            if len(picked) > _SUMMARY_MAX_CHARS:
+                picked = picked[: _SUMMARY_MAX_CHARS - 1].rstrip() + "…"
+            return picked
+    # body 없음 → 제목으로 대체 (중복 느낌이지만 body 부재 신호 역할)
+    return fallback_title[:_SUMMARY_MAX_CHARS]
+
+
+def _format_keywords(matched_keywords: Optional[list[str]]) -> str:
+    """§3 필드 3 : 강한 키워드 최대 3개, 슬래시 구분."""
+    if not matched_keywords:
+        return "-"
+    top = [k.strip() for k in matched_keywords[:_KEYWORDS_MAX] if k and k.strip()]
+    return " / ".join(top) if top else "-"
+
+
+def _format_asset_groups(topic_domain: Optional[str]) -> str:
+    """
+    §3 필드 4 : 금융 / 투자 / 크립토 / 주식.
+    현재 classifier 는 단일 primary_domain 만 반환 → 단일값 그대로 사용.
+    복수 도메인 지원은 본 세션 범위 밖.
+    """
+    if not topic_domain or topic_domain == "none":
+        return "-"
+    return topic_domain
+
+
+def _format_urgency(urgency: Optional[str]) -> str:
+    """§3 필드 5 : high 또는 medium. (§4 소문자 유지)"""
+    if urgency in ("high", "medium"):
+        return urgency
+    return "-"
+
+
+def _format_reason(breaking_reason: Optional[str]) -> str:
+    """§3 필드 6 : 왜 BREAKING_NOW 인지 1줄."""
+    if not breaking_reason:
+        return "-"
+    r = breaking_reason.strip().replace("\n", " ")
+    return r or "-"
+
+
+def _format_collected_at(collected_at: Optional[datetime]) -> str:
+    """§3 부가 정보 `수집 시각` : `YYYY-MM-DD HH:MM KST`."""
+    dt = collected_at or datetime.now(tz=_KST)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_KST)
+    else:
+        dt = dt.astimezone(_KST)
+    return dt.strftime("%Y-%m-%d %H:%M KST")
 
 
 # ---------------------------------------------------------------------------
@@ -186,31 +287,56 @@ def build_breaking_alert_text(
     breaking_result: "ClassificationResult",
     title: str,
     url: Optional[str],
+    body: Optional[str] = None,
+    collected_at: Optional[datetime] = None,
 ) -> str:
     """
-    BREAKING_NOW 알림용 최소 페이로드 텍스트.
+    BREAKING_NOW 텔레그램 카드 본문.
 
-    기존 approval card 와 의도적으로 다른 포맷이며, 버튼/승인 없이 순수
-    알림 전용이다. 운영자 지시 7개 필드를 모두 포함한다.
+    docs/TELEGRAM_BREAKING_ALERT_TEMPLATE.md §3 (8필드 고정) / §4 (문장 규칙) /
+    §5 (복붙 템플릿) 기준.
+
+    8필드 순서 고정, 이모지 금지, 한국어 only, 600자 상한. approval card
+    (telegram_service.py) 와는 의도적으로 분리되어 있다.
+
+    Args:
+        breaking_result: classify_article 결과.
+        title: 원문 제목 (§3 필드 1).
+        url: 원문 링크 (§3 필드 7). None 이면 "원문" 라인 생략 (§10.2 참조).
+        body: 원문 본문. 선두 최대 2문장을 핵심 요지로 사용 (§3 필드 2).
+              None 이면 제목을 요지 자리에 대체.
+        collected_at: 수집 시각. None 이면 호출 시점 KST 를 사용.
     """
-    em = _urgency_emoji(breaking_result.urgency)
-    kws = ", ".join(breaking_result.matched_keywords[:5]) or "-"
-    reason = breaking_result.breaking_reason or "-"
-    urgency_label = (breaking_result.urgency or "-").upper()
+    clipped_title = _clip_title(title)
+    summary = _extract_summary(body, fallback_title=clipped_title)
+    keywords = _format_keywords(breaking_result.matched_keywords)
+    asset_groups = _format_asset_groups(breaking_result.topic_domain)
+    urgency_str = _format_urgency(breaking_result.urgency)
+    reason = _format_reason(breaking_result.breaking_reason)
+    action_hint = _operator_action_hint(breaking_result.urgency)
+    collected_str = _format_collected_at(collected_at)
 
+    # §5 복붙 템플릿 순서 고정
     lines = [
-        f"{em} <b>BREAKING ALERT</b>",
-        "─" * 30,
-        f"📰 <b>Title:</b> {title}",
-        f"🏷️ <b>Classification:</b> {breaking_result.classification}",
-        f"📂 <b>Topic:</b> {breaking_result.topic_domain}",
-        f"🔑 <b>Keywords:</b> {kws}",
-        f"💥 <b>Reason:</b> {reason}",
-        f"⚡ <b>Urgency:</b> {urgency_label}",
+        f"[속보] {clipped_title}",
+        "",
+        f"핵심 : {summary}",
+        f"키워드 : {keywords}",
+        f"영향 자산군 : {asset_groups}",
+        f"긴급도 : {urgency_str}",
+        f"분류 사유 : {reason}",
+        f"운영자 액션 : {action_hint}",
     ]
     if url:
-        lines.append(f"🔗 <b>Source:</b> {url}")
-    return "\n".join(lines)
+        lines.append("")
+        lines.append(f"원문 : {url}")
+    lines.append(f"시각 : {collected_str}")
+
+    text = "\n".join(lines)
+    # §4 600자 상한 — 초과 시 끝부분만 잘라 잘림 방지. 제목/요지는 이미 내부 clip.
+    if len(text) > _CARD_MAX_CHARS:
+        text = text[: _CARD_MAX_CHARS - 1].rstrip() + "…"
+    return text
 
 
 async def send_breaking_alert(
@@ -218,6 +344,8 @@ async def send_breaking_alert(
     breaking_result: "ClassificationResult",
     title: str,
     url: Optional[str] = None,
+    body: Optional[str] = None,
+    collected_at: Optional[datetime] = None,
     now: Optional[float] = None,
 ) -> bool:
     """
@@ -231,7 +359,9 @@ async def send_breaking_alert(
     - 전송 성공 시에만 dedup 저장소에 기록 (차단 경로 / 전송 실패 경로에서는 기록 안 함)
 
     Args:
-        now: 현재 epoch seconds (테스트에서 시간 주입용, 기본 time.time()).
+        body: 원문 본문. build_breaking_alert_text 로 전달되어 핵심 요지 추출에 사용.
+        collected_at: 수집 시각 KST. None 이면 호출 시점.
+        now: 현재 epoch seconds (테스트에서 dedup 시간 주입용, 기본 time.time()).
 
     Returns:
         전송 성공 여부 (True/False). MOCK 모드도 True 로 간주.
@@ -267,6 +397,8 @@ async def send_breaking_alert(
         breaking_result=breaking_result,
         title=title,
         url=url,
+        body=body,
+        collected_at=collected_at,
     )
 
     if not settings.has_telegram_config:
@@ -275,10 +407,11 @@ async def send_breaking_alert(
             _record_sent(issue_key, now_ts)
         return True
 
+    # §4 "이모지 금지" + 한국어 전용 plain text → parse_mode 미지정.
+    # (HTML 파서는 `<`, `>`, `&` 가 섞인 기사 텍스트에서 parse 실패할 수 있다.)
     payload = {
         "chat_id": settings.telegram_chat_id,
         "text": text,
-        "parse_mode": "HTML",
     }
 
     try:

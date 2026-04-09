@@ -107,6 +107,9 @@ class Orchestrator:
                         breaking_result=breaking_result,
                         title=source_item.title,
                         url=source_item.url,
+                        # S3-C.1: 핵심 요지 추출용. build_breaking_alert_text 가 선두
+                        # 1~2 문장만 사용하며, None 이어도 fail-open (제목 대체).
+                        body=source_item.source_text,
                     )
                     logger.info(f"[1.6/6] breaking alert 핸드오프: sent={sent}")
                 except Exception as e:

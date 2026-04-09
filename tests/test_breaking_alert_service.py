@@ -57,7 +57,7 @@ def _breaking_result(classification: str = "BREAKING_NOW") -> ClassificationResu
 
 
 # ---------------------------------------------------------------------------
-# 1) payload 조립 — 7개 필드 모두 렌더링되는지
+# 1) payload 조립 — docs §3 8필드 모두 렌더링되는지 + §5 라벨 고정
 # ---------------------------------------------------------------------------
 def test_build_breaking_alert_text_contains_all_required_fields():
     r = _breaking_result()
@@ -65,21 +65,154 @@ def test_build_breaking_alert_text_contains_all_required_fields():
         breaking_result=r,
         title="한은 기준금리 25bp 인하 의결",
         url="https://www.bok.or.kr/news/1",
+        body=(
+            "4월 9일 금통위가 기준금리를 연 3.25%에서 3.00%로 25bp 인하 의결했다. "
+            "시장 컨센서스는 동결이었으며, 발표 직후 단기 채권 금리가 즉시 하락 반응했다."
+        ),
     )
-    assert "BREAKING ALERT" in text
-    assert "한은 기준금리 25bp 인하 의결" in text  # title
-    assert "BREAKING_NOW" in text                    # classification
-    assert "금융" in text                            # topic_domain
-    assert "기준금리" in text                        # matched_keywords
-    assert "정책 결정" in text                        # breaking_reason
-    assert "HIGH" in text                            # urgency (uppercased)
-    assert "https://www.bok.or.kr/news/1" in text    # url
+    # §3 필드 1 : 제목 + [속보] prefix
+    assert text.startswith("[속보] 한은 기준금리 25bp 인하 의결")
+    # §3 필드 2 : 핵심 요지 라벨 + body 선두 문장 반영
+    assert "핵심 :" in text
+    assert "금통위가 기준금리를" in text
+    # §3 필드 3 : 키워드 라벨 + 매칭 키워드
+    assert "키워드 :" in text
+    assert "기준금리" in text
+    # §3 필드 4 : 영향 자산군
+    assert "영향 자산군 : 금융" in text
+    # §3 필드 5 : 긴급도 (소문자 유지, docs §4)
+    assert "긴급도 : high" in text
+    # §3 필드 6 : 분류 사유
+    assert "분류 사유 :" in text
+    assert "정책 결정" in text
+    # §3 필드 7 : 원문 링크
+    assert "원문 : https://www.bok.or.kr/news/1" in text
+    # §3 필드 8 : 운영자 액션 힌트 (high → "즉시 확인")
+    assert "운영자 액션 :" in text
+    assert "즉시 확인" in text
+    # §3 부가 정보 : 수집 시각 (YYYY-MM-DD HH:MM KST)
+    assert "시각 :" in text
+    assert "KST" in text
+    # §4 이모지 금지
+    for ch in "🚨⚠️🔔📰🏷️📂🔑💥⚡🔗":
+        assert ch not in text
+    # §4 HTML 태그 금지 (plain text 로 전환)
+    assert "<b>" not in text
+    assert "</b>" not in text
 
 
 def test_build_breaking_alert_text_handles_missing_url():
     r = _breaking_result()
-    text = build_breaking_alert_text(breaking_result=r, title="t", url=None)
-    assert "Source:" not in text  # url 없으면 Source 줄 생략
+    text = build_breaking_alert_text(
+        breaking_result=r, title="t", url=None, body="본문 없음."
+    )
+    # §3 필드 7 : url 없을 때 "원문 :" 라인 자체가 없어야 한다
+    assert "원문 :" not in text
+    # 다른 필수 필드는 여전히 존재
+    assert "[속보] t" in text
+    assert "핵심 :" in text
+    assert "긴급도 :" in text
+
+
+# ---------------------------------------------------------------------------
+# 1-b) 템플릿 상세 : medium 긴급도 / body 부재 fallback / 제목 clip / 600자 상한
+# ---------------------------------------------------------------------------
+def test_build_breaking_alert_text_medium_urgency_action_hint():
+    r = ClassificationResult(
+        classification="BREAKING_NOW",  # type: ignore[arg-type]
+        topic_domain="금융",
+        matched_keywords=["환율", "1,420"],
+        breaking_reason="가격 충격 + 단기 변동 + 1차 시세 출처",
+        urgency="medium",
+    )
+    text = build_breaking_alert_text(
+        breaking_result=r,
+        title="원/달러 환율 장중 1,420원 돌파",
+        url="https://example.com/fx/1",
+        body="4월 9일 오전 환율이 장중 1,420원을 돌파했다. 1주일 전 대비 +1.8% 변동.",
+    )
+    # §3 필드 5 medium 소문자 (docs §4)
+    assert "긴급도 : medium" in text
+    # §3 필드 8 medium → "정보만" (§6.3 / §6.4 예시)
+    assert "정보만" in text
+    # high 경로 문구가 섞이지 않아야 한다
+    assert "즉시 확인" not in text
+
+
+def test_build_breaking_alert_text_summary_falls_back_to_title_when_body_missing():
+    r = _breaking_result()
+    text = build_breaking_alert_text(
+        breaking_result=r,
+        title="한은 기준금리 25bp 인하 의결",
+        url="https://example.com/1",
+        body=None,
+    )
+    # body 없을 때도 "핵심 :" 라벨은 존재 (§3 필드 2 생략 금지)
+    assert "핵심 :" in text
+    # fallback : 제목이 핵심 요지 자리에 들어간다
+    # (요지 라벨 + 제목 문구)
+    assert "핵심 : 한은 기준금리 25bp 인하 의결" in text
+
+
+def test_build_breaking_alert_text_extracts_only_first_two_sentences():
+    r = _breaking_result()
+    body = (
+        "첫 문장은 핵심이다. "
+        "두 번째 문장은 맥락이다. "
+        "세 번째 문장은 무시되어야 한다. "
+        "네 번째 문장도 포함되면 안 된다."
+    )
+    text = build_breaking_alert_text(
+        breaking_result=r, title="t", url=None, body=body,
+    )
+    assert "첫 문장은 핵심이다" in text
+    assert "두 번째 문장은 맥락이다" in text
+    assert "세 번째 문장은 무시되어야 한다" not in text
+    assert "네 번째 문장" not in text
+
+
+def test_build_breaking_alert_text_title_clipped_to_60_chars():
+    r = _breaking_result()
+    # 60자 초과 제목
+    long_title = "가" * 80
+    text = build_breaking_alert_text(
+        breaking_result=r, title=long_title, url=None, body="본문."
+    )
+    # [속보] 라인은 [속보] + 공백 + (제목 ≤ 60자, 끝 `…`)
+    header_line = text.splitlines()[0]
+    # 원문 제목 80자 그대로는 들어가면 안 됨
+    assert "가" * 80 not in header_line
+    # 끝에 `…` 표시
+    assert header_line.endswith("…")
+
+
+def test_build_breaking_alert_text_respects_total_length_budget():
+    r = _breaking_result()
+    text = build_breaking_alert_text(
+        breaking_result=r,
+        title="한은 기준금리 25bp 인하 의결",
+        url="https://example.com/1",
+        body=(
+            "4월 9일 금통위가 기준금리를 연 3.25%에서 3.00%로 25bp 인하 의결했다. "
+            "시장 컨센서스는 동결이었으며, 발표 직후 단기 채권 금리가 즉시 하락 반응했다."
+        ),
+    )
+    # §4 600자 상한 (하드 캡)
+    assert len(text) <= 600
+
+
+def test_build_breaking_alert_text_collected_at_uses_kst_format():
+    from datetime import datetime, timezone, timedelta
+    kst = timezone(timedelta(hours=9))
+    r = _breaking_result()
+    text = build_breaking_alert_text(
+        breaking_result=r,
+        title="t",
+        url=None,
+        body="본문.",
+        collected_at=datetime(2026, 4, 9, 11, 2, tzinfo=kst),
+    )
+    assert "시각 : 2026-04-09 11:02 KST" in text
 
 
 # ---------------------------------------------------------------------------
