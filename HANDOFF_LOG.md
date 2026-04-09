@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-04-09 21:00 KST — Phase G : Dedup/Candidate 영속화 서버 반영 완료
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : dedup + candidate pool DB 영속화 서버 반영.
+- **반영 결과** :
+  - `app/models/dedup.py` — 신규 배치 (git show). 3 모델.
+  - `app/services/breaking_alert_service.py` — 전체 교체 (438→485줄, +47). 서버본 = Phase B 배치 원본.
+  - `app/services/top5_briefing_service.py` — 전체 교체 (513→643줄, +130). 서버본 = Phase D 배치 원본.
+  - `app/db.py` — surgical 1줄 삽입 (`import app.models.dedup`).
+    - 첫 시도: 앵커 불일치로 실패 (들여쓰기 누락). 수정 후 성공.
+  - 테이블 자동 생성: breaking_dedup_entries, candidate_pool_entries, breaking_sent_keys (3/3).
+  - 기존 4 테이블 (cta_copies, drafts, post_logs, source_items) 무영향 확인.
+- **서버 상태** :
+  - xdashboard: active (running), PID 204674.
+  - SQLite 테이블: 7개 (기존 4 + 신규 3).
+  - 롤백:
+    ```
+    cp /tmp/db.py.bak.phase_g app/db.py
+    cp /tmp/breaking_alert_service.py.bak.phase_g app/services/breaking_alert_service.py
+    cp /tmp/top5_briefing_service.py.bak.phase_g app/services/top5_briefing_service.py
+    rm -f app/models/dedup.py
+    systemctl restart xdashboard
+    ```
+- **Recommendation** : Phase G COMPLETE.
+
+---
+
 ## 2026-04-09 20:00 KST — Dedup/Candidate Pool DB 영속화
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)

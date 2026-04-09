@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 20:00 KST (Dedup/Candidate 영속화 구현 완료, 서버 반영 대기)
+최종 갱신 : 2026-04-09 21:00 KST (Phase G 서버 반영 완료)
 
 ---
 
@@ -263,13 +263,13 @@ except Exception as e:
 ## 8. 영속화 테이블 (서버 반영 대기)
 
 Dedup/Candidate Pool 영속화를 위해 SQLite 에 3개 테이블 추가 예정.
-`init_db()` 호출 시 `Base.metadata.create_all()` 로 자동 생성됨 (기존 테이블 무영향).
+`init_db()` 호출 시 `Base.metadata.create_all()` 로 자동 생성. ✅ 서버 반영 완료 (2026-04-09).
 
-| 테이블 | 용도 | 핵심 컬럼 |
-|---|---|---|
-| `breaking_dedup_entries` | BREAKING_NOW 전송 기록 (6h dedup) | issue_key, sent_at (epoch) |
-| `candidate_pool_entries` | 야간 CANDIDATE 기사 풀 | title, body, topic_domain, matched_keywords_json, cycle_date |
-| `breaking_sent_keys` | BREAKING_NOW→Top5 제외 키 | issue_key, cycle_date |
+| 테이블 | 용도 | 핵심 컬럼 | 상태 |
+|---|---|---|---|
+| `breaking_dedup_entries` | BREAKING_NOW 전송 기록 (6h dedup) | issue_key, sent_at (epoch) | ✅ 생성 완료 |
+| `candidate_pool_entries` | 야간 CANDIDATE 기사 풀 | title, body, topic_domain, matched_keywords_json, cycle_date | ✅ 생성 완료 |
+| `breaking_sent_keys` | BREAKING_NOW→Top5 제외 키 | issue_key, cycle_date | ✅ 생성 완료 |
 
 - 인메모리 1차 + DB write-through 구조 (fail-open)
 - 시작 시 DB → 메모리 lazy-load 복원
