@@ -6,24 +6,32 @@
 ---
 
 ## Updated At
-2026-04-09 17:00 KST
+2026-04-09 18:30 KST
 
 ## Updated By
-Claude Code (claude/x-posting-ops-review-7hlxK)
+Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**P1 BREAKING 파이프라인 완료 + Top5 브리핑 구현 완료.** 서버 반영 대기 중.
+**P1 BREAKING 파이프라인 + Top5 브리핑 서버 반영 완료 (Phase D+E).** Phase F (스케줄러) 대기.
 
 ## Current Priority
-**Top5 브리핑 서버 반영 검증** — 코드 구현 + 테스트 완료. 서버 적용은 운영자 트리거 대기.
+**Phase F (05:00 KST 스케줄러 연결)** — Phase D+E 서버 반영 완료. 스케줄러 wiring 은 별도 세션.
+
+## ★ Phase D+E 서버 반영 완료 (2026-04-09)
+- Phase D: `top5_briefing_service.py` 서버 배치 (sha256 검증 OK)
+- Phase E: orchestrator.py +27줄 수술식 삽입 (680→707줄)
+  - Step 1.5b: CANDIDATE → `record_candidate()` 적재
+  - Step 1.6 내: BREAKING_NOW → `record_breaking_sent()` Top5 제외 등록
+- py_compile OK, grep 검증 OK, xdashboard restart OK
 
 ## ★ 05:00 Top5 브리핑 카드 구현 완료 (2026-04-09)
 - `app/services/top5_briefing_service.py` 신규 (점수 산정 + 선정 + 카드 + 전송)
 - `app/orchestrator.py` Step 1.5b CANDIDATE 적재 + Step 1.6 BREAKING_NOW 제외 등록
 - 29 tests passed, 0 regression
-- 서버 반영 대기
+- ✅ 서버 반영 완료 (Phase D+E)
 
 ### 다음 후보 (운영자 택 1)
+- **Phase F: 05:00 KST 스케줄러 연결** (`run_top5_briefing()` → run.py 또는 cron)
 - 후속 보도 자동 트래킹 (24h 윈도우)
 - dedup 영속화 (DB/Redis 이관, 운영자 승인 필요)
 - publisher 확장

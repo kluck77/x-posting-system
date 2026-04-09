@@ -5,6 +5,57 @@
 
 ---
 
+## 2026-04-09 18:30 KST — Phase D+E : Top5 서버 반영 완료
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : Top5 브리핑 서비스를 프로덕션 서버에 수술식 반영 (Phase D: 신규 파일, Phase E: orchestrator 삽입).
+  Phase F (05:00 스케줄러 연결) 는 본 세션 범위 밖.
+- **Phase D** (신규 파일 배치) :
+  - `app/services/top5_briefing_service.py` — `git show` 로 서버 배치.
+    sha256: `6a71367cb9f8222dbb3026b39e59c197a5f81eca6f6286fe0dd617292eebed8c`
+  - py_compile OK, import smoke OK.
+- **Phase E** (orchestrator.py surgical insertion, +27줄) :
+  - Step 1.5b (line 175): CANDIDATE → `record_candidate()` 적재 (17줄).
+  - Step 1.6 내 (line 204): BREAKING_NOW 전송 성공 시 `record_breaking_sent()` (10줄).
+  - 수술식 Python 삽입 스크립트 사용 (앵커 매칭 + 이중삽입 방지 + 자동 롤백).
+  - 680줄 → 707줄 (+27). py_compile OK. grep 검증 통과.
+- **서버 상태** :
+  - orchestrator.py: 707줄 (Phase C 680 + Phase E 27).
+  - Step 순서: 0 → 1 → 1.5 → **1.5b** → 1.6(**+record_breaking_sent**) → 2 → ... → 6.
+  - xdashboard: active (running), PID 203773.
+  - 롤백: `cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py && systemctl restart xdashboard`
+- **검증 결과** :
+  - `grep -c "Step 1.5b" orchestrator.py` → 1 (단일 삽입 확인)
+  - `grep -c "record_candidate" orchestrator.py` → 2 (import + 호출)
+  - `grep -c "record_breaking_sent" orchestrator.py` → 2 (import + 호출)
+  - py_compile OK, xdashboard restart 성공.
+- **미완료** :
+  - Phase F: `run_top5_briefing()` 05:00 KST 스케줄러 연결 (별도 세션).
+- **Recommendation** : Phase D+E COMPLETE. Phase F 는 운영자 승인 후 별도 진행.
+
+### 서버 운영 명령어 (Phase D+E)
+
+```bash
+# top5_briefing_service.py 검증
+cd /root/x-posting-system
+/root/x-posting-system/venv/bin/python -m py_compile app/services/top5_briefing_service.py
+/root/x-posting-system/venv/bin/python -c "from app.services.top5_briefing_service import record_candidate, record_breaking_sent; print('OK')"
+
+# orchestrator 삽입 점검
+grep -n "Step 1.5b" app/orchestrator.py
+grep -n "record_candidate\|record_breaking_sent" app/orchestrator.py
+wc -l app/orchestrator.py  # 707이어야 정상
+
+# 롤백 (문제 시)
+cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py
+systemctl restart xdashboard
+
+# 로그 감시 (CANDIDATE 적재 확인)
+journalctl -u xdashboard -f | grep -E "record_candidate|record_breaking_sent|Step 1\.5b"
+```
+
+---
+
 ## 2026-04-09 17:00 KST — 05:00 Top5 브리핑 카드 구현
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)

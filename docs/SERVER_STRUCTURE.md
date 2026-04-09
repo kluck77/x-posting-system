@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 16:17 KST (Phase B/C 서버 반영 완료)
+최종 갱신 : 2026-04-09 18:30 KST (Phase D+E 서버 반영 완료)
 
 ---
 
@@ -58,7 +58,7 @@ ps -ef | grep -E 'python|uvicorn|gunicorn' | grep -v grep
 |---|---|---|
 | 브랜치 | `temp/phase8a-observe-bypass-20260408-042459` | `claude/x-posting-ops-review-7hlxK` |
 | HEAD | `58f89b05` | `2413a71` |
-| orchestrator.py | 680줄 (고급 기능 + Step 1.5/1.6 삽입) | 349줄 (단순 기준선) |
+| orchestrator.py | 707줄 (고급 기능 + Step 1.5/1.5b/1.6 삽입) | 349줄 (단순 기준선) |
 
 ### 서버에만 있는 orchestrator 기능 (브랜치에 없음)
 
@@ -93,7 +93,16 @@ from app.providers.base import FactCheckResult, TrendResult
 | `app/services/breaking_alert_service.py` | Phase B: `git show` 배치 | ✅ sha256 `a808e815...` |
 | `app/orchestrator.py` Step 1.5/1.6 | Phase C: `patch -p1` 삽입 (+37줄) | ✅ 643→680줄, py_compile OK |
 
-- 롤백: `cp /tmp/orchestrator.py.bak.phase_c app/orchestrator.py && systemctl restart xdashboard`
+### Phase D+E 서버 반영 완료 (2026-04-09 ~09:30 UTC)
+
+| 파일 | 반영 방식 | 상태 |
+|---|---|---|
+| `app/services/top5_briefing_service.py` | Phase D: `git show` 배치 | ✅ sha256 `6a71367c...` |
+| `app/orchestrator.py` Step 1.5b | Phase E: Python 삽입 스크립트 (+17줄) | ✅ CANDIDATE record_candidate() |
+| `app/orchestrator.py` Step 1.6 내부 | Phase E: Python 삽입 스크립트 (+10줄) | ✅ BREAKING_NOW record_breaking_sent() |
+
+- orchestrator.py: 680 → 707줄 (+27)
+- 롤백: `cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py && systemctl restart xdashboard`
 
 ### 브랜치에만 있는 파일 (서버에 없음)
 
@@ -101,7 +110,7 @@ from app.providers.base import FactCheckResult, TrendResult
 
 ---
 
-## 4. 서버 app/services/ 파일 목록 (2026-04-09 Phase B 반영 후)
+## 4. 서버 app/services/ 파일 목록 (2026-04-09 Phase D 반영 후)
 
 ```
 __init__.py
@@ -131,6 +140,7 @@ repetition_guard.py
 rss_fetcher.py
 source_service.py
 telegram_service.py
+top5_briefing_service.py
 topic_memory.py
 vision_service.py
 voice_guard.py
@@ -197,9 +207,11 @@ systemctl restart xdashboard
 ```
 Step 0  : 일일 제한 확인
 Step 1  : 소스 DB 저장                          ← 줄 153~155
-Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ 반영 완료
-Step 1.6: BREAKING_NOW 텔레그램 핸드오프         ← 줄 176~192 ✅ 반영 완료
-Step 2  : Researcher — 배경 리서치               ← 줄 194~
+Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ Phase C
+Step 1.5b: CANDIDATE → record_candidate()       ← 줄 175~191 ✅ Phase E
+Step 1.6: BREAKING_NOW 텔레그램 핸드오프         ← 줄 193~209 ✅ Phase C+E
+          └ record_breaking_sent() (Top5 제외)   ← 줄 200~208 ✅ Phase E
+Step 2  : Researcher — 배경 리서치               ← 줄 221~
 Step 3  : DraftWriter — 초안 생성
 Step 4  : FactChecker — 팩트체크
 Step 4.5: 5-Criteria 품질 필터 (서버 고유)
