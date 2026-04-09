@@ -5,6 +5,66 @@
 
 ---
 
+## 2026-04-09 12:25 KST — 계정 품질 레이어 문서화 완료 (2/2) — AI_ROLE_PROMPTS.md 재개 박제
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 직전 세션(09:42 KST)에서 미작성 상태로 박제된 `docs/AI_ROLE_PROMPTS.md` 재개 생성 완료 박제 → 계정 품질 문서 2종(ACCOUNT_CONSTITUTION / AI_ROLE_PROMPTS) 쌍 완료 선언
+- **Changed Files** :
+  - `HANDOFF_LOG.md` (최상단 본 항목 1건 추가) — 본 세션 수정 대상
+  - (참고) `docs/AI_ROLE_PROMPTS.md` 는 직전 commit `01632471` 로 이미 반영됨 — 본 세션에서는 **무수정**
+- **Code Changes** : 0
+- **Test Result** : N/A (docs only, markdown 단일 파일 추가)
+- **Runtime Risk Remaining** : 0 (앱 코드 무변경)
+- **Server Apply Risk** : 0 (문서, 서버 적용 불필요)
+- **Recommendation** : APPROVE (완료 박제)
+- **Next Operator Action** : 계정 품질 문서 쌍 완료 확인 → 다음 트리거(운영자 hotfix / 후보 선택 / §15.1 알림) 대기
+
+### 핵심 사실
+
+- `docs/AI_ROLE_PROMPTS.md` **생성 완료** (draft writer / reviewer role prompts)
+- 반영 commit : **`01632471513ebf3264f2d8abb9a09cd67dffda66`** ("docs: add AI_ROLE_PROMPTS.md (draft writer / reviewer role prompts)")
+- 반영 브랜치 : **`claude/x-posting-ops-review-7hlxK`** (기준 브랜치 직접 write)
+- 반영 파일 : `docs/AI_ROLE_PROMPTS.md` 1 파일 (+173 lines, 9003 bytes)
+- 다른 파일 수정 : **0** (앱 코드 / TASK_BOARD / RUNNER_RULES / COMMANDER_BRIEF / README / ACCOUNT_CONSTITUTION 모두 무수정)
+
+### 계정 품질 문서 쌍 완료 선언
+
+- ✅ `docs/ACCOUNT_CONSTITUTION.md` (1/2, commit `15a4b33`) — 직전 세션 완료 (12 섹션)
+- ✅ `docs/AI_ROLE_PROMPTS.md` (2/2, commit `01632471`) — 본 완료 박제 (draft writer / reviewer 역할 프롬프트)
+- → **계정 품질 레이어 문서화 2종 세트 완료.** 직전 세션(09:42 KST)의 "AI_ROLE_PROMPTS.md 미작성 — 운영자 재개 지시 대기" 상태 해소.
+
+### 본 세션 범위 (HANDOFF_LOG 1파일 갱신 전용)
+
+- 목적 : `01632471` 의 완료 사실을 HANDOFF_LOG.md 최상단에 기록하는 것 **단 하나**
+- 수정 파일 : `HANDOFF_LOG.md` 만
+- 코드 수정 : 0
+- 브랜치 생성 : 0 (기존 `claude/x-posting-ops-review-7hlxK` 직접 write)
+- TASK_BOARD 수정 : **0** (운영자 지시에 따라 본 세션은 HANDOFF_LOG 단일 갱신)
+
+### Preflight Sweep (완료)
+
+- **Changed Files** : `HANDOFF_LOG.md` (상단 본 항목 1건 추가) — 1 file only
+- **Syntax Check Result** : N/A (markdown only, 기존 항목 구조 동일 포맷)
+- **Test Result** : N/A (docs only)
+- **Runtime Risk Remaining** : 0 (앱 코드 무변경)
+- **Server Apply Risk** : 0 (문서, 서버 적용 불필요)
+- **Recommendation** : APPROVE
+
+### 보호 영역 무변경 확인
+
+- `app/*` 전체 무변경 ✓
+- `TASK_BOARD.md` 무변경 ✓ (운영자 명시 금지)
+- `RUNNER_RULES.md` 무변경 ✓
+- `README.md` / `COMMANDER_BRIEF.md` 무변경 ✓
+- `docs/ACCOUNT_CONSTITUTION.md` 무변경 ✓ (운영자 명시 금지)
+- `docs/AI_ROLE_PROMPTS.md` 무변경 ✓ (운영자 명시 금지 — 직전 commit 로 이미 반영됨)
+- `main` 브랜치 무변경 ✓
+- 새 브랜치 생성 0 ✓
+- `.env` / dashboard 무변경 ✓
+- destructive 명령 0 ✓
+
+---
+
 ## 2026-04-09 09:42 KST — 계정 품질 레이어 문서화 부분 완료 (1/2) — 운영자 중단 지시
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
