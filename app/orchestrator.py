@@ -95,6 +95,24 @@ class Orchestrator:
                 f"domain={breaking_result.topic_domain} "
                 f"urgency={breaking_result.urgency or '-'}"
             )
+
+            # Step 1.6: BREAKING_NOW 일 때만 분리된 텔레그램 알림 핸드오프
+            # - 기존 approval card 흐름과 섞지 않는 분리 경로 (S3-C)
+            # - 이중 fail-open : 내부 함수가 False 를 반환하거나 예외를 내더라도
+            #   파이프라인은 계속 진행.
+            if breaking_result.classification == "BREAKING_NOW":
+                try:
+                    from app.services.breaking_alert_service import send_breaking_alert
+                    sent = await send_breaking_alert(
+                        breaking_result=breaking_result,
+                        title=source_item.title,
+                        url=source_item.url,
+                    )
+                    logger.info(f"[1.6/6] breaking alert 핸드오프: sent={sent}")
+                except Exception as e:
+                    logger.warning(
+                        f"breaking alert 핸드오프 실패 (fail-open, 파이프라인 계속): {e}"
+                    )
         except Exception as e:
             logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
 
