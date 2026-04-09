@@ -76,6 +76,28 @@ class Orchestrator:
         logger.info("[1/6] 소스 DB 저장")
         source_item = self.source_service.ingest_manual(data)
 
+        # Step 1.5: BREAKING 분류 (fail-open, 메모리 결과만, 알림 미전송)
+        # - breaking_classifier 호출만 수행. 텔레그램 / Top5 / DB 저장 연결은 아직 없음.
+        # - 실패 시 기존 파이프라인 계속 진행 (fail-open).
+        try:
+            from app.services.breaking_classifier import classify_article
+            breaking_result = classify_article(
+                title=source_item.title,
+                body=source_item.source_text,
+                publisher=None,
+                published_at=source_item.created_at,
+                url=source_item.url,
+            )
+            # 메모리상 결과만 — 영속화 금지 (DB 스키마 변경 금지).
+            source_item.breaking_result = breaking_result  # type: ignore[attr-defined]
+            logger.info(
+                f"[1.5/6] breaking classify: {breaking_result.classification} "
+                f"domain={breaking_result.topic_domain} "
+                f"urgency={breaking_result.urgency or '-'}"
+            )
+        except Exception as e:
+            logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
+
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")
         try:
