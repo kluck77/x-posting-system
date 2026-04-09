@@ -6,16 +6,22 @@
 ---
 
 ## Updated At
-2026-04-09 09:16 KST
+2026-04-09 12:28 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**세션 휴지 (Rest).** 오늘 P0 4건 종결 후 운영자 결정으로 정지. 기준선 안정화 상태.
+**세션 휴지 (Rest) 유지 + 계정 품질 문서 2종 완료.** 오늘 P0 4건 종결 + 계정 품질 레이어 문서화 완료. 버그 휴지 상태는 유지.
 
 ## Current Priority
 **없음 — 휴지 중. 다음 트리거 (운영자 hotfix / 후보 선택 / §15.1 알림) 대기.**
+
+## ★ 계정 품질 문서 2종 완료 (2026-04-09)
+- ✅ `docs/ACCOUNT_CONSTITUTION.md` (commit `15a4b33`) — 계정 정체성 / 주제 / 금지사항 / 톤·문장·리스크·예시 12 섹션
+- ✅ `docs/AI_ROLE_PROMPTS.md` (commit `01632471`) — draft writer / reviewer role prompts (+173 lines)
+- → **계정 품질 레이어 문서화 2종 세트 완료.** 현재 기준 문서는 이 2개.
+- `README.md` / `COMMANDER_BRIEF.md §7` / `RUNNER_RULES.md §12` 의 옛 방향성 항목은 `ACCOUNT_CONSTITUTION.md` 의 Supersedes 선언으로 대체됨 (별 P0 분기 대상, 본 세션 무수정).
 
 ---
 
@@ -95,7 +101,36 @@ Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ---
 
-## 다음 P0 후보 (운영자 1개 선택)
+## 다음 후보 (계정 품질 문서 2종 완료 후 — 운영자 1개 선택, NEEDS_HUMAN)
+
+### 후보 G1 — ACCOUNT_CONSTITUTION + AI_ROLE_PROMPTS 기반 실제 작성 워크플로 문서화
+- **목표** : 두 문서가 실제 한국어 원문 생성 파이프라인에서 어떻게 호출되고 묶이는지의 워크플로 1장 문서화
+- **위험도** : 0 (docs only)
+- **범위** : 신규 docs 파일 1개 (예: `docs/WRITING_WORKFLOW.md`) — 코드 무수정
+- **이점** : 기준 문서 2종 → 실행 절차 매핑, 손실 없는 재사용 가능
+- **단점** : 본 세션에서 확정 금지, 운영자 승인 후 별 세션에서 진입
+
+### 후보 G2 — DraftWriter / Reviewer 실사용 입력 템플릿 문서화
+- **목표** : AI_ROLE_PROMPTS 에 대응되는 실사용 입력 템플릿(제목 / 원문 / 해석 축 / 출처 등) 샘플 문서화
+- **위험도** : 0 (docs only)
+- **범위** : 신규 docs 파일 1개 (예: `docs/INPUT_TEMPLATES.md`) — 코드 무수정
+- **이점** : 운영자가 매 입력마다 재구성하지 않도록 템플릿 고정
+- **단점** : 본 세션에서 확정 금지, 운영자 승인 후 별 세션에서 진입
+
+### 후보 G3 — 운영 휴지 유지
+- **목표** : 현재 휴지 상태 그대로 유지, 운영자 hotfix / §15.1 알림 대기
+- **위험도** : 0
+- **이점** : 기준선 흐림 방지, 다음 트리거까지 대기
+- **단점** : 없음 (기본값)
+
+### 권고
+- **NEEDS_HUMAN** — 본 세션에서 다음 후보를 확정하지 않는다.
+- 운영자가 G1 / G2 / G3 중 1개 선택해야 진입 가능.
+- 새 hotfix 가 있으면 그쪽이 우선.
+
+---
+
+## 이전 P0 후보 (참고용, 종결 또는 보류)
 
 ### 후보 C — base.py 시그니처 drift 점검
 - **목표** : `app/providers/base.py` 의 추상 시그니처가 concrete 와 narrow 차이를 유지하는 게 의도적인지 점검 + 필요 시 widening
@@ -143,7 +178,7 @@ Claude Code (claude/x-posting-ops-review-7hlxK)
 ---
 
 ## Recommendation
-**APPROVE (P0 후보 B 종결 박제) + NEEDS_HUMAN (다음 P0 선택)**
+**NEEDS_HUMAN** — 계정 품질 문서 2종 완료 박제 + 다음 후보(G1 / G2 / G3) 선택 대기. 버그 휴지 상태는 유지.
 
 운영자 결정 기록 (누적):
 - 08:37 KST : 직전 P0 종결, 후보 A/B/C 중 1개 선택 요청
@@ -152,15 +187,22 @@ Claude Code (claude/x-posting-ops-review-7hlxK)
 - 09:00 KST : 2차 실측 + 운영자 1줄 회신 → D1+D3 단정, P0 후보 A 종결
 - 09:06 KST : "D 다음 B" 결정 → 후보 D 진입+종결 (RUNNER_RULES §15)
 - 09:12 KST : 후보 B 종결 (mock_providers kwarg 정합, pytest 9/9)
+- 09:16 KST : 오늘 P0 4건 종결, 운영자 결정으로 세션 휴지
+- 09:42 KST : 계정 품질 레이어 문서화 전환 → `ACCOUNT_CONSTITUTION.md` 완료 / `AI_ROLE_PROMPTS.md` 부분 중단
+- 12:18 KST : `AI_ROLE_PROMPTS.md` 재개 반영 (commit `01632471`)
+- 12:25 KST : HANDOFF_LOG 최상단 완료 박제 (commit `90fede1`)
+- 12:28 KST : 본 TASK_BOARD 갱신 — 계정 품질 문서 2종 완료 반영, 휴지 유지, NEEDS_HUMAN
 
 다음 세션 트리거:
-- 운영자가 다음 P0 (C / E / F / 새 hotfix) 중 1개 선택
-- 또는 새 hotfix 발생 시 그쪽 우선
+- 운영자가 다음 후보 (G1 / G2 / G3 / 새 hotfix) 중 1개 선택
+- 또는 새 hotfix / §15.1 알림 발생 시 그쪽 우선
+- 버그 휴지 상태는 운영자 명시 해제 전까지 유지
 
 ---
 
 ## Next Handoff Rule
-- 운영자 후보 선택 후 다음 세션에서 해당 후보 P0 진입 박제
-- 후보 C 채택 시 read-only 점검 먼저, 수정은 별도 승인
-- 후보 E 채택 시 서버 surgical checkout 1개 파일 (`mock_providers.py`)
-- 후보 F (새 hotfix) 채택 시 새 P0 진입 절차
+- 운영자 후보 선택 후 다음 세션에서 해당 후보 진입 박제
+- 후보 G1 / G2 채택 시 신규 docs 파일 1개만 생성, 코드 무수정
+- 후보 G3 채택 시 휴지 유지 (추가 작업 없음)
+- 새 hotfix 발생 시 그쪽이 G1/G2/G3 보다 우선
+- 이전 P0 후보 (C / E / F) 는 참고용으로만 남김 — 진입 시 별도 운영자 승인 필요
