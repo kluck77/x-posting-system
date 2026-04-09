@@ -5,6 +5,56 @@
 
 ---
 
+## 2026-04-09 09:06 KST — P0 후보 D 진입+종결 — RUNNER_RULES §15 부칙 추가 (drift 재발 방지)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 운영자 선택 ("D 다음 B") 의 D 단계. P0 후보 A 종결 회고로 RUNNER_RULES 에 운영자 직접 작업 알림 의무 부칙 추가.
+- **Changed Files** :
+  - `RUNNER_RULES.md` (§15 신설)
+  - `HANDOFF_LOG.md` (최상단 본 항목)
+  - `TASK_BOARD.md` (P0 후보 D 종결 + 후보 B 진입)
+- **Code Changes** : 0 (운영 문서만)
+- **Syntax Check Result** : N/A
+- **Signature Compatibility Check Result** : N/A
+- **Test Result** : N/A
+- **Runtime Risk Remaining** : 0 (앱 코드 무변경)
+- **Server Apply Risk** : 0 (서버 적용 대상 아님)
+- **Recommendation** : APPROVE (D 종결 박제 + B 진입)
+
+### 운영자 결정
+> "D 먼저가 맞다. 이번에 확인된 문제는 코드보다 운영 절차 drift 라서, 재발 방지 규칙부터 박는 게 우선이다.
+> 그다음은 B."
+> → 명시 회신 : "D 다음 B"
+
+### 신설 부칙 요약 (RUNNER_RULES §15)
+- **15.1 운영자 사전 알림 의무 (5개 행위)** : 다음 5개 행위 수행 시 1줄 알림 의무
+  1. surgical checkout (`git checkout <ref> -- <file>`)
+  2. 임시 브랜치 (`temp/...`, `wip/...`) 생성/checkout
+  3. `.bak` 파일 생성/복원/삭제
+  4. 다른 Claude Code 세션 동시 가동
+  5. vim/nano/scp/파일매니저 직접 보호 영역 수정
+- **15.2 Claude Code 측 의무** : 코드 변경 진입 시 24h 내 위 5개 수행 여부 확인 요청
+- **15.3 위반 시 처리** : drift 발견 시 hotfix STOP, 채널 식별 후 재진입
+- **15.4 한계** : 신뢰 기반 운영, 자동화 가드레일은 별 P0
+
+### 알림 양식 (운영자 사용)
+```
+[운영자작업] <행위> <파일/대상> @<UTC시각>
+예: [운영자작업] surgical checkout app/providers/anthropic_provider.py @2026-04-08 04:24
+```
+
+### 본 P0 종결 사유
+- 후보 D 의 작업물 = RUNNER_RULES 부칙 1개 추가
+- 단일 commit 으로 완결 가능한 단위 (코드 0, 문서 1)
+- 즉시 종결 후 후보 B 진입
+
+### 보호 영역 무변경 확인
+- `app/*` 전체 무변경 ✓
+- `RUNNER_RULES.md` 는 RUNNER_RULES §10 "운영 원칙이 바뀔 때만 갱신" 의 직접 적용 사례
+- destructive 명령 0
+
+---
+
 ## 2026-04-09 09:00 KST — P0 후보 A 종결 — drift 채널 단정 (D1 + D3 결합)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)

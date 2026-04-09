@@ -6,20 +6,27 @@
 ---
 
 ## Updated At
-2026-04-09 09:00 KST
+2026-04-09 09:06 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**P0 후보 A 종결 완료.** drift 채널을 D1 + D3 결합으로 단정. 다음 P0 운영자 선택 대기.
+**P0 후보 D 종결. 후보 B 진입 (mock_providers kwarg 시그니처 정합).**
 
 ## Current Priority
-**NEEDS_HUMAN — 다음 P0 후보 (B / C / D) 중 1개 선택**
+P0 — **mock_providers kwarg 시그니처 phase-8α 정합 검증/보강** (후보 B)
 
 ---
 
 ## Closed Issues (직전 P0 종결 기록 — 누적식)
+
+### ✅ P0 후보 D — RUNNER_RULES §15 부칙 (drift 재발 방지) 추가
+- 종결 일시 : 2026-04-09 09:06 KST
+- 작업물 : `RUNNER_RULES.md` §15 신설 (운영자 5개 행위 사전 알림 의무 + Claude Code 측 24h 확인 의무 + 위반 처리 + 한계)
+- 결정적 근거 : 후보 A 의 회고 → 운영 절차 drift 가 코드 drift 보다 선행 원인
+- 코드 변경 : 0
+- 운영자 결정 : "D 먼저가 맞다 ... D 다음 B"
 
 ### ✅ P0 후보 A — 서버 anthropic_provider.py 출처 미상 변경 채널 식별
 - 종결 일시 : 2026-04-09 09:00 KST
@@ -50,64 +57,47 @@ Claude Code (claude/x-posting-ops-review-7hlxK)
 - 텔레그램 카드 전송 정상
 - Reviewer JSON 파싱 (H1) sanitize 로 정상화
 - DraftWriter / Reviewer 진단 로그 부착 완료
-- ★ 서버 drift 채널 단정 완료 (D1 + D3 결합) ★
+- ★ 서버 drift 채널 단정 (D1 + D3 결합) — P0 후보 A 종결 ★
+- ★ RUNNER_RULES §15 부칙 (drift 재발 방지) 추가 — P0 후보 D 종결 ★
 
 ### 작업 브랜치 HEAD (GitHub 기준선)
-- 직전 docs HEAD : `d2d949c` (P0 후보 A 1차 실측 박제)
+- 직전 docs HEAD : `031e1c9` (P0 후보 A 종결 박제)
 - 직전 코드 HEAD : `b62cc33` (anthropic_provider.py 39+/1- sanitize)
 - 현재 시점 서버 == GitHub `b62cc33` byte-identical (1차 실측 확인)
 - 브랜치 : `claude/x-posting-ops-review-7hlxK`
 
-### Drift 채널 단정 (P0 후보 A 종결 결과)
-- ★ **D1 (운영자 직접 작업) + D3 (.bak 안전 백업) 결합** ★
-- 결정적 근거 :
-  - git reflog : `temp/phase8a-observe-bypass-20260408-042459` (Claude Code 자동 명명)
-  - 운영자 자인 : "손댁적 잇고"
-  - `.bak` = 옛 v10 본 (21270 bytes, sha256 167ed967..., 현재 본과 다름)
-  - phase8 코드가 GitHub 작업 브랜치 push 18시간 이전에 서버 working tree 진입
-- D2 (다른 세션 단독), D4 (직접 업로드), D5 (자동화 hook) 모두 배제
-
 ---
 
 ## Current Issue
-**없음 — 운영자 다음 P0 선택 대기**
+**mock_providers kwarg 시그니처 phase-8α 정합 검증/보강 (후보 B)**
+
+목표 : `app/providers/mock_providers.py` 의 mock 5종이 phase-8α 이후 시그니처 (`criteria_context` kwarg) 와 100% 정합한지 검증 + 누락 시 보강 + pytest 통과.
+
+### 진입 근거
+- phase-8α 진단 로그 + sanitize 패치 적용 후, 운영 라인 (Anthropic / OpenAI) 시그니처는 검증 완료
+- mock_providers 는 키 부재 시 fallback / 로컬 dev / pytest 에서만 사용
+- 시그니처 누락 시 fallback 호출에서 TypeError 잠복 가능 (운영 라인 외 환경에서 깨짐)
+- 본 P0 는 코드 변경 최소화 + 테스트 통과 중심
 
 ---
 
-## 다음 P0 후보 (운영자 1개 선택)
-
-### 후보 B — mock_providers kwarg 시그니처 phase-8α 정합
-- **목표** : `MockReviewer.review_and_refine()` 등 mock 5종이 phase-8α 시그니처 (`criteria_context` kwarg) 와 100% 정합한지 검증 + 누락 시 보강
-- **위험도** : 낮음 (운영 라인 미사용, 키 부재 시 fallback 만)
-- **범위** : `app/providers/mock_providers.py` 1개 파일 / `tests/test_providers.py` 1개 파일
-- **검증** : pytest 5종 mock 통과
-- **이점** : 다음 통합 테스트 / 키 부재 환경 / 로컬 dev 안정화
-- **단점** : 운영 라인에 직접 영향 없음 (우선순위 낮음 가능)
-
-### 후보 C — base.py 시그니처 drift 점검
-- **목표** : `app/providers/base.py` 의 `BaseDraftWriter` / `BaseReviewer` 추상 시그니처가 OpenAI/Anthropic 구현체와 일치하는지 점검
-- **위험도** : 중 (RUNNER_RULES 보호 영역 — 사전 승인 필요)
-- **범위** : 점검은 read-only, 수정은 운영자 승인 후
-- **이점** : 다음 phase8γ 작업 전 안전망 확보
-- **단점** : 보호 영역이라 작업 마찰 큼
-
-### 후보 D — RUNNER_RULES 부칙 (drift 재발 방지 가드레일)
-- **목표** : 운영자가 임시 브랜치 + .bak + 직접 surgical checkout 작업을 했을 때 채팅에 즉시 알리도록 하는 운영 약속을 RUNNER_RULES 에 부칙으로 추가
-- **위험도** : 0 (문서만)
-- **범위** : `RUNNER_RULES.md` 11장 또는 새 15장 추가
-- **이점** : 본 P0 후보 A 의 근본 원인 (drift 채널 자체) 재발 방지
-- **단점** : 운영자 행동 통제 — 운영자 동의 필요
-
-### 권고
-- **B + D 병행** : B 는 코드 안전망, D 는 운영 가드레일. 둘 다 작은 작업이라 1세션 처리 가능.
-- 다만 RUNNER_RULES 4장 "한 번에 하나의 문제만" 원칙상 운영자가 1개를 명시 선택하는 게 정석.
+## Minimal Scope
+- `app/providers/mock_providers.py` 시그니처 점검 및 누락 시 1개 파일 패치
+- `tests/test_providers.py` 가 이미 통과하는지 확인 + 필요 시 보조 테스트 1~2개 추가만
+- AI 호출 0, 외부 의존 0
 
 ---
 
-## Files Forbidden To Change (다음 P0 후보 선택까지 유효)
+## Exact Files To Change (점검 결과에 따라 0~2개)
+- `app/providers/mock_providers.py` (필요 시)
+- `tests/test_providers.py` (필요 시)
+
+---
+
+## Files Forbidden To Change
 - `app/orchestrator.py`
 - `app/api/admin.py`
-- `app/providers/base.py` (후보 C 채택 시 read-only 점검만)
+- `app/providers/base.py` (read-only 참조만)
 - `app/providers/anthropic_provider.py`
 - `app/providers/openai_provider.py`
 - `app/providers/ai_provider.py`
@@ -122,27 +112,29 @@ Claude Code (claude/x-posting-ops-review-7hlxK)
 ---
 
 ## Validation Steps
-**N/A — 본 단계는 P0 종결 박제 + 다음 후보 선택 요청만**
+
+### 본 P0 검증 (로컬, 5분 이내)
+```
+cd /home/user/x-posting-system
+python3 -m py_compile app/providers/mock_providers.py
+python3 -m pytest tests/test_providers.py -v
+```
+
+### 시그니처 비교 (read-only)
+- `BaseReviewer.review_and_refine()` (base.py) vs
+  `MockReviewer.review_and_refine()` vs
+  `AnthropicReviewer.review_and_refine()` 의 인자 목록 동일성 확인
+- `BaseDraftWriter.generate_draft()` vs `MockDraftWriter.generate_draft()` vs
+  `OpenAIDraftWriter.generate_draft()` 동일성 확인
 
 ---
 
 ## Recommendation
-**APPROVE (P0 후보 A 종결 박제) + NEEDS_HUMAN (다음 P0 선택)**
-
-운영자 결정 기록 (누적):
-- 08:37 KST : 직전 P0 종결, 후보 A/B/C 중 1개 선택 요청
-- 08:41 KST : 후보 A 채택 → 실측 명령 발신
-- 08:49 KST : 1차 실측 결과 박제, 후보 2개 그룹으로 좁힘
-- 09:00 KST : 2차 실측 + 운영자 1줄 회신 → D1+D3 단정, P0 후보 A 종결
-
-다음 세션 트리거:
-- 운영자가 다음 P0 후보 (B / C / D) 중 1개 명시 선택
-- 또는 새 hotfix 발생 시 그쪽 우선
+**APPROVE (B 진입)** — 점검 단계는 read-only, 패치 단계는 1개 파일 한정.
 
 ---
 
 ## Next Handoff Rule
-- 운영자 후보 선택 후 다음 세션에서 해당 후보 P0 진입 박제
-- 후보 D (RUNNER_RULES 부칙) 채택 시 코드 변경 0, 문서만
-- 후보 B 채택 시 mock_providers 1개 파일 + tests 1개 파일만
-- 후보 C 채택 시 우선 read-only 점검만 (보호 영역)
+- 점검 결과 시그니처 정합 → 코드 변경 0, B 즉시 종결
+- 점검 결과 시그니처 누락 → mock_providers.py 1개 파일 minimal patch + pytest 통과 → B 종결
+- B 종결 후 다음 P0 운영자 선택 대기 (후보 C 또는 새 hotfix)
