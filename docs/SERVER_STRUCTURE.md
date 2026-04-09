@@ -58,7 +58,7 @@ ps -ef | grep -E 'python|uvicorn|gunicorn' | grep -v grep
 |---|---|---|
 | 브랜치 | `temp/phase8a-observe-bypass-20260408-042459` | `claude/x-posting-ops-review-7hlxK` |
 | HEAD | `58f89b05` | `2413a71` |
-| orchestrator.py | 707줄 (고급 기능 + Step 1.5/1.5b/1.6 삽입) | 349줄 (단순 기준선) |
+| orchestrator.py | 745줄 (고급 기능 + Step 1.5/1.5b/1.6/1.7 삽입) | 417줄 (Phase H 포함) |
 
 ### 서버에만 있는 orchestrator 기능 (브랜치에 없음)
 
@@ -115,18 +115,20 @@ from app.providers.base import FactCheckResult, TrendResult
 - 브랜치 main.py 와 서버 main.py 구조 동일 → 전체 교체 안전
 - 롤백: `cp /tmp/main.py.bak.phase_f app/main.py && systemctl restart xdashboard`
 
-### Phase H 구현 완료, 서버 반영 대기
+### Phase H 서버 반영 완료 (2026-04-09 11:00 UTC)
 
 | 파일 | 반영 방식 | 상태 |
 |---|---|---|
-| `app/orchestrator.py` Step 1.7 | Phase H: 수술식 삽입 (Step 1.6 후, Step 2 전) | ⏳ 서버 반영 대기 |
-| `app/orchestrator.py` full_pipeline | Phase H: 2줄 조건문 삽입 | ⏳ 서버 반영 대기 |
-| `app/orchestrator.py` _handle_regenerate | Phase H: 2줄 조건문 삽입 | ⏳ 서버 반영 대기 |
+| `app/orchestrator.py` Step 1.7 | Phase H: base64 Python 스크립트, 수술식 삽입 (+31줄) | ✅ |
+| `app/orchestrator.py` full_pipeline | Phase H: 1줄→6줄 교체 (+5줄) | ✅ |
+| `app/orchestrator.py` _handle_regenerate | Phase H: 1줄→3줄 교체 (+2줄) | ✅ |
 
+- orchestrator.py: 707 → 745줄 (+38)
 - Step 1.7: BREAKING_NOW/CANDIDATE + 금융/투자/크립토/주식 → 영어 초안 + 승인 카드 우회
 - full_pipeline / _handle_regenerate: `_skip_approval_card` 플래그로 `send_for_approval()` 조건부 생략
 - HOLD/REJECT/비대상 도메인 → 기존 파이프라인 100% 유지
 - fail-open: 판정 실패 시 기존 영어 파이프라인 그대로 실행
+- 롤백: `cp /tmp/orchestrator.py.bak.phase_h app/orchestrator.py && systemctl restart xdashboard`
 
 ### 브랜치에만 있는 파일 (서버에 없음)
 
@@ -235,7 +237,7 @@ Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ Phase C
 Step 1.5b: CANDIDATE → record_candidate()       ← 줄 175~191 ✅ Phase E
 Step 1.6: BREAKING_NOW 텔레그램 핸드오프         ← 줄 193~209 ✅ Phase C+E
           └ record_breaking_sent() (Top5 제외)   ← 줄 200~208 ✅ Phase E
-Step 1.7: 한국어 전용 라인 분기 (early return)    ← ⏳ Phase H (브랜치 완료, 서버 대기)
+Step 1.7: 한국어 전용 라인 분기 (early return)    ← ✅ Phase H (서버 반영 완료)
           └ BREAKING_NOW/CANDIDATE + 금융/투자/크립토/주식
             → 영어 초안 파이프라인 전체 우회
             → 최소 Draft 레코드 + _skip_approval_card=True

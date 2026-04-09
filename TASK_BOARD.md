@@ -12,21 +12,20 @@
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**Phase H 브랜치 구현 완료.** 한국어 전용 라인 분기 (영어 승인 카드 우회). 서버 반영 대기.
+**Phase H 서버 반영 완료.** 한국어 전용 라인 분기 (영어 승인 카드 우회) 운영 중.
 
 ## Current Priority
-**Phase H 서버 반영** — orchestrator.py Step 1.7 수술식 삽입 + full_pipeline/regenerate 조건문 삽입.
+**운영 안정화 관찰** — 금융 기사 인입 시 영어 승인 카드 미발송 + BREAKING/Top5 정상 동작 확인.
 
-## ★ Phase H: 한국어 전용 라인 분기 — 영어 승인 카드 우회 (2026-04-09)
-- `app/orchestrator.py` Step 1.7 삽입 (+35줄, 3곳 수술)
+## ★ Phase H: 한국어 전용 라인 분기 — 서버 반영 완료 (2026-04-09)
+- `app/orchestrator.py` Step 1.7 수술식 삽입 (707→745줄, 3곳)
   - BREAKING_NOW/CANDIDATE + 금융/투자/크립토/주식 → 영어 초안 + 승인 카드 생략
   - HOLD/REJECT/비대상 도메인 → 기존 파이프라인 100% 유지
-- `tests/test_ko_routing.py` 신규 (10 tests)
-- 173 passed, 0 regression
-- 서버 반영 대기 (orchestrator.py 수술식 적용)
+- `tests/test_ko_routing.py` 신규 (10 tests), 173 passed, 0 regression
+- 서버: py_compile OK, xdashboard active (running)
 
 ### 다음 후보 (운영자 택 1)
-- Phase H 서버 반영 (orchestrator.py 수술식)
+- 실 기사 인입으로 Phase H 분기 동작 검증
 - 05:00 Top5 브리핑 첫 자동 발송 확인
 - 후속 보도 자동 트래킹 (24h 윈도우)
 - publisher 확장
