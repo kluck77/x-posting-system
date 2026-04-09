@@ -5,6 +5,105 @@
 
 ---
 
+## 2026-04-09 09:00 KST — P0 후보 A 종결 — drift 채널 단정 (D1 + D3 결합)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 2차 실측 + 운영자 1줄 회신 수신 → drift 채널 단정 + 본 P0 종결. 코드 수정 0.
+- **Changed Files** :
+  - `HANDOFF_LOG.md` (최상단 본 항목)
+  - `TASK_BOARD.md` (Current P0 종결, Closed Issues 추가, 다음 후보 제시)
+- **Code Changes** : 0
+- **Syntax Check Result** : N/A (문서만)
+- **Signature Compatibility Check Result** : N/A (코드 변경 0)
+- **Test Result** : N/A
+- **Runtime Risk Remaining** : 0 (앱 코드 무변경)
+- **Server Apply Risk** : 0 (서버 적용 대상 아님)
+- **Recommendation** : APPROVE (본 P0 종결 박제)
+
+### 운영자 회신 (1줄)
+> "손댁적 잇고 저 거 명령어 적용하고 보내줄게"
+> = 최근 24시간 내 운영자 본인이 anthropic_provider.py 를 직접 손댄 적 있음
+
+→ ★ 이 한 줄로 **D2 (다른 Claude 세션 단독)** 가설 즉시 배제.
+→ 직접 작업 채널 (D1) 이 실재함을 운영자가 자인.
+
+### 운영자 서버 출력 — 2차 실측 (그대로 박제)
+
+```
+ls -la /root/x-posting-system/app/providers/anthropic_provider.py.bak
+→ -rw-r--r-- 1 root root 21270 Apr  7 23:44 anthropic_provider.py.bak
+
+sha256sum /root/x-posting-system/app/providers/anthropic_provider.py.bak
+→ 167ed9671e9658afed540a73d14534c1f2675205227883460b5563f81ba239ca
+
+diff anthropic_provider.py.bak anthropic_provider.py | head -30
+→ < from app.providers.openai_provider import ThreadResult
+   < DRAFT_SYSTEM_PROMPT 에 @cheesesvav 식별자
+   < 5-block 구조 (HOOK / CONTRADICTION / NUMBER SHOCK / BURIED STORY / ...)
+   (.bak 본이 현재 본보다 풍부한 옛 v10 prompt 구조 보유)
+
+git reflog --date=iso | head -20
+→ 58f89b0 HEAD@{2026-04-08 04:24:59 +0000}: checkout: moving from claude/premium-control-room-ui-LJFba to temp/phase8a-observe-bypass-20260408-042459
+   58f89b0 HEAD@{2026-04-08 00:44:29 +0000}: reset: moving to HEAD
+   58f89b0 HEAD@{2026-04-07 22:08:46 +0000}: pull origin claude/premium-control-room-ui-LJFba: Fast-forward
+
+git stash list
+→ WIP on claude/premium-control-room-ui-LJFba: 58f89b0 feat(telegram): add Korean translation
+```
+
+### ★ 결정적 발견 ★
+- `temp/phase8a-observe-bypass-20260408-042459` 임시 브랜치가 git reflog 에 명시적으로 잡힘
+- 명명 패턴 `temp/{task}-{YYYYMMDD-HHMMSS}` = **Claude Code 자동 생성 임시 브랜치 양식과 정확히 일치**
+- 즉 본 GitHub 작업 브랜치 (`claude/x-posting-ops-review-7hlxK`) 가 아닌
+  **다른 Claude Code 세션 (또는 운영자 직접 작업) 이 서버에서 임시 브랜치를 생성**해
+  거기서 phase8α 진단 코드를 직접 만들어 working tree 에 얹은 것이 확인됨
+- 임시 브랜치 자체가 GitHub 에 push 되지 않은 상태로 surgical 적용 → "GitHub 안 거침" 의 직접 증거
+
+### Timeline 재구성 (UTC 기준)
+
+| UTC 시각 | 이벤트 | 출처 |
+|---|---|---|
+| 2026-04-05 22:24 | bde95b8 v10 commit (서버 git tracked HEAD 마지막 anthropic 변경) | git log |
+| 2026-04-07 22:08 | `claude/premium-control-room-ui-LJFba` Fast-forward pull | git reflog |
+| 2026-04-07 23:44 | `anthropic_provider.py.bak` 생성 (mtime) — 21270 bytes 옛 v10 본 백업 | ls -la .bak |
+| 2026-04-08 00:44 | reset to HEAD (다른 작업 정리) | git reflog |
+| ★ 2026-04-08 04:24:59 | **`temp/phase8a-observe-bypass-20260408-042459` checkout** | git reflog |
+| 2026-04-08 05:37 | 첫 `[Phase8α]` 로그 출현 (앞 세션 server.log 인용) | server.log |
+| 2026-04-08 05:55 | 첫 `[Phase8β]` 로그 출현 (앞 세션 server.log 인용) | server.log |
+| 2026-04-08 23:36 | 본 세션 surgical checkout (`b62cc33` 동등본 적용) | mtime / git status |
+
+→ phase8 코드는 본 GitHub 작업 브랜치 (`claude/x-posting-ops-review-7hlxK`) 가 push 되기 **18시간 이상 전**에 이미 서버 working tree 에 적용되어 있었다.
+
+### Drift 채널 최종 단정
+
+- ★ **D1 (운영자 직접 작업 — 다른 Claude Code 세션 또는 직접 surgical) + D3 (.bak 안전 백업) 결합** ★
+
+세부 :
+1. **D1 측면** : 운영자가 자인했고 (`손댁적 잇고`), git reflog 에 임시 브랜치 직접 증거 존재
+2. **D3 측면** : `.bak` 가 *현재 본의 백업이 아니라* 그 이전 v10 본의 안전 백업이었음 (sha256 다름, size 2배, prompt 구조 다름)
+   → 즉 ".bak 만들고 그 위에 새 phase8 수정 얹음" 시나리오 정합 (D3 강화)
+3. **D2 (다른 세션 단독)** : 운영자 자인으로 단독 채널 가설 배제. 단 "다른 Claude Code 세션" 자체는 D1 의 도구로 사용되었을 수 있음
+4. **D4 / D5** : 1차 실측에서 이미 사실상 배제 — 본 단계에서도 추가 시그널 0
+
+### 본 P0 종결 사유
+- 운영자 목표였던 "drift 경로 후보 ≤ 2개로 좁히기" 를 단일 결합 채널 (D1+D3) 로 단정 → 목표 초과 달성
+- D2 단독 가설 배제, D4/D5 사실상 배제 완료
+- 추가 실측으로 얻을 수 있는 정보의 한계효용 < 다음 P0 진행 가치
+- 단정 근거가 git reflog (위변조 어려운 객체) 에서 직접 나와 신뢰도 충분
+
+### 잔여 위험 및 권고 (다음 P0 분기에서 다룰 사항)
+- **재발 방지 가드레일 부재** : 운영자가 다음에도 임시 브랜치 + .bak 작업을 반복하면 drift 재발
+  → 후보 D (RUNNER_RULES 부칙) 로 별 P0 검토 권고
+- **본 P0 범위 외** : 운영자 행동 통제는 RUNNER_RULES 갱신 대상이지 코드 패치 대상 아님
+- 현재 시점 서버 == GitHub `b62cc33` byte-identical 이므로 *지금* drift 는 0
+
+### 보호 영역 무변경 확인
+- `app/providers/anthropic_provider.py` 무변경 ✓ (실측만)
+- 그 외 보호 영역 전체 무변경 ✓
+- destructive 명령 0
+
+---
+
 ## 2026-04-09 08:49 KST — P0 후보 A 1차 실측 — 후보 2개 그룹으로 좁힘 (D3 강 / D1·D2 가능)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
