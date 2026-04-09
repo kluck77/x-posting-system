@@ -5,6 +5,72 @@
 
 ---
 
+## 2026-04-09 (KST) — P1 stage-3 / S3-C.1 : BREAKING 텔레그램 카드 템플릿 §3/§5 정합
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : BREAKING_NOW 텔레그램 카드 포맷을
+  `docs/TELEGRAM_BREAKING_ALERT_TEMPLATE.md` §3 (8필드) / §4 (문장 규칙) /
+  §5 (복붙 템플릿) 기준으로 고도화. dedup / approval / publisher / Top5 /
+  dashboard / DB 는 모두 범위 밖.
+- **Changed Files** :
+  - `app/services/breaking_alert_service.py` — 카드 렌더러 재작성, 헬퍼 7종
+    신설 (`_operator_action_hint` / `_clip_title` / `_extract_summary` /
+    `_format_keywords` / `_format_asset_groups` / `_format_urgency` /
+    `_format_reason` / `_format_collected_at`), 길이 상수 (`_CARD_MAX_CHARS`
+    600, `_TITLE_MAX_CHARS` 60, `_SUMMARY_MAX_CHARS` 200, `_KEYWORDS_MAX` 3),
+    KST tzinfo, 이모지 / HTML 태그 / "BREAKING ALERT" 헤더 전면 삭제,
+    `build_breaking_alert_text` / `send_breaking_alert` 에 `body` /
+    `collected_at` kwarg 추가, payload 에서 `parse_mode="HTML"` 제거.
+  - `app/orchestrator.py` — `[1.6/6]` 의 `send_breaking_alert()` 호출에
+    `body=source_item.source_text` 1줄만 추가 (다른 wiring 무수정).
+  - `tests/test_breaking_alert_service.py` — 기존 2건 수정 + 신규 7건 추가
+    (8필드 라벨 / body 선두 2문장 / body None fallback / 제목 60자 clip /
+    카드 600자 하드 캡 / medium 긴급도 액션 힌트 / KST 포맷 핀).
+- **Code Changes** : +304 / −35 (3 files)
+- **Test Result** : 44 passed
+  (`tests/test_breaking_alert_service.py` 32 + `tests/test_breaking_classifier.py` 9
+  + `tests/test_breaking_classifier_wiring.py` 3, 회귀 0).
+- **Syntax Check** : `python -m py_compile` OK.
+- **Runtime Risk Remaining** :
+  - `parse_mode="HTML"` 제거로 실서버 텔레그램 렌더는 plain text 로 바뀜 →
+    운영자가 `<b>` 굵기를 기대했다면 시각 차이. 반대로 `<`/`>`/`&` 가 섞인
+    기사 제목에서 parse 실패 리스크는 제거됨.
+  - 프로세스 재시작 시 dedup 저장소 초기화 (S3-A 기존 한계, 본 세션 무변경).
+- **Server Apply Risk** : 낮음. 대상 파일 3건만 선택 반영하면 됨.
+- **Recommendation** : APPROVE.
+- **Next Operator Action** :
+  - 서버에 `app/services/breaking_alert_service.py` / `app/orchestrator.py` 2
+    파일만 선택 반영 후 실제 BREAKING_NOW 샘플 1건으로 텔레그램 렌더 확인.
+  - 이후 다음 트리거 (S3-B 또는 Top5 스펙 착수) 는 운영자 지시 대기.
+
+### 파이프라인 누적 상태 (P1 stage-3 완료 구간)
+
+- stage-1 : `breaking_classifier.py` BREAKING_NOW/CANDIDATE/HOLD/REJECT 분류 ✅
+- stage-2 : `orchestrator.py` Step 1.5 fail-open wiring ✅
+- stage-3 / S3-C : BREAKING_NOW 텔레그램 핸드오프 (`breaking_alert_service.py`) ✅
+- stage-3 / S3-A : 프로세스 내 dedup gate (6h window, issue_key) ✅ (HEAD `4fd139a`)
+- **stage-3 / S3-C.1 : 카드 포맷 §3/§5 정합 ✅ (본 세션 HEAD `92b3adc`)**
+
+### 본 세션 기준 HEAD
+
+- 코드 commit : `92b3adc` feat(breaking-alert): align telegram card to template §3/§5 (P1 stage-3, S3-C.1)
+- 직전 코드 HEAD : `4fd139a` feat(breaking-alert): add minimal in-memory dedup gate (P1 stage-3, S3-A)
+- 브랜치 : `claude/x-posting-ops-review-7hlxK`
+
+### 다음 세션 착수 지점
+
+- 남은 BREAKING 관련 후속 카드는 **TASK_BOARD 상 현재 휴지**. 운영자 트리거
+  대기 상태. 다음 세션이 이어받을 경우 다음 중 1개만 택일하여 지시 받을 것:
+  - (a) 서버 반영 검증 (현재 본 세션 결과물 2 파일)
+  - (b) 05:00 Top5 브리핑 카드 착수 (별 세션, `docs/TELEGRAM_BREAKING_ALERT_TEMPLATE.md`
+        §7~§9 기준)
+  - (c) BREAKING_NOW 후 24h 후속 보도 자동 트래킹 (별 세션, 본 레포 미구현)
+  - (d) 서버측 dedup 영속화 (DB/Redis 이관) — 운영자 명시 승인 전 금지
+- 이 HANDOFF 항목 자체는 세션 연결용 누적 기록으로만 사용. TASK_BOARD 는
+  본 세션 무수정.
+
+---
+
 ## 2026-04-09 12:25 KST — 계정 품질 레이어 문서화 완료 (2/2) — AI_ROLE_PROMPTS.md 재개 박제
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
