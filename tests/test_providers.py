@@ -21,6 +21,16 @@ class TestMockDraftWriter:
         assert result.body
         assert result.category_suggestion
 
+    @pytest.mark.asyncio
+    async def test_accepts_phase8_kwargs(self):
+        """[Phase 8-γ] Mock 가 OpenAI/Anthropic 의 dormant kwargs 를 수용해야 한다."""
+        writer = MockDraftWriter()
+        result = await writer.generate_draft(
+            "t", "s", language="en",
+            source_type="rss", criteria_context="ctx",
+        )
+        assert result.body
+
 
 class TestMockReviewer:
     @pytest.mark.asyncio
@@ -46,6 +56,16 @@ class TestMockReviewer:
         research = ResearchResult(summary="Some research", key_facts=["fact1"])
         result = await reviewer.review_and_refine(
             title="t", source_text="s", draft=draft, research=research,
+        )
+        assert result.risk_level
+
+    @pytest.mark.asyncio
+    async def test_accepts_phase8_kwargs(self):
+        """[Phase 8-γ] MockReviewer 가 Anthropic 의 dormant criteria_context 를 수용해야 한다."""
+        reviewer = MockReviewer()
+        draft = DraftResult(hook="h", body="b", category_suggestion="society")
+        result = await reviewer.review_and_refine(
+            title="t", source_text="s", draft=draft, criteria_context="ctx",
         )
         assert result.risk_level
 

@@ -5,6 +5,97 @@
 
 ---
 
+## 2026-04-09 09:12 KST — P0 후보 B 종결 — mock_providers kwarg 정합 (Phase 8-γ)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 운영자 선택 ("D 다음 B") 의 B 단계. mock_providers 시그니처를 OpenAI/Anthropic concrete provider 와 정합시켜 latent TypeError 봉쇄.
+- **Changed Files** :
+  - `app/providers/mock_providers.py` (+11 / −1)
+  - `tests/test_providers.py` (+20 / −0)
+  - `HANDOFF_LOG.md` (최상단 본 항목)
+  - `TASK_BOARD.md` (P0 후보 B 종결, 다음 P0 대기)
+- **Code Changes** : 2 files (mock + test)
+- **Syntax Check Result** : `python3 -m py_compile app/providers/mock_providers.py` → OK
+- **Signature Compatibility Check Result** : `inspect.signature` 4종 비교 — Mock 가 OpenAI/Anthropic 와 100% 동일. Base 는 무수정 (보호 영역).
+- **Test Result** : `python3 -m pytest tests/test_providers.py -v` → **9 passed** (직전 7 + 신규 2)
+- **Runtime Risk Remaining** : 0 (신규 kwargs 는 mock 내부에서 무시, 부작용 없음)
+- **Server Apply Risk** : 낮음 — 운영 라인은 mock 미사용 (fallback 만), 운영자 confirm 후 surgical apply 가능
+- **Recommendation** : APPROVE
+
+### 진단 결과 — 시그니처 gap 박제
+
+```
+=== generate_draft (before patch) ===
+Base.generate_draft        (self, title, source_text, language='en')
+Mock.generate_draft        (self, title, source_text, language='en')                   ← Base 와 동일
+OpenAI.generate_draft      (self, title, source_text, language='en',
+                            source_type='manual', criteria_context='')                 ← Base 보다 wide
+Anthropic.generate_draft   (self, title, source_text, language='en',
+                            source_type='manual', criteria_context='')                 ← Base 보다 wide
+
+=== review_and_refine (before patch) ===
+Base.review_and_refine     (self, title, source_text, draft, research=None, factcheck=None)
+Mock.review_and_refine     (self, title, source_text, draft, research=None, factcheck=None)
+                                                                                       ← Base 와 동일
+Anthropic.review_and_refine(self, title, source_text, draft, research=None, factcheck=None,
+                            criteria_context='')                                       ← Base 보다 wide
+```
+
+### Caller 실측
+- `grep -rn 'criteria_context|source_type'` → app/orchestrator.py 에서 provider 호출 시 kwargs 0개 사용
+- 즉 현 시점 latent TypeError 는 **0건** 이지만, 다음 단계에서 caller 가 새 kwarg 사용을 시작하면 mock fallback 환경에서 즉시 깨짐
+- 본 패치는 그 latent 봉쇄가 목표 (운영자 의도와 정합)
+
+### Patch 내용 (mock_providers.py)
+- `MockDraftWriter.generate_draft` 시그니처에 `source_type='manual', criteria_context=''` 추가
+- `MockReviewer.review_and_refine` 시그니처에 `criteria_context=''` 추가
+- mock 내부 로직은 변경 0 (kwargs 는 무시)
+- `[Phase 8-γ]` 주석으로 변경 의도 명시
+- base.py 무수정 (보호 영역)
+
+### Patch 내용 (tests/test_providers.py)
+- `TestMockDraftWriter.test_accepts_phase8_kwargs` 신설 (kwargs 수용 검증)
+- `TestMockReviewer.test_accepts_phase8_kwargs` 신설 (kwargs 수용 검증)
+- 기존 7개 테스트 무수정
+
+### Patch 후 시그니처 (정합 확인)
+```
+Base.generate_draft        (self, title, source_text, language='en')
+Mock.generate_draft        (self, title, source_text, language='en',
+                            source_type='manual', criteria_context='')                 ← OpenAI/Anthropic 일치
+OpenAI.generate_draft      (self, title, source_text, language='en',
+                            source_type='manual', criteria_context='')
+Anthropic.generate_draft   (self, title, source_text, language='en',
+                            source_type='manual', criteria_context='')
+
+Base.review_and_refine     (self, title, source_text, draft, research=None, factcheck=None)
+Mock.review_and_refine     (self, title, source_text, draft, research=None, factcheck=None,
+                            criteria_context='')                                       ← Anthropic 일치
+Anthropic.review_and_refine(self, title, source_text, draft, research=None, factcheck=None,
+                            criteria_context='')
+```
+
+→ ★ Mock ≡ OpenAI ≡ Anthropic 시그니처 정합 ★
+→ Base 만 단독으로 narrow (보호 영역, 의도적 무수정)
+
+### 잔여 위험 / 후속 P0 후보
+- `base.py` 가 여전히 narrow → Liskov 측면에서 abstract < concrete 인 상태 유지
+- 향후 base.py 갱신은 후보 C (base.py drift 점검) 또는 별 P0 로 운영자 사전 승인 후만 가능
+- 본 패치는 caller 가 새 kwarg 를 쓰기 시작해도 mock 환경에서 깨지지 않는 안전망 역할
+
+### 보호 영역 무변경 확인
+- `app/providers/base.py` 무수정 ✓
+- `app/orchestrator.py`, `app/api/admin.py`, `app/services/*`, `app/models/*` 모두 무수정 ✓
+- `.env`, `main` 브랜치 무수정 ✓
+- destructive 명령 0
+
+### 서버 적용 권고
+- mock_providers.py 1개 파일 surgical checkout 만 (운영 라인 미영향, 키 부재 환경/테스트 안전망)
+- 서버에서 운영 라인은 키 보유 → 실제로 mock 호출 안 됨 → 본 패치 미적용 시에도 운영 안전
+- 서버 적용 가치 = pytest 환경 정합 + 향후 확장 안전 → 우선순위 낮음 (선택)
+
+---
+
 ## 2026-04-09 09:06 KST — P0 후보 D 진입+종결 — RUNNER_RULES §15 부칙 추가 (drift 재발 방지)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)

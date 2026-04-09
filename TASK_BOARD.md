@@ -6,20 +6,32 @@
 ---
 
 ## Updated At
-2026-04-09 09:06 KST
+2026-04-09 09:12 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**P0 후보 D 종결. 후보 B 진입 (mock_providers kwarg 시그니처 정합).**
+**P0 후보 B 종결. 운영자 다음 P0 선택 대기.**
 
 ## Current Priority
-P0 — **mock_providers kwarg 시그니처 phase-8α 정합 검증/보강** (후보 B)
+**NEEDS_HUMAN — 다음 P0 선택 (후보 C 또는 새 hotfix)**
 
 ---
 
 ## Closed Issues (직전 P0 종결 기록 — 누적식)
+
+### ✅ P0 후보 B — mock_providers kwarg 시그니처 phase-8γ 정합
+- 종결 일시 : 2026-04-09 09:12 KST
+- 작업물 :
+  - `app/providers/mock_providers.py` (+11 / −1) — `MockDraftWriter` / `MockReviewer` 시그니처 widening
+  - `tests/test_providers.py` (+20 / −0) — kwargs 수용 boundary test 2개 신규
+- 결정적 근거 :
+  - 시그니처 진단 : Mock ≡ Base 였으나 OpenAI/Anthropic 는 wide → latent TypeError 가능
+  - 패치 후 inspect 비교 : Mock ≡ OpenAI ≡ Anthropic 일치
+  - pytest : 9 passed (직전 7 + 신규 2)
+- base.py 무수정 (보호 영역)
+- 운영자 결정 : "D 다음 B"
 
 ### ✅ P0 후보 D — RUNNER_RULES §15 부칙 (drift 재발 방지) 추가
 - 종결 일시 : 2026-04-09 09:06 KST
@@ -59,45 +71,59 @@ P0 — **mock_providers kwarg 시그니처 phase-8α 정합 검증/보강** (후
 - DraftWriter / Reviewer 진단 로그 부착 완료
 - ★ 서버 drift 채널 단정 (D1 + D3 결합) — P0 후보 A 종결 ★
 - ★ RUNNER_RULES §15 부칙 (drift 재발 방지) 추가 — P0 후보 D 종결 ★
+- ★ Mock provider kwarg 정합 (Mock ≡ OpenAI ≡ Anthropic) — P0 후보 B 종결 ★
 
 ### 작업 브랜치 HEAD (GitHub 기준선)
-- 직전 docs HEAD : `031e1c9` (P0 후보 A 종결 박제)
+- 직전 docs HEAD : `735ae15` (P0 후보 D — RUNNER_RULES §15 추가)
 - 직전 코드 HEAD : `b62cc33` (anthropic_provider.py 39+/1- sanitize)
-- 현재 시점 서버 == GitHub `b62cc33` byte-identical (1차 실측 확인)
+- 새 코드 HEAD : (본 P0 B commit 직후 갱신 예정)
 - 브랜치 : `claude/x-posting-ops-review-7hlxK`
+
+### Provider 시그니처 정합 현황 (Phase 8-γ 후)
+- `Base.generate_draft` : narrow `(title, source_text, language)` — 보호 영역 무수정
+- `Mock.generate_draft` ≡ `OpenAI.generate_draft` ≡ `Anthropic.generate_draft`
+  : wide `(title, source_text, language, source_type, criteria_context)`
+- `Base.review_and_refine` : narrow `(..., factcheck)`
+- `Mock.review_and_refine` ≡ `Anthropic.review_and_refine`
+  : wide `(..., factcheck, criteria_context)`
+- pytest : 9/9 PASSED
 
 ---
 
 ## Current Issue
-**mock_providers kwarg 시그니처 phase-8α 정합 검증/보강 (후보 B)**
-
-목표 : `app/providers/mock_providers.py` 의 mock 5종이 phase-8α 이후 시그니처 (`criteria_context` kwarg) 와 100% 정합한지 검증 + 누락 시 보강 + pytest 통과.
-
-### 진입 근거
-- phase-8α 진단 로그 + sanitize 패치 적용 후, 운영 라인 (Anthropic / OpenAI) 시그니처는 검증 완료
-- mock_providers 는 키 부재 시 fallback / 로컬 dev / pytest 에서만 사용
-- 시그니처 누락 시 fallback 호출에서 TypeError 잠복 가능 (운영 라인 외 환경에서 깨짐)
-- 본 P0 는 코드 변경 최소화 + 테스트 통과 중심
+**없음 — 운영자 다음 P0 선택 대기**
 
 ---
 
-## Minimal Scope
-- `app/providers/mock_providers.py` 시그니처 점검 및 누락 시 1개 파일 패치
-- `tests/test_providers.py` 가 이미 통과하는지 확인 + 필요 시 보조 테스트 1~2개 추가만
-- AI 호출 0, 외부 의존 0
+## 다음 P0 후보 (운영자 1개 선택)
 
----
+### 후보 C — base.py 시그니처 drift 점검
+- **목표** : `app/providers/base.py` 의 추상 시그니처가 concrete 와 narrow 차이를 유지하는 게 의도적인지 점검 + 필요 시 widening
+- **위험도** : 중 (보호 영역 — 운영자 사전 승인 필요)
+- **범위** : 우선 read-only 점검, 수정은 별도 승인 후
+- **이점** : Liskov 측면에서 abstract ≡ concrete 일치, 향후 caller 가 새 kwarg 사용 시 명시적 인터페이스
+- **단점** : 보호 영역, 변경 마찰 큼
 
-## Exact Files To Change (점검 결과에 따라 0~2개)
-- `app/providers/mock_providers.py` (필요 시)
-- `tests/test_providers.py` (필요 시)
+### 후보 E — 서버 surgical apply (P0 B 결과물)
+- **목표** : `mock_providers.py` 1개 파일을 서버에 surgical checkout
+- **위험도** : 낮음 (운영 라인 미사용)
+- **이점** : 서버 환경에서 키 부재 시 fallback 안전망
+- **단점** : 운영 라인은 키 보유 → 즉각적 가치 낮음 → 우선순위 낮음
+
+### 후보 F — 새 hotfix (운영자 발의 시)
+- 운영자가 텔레그램/대시보드/로그에서 새 이상을 발견하면 그쪽 우선
+
+### 권고
+- **F (새 hotfix) 가 있으면 F 우선**
+- 없으면 후보 E (서버 surgical apply, 5분 작업) 또는 후보 C (base.py 점검 read-only)
+- C 는 보호 영역이라 사전 승인 필수
 
 ---
 
 ## Files Forbidden To Change
 - `app/orchestrator.py`
 - `app/api/admin.py`
-- `app/providers/base.py` (read-only 참조만)
+- `app/providers/base.py` (후보 C 채택 시 read-only 점검만)
 - `app/providers/anthropic_provider.py`
 - `app/providers/openai_provider.py`
 - `app/providers/ai_provider.py`
@@ -112,29 +138,29 @@ P0 — **mock_providers kwarg 시그니처 phase-8α 정합 검증/보강** (후
 ---
 
 ## Validation Steps
-
-### 본 P0 검증 (로컬, 5분 이내)
-```
-cd /home/user/x-posting-system
-python3 -m py_compile app/providers/mock_providers.py
-python3 -m pytest tests/test_providers.py -v
-```
-
-### 시그니처 비교 (read-only)
-- `BaseReviewer.review_and_refine()` (base.py) vs
-  `MockReviewer.review_and_refine()` vs
-  `AnthropicReviewer.review_and_refine()` 의 인자 목록 동일성 확인
-- `BaseDraftWriter.generate_draft()` vs `MockDraftWriter.generate_draft()` vs
-  `OpenAIDraftWriter.generate_draft()` 동일성 확인
+**N/A — 본 단계는 P0 종결 박제 + 다음 후보 선택 요청만**
 
 ---
 
 ## Recommendation
-**APPROVE (B 진입)** — 점검 단계는 read-only, 패치 단계는 1개 파일 한정.
+**APPROVE (P0 후보 B 종결 박제) + NEEDS_HUMAN (다음 P0 선택)**
+
+운영자 결정 기록 (누적):
+- 08:37 KST : 직전 P0 종결, 후보 A/B/C 중 1개 선택 요청
+- 08:41 KST : 후보 A 채택 → 실측 명령 발신
+- 08:49 KST : 1차 실측 결과 박제, 후보 2개 그룹으로 좁힘
+- 09:00 KST : 2차 실측 + 운영자 1줄 회신 → D1+D3 단정, P0 후보 A 종결
+- 09:06 KST : "D 다음 B" 결정 → 후보 D 진입+종결 (RUNNER_RULES §15)
+- 09:12 KST : 후보 B 종결 (mock_providers kwarg 정합, pytest 9/9)
+
+다음 세션 트리거:
+- 운영자가 다음 P0 (C / E / F / 새 hotfix) 중 1개 선택
+- 또는 새 hotfix 발생 시 그쪽 우선
 
 ---
 
 ## Next Handoff Rule
-- 점검 결과 시그니처 정합 → 코드 변경 0, B 즉시 종결
-- 점검 결과 시그니처 누락 → mock_providers.py 1개 파일 minimal patch + pytest 통과 → B 종결
-- B 종결 후 다음 P0 운영자 선택 대기 (후보 C 또는 새 hotfix)
+- 운영자 후보 선택 후 다음 세션에서 해당 후보 P0 진입 박제
+- 후보 C 채택 시 read-only 점검 먼저, 수정은 별도 승인
+- 후보 E 채택 시 서버 surgical checkout 1개 파일 (`mock_providers.py`)
+- 후보 F (새 hotfix) 채택 시 새 P0 진입 절차

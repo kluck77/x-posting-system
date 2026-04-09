@@ -20,8 +20,16 @@ class MockDraftWriter(BaseDraftWriter):
     """Mock 초안 작성기. API 키 없이 데모용 초안을 생성합니다."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self,
+        title: str,
+        source_text: str,
+        language: str = "en",
+        source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
+        # [Phase 8-γ] kwargs widened to match OpenAI/Anthropic concrete providers.
+        # source_type / criteria_context 는 mock 에선 사용하지 않으나, 시그니처
+        # 정합 보장을 위해 수용한다 (latent TypeError 봉쇄).
         logger.info(f"[Mock DraftWriter] 초안 생성: '{title[:50]}'")
         return DraftResult(
             hook=f"🇰🇷 Here's what you need to know: {title[:80]}",
@@ -51,7 +59,9 @@ class MockReviewer(BaseReviewer):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str = "",
     ) -> ReviewResult:
+        # [Phase 8-γ] criteria_context kwarg 수용하여 Anthropic Reviewer 와 시그니처 정합.
         logger.info(f"[Mock Reviewer] 리뷰: '{title[:50]}'")
         return ReviewResult(
             hook=draft.hook,
