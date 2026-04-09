@@ -80,7 +80,8 @@ async def system_status():
 async def ingest_source(data: SourceItemCreate):
     """
     소스를 입력하고 전체 AI 파이프라인을 실행합니다.
-    완료되면 텔레그램에 승인 카드가 전송됩니다.
+    분류 결과에 따라 속보 알림 / Top5 큐 적재 / 주간 즉시 알림 /
+    영어 승인 초안 생성 중 해당 경로로 처리됩니다.
     """
     orchestrator = Orchestrator()
     try:

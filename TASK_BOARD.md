@@ -12,12 +12,20 @@
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**주간 고점수 CANDIDATE 즉시 알림 구현 완료 (서버 반영 대기).** 05:00~22:00 KST 주간 시간대 고점수 기사 즉시 텔레그램 알림.
+**/ingest 응답 문구 정합성 수정 완료 (서버 반영 대기).** 응답 메시지가 실제 처리 경로(속보/Top5/주간 알림/KO-only/approval)를 정확히 반영.
 
 ## Current Priority
-**서버 반영** — daytime_alert_service.py 신규 배치 + orchestrator.py Step 1.5c 수술식 삽입.
+**서버 반영** — orchestrator.py full_pipeline 블록 교체 + admin.py docstring 수정.
 
-## ★ 주간 고점수 CANDIDATE 즉시 알림 (2026-04-09)
+## ★ /ingest 응답 문구 정합성 수정 (2026-04-09)
+- `app/orchestrator.py` — full_pipeline() 응답 메시지를 처리 경로별 조건 분기로 교체 + docstring 수정
+- `app/api/admin.py` — /ingest endpoint docstring 수정
+- 변경 전: 모든 경로에서 "초안 생성 완료! 텔레그램에서 승인해주세요." 고정
+- 변경 후: BREAKING_NOW/CANDIDATE KO-only / approval 전송 / approval 미전송 4가지 분기
+- 206 passed, 0 regression
+- 서버 반영 대기 (2개 파일 surgical)
+
+## ★ 주간 고점수 CANDIDATE 즉시 알림 (2026-04-09) — 서버 반영 완료
 - `app/services/daytime_alert_service.py` (신규, ~264줄) — 조건 판정 + 카드 텍스트 + 텔레그램 전송
 - `app/orchestrator.py` (+15줄) — Step 1.5c 삽입 (CANDIDATE 블록 내, 1.5b 직후)
 - `tests/test_daytime_alert.py` (신규, 26 tests)

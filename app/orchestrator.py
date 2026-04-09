@@ -407,7 +407,7 @@ class Orchestrator:
         return await self._handle_approve(draft)
 
     async def full_pipeline(self, data: SourceItemCreate) -> dict:
-        """전체 파이프라인: 소스 입력 → AI 생성 → 텔레그램 승인카드 전송"""
+        """전체 파이프라인: 소스 입력 → 분류 → AI 생성 또는 한국어 전용 라인 처리"""
         try:
             draft = await self.ingest_and_generate(data)
             # BREAKING/CANDIDATE 한국어 전용 라인 → 승인 카드 생략
@@ -416,6 +416,18 @@ class Orchestrator:
                 logger.info(f"[pipeline] 승인 카드 생략 (한국어 전용 라인): draft_id={draft.id}")
             else:
                 sent = await self.send_for_approval(draft.id)
+
+            # 실제 처리 경로에 맞는 응답 메시지
+            if getattr(draft, '_skip_approval_card', False):
+                if draft.hook.startswith("[BREAKING_NOW]"):
+                    message = "속보 알림 대상으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
+                else:
+                    message = "한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
+            elif sent:
+                message = "초안 생성 완료. 텔레그램에서 승인해주세요."
+            else:
+                message = "초안 생성 완료."
+
             return {
                 "success": True,
                 "draft_id": draft.id,
@@ -424,7 +436,7 @@ class Orchestrator:
                 "telegram_sent": sent,
                 "hook": draft.hook,
                 "body": draft.body,
-                "message": "초안 생성 완료! 텔레그램에서 승인해주세요.",
+                "message": message,
             }
         except Exception as e:
             logger.error(f"파이프라인 오류: {e}", exc_info=True)

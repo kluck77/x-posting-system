@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-04-09 — /ingest 응답 문구를 현재 운영 정책에 맞게 정리
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : /ingest 응답 메시지가 현재 실제 처리 경로(속보 알림/Top5 큐/주간 즉시 알림/KO-only 우회/approval 흐름)를 정확히 반영하도록 문구 수정. 기능 로직 변경 없음.
+- **Changed Files** :
+  - `app/orchestrator.py` — `full_pipeline()` 응답 메시지를 처리 경로별 조건 분기로 교체 + docstring 수정
+  - `app/api/admin.py` — `/ingest` endpoint docstring 수정
+  - `HANDOFF_LOG.md`, `TASK_BOARD.md`, `docs/SERVER_STRUCTURE.md` 갱신
+- **변경 전** : 모든 경로에서 `"초안 생성 완료! 텔레그램에서 승인해주세요."` 고정 반환
+- **변경 후** :
+  - BREAKING_NOW + KO-only → `"속보 알림 대상으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."`
+  - CANDIDATE + KO-only → `"한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."`
+  - 기존 approval 흐름 (카드 전송 성공) → `"초안 생성 완료. 텔레그램에서 승인해주세요."`
+  - 기존 approval 흐름 (카드 미전송) → `"초안 생성 완료."`
+- **Test Result** : 206 passed, 0 regression
+- **Runtime Risk** : 0 (응답 메시지 문자열만 변경, 분기/로직 의미 무변경)
+- **서버 반영** : orchestrator.py `full_pipeline()` 블록 수술식 교체 + admin.py docstring 수정 (2개 파일)
+
+---
+
 ## 2026-04-09 — 주간 고점수 CANDIDATE 즉시 알림 (Daytime Alert)
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
