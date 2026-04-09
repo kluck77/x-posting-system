@@ -6,16 +6,24 @@
 ---
 
 ## Updated At
-2026-04-09 19:00 KST
+2026-04-09 20:00 KST
 
 ## Updated By
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**Phase F 구현 완료.** Top5 브리핑 05:00 KST 스케줄러 코드 + 테스트 완료. 서버 반영 대기.
+**Dedup/Candidate Pool DB 영속화 구현 완료.** 서버 반영 대기.
 
 ## Current Priority
-**Phase F 서버 반영** — `app/main.py` 1개 파일 교체 + 재시작.
+**영속화 서버 반영** — 모델 1개 + 서비스 2개 + db.py 1줄.
+
+## ★ Dedup/Candidate Pool DB 영속화 (2026-04-09)
+- `app/models/dedup.py` 신규 (3 테이블: breaking_dedup_entries, candidate_pool_entries, breaking_sent_keys)
+- `app/services/breaking_alert_service.py` — DB write-through + 시작 시 복원
+- `app/services/top5_briefing_service.py` — DB write-through + 시작 시 복원 + 브리핑 후 cleanup
+- `app/db.py` — import 1줄 추가
+- 92 tests passed (신규 10), 0 regression
+- 서버 반영 대기
 
 ## ★ Phase F: 05:00 KST 스케줄러 구현 완료 (2026-04-09)
 - `app/main.py` +22줄 — `_top5_scheduler_loop()` + `asyncio.create_task()` 삽입

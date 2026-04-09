@@ -62,5 +62,6 @@ def init_db():
     이미 존재하는 테이블은 건너뜁니다.
     """
     from app.models.content import Base  # 순환 import 방지
+    import app.models.dedup  # noqa: F401 — 테이블 등록 (dedup + candidate pool)
     Base.metadata.create_all(bind=engine)
     logger.info("데이터베이스 테이블 초기화 완료")

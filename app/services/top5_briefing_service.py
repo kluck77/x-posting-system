@@ -68,6 +68,9 @@ _candidate_lock = Lock()
 _breaking_sent_keys: set[str] = set()
 _breaking_sent_lock = Lock()
 
+# DB 복원 플래그
+_candidates_loaded_from_db = False
+
 
 def record_candidate(
     *,
@@ -93,6 +96,7 @@ def record_candidate(
     )
     with _candidate_lock:
         _candidate_store.append(entry)
+    _persist_candidate_to_db(entry)
     logger.debug(f"[top5] candidate recorded: {title[:40]}")
 
 
@@ -101,6 +105,7 @@ def record_breaking_sent(*, title: str, topic_domain: str) -> None:
     key = _issue_key(title, topic_domain)
     with _breaking_sent_lock:
         _breaking_sent_keys.add(key)
+    _persist_breaking_sent_to_db(key)
 
 
 def _issue_key(title: str, topic_domain: str) -> str:
@@ -112,10 +117,128 @@ def _issue_key(title: str, topic_domain: str) -> str:
 
 def _reset_stores_for_tests() -> None:
     """테스트 전용."""
+    global _candidates_loaded_from_db
     with _candidate_lock:
         _candidate_store.clear()
     with _breaking_sent_lock:
         _breaking_sent_keys.clear()
+    _candidates_loaded_from_db = False
+
+
+def _current_cycle_date() -> str:
+    """현재 브리핑 사이클 날짜 (YYYY-MM-DD KST). 05:00 전이면 당일, 이후면 익일."""
+    now_kst = datetime.now(tz=_KST)
+    if now_kst.hour < 5:
+        return now_kst.strftime("%Y-%m-%d")
+    return (now_kst + timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def _persist_candidate_to_db(entry: CandidateEntry) -> None:
+    """DB write-through (fail-open)."""
+    try:
+        import json
+        from app.db import get_db
+        from app.models.dedup import CandidatePoolEntry
+        db = get_db()
+        try:
+            db.add(CandidatePoolEntry(
+                title=entry.title,
+                body=entry.body,
+                url=entry.url,
+                topic_domain=entry.topic_domain,
+                matched_keywords_json=json.dumps(entry.matched_keywords, ensure_ascii=False),
+                breaking_reason=entry.breaking_reason,
+                urgency=entry.urgency,
+                collected_at=entry.collected_at,
+                cycle_date=_current_cycle_date(),
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("[top5] DB candidate persist 실패 (fail-open)")
+
+
+def _persist_breaking_sent_to_db(issue_key: str) -> None:
+    """DB write-through (fail-open)."""
+    try:
+        from app.db import get_db
+        from app.models.dedup import BreakingSentKey
+        db = get_db()
+        try:
+            db.add(BreakingSentKey(
+                issue_key=issue_key,
+                cycle_date=_current_cycle_date(),
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("[top5] DB breaking_sent persist 실패 (fail-open)")
+
+
+def _load_candidates_from_db() -> None:
+    """시작 시 DB → 메모리 복원. 현재 사이클 항목만 로드."""
+    global _candidates_loaded_from_db
+    if _candidates_loaded_from_db:
+        return
+    try:
+        import json
+        from app.db import get_db
+        from app.models.dedup import BreakingSentKey, CandidatePoolEntry
+        cycle = _current_cycle_date()
+        db = get_db()
+        try:
+            rows = db.query(CandidatePoolEntry).filter(
+                CandidatePoolEntry.cycle_date == cycle
+            ).all()
+            with _candidate_lock:
+                for row in rows:
+                    entry = CandidateEntry(
+                        title=row.title,
+                        body=row.body,
+                        url=row.url,
+                        topic_domain=row.topic_domain,
+                        matched_keywords=json.loads(row.matched_keywords_json) if row.matched_keywords_json else [],
+                        breaking_reason=row.breaking_reason,
+                        urgency=row.urgency,
+                        collected_at=row.collected_at,
+                    )
+                    _candidate_store.append(entry)
+            sent_rows = db.query(BreakingSentKey).filter(
+                BreakingSentKey.cycle_date == cycle
+            ).all()
+            with _breaking_sent_lock:
+                for row in sent_rows:
+                    _breaking_sent_keys.add(row.issue_key)
+            logger.info(f"[top5] DB 로드 완료: candidates={len(rows)}, sent_keys={len(sent_rows)} (cycle={cycle})")
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("[top5] DB 로드 실패 (fail-open, 인메모리만 사용)")
+    _candidates_loaded_from_db = True
+
+
+def _cleanup_db_after_briefing() -> None:
+    """05:00 브리핑 전송 후 DB 정리. 현재 사이클 데이터 삭제."""
+    try:
+        from app.db import get_db
+        from app.models.dedup import BreakingSentKey, CandidatePoolEntry
+        cycle = _current_cycle_date()
+        db = get_db()
+        try:
+            db.query(CandidatePoolEntry).filter(
+                CandidatePoolEntry.cycle_date == cycle
+            ).delete()
+            db.query(BreakingSentKey).filter(
+                BreakingSentKey.cycle_date == cycle
+            ).delete()
+            db.commit()
+            logger.info(f"[top5] DB 사이클 데이터 삭제 완료 (cycle={cycle})")
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("[top5] DB 정리 실패 (fail-open)")
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +438,8 @@ def select_top5(
     if ref_kst is None:
         ref_kst = datetime.now(tz=_KST)
 
+    _load_candidates_from_db()
+
     with _candidate_lock:
         pool = list(_candidate_store)
 
@@ -503,11 +628,16 @@ async def run_top5_briefing() -> bool:
     result = await send_top5_briefing(ref_kst=ref_kst)
 
     # 전송 후 야간 저장소 초기화 (다음 사이클 준비)
+    global _candidates_loaded_from_db
     with _candidate_lock:
         cleared = len(_candidate_store)
         _candidate_store.clear()
     with _breaking_sent_lock:
         _breaking_sent_keys.clear()
+    _candidates_loaded_from_db = False
+
+    # DB 사이클 데이터도 정리
+    _cleanup_db_after_briefing()
 
     logger.info(f"[top5] 저장소 초기화 완료 (candidates={cleared})")
     return result

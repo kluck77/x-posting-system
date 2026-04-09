@@ -73,9 +73,10 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.。!?])\s+")
 BREAKING_DEDUP_WINDOW_SECONDS: int = 6 * 60 * 60
 
 # 프로세스 내 dedup 저장소 : issue_key → 마지막 발행 epoch seconds
-# 단일 프로세스 MVP. 재시작 시 초기화됨. DB / 외부 캐시 없음 (운영자 명시).
+# 인메모리 1차 + DB write-through 영속화. 시작 시 DB→메모리 복원.
 _dedup_store: dict[str, float] = {}
 _dedup_lock = Lock()
+_dedup_loaded_from_db = False
 
 
 def _get_api_url(method: str) -> str:
@@ -263,6 +264,7 @@ def compute_issue_key(*, title: str, topic_domain: str) -> str:
 # ---------------------------------------------------------------------------
 def _is_duplicate_within_window(issue_key: str, now: float) -> bool:
     """True = dedup 차단 / False = 통과. 단순 마지막발행시각 비교."""
+    _load_dedup_from_db()
     with _dedup_lock:
         last = _dedup_store.get(issue_key)
     if last is None:
@@ -274,12 +276,57 @@ def _record_sent(issue_key: str, now: float) -> None:
     """전송 성공 시에만 호출. 차단 경로에서는 기록하지 않는다."""
     with _dedup_lock:
         _dedup_store[issue_key] = now
+    _persist_dedup_to_db(issue_key, now)
 
 
 def _reset_dedup_store_for_tests() -> None:
     """테스트 전용. 운영 코드에서 호출 금지."""
+    global _dedup_loaded_from_db
     with _dedup_lock:
         _dedup_store.clear()
+    _dedup_loaded_from_db = False
+
+
+def _persist_dedup_to_db(issue_key: str, sent_at: float) -> None:
+    """DB write-through (fail-open)."""
+    try:
+        from app.db import get_db
+        from app.models.dedup import BreakingDedupEntry
+        db = get_db()
+        try:
+            db.add(BreakingDedupEntry(issue_key=issue_key, sent_at=sent_at))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("[dedup] DB persist 실패 (fail-open)")
+
+
+def _load_dedup_from_db() -> None:
+    """시작 시 DB → 메모리 복원. 6h 윈도우 내 항목만 로드."""
+    global _dedup_loaded_from_db
+    if _dedup_loaded_from_db:
+        return
+    try:
+        from app.db import get_db
+        from app.models.dedup import BreakingDedupEntry
+        cutoff = time.time() - BREAKING_DEDUP_WINDOW_SECONDS
+        db = get_db()
+        try:
+            rows = db.query(BreakingDedupEntry).filter(
+                BreakingDedupEntry.sent_at > cutoff
+            ).all()
+            with _dedup_lock:
+                for row in rows:
+                    existing = _dedup_store.get(row.issue_key)
+                    if existing is None or row.sent_at > existing:
+                        _dedup_store[row.issue_key] = row.sent_at
+            logger.info(f"[dedup] DB 로드 완료: {len(rows)}건 (6h 윈도우)")
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("[dedup] DB 로드 실패 (fail-open, 인메모리만 사용)")
+    _dedup_loaded_from_db = True
 
 
 def build_breaking_alert_text(

@@ -5,6 +5,88 @@
 
 ---
 
+## 2026-04-09 20:00 KST — Dedup/Candidate Pool DB 영속화
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : BREAKING dedup 상태 + Top5 CANDIDATE 풀을 프로세스 재시작 후에도 유지.
+- **기존 문제** :
+  - 재시작 → dedup 6h 윈도우 소실 → 중복 BREAKING 알림 가능
+  - 재시작 → CANDIDATE 풀 소실 → 05:00 빈 브리핑
+- **채택한 방식** : 하이브리드 (인메모리 유지 + DB write-through + 시작 시 DB→메모리 복원)
+  - 런타임: 기존과 동일 속도 (메모리 읽기)
+  - 영속화: DB 쓰기는 fail-open (실패해도 기존 동작 유지)
+  - 복원: 첫 사용 시 1회 lazy-load
+- **Changed Files** :
+  - `app/models/dedup.py` (신규, 3 테이블) — BreakingDedupEntry, CandidatePoolEntry, BreakingSentKey
+  - `app/db.py` (+1줄) — `import app.models.dedup` for table registration
+  - `app/services/breaking_alert_service.py` (+~40줄) — `_persist_dedup_to_db()`, `_load_dedup_from_db()` 추가, `_record_sent` / `_is_duplicate_within_window` 에 hook
+  - `app/services/top5_briefing_service.py` (+~100줄) — `_persist_candidate_to_db()`, `_persist_breaking_sent_to_db()`, `_load_candidates_from_db()`, `_cleanup_db_after_briefing()` 추가, `record_candidate` / `record_breaking_sent` / `select_top5` / `run_top5_briefing` 에 hook
+  - `tests/test_dedup_persistence.py` (신규, 10 tests) — DB write-through, 복원, 재시작 시뮬레이션, 만료 필터, cleanup
+- **Test Result** : 92 passed (신규 10 + 기존 82), 0 regression.
+- **Syntax Check** : `py_compile` OK (전 파일).
+- **Runtime Risk** :
+  - DB 쓰기 실패 시 → fail-open, 기존 인메모리 동작 유지. 데이터 유실 가능하지만 기능 중단 없음.
+  - 테이블 auto-create : `init_db()` 시 `create_all()` 이 기존 테이블은 건너뛰고 새 테이블만 생성.
+  - cycle_date 계산 : KST 기준 05:00 경계. 서버 시계 정상 전제.
+- **Server Apply Risk** : 낮음.
+  - 신규 모델 파일 1개 + 기존 파일 2개 수정 (breaking_alert_service.py, top5_briefing_service.py)
+  - db.py 는 서버에서도 동일 구조 → `import app.models.dedup` 1줄만 추가
+  - 기존 SQLite DB 에 3개 테이블 자동 추가 (기존 테이블 무영향)
+- **Recommendation** : APPROVE.
+- **Next Operator Action** :
+  1. 서버에 `app/models/dedup.py` 파일 배치
+  2. 서버 `app/db.py` 에 import 1줄 추가
+  3. 서버 `app/services/breaking_alert_service.py` 교체
+  4. 서버 `app/services/top5_briefing_service.py` 교체
+  5. `systemctl restart xdashboard` → 자동 테이블 생성
+
+### 서버 운영 명령어 (영속화)
+
+```bash
+cd /root/x-posting-system
+
+# 백업
+cp app/db.py /tmp/db.py.bak.persist
+cp app/services/breaking_alert_service.py /tmp/breaking_alert_service.py.bak.persist
+cp app/services/top5_briefing_service.py /tmp/top5_briefing_service.py.bak.persist
+
+# 파일 배치 (git show 방식)
+git fetch origin claude/x-posting-ops-review-7hlxK
+git show origin/claude/x-posting-ops-review-7hlxK:app/models/dedup.py > app/models/dedup.py
+git show origin/claude/x-posting-ops-review-7hlxK:app/services/top5_briefing_service.py > app/services/top5_briefing_service.py
+
+# db.py 수술식 삽입 (import 1줄)
+sed -i '/from app.models.content import Base/a\    import app.models.dedup  # noqa: F401 — 테이블 등록 (dedup + candidate pool)' app/db.py
+
+# breaking_alert_service.py 는 서버 버전 구조 확인 후 surgical 또는 교체 결정
+
+# 검증
+/root/x-posting-system/venv/bin/python -m py_compile app/models/dedup.py
+/root/x-posting-system/venv/bin/python -m py_compile app/db.py
+/root/x-posting-system/venv/bin/python -c "from app.models.dedup import BreakingDedupEntry, CandidatePoolEntry, BreakingSentKey; print('OK')"
+
+# 서비스 재시작 (테이블 자동 생성)
+systemctl restart xdashboard
+
+# 테이블 생성 확인
+/root/x-posting-system/venv/bin/python -c "
+import sqlite3
+conn = sqlite3.connect('x_poster.db')
+tables = [r[0] for r in conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()]
+print('Tables:', tables)
+conn.close()
+"
+
+# 롤백 (문제 시)
+cp /tmp/db.py.bak.persist app/db.py
+cp /tmp/breaking_alert_service.py.bak.persist app/services/breaking_alert_service.py
+cp /tmp/top5_briefing_service.py.bak.persist app/services/top5_briefing_service.py
+rm -f app/models/dedup.py
+systemctl restart xdashboard
+```
+
+---
+
 ## 2026-04-09 19:00 KST — Phase F : 05:00 KST Top5 스케줄러 연결
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)

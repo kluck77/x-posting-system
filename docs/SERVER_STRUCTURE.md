@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 19:00 KST (Phase F 구현 완료, 서버 반영 대기)
+최종 갱신 : 2026-04-09 20:00 KST (Dedup/Candidate 영속화 구현 완료, 서버 반영 대기)
 
 ---
 
@@ -257,6 +257,23 @@ except Exception as e:
 - `System restart required` 경고 있음 (OS 커널 업데이트 대기).
 - `.env.bak.*` 파일 다수 존재 (`.env.bak.approvalkr`, `.env.bak.krapproval2`, `.env.bak.promotetest`).
 - `_baseline_20260408/` 디렉토리 존재 (이전 baseline 스냅샷).
+
+---
+
+## 8. 영속화 테이블 (서버 반영 대기)
+
+Dedup/Candidate Pool 영속화를 위해 SQLite 에 3개 테이블 추가 예정.
+`init_db()` 호출 시 `Base.metadata.create_all()` 로 자동 생성됨 (기존 테이블 무영향).
+
+| 테이블 | 용도 | 핵심 컬럼 |
+|---|---|---|
+| `breaking_dedup_entries` | BREAKING_NOW 전송 기록 (6h dedup) | issue_key, sent_at (epoch) |
+| `candidate_pool_entries` | 야간 CANDIDATE 기사 풀 | title, body, topic_domain, matched_keywords_json, cycle_date |
+| `breaking_sent_keys` | BREAKING_NOW→Top5 제외 키 | issue_key, cycle_date |
+
+- 인메모리 1차 + DB write-through 구조 (fail-open)
+- 시작 시 DB → 메모리 lazy-load 복원
+- 05:00 브리핑 전송 후 현재 사이클 데이터 삭제
 - `debug_*.txt` 파일 존재 (이전 디버깅 로그).
 - `scripts/collect_debug_bundle.sh` 존재.
 - `static/` 디렉토리에 AI 역할 아바타 이미지 존재.
