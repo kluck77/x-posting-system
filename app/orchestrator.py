@@ -96,6 +96,23 @@ class Orchestrator:
                 f"urgency={breaking_result.urgency or '-'}"
             )
 
+            # Step 1.5b: CANDIDATE → Top5 야간 큐 적재 (fail-open)
+            if breaking_result.classification == "CANDIDATE":
+                try:
+                    from app.services.top5_briefing_service import record_candidate
+                    record_candidate(
+                        title=source_item.title,
+                        body=source_item.source_text,
+                        url=source_item.url,
+                        topic_domain=breaking_result.topic_domain,
+                        matched_keywords=breaking_result.matched_keywords,
+                        breaking_reason=breaking_result.breaking_reason,
+                        urgency=breaking_result.urgency,
+                        collected_at=source_item.created_at,
+                    )
+                except Exception:
+                    pass  # fail-open, 로그는 record_candidate 내부
+
             # Step 1.6: BREAKING_NOW 일 때만 분리된 텔레그램 알림 핸드오프
             # - 기존 approval card 흐름과 섞지 않는 분리 경로 (S3-C)
             # - 이중 fail-open : 내부 함수가 False 를 반환하거나 예외를 내더라도
@@ -112,6 +129,16 @@ class Orchestrator:
                         body=source_item.source_text,
                     )
                     logger.info(f"[1.6/6] breaking alert 핸드오프: sent={sent}")
+                    # Top5 제외 등록 (BREAKING_NOW 전송분은 Top5에서 제외)
+                    if sent:
+                        try:
+                            from app.services.top5_briefing_service import record_breaking_sent
+                            record_breaking_sent(
+                                title=source_item.title,
+                                topic_domain=breaking_result.topic_domain,
+                            )
+                        except Exception:
+                            pass  # fail-open
                 except Exception as e:
                     logger.warning(
                         f"breaking alert 핸드오프 실패 (fail-open, 파이프라인 계속): {e}"

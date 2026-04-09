@@ -6,16 +6,28 @@
 ---
 
 ## Updated At
-2026-04-09 12:28 KST
+2026-04-09 17:00 KST
 
 ## Updated By
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**세션 휴지 (Rest) 유지 + 계정 품질 문서 2종 완료.** 오늘 P0 4건 종결 + 계정 품질 레이어 문서화 완료. 버그 휴지 상태는 유지.
+**P1 BREAKING 파이프라인 완료 + Top5 브리핑 구현 완료.** 서버 반영 대기 중.
 
 ## Current Priority
-**없음 — 휴지 중. 다음 트리거 (운영자 hotfix / 후보 선택 / §15.1 알림) 대기.**
+**Top5 브리핑 서버 반영 검증** — 코드 구현 + 테스트 완료. 서버 적용은 운영자 트리거 대기.
+
+## ★ 05:00 Top5 브리핑 카드 구현 완료 (2026-04-09)
+- `app/services/top5_briefing_service.py` 신규 (점수 산정 + 선정 + 카드 + 전송)
+- `app/orchestrator.py` Step 1.5b CANDIDATE 적재 + Step 1.6 BREAKING_NOW 제외 등록
+- 29 tests passed, 0 regression
+- 서버 반영 대기
+
+### 다음 후보 (운영자 택 1)
+- 후속 보도 자동 트래킹 (24h 윈도우)
+- dedup 영속화 (DB/Redis 이관, 운영자 승인 필요)
+- publisher 확장
+- 휴지 유지
 
 ## ★ 계정 품질 문서 2종 완료 (2026-04-09)
 - ✅ `docs/ACCOUNT_CONSTITUTION.md` (commit `15a4b33`) — 계정 정체성 / 주제 / 금지사항 / 톤·문장·리스크·예시 12 섹션

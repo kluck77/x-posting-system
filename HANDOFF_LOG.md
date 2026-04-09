@@ -5,6 +5,54 @@
 
 ---
 
+## 2026-04-09 17:00 KST — 05:00 Top5 브리핑 카드 구현
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 22:00~05:00 KST 야간 CANDIDATE 중 Top5 선정 → 05:00 텔레그램 브리핑 카드 발송 구현.
+- **Changed Files** :
+  - `app/services/top5_briefing_service.py` (신규, ~340줄) — 인메모리 CANDIDATE 저장소,
+    4축 가점 + 3축 패널티 점수 산정 (TOP5_BRIEFING_SCORING_SPEC.md §4~§9 준수),
+    Top5 선정 (60점 하한선 / 자산군 균형 / 동률 처리 / 중복도 패널티),
+    §9 복붙 템플릿 기반 카드 생성, 텔레그램 전송 (httpx, fail-open),
+    `run_top5_briefing()` 스케줄러 진입점.
+  - `app/orchestrator.py` (+23줄) — Step 1.5b: CANDIDATE → `record_candidate()` 적재,
+    Step 1.6 내: BREAKING_NOW 전송 성공 시 `record_breaking_sent()` 호출 (Top5 제외용).
+  - `tests/test_top5_briefing_service.py` (신규, 29 tests) — 신선도/시장영향/근거강도/
+    적합도/패널티/Top5선정/카드생성/전송/야간필터 전 구간 커버.
+- **Code Changes** : +640 / −0 (신규 2 + 수정 1)
+- **Test Result** : 29 passed (신규), 135 passed (기존), 0 regression.
+  기존 실패 9건은 test_providers.py pytest-asyncio 미설치 (pre-existing).
+- **Syntax Check** : `py_compile` OK (top5_briefing_service.py + orchestrator.py).
+- **Runtime Risk Remaining** :
+  - 인메모리 저장소 → 프로세스 재시작 시 야간 CANDIDATE 풀 초기화. 05:00 직전 재시작 시 빈 브리핑.
+  - 점수 산정은 규칙 기반 휴리스틱. LLM 채점 대비 정밀도 한계. 운영 데이터 쌓인 후 가중치 튜닝 필요.
+  - 스케줄러 연결 (05:00 KST `run_top5_briefing()` 호출) 은 서버 반영 시 별도 작업.
+- **Server Apply Risk** : 낮음.
+  - `top5_briefing_service.py` : 신규 파일 배치 (무충돌).
+  - `orchestrator.py` : Step 1.5 블록 내부 CANDIDATE 분기 + Step 1.6 내부 1줄 추가.
+    서버 680줄 orchestrator 에 surgical insertion 필요 (Phase C 패턴 동일).
+  - 스케줄러 wiring : `run.py` 또는 cron 에 05:00 KST 트리거 추가 필요.
+- **Recommendation** : APPROVE.
+- **Next Operator Action** :
+  1. 서버에 `top5_briefing_service.py` 파일 배치.
+  2. 서버 `orchestrator.py` 에 Step 1.5b + Step 1.6 확장 surgical insertion.
+  3. 스케줄러에 05:00 KST `run_top5_briefing()` 호출 등록.
+  4. 수동 테스트로 카드 형식 확인.
+
+### 점수 산정 요약 (TOP5_BRIEFING_SCORING_SPEC.md 준수)
+
+| 축 | 배점 | 구현 방식 |
+|---|---|---|
+| 신선도 | 20 | KST 시간대별 구간 점수 |
+| 시장 영향도 | 30 | 거시/Tier1 키워드 밀도 |
+| 근거 강도 | 25 | 본문 길이 + 수치 + 인용 |
+| 계정 적합도 | 25 | 도메인 + 해석 축 시그널 |
+| 중복도 패널티 | -15 | issue_key 기반 같은 이슈 1건만 |
+| 자극 제목 패널티 | -10 | 과장 단어 + 느낌표 |
+| 본문 빈약 패널티 | -10 | 400자 미만 + 수치/인용/맥락 부재 |
+
+---
+
 ## 2026-04-09 16:17 KST — Phase B/C : BREAKING 기능 서버 반영 완료
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
