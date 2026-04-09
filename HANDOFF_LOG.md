@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-04-09 — AI 운영 구조 문서화
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : AI 6축 운영 구조 + 네이버 자동수집 라인을 문서로 고정. 코드 변경 없음, 서버 반영 없음.
+- **Changed Files** :
+  - `docs/AI_OPERATING_LAYER.md` (신규) — AI 6축 역할 정의, 네이버 자동수집 라인, 수동 /ingest 라인, BREAKING/Top5/KO-only/승인 관계, 공통 정책 레이어, 금지사항, 문서 관계도
+  - `HANDOFF_LOG.md` — 본 항목 추가
+  - `TASK_BOARD.md` — Current Stage 갱신, 다음 후보 갱신
+  - `docs/SERVER_STRUCTURE.md` — AI 운영 구조 문서 연결 참조 추가
+- **코드 변경** : 0
+- **서버 반영** : 불필요 (문서만)
+- **Recommendation** : 문서화 완료. 실 기사 인입으로 Phase H 분기 동작 확인 권장.
+- **Next Operator Action** : 다음 후보 (실 기사 검증 / Top5 첫 발송 확인 / 후속 보도 트래킹 / publisher 확장 / 휴지 유지) 중 1개 선택.
+
+---
+
 ## 2026-04-09 — Phase H : 한국어 전용 라인 분기 — 서버 반영 완료
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)

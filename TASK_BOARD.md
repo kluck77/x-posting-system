@@ -12,7 +12,7 @@
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**Phase H 서버 반영 완료.** 한국어 전용 라인 분기 (영어 승인 카드 우회) 운영 중.
+**Phase H 서버 반영 완료 + AI 운영 구조 문서화 완료.** 한국어 전용 라인 분기 운영 중. AI 6축 구조 + 네이버 자동수집 라인 문서 고정.
 
 ## Current Priority
 **운영 안정화 관찰** — 금융 기사 인입 시 영어 승인 카드 미발송 + BREAKING/Top5 정상 동작 확인.
@@ -23,6 +23,10 @@ Claude Code (claude/github-mcp-setup-L0oac)
   - HOLD/REJECT/비대상 도메인 → 기존 파이프라인 100% 유지
 - `tests/test_ko_routing.py` 신규 (10 tests), 173 passed, 0 regression
 - 서버: py_compile OK, xdashboard active (running)
+
+## ★ AI 운영 구조 문서화 완료 (2026-04-09)
+- `docs/AI_OPERATING_LAYER.md` 신규 — AI 6축 역할 정의, 네이버 자동수집 라인, BREAKING/Top5/KO-only/승인 관계, 문서 관계도
+- 코드 변경 0, 서버 반영 불필요
 
 ### 다음 후보 (운영자 택 1)
 - 실 기사 인입으로 Phase H 분기 동작 검증

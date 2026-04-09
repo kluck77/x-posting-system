@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 21:00 KST (Phase G 서버 반영 완료)
+최종 갱신 : 2026-04-09 KST (AI 운영 구조 문서 연결 추가)
 
 ---
 
@@ -296,3 +296,39 @@ Dedup/Candidate Pool 영속화를 위해 SQLite 에 3개 테이블 추가 예정
 - `debug_*.txt` 파일 존재 (이전 디버깅 로그).
 - `scripts/collect_debug_bundle.sh` 존재.
 - `static/` 디렉토리에 AI 역할 아바타 이미지 존재.
+
+---
+
+## 9. AI 운영 구조 연결
+
+AI 6축 운영 구조의 전체상은 `docs/AI_OPERATING_LAYER.md` 에 정리되어 있다.
+서버와 관련된 핵심 연결점만 아래에 기록한다.
+
+### 9.1 네이버 자동수집 (서버 전용 파일)
+
+| 파일 | 역할 |
+|------|------|
+| `app/services/naver_news.py` | 네이버 뉴스 API 호출 |
+| `app/services/naver_usage.py` | 네이버 API 할당량 추적 (25,000/일) |
+| `app/services/news_monitor.py` | 폴링 오케스트레이션 |
+| `app/services/rss_fetcher.py` | RSS 피드 수집 |
+| `app/services/content_fetcher.py` | 기사 본문 추출 |
+
+수집된 기사 → `SourceItemCreate` → `orchestrator.full_pipeline()` (수동 /ingest 와 동일 진입점).
+
+### 9.2 서버 고유 AI 기능 (작업 브랜치에 없음)
+
+| 기능 | Step | 관련 파일 |
+|------|------|----------|
+| 5-Criteria 품질 필터 | Step 4.5 | `quality_scorer.py` |
+| Reviewer regenerate 루프 | Step 5.5 | orchestrator.py 내장 |
+| community_risk 분류 | Step 6 이후 | `classifier.py` |
+| business_classifier | Step 6 이후 | `business_classifier.py` |
+| prediction_service | Step 6 이후 | `prediction_service.py` |
+| Grok 트렌드 | 독립 | `get_trending_topics()` |
+
+### 9.3 문서 참조
+
+- AI 운영 전체상 : `docs/AI_OPERATING_LAYER.md`
+- 계정 정체성 : `docs/ACCOUNT_CONSTITUTION.md`
+- 역할 프롬프트 : `docs/AI_ROLE_PROMPTS.md`
