@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-04-09 16:17 KST — Phase B/C : BREAKING 기능 서버 반영 완료
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : BREAKING 분류 + 텔레그램 핸드오프를 프로덕션 서버에 수술식 반영.
+- **Phase B** (신규 파일 배치) :
+  - `app/services/breaking_classifier.py` — `git show 92b3adc:<path>` 로 서버 배치.
+    sha256: `16086c70d412f8e5d60ef69bdd6f169a2c5613699c1e3c84b71106391334bf26`
+  - `app/services/breaking_alert_service.py` — 동일 방식 배치.
+    sha256: `a808e815cd93eb2e162fcbf4473415d3bea05348bd2c7c9779143068f6b53d39`
+  - py_compile OK, import smoke OK.
+- **Phase C** (orchestrator.py surgical insertion) :
+  - Step 1.5 (line 157): `classify_article()` 호출, fail-open.
+  - Step 1.6 (line 176): BREAKING_NOW → `send_breaking_alert()` 텔레그램 핸드오프.
+  - base64-encoded unified diff → `patch -p1` 적용. 643줄 → 680줄 (+37, 순수 삽입).
+  - 이중 삽입 감지 → 즉시 롤백 → 단일 삽입 상태 확인 → py_compile OK.
+  - `systemctl restart xdashboard` 완료, active (running).
+- **서버 상태** :
+  - HEAD: `temp/phase8a-observe-bypass-20260408-042459` (`58f89b05`) + Phase B/C 패치.
+  - orchestrator.py: 680줄 (기존 643 + Step 1.5/1.6 37줄).
+  - 롤백: `cp /tmp/orchestrator.py.bak.phase_c app/orchestrator.py && systemctl restart xdashboard`
+- **미확인** :
+  - 실제 기사 인입 시 `[1.5/6]` / `[1.6/6]` 로그 출력 (대기 중).
+  - BREAKING_NOW 실제 텔레그램 발송 확인 (실 트리거 필요).
+- **Updated Docs** : `docs/SERVER_STRUCTURE.md` (Phase B/C 반영 상태, Step 순서, 파일 목록 갱신).
+
+---
+
 ## 2026-04-09 (KST) — P1 stage-3 / S3-C.1 : BREAKING 텔레그램 카드 템플릿 §3/§5 정합
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)

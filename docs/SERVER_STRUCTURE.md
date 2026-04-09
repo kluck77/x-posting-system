@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 (KST)
+최종 갱신 : 2026-04-09 16:17 KST (Phase B/C 서버 반영 완료)
 
 ---
 
@@ -58,7 +58,7 @@ ps -ef | grep -E 'python|uvicorn|gunicorn' | grep -v grep
 |---|---|---|
 | 브랜치 | `temp/phase8a-observe-bypass-20260408-042459` | `claude/x-posting-ops-review-7hlxK` |
 | HEAD | `58f89b05` | `2413a71` |
-| orchestrator.py | 643줄 (고급 기능 포함) | 349줄 (단순 기준선) |
+| orchestrator.py | 680줄 (고급 기능 + Step 1.5/1.6 삽입) | 349줄 (단순 기준선) |
 
 ### 서버에만 있는 orchestrator 기능 (브랜치에 없음)
 
@@ -85,20 +85,30 @@ from app.services.quality_scorer import (
 from app.providers.base import FactCheckResult, TrendResult
 ```
 
-### 브랜치에만 있는 파일 (서버에 없음, 2026-04-09 기준)
+### Phase B/C 서버 반영 완료 (2026-04-09 07:17 UTC)
 
-- `app/services/breaking_classifier.py` (P1 stage-1)
-- `app/services/breaking_alert_service.py` (P1 stage-3)
+| 파일 | 반영 방식 | 상태 |
+|---|---|---|
+| `app/services/breaking_classifier.py` | Phase B: `git show` 배치 | ✅ sha256 `16086c70...` |
+| `app/services/breaking_alert_service.py` | Phase B: `git show` 배치 | ✅ sha256 `a808e815...` |
+| `app/orchestrator.py` Step 1.5/1.6 | Phase C: `patch -p1` 삽입 (+37줄) | ✅ 643→680줄, py_compile OK |
+
+- 롤백: `cp /tmp/orchestrator.py.bak.phase_c app/orchestrator.py && systemctl restart xdashboard`
+
+### 브랜치에만 있는 파일 (서버에 없음)
+
 - `app/services/candidate_filter.py`
 
 ---
 
-## 4. 서버 app/services/ 파일 목록 (2026-04-09 기준)
+## 4. 서버 app/services/ 파일 목록 (2026-04-09 Phase B 반영 후)
 
 ```
 __init__.py
 advisory.py
 b2b_candidate_service.py
+breaking_alert_service.py
+breaking_classifier.py
 brief_offer_service.py
 business_classifier.py
 classifier.py
@@ -187,8 +197,9 @@ systemctl restart xdashboard
 ```
 Step 0  : 일일 제한 확인
 Step 1  : 소스 DB 저장                          ← 줄 153~155
-          ↓ 삽입 가능 지점 (Step 1 과 Step 2 사이)
-Step 2  : Researcher — 배경 리서치               ← 줄 157~
+Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ 반영 완료
+Step 1.6: BREAKING_NOW 텔레그램 핸드오프         ← 줄 176~192 ✅ 반영 완료
+Step 2  : Researcher — 배경 리서치               ← 줄 194~
 Step 3  : DraftWriter — 초안 생성
 Step 4  : FactChecker — 팩트체크
 Step 4.5: 5-Criteria 품질 필터 (서버 고유)
