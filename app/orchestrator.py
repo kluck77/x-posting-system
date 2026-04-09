@@ -115,7 +115,7 @@ class Orchestrator:
 
                 # Step 1.5c: 주간 고점수 CANDIDATE 즉시 알림 (fail-open)
                 # - 05:00~22:00 KST 에만 동작
-                # - 교차검증 4+ / 점수 컷라인 / 즉시성 조건 모두 충족 시 텔레그램 즉시 알림
+                # - 강한 키워드 신호 4+ / 점수 컷라인 / 즉시성 조건 모두 충족 시 텔레그램 즉시 알림
                 # - Top5 큐 적재(1.5b)와 독립. 둘 다 동작해도 충돌 없음.
                 try:
                     from app.services.daytime_alert_service import try_daytime_alert

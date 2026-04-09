@@ -9,7 +9,7 @@ DAYTIME CANDIDATE ALERT SERVICE
 
 조건 (모두 만족해야 함):
   a. 현재 시각 05:00~22:00 KST (주간)
-  b. matched_keywords >= 4 (교차검증)
+  b. matched_keywords >= 4 (강한 키워드 신호 4개 이상)
   c. score >= DAYTIME_SCORE_THRESHOLD (점수 컷라인)
   d. 수집 후 2시간 이내 (즉시성)
 
@@ -42,7 +42,7 @@ _DAY_START_HOUR = 5    # 05:00 KST
 _DAY_END_HOUR = 22     # 22:00 KST
 
 DAYTIME_SCORE_THRESHOLD = 55       # 점수 컷라인 (주간 freshness=0 감안)
-DAYTIME_MIN_KEYWORDS = 4           # 교차검증 최소 키워드 수
+DAYTIME_MIN_KEYWORDS = 4           # 강한 키워드 신호 최소 매칭 수
 DAYTIME_FRESHNESS_HOURS = 2        # 즉시성: 수집 후 N시간 이내
 
 
@@ -89,7 +89,7 @@ def should_send_daytime_alert(
 
     모두 만족해야 True:
       a. 현재 05:00~22:00 KST
-      b. matched_keywords >= 4 (교차검증)
+      b. matched_keywords >= 4 (강한 키워드 신호 4개 이상)
       c. score >= DAYTIME_SCORE_THRESHOLD
       d. 수집 후 2시간 이내 (즉시성)
     """

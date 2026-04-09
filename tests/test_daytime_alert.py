@@ -218,7 +218,7 @@ class TestBuildDaytimeAlertText:
 @pytest.mark.asyncio
 class TestTryDaytimeAlert:
     async def test_daytime_high_score_sends(self):
-        """주간 + 고점수 + 교차검증 → 알림 전송."""
+        """주간 + 고점수 + 강한 키워드 신호 충족 → 알림 전송."""
         now = datetime(2026, 4, 10, 10, 0, tzinfo=_KST)
         collected = now - timedelta(minutes=30)
         from app.services.daytime_alert_service import try_daytime_alert
@@ -269,7 +269,7 @@ class TestTryDaytimeAlert:
         assert result is False
 
     async def test_few_keywords_does_not_send(self):
-        """교차검증 부족 → 알림 안 보냄."""
+        """키워드 신호 부족 → 알림 안 보냄."""
         now = datetime(2026, 4, 10, 10, 0, tzinfo=_KST)
         collected = now - timedelta(minutes=30)
         from app.services.daytime_alert_service import try_daytime_alert
