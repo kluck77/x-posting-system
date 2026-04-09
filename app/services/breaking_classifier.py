@@ -151,8 +151,18 @@ def classify_article(
     combined = f"{title_s}\n{body_s}"
     lowered = combined.lower()
 
-    # 1) 본문 빈약 → HOLD
+    # 1) 본문 빈약 → HOLD (단, 제목에 STRONG 키워드 있으면 CANDIDATE 구제)
     if len(body_s) < MIN_BODY_CHARS or _count_sentences(body_s) < MIN_BODY_SENTENCES:
+        excluded = _match_any(combined, lowered, EXCLUDE_KEYWORDS)
+        if not excluded:
+            title_strong = _match_domains(title_s, title_s.lower(), STRONG_KEYWORDS)
+            if title_strong:
+                primary_domain, kws = _pick_primary(title_strong)
+                return ClassificationResult(
+                    classification="CANDIDATE",
+                    topic_domain=primary_domain,
+                    matched_keywords=kws[:5],
+                )
         return ClassificationResult(
             classification="HOLD",
             topic_domain="none",

@@ -12,10 +12,17 @@
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**/ingest 응답 문구 정합성 수정 — 서버 반영 완료.** 응답 메시지가 실제 처리 경로(속보/Top5/주간 알림/KO-only/approval)를 정확히 반영.
+**KO-only 분기 미동작 수정 완료 (서버 반영 대기).** 짧은 본문 + 강한 제목 키워드 → CANDIDATE 구제.
 
 ## Current Priority
-**없음** — /ingest 문구 정합성 수정 서버 반영 완료. 운영자 다음 지시 대기.
+**서버 반영** — breaking_classifier.py 1개 파일 전체 교체.
+
+## ★ KO-only 분기 미동작 수정 (2026-04-09)
+- `app/services/breaking_classifier.py` (+7줄) — HOLD 가드 내 제목 STRONG 키워드 체크 추가
+- Root Cause: MIN_BODY_CHARS=80 가드 → 짧은 본문 HOLD → topic_domain="none" → KO-only 실패
+- Fix: 제목에 STRONG 키워드 있으면 CANDIDATE 구제 (EXCLUDE는 여전히 HOLD)
+- 207 passed, 0 regression
+- 서버 반영 대기
 
 ## ★ /ingest 응답 문구 정합성 수정 (2026-04-09) — 서버 반영 완료
 - `app/orchestrator.py` — full_pipeline() 응답 메시지를 처리 경로별 조건 분기로 교체 + docstring 수정

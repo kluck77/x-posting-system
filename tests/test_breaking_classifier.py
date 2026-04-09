@@ -105,8 +105,20 @@ class TestCandidate:
 # HOLD 예시 2개
 # ---------------------------------------------------------------------------
 class TestHold:
-    def test_본문_짧음_hold(self):
-        # 본문이 MIN_BODY_CHARS 미만이면 도메인 매칭 여부와 무관하게 HOLD
+    def test_본문_짧음_도메인무관_hold(self):
+        # 본문 짧고 제목에 STRONG 키워드 없음 → HOLD
+        result = classify_article(
+            title="오늘 시장 동향 요약",
+            body="시장이 조용했다.",
+            publisher="연합뉴스",
+            published_at=datetime(2026, 4, 9, 11, 5),
+            url="https://www.yna.co.kr/view/123",
+        )
+        assert result.classification == "HOLD"
+        assert result.topic_domain == "none"
+
+    def test_본문_짧음_제목_강한키워드_candidate(self):
+        # 본문 짧아도 제목에 STRONG 키워드 있으면 CANDIDATE 구제
         result = classify_article(
             title="한은 기준금리 인하 의결 (속보)",
             body="한은이 기준금리를 인하했다.",
@@ -114,10 +126,9 @@ class TestHold:
             published_at=datetime(2026, 4, 9, 11, 5),
             url="https://www.yna.co.kr/view/123",
         )
-        assert result.classification == "HOLD"
-        assert result.topic_domain == "none"
-        assert result.breaking_reason is None
-        assert result.urgency is None
+        assert result.classification == "CANDIDATE"
+        assert result.topic_domain == "금융"
+        assert len(result.matched_keywords) >= 1
 
     def test_url_누락_hold(self):
         # 본문 / 도메인은 충분해도 URL 이 없으면 HOLD (FILTER §10.2)

@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-04-09 — KO-only 분기 미동작 원인 수정 (classifier 짧은 본문 가드)
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : 한국어 금융 기사가 KO-only 분기를 못 타고 영어 approval 카드로 가는 문제 수정.
+- **Root Cause** : `breaking_classifier.py`의 본문 길이 가드 (`MIN_BODY_CHARS=80`) 때문에 짧은 본문 기사가 HOLD (topic_domain="none") → Step 1.7 KO-only 조건 `topic_domain ∈ {금융,투자,크립토,주식}` 실패 → 영어 approval 파이프라인으로 진입.
+- **Fix** : 본문 짧아도 제목에 STRONG 키워드가 있으면 CANDIDATE로 구제 (+7줄). EXCLUDE 키워드 있으면 여전히 HOLD. 도메인 무관 짧은 본문은 여전히 HOLD.
+- **Changed Files** :
+  - `app/services/breaking_classifier.py` (+7줄) — HOLD 가드 내 제목 STRONG 키워드 체크 추가
+  - `tests/test_breaking_classifier.py` (+7줄/−5줄) — 기존 테스트 분리 + 신규 CANDIDATE 구제 테스트
+  - `HANDOFF_LOG.md`, `TASK_BOARD.md`, `docs/SERVER_STRUCTURE.md` 갱신
+- **Test Result** : 207 passed, 0 regression
+- **Runtime Risk** : 낮음 — 짧은 본문 + STRONG 제목 키워드 조합만 HOLD→CANDIDATE 변경. 다른 모든 경로 무변경.
+- **서버 반영** : breaking_classifier.py 1개 파일 전체 교체 (`git show`)
+
+---
+
 ## 2026-04-09 — /ingest 응답 문구를 현재 운영 정책에 맞게 정리
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
