@@ -25,9 +25,50 @@
   - HEAD: `temp/phase8a-observe-bypass-20260408-042459` (`58f89b05`) + Phase B/C 패치.
   - orchestrator.py: 680줄 (기존 643 + Step 1.5/1.6 37줄).
   - 롤백: `cp /tmp/orchestrator.py.bak.phase_c app/orchestrator.py && systemctl restart xdashboard`
-- **미확인** :
-  - 실제 기사 인입 시 `[1.5/6]` / `[1.6/6]` 로그 출력 (대기 중).
-  - BREAKING_NOW 실제 텔레그램 발송 확인 (실 트리거 필요).
+- **수동 발송 테스트** : `sent=True`, 텔레그램 카드 8필드 정상 수신 확인 (16:24 KST).
+- **다음 세션 확인 사항** :
+  - 실제 기사 인입 시 `[1.5/6]` / `[1.6/6]` 로그 출력 확인.
+
+### 서버 운영 명령어
+
+```bash
+# 로그 실시간 감시 (기사 인입 시 [1.5/6] / [1.6/6] 확인)
+cd /root/x-posting-system && journalctl -u xdashboard -f | grep -E "\[1\.[56]/6\]|breaking"
+
+# 수동 BREAKING_NOW 텔레그램 발송 테스트
+cd /root/x-posting-system
+/root/x-posting-system/venv/bin/python - <<'PY'
+import asyncio
+from app.services.breaking_classifier import ClassificationResult
+from app.services.breaking_alert_service import send_breaking_alert
+
+r = ClassificationResult(
+    classification="BREAKING_NOW",
+    topic_domain="금융",
+    matched_keywords=["기준금리", "인하"],
+    breaking_reason="한국은행 금통위 긴급 기준금리 인하 결정",
+    urgency="high",
+)
+
+sent = asyncio.run(send_breaking_alert(
+    breaking_result=r,
+    title="[테스트] 한국은행 기준금리 25bp 긴급 인하 결정",
+    url="https://example.com/test-breaking",
+    body="한국은행 금융통화위원회가 임시회의를 열고 기준금리를 연 2.75%에서 2.50%로 25bp 인하했다.",
+))
+print(f"sent={sent}")
+PY
+
+# 롤백 (문제 시)
+cp /tmp/orchestrator.py.bak.phase_c /root/x-posting-system/app/orchestrator.py
+systemctl restart xdashboard
+
+# 서비스 상태 확인
+systemctl status xdashboard --no-pager | head -12
+
+# 이중 삽입 점검
+grep -c "Step 1.5" /root/x-posting-system/app/orchestrator.py  # 1이어야 정상
+```
 - **Updated Docs** : `docs/SERVER_STRUCTURE.md` (Phase B/C 반영 상태, Step 순서, 파일 목록 갱신).
 
 ---
