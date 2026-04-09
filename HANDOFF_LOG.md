@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-04-10 — Phase F 상태 확정 + 실기사 통합 검증
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : Phase F (05:00 KST Top5 스케줄러) 문서 상태 충돌 해소 + 실기사 1건으로 전체 파이프라인 통합 검증.
+- **Phase F 상태 충돌** :
+  - `TASK_BOARD.md` : "서버 반영 대기" (갱신 누락)
+  - `docs/SERVER_STRUCTURE.md` : "Phase F 서버 반영 완료 (2026-04-09 20:28 UTC)"
+  - 서버 실측: `app/main.py` 스케줄러 코드 존재, server.log에서 `[top5-scheduler] 05:00 KST 자동 실행 등록` 확인
+  - **결론 : Phase F = 서버 반영 완료** → TASK_BOARD 수정 완료
+- **실기사 통합 검증** :
+  - 입력: "4월 금통위 기준금리 동결 결정 — 시장 예상 부합" (금융, 본문 5문장)
+  - classification: CANDIDATE, topic_domain: 금융
+  - 라우팅: KO-only (`[1.7/6] English draft skipped: CANDIDATE domain=금융`)
+  - 응답: "한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
+  - telegram_sent: false, 영어 approval 카드 0건
+  - DB: candidate_pool_entries id=5 적재 확인
+  - draft_id=23, source_id=32
+- **Changed Files** :
+  - `TASK_BOARD.md` — Phase F "서버 반영 대기" → "서버 반영 완료" + Current Stage 갱신
+  - `HANDOFF_LOG.md` — 본 세션 기록 추가
+  - `docs/SERVER_STRUCTURE.md` — 통합 검증 결과 추가
+- **코드 변경** : 0 (문서만 수정)
+- **Runtime Risk** : 0
+
+---
+
 ## 2026-04-09 — KO-only 분기 미동작 원인 수정 (classifier 짧은 본문 가드)
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)

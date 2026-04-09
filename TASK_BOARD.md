@@ -6,16 +6,16 @@
 ---
 
 ## Updated At
-2026-04-09 KST
+2026-04-10 KST
 
 ## Updated By
-Claude Code (claude/github-mcp-setup-L0oac)
+Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**KO-only 분기 미동작 수정 — 서버 반영 완료.** 짧은 본문 + 강한 제목 키워드 → CANDIDATE 구제. smoke test 2건 통과.
+**Phase F 상태 확정 + 실기사 통합 검증 완료.** Phase F "서버 반영 대기" → "서버 반영 완료" 확정 (서버 실측). 금융 CANDIDATE 1건 KO-only 파이프라인 정상 통과.
 
 ## Current Priority
-**없음** — KO-only 분기 수정 서버 반영 완료. 운영자 다음 지시 대기.
+**없음** — 전 파이프라인 정상 확인. 운영자 다음 지시 대기.
 
 ## ★ KO-only 분기 미동작 수정 (2026-04-09) — 서버 반영 완료
 - `app/services/breaking_classifier.py` (+7줄) — HOLD 가드 내 제목 STRONG 키워드 체크 추가
@@ -70,11 +70,12 @@ Claude Code (claude/github-mcp-setup-L0oac)
 - `app/db.py` surgical 1줄 삽입
 - SQLite 테이블: 7개 (기존 4 + 신규 3) 확인 완료
 
-## ★ Phase F: 05:00 KST 스케줄러 구현 완료 (2026-04-09)
+## ★ Phase F: 05:00 KST 스케줄러 구현 완료 (2026-04-09) — 서버 반영 완료
 - `app/main.py` +22줄 — `_top5_scheduler_loop()` + `asyncio.create_task()` 삽입
 - `tests/test_top5_scheduler.py` 신규 (9 tests)
 - 82 passed, 0 regression
-- 서버 반영 대기 (`app/main.py` 1개 파일 교체)
+- ✅ 서버 반영 완료 (2026-04-09 20:28 UTC), server.log에서 등록 로그 확인
+- ✅ 실측 재확인 (2026-04-09 23:19 UTC): 서버 main.py 스케줄러 코드 존재, 다음 실행 2026-04-11 05:00 KST
 
 ## ★ Phase D+E 서버 반영 완료 (2026-04-09)
 - Phase D: `top5_briefing_service.py` 서버 배치 (sha256 검증 OK)

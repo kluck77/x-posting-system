@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 KST (KO-only 분기 미동작 수정 + /ingest 응답 문구 정합성 수정 + 주간 고점수 CANDIDATE 즉시 알림 + 운영 관측성 수정 + Phase F main.py 서버 반영)
+최종 갱신 : 2026-04-10 KST (Phase F 상태 확정 + 실기사 통합 검증)
 
 ---
 
@@ -104,16 +104,20 @@ from app.providers.base import FactCheckResult, TrendResult
 - orchestrator.py: 680 → 707줄 (+27)
 - 롤백: `cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py && systemctl restart xdashboard`
 
-### Phase F 서버 반영 완료 (2026-04-09 20:28 UTC)
+### Phase F 서버 반영 완료 (2026-04-09 20:28 UTC) — 실측 재확인 2026-04-09 23:19 UTC
 
 | 파일 | 반영 방식 | 상태 |
 |---|---|---|
-| `app/main.py` | Phase F: `git show` 전체 교체 | ✅ 서버 반영 완료 |
+| `app/main.py` | Phase F: `git show` 전체 교체 | ✅ 서버 반영 완료 (실측 재확인) |
 
 - `_top5_scheduler_loop()` : 매일 05:00 KST `run_top5_briefing()` 자동 실행
 - `asyncio.create_task()` 로 기존 이벤트루프에 합류 (외부 패키지 불필요)
 - 반영: `git fetch origin claude/x-posting-ops-review-7hlxK` → `git show origin/...:app/main.py > app/main.py`
 - 롤백: `cp /tmp/main.py.bak.phase_f app/main.py && systemctl restart xdashboard`
+- 실측 근거 (2026-04-09 23:19 UTC):
+  - 서버 main.py: `_top5_scheduler_loop` line 23, `create_task` line 82 확인
+  - server.log: `[top5-scheduler] 05:00 KST 자동 실행 등록` + `다음 실행: 2026-04-11T05:00:00+09:00`
+  - xdashboard: active (running), PID 210696
 
 ### KO-only 분기 미동작 수정 — 서버 반영 완료 (2026-04-09 22:31 UTC)
 
@@ -138,6 +142,17 @@ from app.providers.base import FactCheckResult, TrendResult
 - 변경 후: BREAKING_NOW KO-only / CANDIDATE KO-only / approval 전송 / approval 미전송 4가지 분기
 - smoke test: 일반 기사 → `"초안 생성 완료. 텔레그램에서 승인해주세요."` (approval 정상)
 - 롤백: `cp /tmp/orchestrator.py.bak.ingest_msg app/orchestrator.py && cp /tmp/admin.py.bak.ingest_msg app/api/admin.py && systemctl restart xdashboard`
+
+### 실기사 통합 검증 (2026-04-09 23:19 UTC)
+
+- 입력: "4월 금통위 기준금리 동결 결정 — 시장 예상 부합" (금융, 본문 5문장, URL 포함)
+- 결과:
+  - classification=CANDIDATE, topic_domain=금융, draft_id=23
+  - KO-only 라우팅 정상: `[1.7/6] English draft skipped: CANDIDATE domain=금융`
+  - 응답: "한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
+  - telegram_sent=false, 영어 approval 카드 0건
+  - DB candidate_pool_entries id=5 적재 확인
+- 검증 범위: classifier → KO-only 분기 → DB 적재 → 응답 문구 전체 정상
 
 ### 운영 관측성 수정 (서버 반영 대기)
 
