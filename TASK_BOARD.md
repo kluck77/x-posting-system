@@ -6,16 +6,31 @@
 ---
 
 ## Updated At
-2026-04-09 21:00 KST
+2026-04-09 KST
 
 ## Updated By
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**전 Phase 서버 반영 완료.** BREAKING + Top5 + 스케줄러 + 영속화 모두 운영 중.
+**Phase H 브랜치 구현 완료.** 한국어 전용 라인 분기 (영어 승인 카드 우회). 서버 반영 대기.
 
 ## Current Priority
-**운영 안정화 관찰** — 야간 기사 인입 → CANDIDATE 적재 → 05:00 브리핑 자동 발송 확인 대기.
+**Phase H 서버 반영** — orchestrator.py Step 1.7 수술식 삽입 + full_pipeline/regenerate 조건문 삽입.
+
+## ★ Phase H: 한국어 전용 라인 분기 — 영어 승인 카드 우회 (2026-04-09)
+- `app/orchestrator.py` Step 1.7 삽입 (+35줄, 3곳 수술)
+  - BREAKING_NOW/CANDIDATE + 금융/투자/크립토/주식 → 영어 초안 + 승인 카드 생략
+  - HOLD/REJECT/비대상 도메인 → 기존 파이프라인 100% 유지
+- `tests/test_ko_routing.py` 신규 (10 tests)
+- 173 passed, 0 regression
+- 서버 반영 대기 (orchestrator.py 수술식 적용)
+
+### 다음 후보 (운영자 택 1)
+- Phase H 서버 반영 (orchestrator.py 수술식)
+- 05:00 Top5 브리핑 첫 자동 발송 확인
+- 후속 보도 자동 트래킹 (24h 윈도우)
+- publisher 확장
+- 휴지 유지
 
 ## ★ Phase G: Dedup/Candidate 영속화 서버 반영 완료 (2026-04-09)
 - `app/models/dedup.py` 신규 배치 (3 테이블)

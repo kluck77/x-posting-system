@@ -146,6 +146,39 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
 
+        # Step 1.7: BREAKING/CANDIDATE 대상 금융 기사 → 영어 초안 파이프라인 우회
+        # - 한국어 전용 라인(BREAKING 알림 / Top5 큐)에서 이미 처리된 기사에 대해
+        #   영어 초안 생성 + 승인 카드 전송을 건너뛴다.
+        # - fail-open: 판정 실패 시 기존 파이프라인 계속 진행.
+        _KO_ONLY_DOMAINS = {"금융", "투자", "크립토", "주식"}
+        _KO_ONLY_CLASSES = {"BREAKING_NOW", "CANDIDATE"}
+        try:
+            _br = getattr(source_item, "breaking_result", None)
+            if (_br is not None
+                    and _br.classification in _KO_ONLY_CLASSES
+                    and _br.topic_domain in _KO_ONLY_DOMAINS):
+                logger.info(
+                    f"[1.7/6] 영어 초안 우회: {_br.classification} "
+                    f"domain={_br.topic_domain} → 한국어 전용 라인"
+                )
+                draft = self.draft_service.create_draft(
+                    source_item=source_item,
+                    hook=f"[{_br.classification}] {data.title[:80]}",
+                    body=f"한국어 전용 라인 처리 (영어 초안 생략). domain={_br.topic_domain}",
+                    category=ContentCategory.ECONOMY,
+                    risk_level=RiskLevel.LOW,
+                    risk_reasoning=f"{_br.classification} 한국어 전용 라인",
+                    ai_rationale=f"Routed to {_br.classification} pipeline, English draft skipped.",
+                )
+                draft._skip_approval_card = True  # type: ignore[attr-defined]
+                logger.info(
+                    f"=== 파이프라인 완료 (한국어 전용): draft_id={draft.id}, "
+                    f"routing={_br.classification} ==="
+                )
+                return draft
+        except Exception as e:
+            logger.warning(f"[1.7] 영어 초안 우회 판정 실패 (fail-open, 기존 파이프라인 계속): {e}")
+
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")
         try:
@@ -330,7 +363,9 @@ class Orchestrator:
                 source_type=source.source_type, language=source.language,
             )
             new_draft = await self.ingest_and_generate(new_data)
-            await self.send_for_approval(new_draft.id)
+            # BREAKING/CANDIDATE 한국어 전용 라인 → 승인 카드 생략
+            if not getattr(new_draft, '_skip_approval_card', False):
+                await self.send_for_approval(new_draft.id)
             return {
                 "success": True,
                 "message": f"재생성 완료! 새 draft ID: {new_draft.id}",
@@ -356,7 +391,12 @@ class Orchestrator:
         """전체 파이프라인: 소스 입력 → AI 생성 → 텔레그램 승인카드 전송"""
         try:
             draft = await self.ingest_and_generate(data)
-            sent = await self.send_for_approval(draft.id)
+            # BREAKING/CANDIDATE 한국어 전용 라인 → 승인 카드 생략
+            if getattr(draft, '_skip_approval_card', False):
+                sent = False
+                logger.info(f"[pipeline] 승인 카드 생략 (한국어 전용 라인): draft_id={draft.id}")
+            else:
+                sent = await self.send_for_approval(draft.id)
             return {
                 "success": True,
                 "draft_id": draft.id,

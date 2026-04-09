@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-04-09 — Phase H : 한국어 전용 라인 분기 (영어 승인 카드 우회)
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : BREAKING_NOW/CANDIDATE + 금융/투자/크립토/주식 기사에 대해 기존 영어 승인 초안 카드 경로를 차단.
+- **Changed Files** :
+  - `app/orchestrator.py` (+35줄, 3곳 수술)
+    - Step 1.7: `_KO_ONLY_DOMAINS` + `_KO_ONLY_CLASSES` 판정 → 영어 초안 파이프라인 early return
+    - `full_pipeline()`: `_skip_approval_card` 플래그 확인 → 승인 카드 전송 조건부 생략
+    - `_handle_regenerate()`: 동일 플래그 확인 → 승인 카드 전송 조건부 생략
+  - `tests/test_ko_routing.py` (신규, 10 tests)
+    - 4대 도메인 × BREAKING_NOW/CANDIDATE 우회 확인 (4건)
+    - HOLD/REJECT/none 도메인 기존 파이프라인 유지 확인 (4건)
+    - full_pipeline 승인 카드 분기 확인 (2건)
+- **Test Result** : 173 passed, 0 regression.
+- **Runtime Risk** :
+  - fail-open: Step 1.7 판정 실패 시 기존 영어 파이프라인 그대로 실행 (무영향)
+  - `_skip_approval_card` 는 런타임 속성, DB 스키마 무변경
+  - HOLD/REJECT 기사에는 기존 흐름 100% 유지
+- **Server Apply Risk** : 낮음. orchestrator.py 1개 파일 수술식 적용 필요.
+  - 서버 orchestrator (707줄) 에는 Step 1.6 이후, Step 2 이전에 동일 블록 삽입
+  - `full_pipeline()` / `_handle_regenerate()` 에 각 2줄 조건문 삽입
+- **Recommendation** : 서버 반영은 운영자 판단. 브랜치 코드 + 테스트 완료.
+
+---
+
 ## 2026-04-09 21:00 KST — Phase G : Dedup/Candidate 영속화 서버 반영 완료
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
