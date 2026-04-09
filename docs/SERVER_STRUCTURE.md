@@ -115,15 +115,17 @@ from app.providers.base import FactCheckResult, TrendResult
 - 반영: `git fetch origin claude/x-posting-ops-review-7hlxK` → `git show origin/...:app/main.py > app/main.py`
 - 롤백: `cp /tmp/main.py.bak.phase_f app/main.py && systemctl restart xdashboard`
 
-### /ingest 응답 문구 정합성 수정 (서버 반영 대기)
+### /ingest 응답 문구 정합성 수정 — 서버 반영 완료 (2026-04-09 22:07 UTC)
 
 | 파일 | 변경 내용 | 상태 |
 |---|---|---|
-| `app/orchestrator.py` | full_pipeline() 응답 메시지를 처리 경로별 조건 분기로 교체 + docstring | ⏳ 서버 반영 대기 |
-| `app/api/admin.py` | /ingest endpoint docstring 수정 | ⏳ 서버 반영 대기 |
+| `app/orchestrator.py` | full_pipeline() 응답 메시지를 처리 경로별 조건 분기로 교체 + docstring | ✅ 서버 반영 완료 |
+| `app/api/admin.py` | /ingest endpoint docstring 수정 | ✅ 서버 반영 완료 |
 
+- orchestrator.py: 764 → 775줄 (+11, 메시지 분기 블록)
 - 변경 전: 모든 경로에서 `"초안 생성 완료! 텔레그램에서 승인해주세요."` 고정
 - 변경 후: BREAKING_NOW KO-only / CANDIDATE KO-only / approval 전송 / approval 미전송 4가지 분기
+- smoke test: 일반 기사 → `"초안 생성 완료. 텔레그램에서 승인해주세요."` (approval 정상)
 - 롤백: `cp /tmp/orchestrator.py.bak.ingest_msg app/orchestrator.py && cp /tmp/admin.py.bak.ingest_msg app/api/admin.py && systemctl restart xdashboard`
 
 ### 운영 관측성 수정 (서버 반영 대기)

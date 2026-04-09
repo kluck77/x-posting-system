@@ -21,7 +21,12 @@
   - 기존 approval 흐름 (카드 미전송) → `"초안 생성 완료."`
 - **Test Result** : 206 passed, 0 regression
 - **Runtime Risk** : 0 (응답 메시지 문자열만 변경, 분기/로직 의미 무변경)
-- **서버 반영** : orchestrator.py `full_pipeline()` 블록 수술식 교체 + admin.py docstring 수정 (2개 파일)
+- **서버 반영** : ✅ 완료 (2026-04-09 22:07 UTC)
+  - admin.py: `git show` 전체 교체
+  - orchestrator.py: base64 Python 스크립트로 full_pipeline return 블록 수술식 교체 (764→775줄)
+  - py_compile OK, xdashboard active (running)
+  - smoke test: 일반 기사 /ingest → `"초안 생성 완료. 텔레그램에서 승인해주세요."` (approval 경로 정상)
+  - 롤백: `cp /tmp/orchestrator.py.bak.ingest_msg app/orchestrator.py && cp /tmp/admin.py.bak.ingest_msg app/api/admin.py && systemctl restart xdashboard`
 
 ---
 
