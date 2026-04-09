@@ -5,6 +5,61 @@
 
 ---
 
+## 2026-04-09 19:00 KST — Phase F : 05:00 KST Top5 스케줄러 연결
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : `run_top5_briefing()` 를 매일 05:00 KST 에 자동 실행되도록 연결.
+- **기존 구조 조사** :
+  - APScheduler / cron / scheduler 패키지 : 없음
+  - `run.py` → `app.main.main()` → `asyncio.run(run_all())`
+  - `run_all()` : FastAPI(thread) + 텔레그램(await) + 무한루프
+  - 기존 스케줄 구조 0건. 순수 asyncio 이벤트루프만 존재.
+- **채택한 방식** : `asyncio.create_task()` 백그라운드 루프
+  - 외부 패키지 불필요
+  - 기존 이벤트루프에 자연스럽게 합류
+  - systemd timer / cron 증설 불필요
+- **Changed Files** :
+  - `app/main.py` (+22줄) — `_top5_scheduler_loop()` 추가 (매일 05:00 KST 대기 → 실행 → 반복),
+    `run_all()` 에 `asyncio.create_task()` 1줄 삽입.
+  - `tests/test_top5_scheduler.py` (신규, 9 tests) — 시각 계산 7건 + 루프 호출 확인 1건 + fail-open 1건.
+- **Test Result** : 82 passed (신규 9 + 기존 73), 0 regression.
+- **Syntax Check** : `py_compile` OK (app/main.py).
+- **Runtime Risk** :
+  - 프로세스 재시작 시 야간 CANDIDATE 풀 초기화 (기존 한계, 변경 없음).
+  - 시각 계산은 KST `datetime.now()` 기반. 서버 시계 drift 시 최대 수초 오차 (무해).
+  - `asyncio.sleep()` 는 OS 스케줄러 정밀도에 의존. 수초 오차 가능 (무해).
+- **Server Apply Risk** : 매우 낮음. `app/main.py` 1개 파일만 교체.
+  - 브랜치 main.py 는 서버 main.py 와 동일 구조 (서버 고유 기능 없음).
+  - 전체 교체 안전 (`git show` 방식 가능).
+- **Recommendation** : APPROVE.
+- **Next Operator Action** :
+  1. 서버에 `app/main.py` 배치: `git show <sha>:app/main.py > app/main.py`
+  2. `systemctl restart xdashboard`
+  3. `journalctl -u xdashboard -n 10 --no-pager | grep top5-scheduler` 로 등록 로그 확인
+
+### 서버 운영 명령어 (Phase F)
+
+```bash
+# main.py 교체
+cd /root/x-posting-system
+cp app/main.py /tmp/main.py.bak.phase_f
+git fetch origin claude/x-posting-ops-review-7hlxK
+git show origin/claude/x-posting-ops-review-7hlxK:app/main.py > app/main.py
+/root/x-posting-system/venv/bin/python -m py_compile app/main.py
+
+# 서비스 재시작
+systemctl restart xdashboard
+
+# 스케줄러 등록 확인
+journalctl -u xdashboard -n 20 --no-pager | grep -E "top5-scheduler|Top5"
+
+# 롤백 (문제 시)
+cp /tmp/main.py.bak.phase_f app/main.py
+systemctl restart xdashboard
+```
+
+---
+
 ## 2026-04-09 18:30 KST — Phase D+E : Top5 서버 반영 완료
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)

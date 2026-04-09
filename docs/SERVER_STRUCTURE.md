@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 18:30 KST (Phase D+E 서버 반영 완료)
+최종 갱신 : 2026-04-09 19:00 KST (Phase F 구현 완료, 서버 반영 대기)
 
 ---
 
@@ -103,6 +103,17 @@ from app.providers.base import FactCheckResult, TrendResult
 
 - orchestrator.py: 680 → 707줄 (+27)
 - 롤백: `cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py && systemctl restart xdashboard`
+
+### Phase F 구현 완료, 서버 반영 대기
+
+| 파일 | 반영 방식 | 상태 |
+|---|---|---|
+| `app/main.py` | Phase F: `git show` 전체 교체 | ⏳ 서버 반영 대기 |
+
+- `_top5_scheduler_loop()` : 매일 05:00 KST `run_top5_briefing()` 자동 실행
+- `asyncio.create_task()` 로 기존 이벤트루프에 합류 (외부 패키지 불필요)
+- 브랜치 main.py 와 서버 main.py 구조 동일 → 전체 교체 안전
+- 롤백: `cp /tmp/main.py.bak.phase_f app/main.py && systemctl restart xdashboard`
 
 ### 브랜치에만 있는 파일 (서버에 없음)
 

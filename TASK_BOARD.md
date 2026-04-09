@@ -6,16 +6,22 @@
 ---
 
 ## Updated At
-2026-04-09 18:30 KST
+2026-04-09 19:00 KST
 
 ## Updated By
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**P1 BREAKING 파이프라인 + Top5 브리핑 서버 반영 완료 (Phase D+E).** Phase F (스케줄러) 대기.
+**Phase F 구현 완료.** Top5 브리핑 05:00 KST 스케줄러 코드 + 테스트 완료. 서버 반영 대기.
 
 ## Current Priority
-**Phase F (05:00 KST 스케줄러 연결)** — Phase D+E 서버 반영 완료. 스케줄러 wiring 은 별도 세션.
+**Phase F 서버 반영** — `app/main.py` 1개 파일 교체 + 재시작.
+
+## ★ Phase F: 05:00 KST 스케줄러 구현 완료 (2026-04-09)
+- `app/main.py` +22줄 — `_top5_scheduler_loop()` + `asyncio.create_task()` 삽입
+- `tests/test_top5_scheduler.py` 신규 (9 tests)
+- 82 passed, 0 regression
+- 서버 반영 대기 (`app/main.py` 1개 파일 교체)
 
 ## ★ Phase D+E 서버 반영 완료 (2026-04-09)
 - Phase D: `top5_briefing_service.py` 서버 배치 (sha256 검증 OK)
@@ -31,7 +37,6 @@ Claude Code (claude/github-mcp-setup-L0oac)
 - ✅ 서버 반영 완료 (Phase D+E)
 
 ### 다음 후보 (운영자 택 1)
-- **Phase F: 05:00 KST 스케줄러 연결** (`run_top5_briefing()` → run.py 또는 cron)
 - 후속 보도 자동 트래킹 (24h 윈도우)
 - dedup 영속화 (DB/Redis 이관, 운영자 승인 필요)
 - publisher 확장
