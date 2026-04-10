@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-10 KST (news_monitor → full_pipeline 통합)
+최종 갱신 : 2026-04-10 KST (레인별 일일 제한 분리)
 
 ---
 
@@ -190,6 +190,22 @@ from app.providers.base import FactCheckResult, TrendResult
   - KO-only 라우팅 정상, 영어 승인 카드 0건
 - 롤백: `cp /tmp/main.py.bak.monitor app/main.py && cp /tmp/news_monitor.py.bak.pipeline app/services/news_monitor.py && systemctl restart xdashboard`
 
+### 레인별 일일 제한 분리 (서버 반영 대기)
+
+| 파일 | 반영 방식 | 상태 |
+|---|---|---|
+| `app/services/rate_limiter.py` | `git show` 전체 교체 | ⏳ 서버 반영 대기 |
+| `app/orchestrator.py` | `scripts/patch_rate_limit_lanes.py` 실행 | ⏳ 서버 반영 대기 |
+
+- **문제**: 단일 카운터(Draft count)가 Step 0에서 전체 파이프라인 게이트.
+  naver_auto KO-only 백로그(AI 비용 $0)가 쿼터 소진 → BREAKING/수동입력 차단.
+- **해결**: rate check를 Step 0 → Step 2 직전으로 이동 + 레인별 분리.
+  - Lane A~C (BREAKING/주간알림/Top5): 항상 실행 (Step 1.7 이전 리턴)
+  - Lane D-auto: max_ai - manual_reserved(5) 까지
+  - Lane D-manual: max_ai 전체 사용
+  - KO-only 드래프트는 AI 카운트에서 제외 (body prefix 필터)
+- 롤백: `cp /tmp/rate_limiter.py.bak.lanes app/services/rate_limiter.py && cp /tmp/orchestrator.py.bak.lanes app/orchestrator.py && systemctl restart xdashboard`
+
 ### 운영 관측성 수정 (서버 반영 대기)
 
 | 파일 | 변경 내용 | 상태 |
@@ -330,7 +346,7 @@ systemctl restart xdashboard
 서버 orchestrator.py 의 `ingest_and_generate()` 내부 Step 순서 :
 
 ```
-Step 0  : 일일 제한 확인
+Step 0  : (비활성화 — rate check를 Step 2 직전으로 이동)     ⏳ 서버 반영 대기
 Step 1  : 소스 DB 저장                          ← 줄 153~155
 Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ Phase C
 Step 1.5b: CANDIDATE → record_candidate()       ← 줄 175~191 ✅ Phase E
@@ -341,6 +357,10 @@ Step 1.7: 한국어 전용 라인 분기 (early return)    ← ✅ Phase H (서�
           └ BREAKING_NOW/CANDIDATE + 금융/투자/크립토/주식
             → 영어 초안 파이프라인 전체 우회
             → 최소 Draft 레코드 + _skip_approval_card=True
+Step 2 rate check: AI 파이프라인 레인별 제한       ⏳ 서버 반영 대기
+          └ can_run_ai_pipeline(source_type)
+          └ 자동수집: max_ai - manual_reserved(5)
+          └ 수동입력: max_ai 전체
 Step 2  : Researcher — 배경 리서치               ← 줄 221~
 Step 3  : DraftWriter — 초안 생성
 Step 4  : FactChecker — 팩트체크

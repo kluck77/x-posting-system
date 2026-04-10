@@ -7,7 +7,7 @@
 ---
 
 ## Updated At
-2026-04-09 KST
+2026-04-10 KST (레인별 일일 제한 분리)
 
 ## Updated By
 Claude Code (claude/github-mcp-setup-L0oac)
@@ -183,10 +183,17 @@ Body: { "title": "...", "source_text": "...", "url": "...", ... }
 - Reviewer system prompt : 헌장 기반 검수 (PASS / REVISE / REJECT JSON 판정).
 - 프롬프트 변경은 `ACCOUNT_CONSTITUTION.md` 갱신 → `AI_ROLE_PROMPTS.md` 동기화 순서.
 
-### 6.3 일일 제한 (`rate_limiter.py`)
+### 6.3 일일 제한 (`rate_limiter.py`) — 레인별 분리
 
-- 초안 생성 / 텔레그램 전송 / X 게시 각각 일일 한도 존재.
-- Step 0 에서 초안 한도 확인, 승인 시 게시 한도 확인.
+- AI 파이프라인 제한: Step 2 직전에서 `can_run_ai_pipeline(source_type)` 확인.
+- 텔레그램 전송 / X 게시 각각 별도 일일 한도 존재.
+- 레인 구조:
+  - Lane A (BREAKING_NOW): 무제한 — Step 1.7 이전 리턴
+  - Lane B (주간 즉시 알림): 무제한 — Step 1.5c
+  - Lane C (Top5 후보 적재): 무제한 — Step 1.5b
+  - Lane D-auto (자동수집 AI): `max_ai_drafts - manual_reserved` 까지
+  - Lane D-manual (수동 AI): `max_ai_drafts` 전체
+- KO-only 드래프트는 AI 카운트에서 제외 (body prefix `"한국어 전용 라인 처리"`).
 
 ### 6.4 품질 필터 (서버 고유)
 

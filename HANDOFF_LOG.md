@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-04-10 — 레인별 일일 제한 분리 (rate limit lane split)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 자동수집 백로그가 수동 운영량을 잠식하는 문제 해결. 일일 제한을 레인별로 분리.
+- **Root Cause** : 단일 카운터(Draft count)가 Step 0에서 전체 파이프라인을 게이트.
+  KO-only 드래프트(AI 비용 $0)도 카운트에 포함 → naver_auto 백로그가 쿼터 소진 → BREAKING_NOW/수동입력 차단.
+- **변경 내용** :
+  1. `app/services/rate_limiter.py` — 레인별 AI 파이프라인 제한 추가
+     - `can_run_ai_pipeline(source_type)`: 레인별 제한 체크
+     - `get_today_ai_draft_count()`: KO-only 드래프트 제외 카운트
+     - `get_today_auto_ai_draft_count()`: 자동수집 전용 카운트
+     - manual_reserved=5 (수동 입력 보장 슬롯)
+  2. `app/orchestrator.py` — rate check 위치 이동 (surgical edit)
+     - Step 0: `can_create_draft()` 제거
+     - Step 2 직전: `can_run_ai_pipeline(data.source_type)` 삽입
+     - Steps 1~1.7 (소스 저장, 분류, BREAKING, Top5, KO-only) 항상 실행
+  3. `scripts/patch_rate_limit_lanes.py` — 서버 전용 패치 스크립트
+  4. `tests/test_rate_limiter.py` — 7 tests 추가 (레인별 제한 검증)
+- **레인 정책** :
+  | Lane | 대상 | 제한 |
+  |------|------|------|
+  | A | BREAKING_NOW | 무제한 (Step 1.7 이전 리턴) |
+  | B | 주간 즉시 알림 | 무제한 (Step 1.5c) |
+  | C | Top5 후보 적재 | 무제한 (Step 1.5b) |
+  | D-auto | 자동수집 AI 파이프라인 | max_ai - manual_reserved |
+  | D-manual | 수동 AI 파이프라인 | max_ai 전체 |
+- **설계 판단** :
+  - KO-only 드래프트 body prefix (`"한국어 전용 라인 처리"`) 로 AI 카운트에서 제외
+  - 수동 입력 5슬롯 보장 — 자동수집이 15슬롯 소진해도 수동 /ingest 가능
+  - 기존 `can_create_draft()` 메서드 유지 (하위 호환)
+- **Test Result** : 222 passed, 0 regression
+- **서버 반영** : 2개 파일 적용 필요
+  1. `rate_limiter.py` → `git show` 전체 교체
+  2. `orchestrator.py` → `scripts/patch_rate_limit_lanes.py` 실행
+- **Runtime Risk** : 낮음 — fail-open 유지, 기존 메서드 호환, KO-only/BREAKING 경로 무영향
+- **롤백** :
+  - `cp /tmp/rate_limiter.py.bak.lanes app/services/rate_limiter.py`
+  - `cp /tmp/orchestrator.py.bak.lanes app/orchestrator.py`
+  - `systemctl restart xdashboard`
+
+---
+
 ## 2026-04-10 — news_monitor → full_pipeline 통합 (자동수집 신 파이프라인 연결)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)

@@ -132,6 +132,138 @@ class TestRateLimiter:
         assert allowed is True
 
 
+class TestLaneBasedRateLimiting:
+    """레인별 AI 파이프라인 제한 테스트"""
+
+    def _create_source(self, db_session, source_type="manual"):
+        source = SourceItem(
+            title="테스트 소스",
+            source_text="테스트 텍스트",
+            source_type=source_type,
+            language="ko",
+            created_at=datetime.now(timezone.utc),
+        )
+        db_session.add(source)
+        db_session.commit()
+        db_session.refresh(source)
+        return source
+
+    def _create_ai_draft(self, db_session, source_id, body="AI generated content"):
+        """AI 파이프라인을 거친 일반 드래프트"""
+        return _create_draft(db_session, source_id, body=body)
+
+    def _create_ko_only_draft(self, db_session, source_id):
+        """KO-only 드래프트 (Step 1.7 early return)"""
+        return _create_draft(
+            db_session, source_id,
+            hook="[CANDIDATE] 테스트 기사",
+            body="한국어 전용 라인 처리 (영어 초안 생략). domain=금융",
+        )
+
+    def test_ai_draft_count_excludes_ko_only(self, db_session):
+        """AI 카운트에서 KO-only 드래프트 제외"""
+        source = self._create_source(db_session)
+        self._create_ai_draft(db_session, source.id, body="AI draft 1")
+        self._create_ai_draft(db_session, source.id, body="AI draft 2")
+        self._create_ko_only_draft(db_session, source.id)
+
+        limiter = RateLimiter(db_session, max_ai_drafts=20)
+        assert limiter.get_today_ai_draft_count() == 2  # KO-only 제외
+
+    def test_ai_draft_count_by_source_type(self, db_session):
+        """source_type 별 AI 카운트 분리"""
+        manual_src = self._create_source(db_session, source_type="manual")
+        auto_src = self._create_source(db_session, source_type="naver_auto")
+
+        self._create_ai_draft(db_session, manual_src.id, body="Manual AI draft")
+        self._create_ai_draft(db_session, auto_src.id, body="Auto AI draft 1")
+        self._create_ai_draft(db_session, auto_src.id, body="Auto AI draft 2")
+
+        limiter = RateLimiter(db_session, max_ai_drafts=20)
+        assert limiter.get_today_ai_draft_count() == 3
+        assert limiter.get_today_ai_draft_count(source_type="manual") == 1
+        assert limiter.get_today_auto_ai_draft_count() == 2
+
+    def test_breaking_and_ko_only_bypass_rate_check(self, db_session):
+        """BREAKING/KO-only 드래프트는 AI 카운트에 영향 없음"""
+        source = self._create_source(db_session, source_type="naver_auto")
+        # KO-only 50건 생성 — 이것만으로 AI 한도 미소진
+        for _ in range(50):
+            self._create_ko_only_draft(db_session, source.id)
+
+        limiter = RateLimiter(db_session, max_ai_drafts=20)
+        assert limiter.get_today_ai_draft_count() == 0
+        can, _ = limiter.can_run_ai_pipeline(source_type="naver_auto")
+        assert can is True
+
+    def test_auto_limited_by_reserved_slots(self, db_session):
+        """자동수집은 max_ai - manual_reserved 까지만"""
+        auto_src = self._create_source(db_session, source_type="naver_auto")
+
+        limiter = RateLimiter(
+            db_session, max_ai_drafts=10, manual_reserved=3,
+        )
+        # auto limit = 10 - 3 = 7
+        for i in range(7):
+            self._create_ai_draft(
+                db_session, auto_src.id, body=f"Auto AI draft {i}",
+            )
+
+        can, msg = limiter.can_run_ai_pipeline(source_type="naver_auto")
+        assert can is False
+        assert "자동수집" in msg
+        assert "3슬롯 예약" in msg
+
+    def test_manual_uses_full_limit(self, db_session):
+        """수동 입력은 전체 한도 사용 가능"""
+        auto_src = self._create_source(db_session, source_type="naver_auto")
+        manual_src = self._create_source(db_session, source_type="manual")
+
+        limiter = RateLimiter(
+            db_session, max_ai_drafts=10, manual_reserved=3,
+        )
+        # auto 7건 → auto 한도 소진
+        for i in range(7):
+            self._create_ai_draft(
+                db_session, auto_src.id, body=f"Auto AI draft {i}",
+            )
+
+        # auto 차단
+        can_auto, _ = limiter.can_run_ai_pipeline(source_type="naver_auto")
+        assert can_auto is False
+
+        # manual 허용 (total 7/10, 아직 여유)
+        can_manual, _ = limiter.can_run_ai_pipeline(source_type="manual")
+        assert can_manual is True
+
+    def test_manual_blocked_at_total_limit(self, db_session):
+        """총 한도 초과 시 수동도 차단"""
+        manual_src = self._create_source(db_session, source_type="manual")
+
+        limiter = RateLimiter(
+            db_session, max_ai_drafts=3, manual_reserved=2,
+        )
+        for i in range(3):
+            self._create_ai_draft(
+                db_session, manual_src.id, body=f"Manual draft {i}",
+            )
+
+        can, msg = limiter.can_run_ai_pipeline(source_type="manual")
+        assert can is False
+        assert "한도 초과" in msg
+
+    def test_daily_summary_includes_lanes(self, db_session):
+        """일일 요약에 레인별 정보 포함"""
+        limiter = RateLimiter(
+            db_session, max_ai_drafts=20, manual_reserved=5,
+        )
+        summary = limiter.get_daily_summary()
+        assert "ai_pipeline" in summary
+        assert summary["ai_pipeline"]["limit"] == 20
+        assert summary["ai_pipeline"]["auto_limit"] == 15
+        assert summary["ai_pipeline"]["manual_reserved"] == 5
+
+
 class TestSourceDuplicateURL:
     """URL 중복 방지 테스트"""
 

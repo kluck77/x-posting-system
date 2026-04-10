@@ -67,10 +67,9 @@ class Orchestrator:
         """
         logger.info(f"=== 파이프라인 시작: '{data.title[:50]}' ===")
 
-        # Step 0: 일일 제한 확인
-        can_draft, draft_msg = self.rate_limiter.can_create_draft()
-        if not can_draft:
-            raise RuntimeError(f"일일 제한 초과: {draft_msg}")
+        # Step 0: (rate check moved to Step 2 직전 — Lane A~C는 AI 비용 없음)
+        # BREAKING_NOW / KO-only / Top5 적재 / 주간 즉시 알림은 항상 실행.
+        # AI 파이프라인(Steps 2-6)만 레인별 제한 적용.
 
         # Step 1: 소스 저장
         logger.info("[1/6] 소스 DB 저장")
@@ -197,6 +196,15 @@ class Orchestrator:
                 return draft
         except Exception as e:
             logger.warning(f"[1.7] 영어 초안 우회 판정 실패 (fail-open, 기존 파이프라인 계속): {e}")
+
+        # Step 2 rate check: AI 파이프라인 진입 제한 (비용 보호)
+        # - KO-only/BREAKING 는 Step 1.7 에서 이미 리턴 → 여기 도달 안 함
+        # - source_type 으로 자동수집/수동입력 레인 분리
+        can_ai, ai_msg = self.rate_limiter.can_run_ai_pipeline(
+            source_type=data.source_type,
+        )
+        if not can_ai:
+            raise RuntimeError(f"일일 제한 초과: {ai_msg}")
 
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")

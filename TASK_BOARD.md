@@ -12,10 +12,31 @@
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**news_monitor → full_pipeline 통합 — 서버 반영 완료.** 네이버 자동수집 기사가 신 파이프라인 경유. 첫 사이클 20건+ 처리 확인.
+**레인별 일일 제한 분리 — 브랜치 구현 완료.** rate check를 Step 0 → Step 2 직전으로 이동. BREAKING/KO-only/Top5/주간알림 무제한, AI 파이프라인만 레인별 제한.
 
 ## Current Priority
-**없음** — 자동수집 통합 완료. 운영자 다음 지시 대기.
+**서버 반영 대기** — rate_limiter.py 교체 + orchestrator.py 패치.
+
+## ★ 레인별 일일 제한 분리 (2026-04-10) — 브랜치 구현 완료
+- `app/services/rate_limiter.py` — `can_run_ai_pipeline(source_type)` 추가
+  - KO-only 드래프트 제외 카운트 (body prefix 필터)
+  - 자동수집: max_ai - manual_reserved(5) 까지
+  - 수동입력: max_ai 전체 사용
+- `app/orchestrator.py` — rate check Step 0 → Step 2 직전 이동
+  - Lane A~C (BREAKING/주간알림/Top5) 항상 실행
+  - Lane D (AI 파이프라인)만 레인별 제한
+- `scripts/patch_rate_limit_lanes.py` — 서버 전용 패치
+- 222 passed, 0 regression
+- 서버 반영 명령:
+  ```
+  cd /root/x-posting-system
+  git fetch origin claude/x-posting-ops-review-7hlxK
+  git show origin/claude/x-posting-ops-review-7hlxK:app/services/rate_limiter.py > app/services/rate_limiter.py
+  git show origin/claude/x-posting-ops-review-7hlxK:scripts/patch_rate_limit_lanes.py > scripts/patch_rate_limit_lanes.py
+  /root/x-posting-system/venv/bin/python scripts/patch_rate_limit_lanes.py
+  systemctl restart xdashboard
+  ```
+- 롤백: `cp /tmp/rate_limiter.py.bak.lanes app/services/rate_limiter.py && cp /tmp/orchestrator.py.bak.lanes app/orchestrator.py && systemctl restart xdashboard`
 
 ## ★ news_monitor → full_pipeline 통합 (2026-04-10) — 서버 반영 완료
 - `app/main.py` — `_news_monitor_loop()` 추가 (APScheduler 대체, 1분 간격)
