@@ -113,27 +113,34 @@ Grok(트렌드)       ──트렌드──▶  ├── orchestrator ◀─┘
 ### 4.2 동작 흐름
 
 ```
-news_monitor.py (주기적 폴링)
+main.py: _news_monitor_loop() (1분 간격, asyncio)
   │
-  ├─▶ naver_news.py (네이버 뉴스 API 검색)
-  │     └─▶ naver_usage.py (할당량 차감)
-  │
-  ├─▶ rss_fetcher.py (RSS 피드 수집)
-  │
-  └─▶ content_fetcher.py (본문 추출)
+  └─▶ news_monitor.run_monitor_cycle()
         │
-        ▼
-  SourceItemCreate 생성
+        ├─▶ naver_news.py (네이버 뉴스 API 검색)
+        │     └─▶ naver_usage.py (할당량 차감)
         │
-        ▼
-  orchestrator.full_pipeline()   ← 수동 /ingest 와 동일한 진입점
+        ├─▶ rss_fetcher.py (RSS 피드 수집)
+        │
+        └─▶ 기사별 처리:
+              │
+              ├─▶ breaking_classifier (사전 분류)
+              │     ├─ BREAKING_NOW / CANDIDATE → full_pipeline() 전달
+              │     └─ HOLD / REJECT → 건너뜀 (일일 제한 보호)
+              │
+              └─▶ SourceItemCreate(source_type="naver_auto") 생성
+                    │
+                    ▼
+              orchestrator.full_pipeline()   ← 수동 /ingest 와 동일한 진입점
 ```
 
 ### 4.3 핵심 사항
 
-- 네이버 수집 결과는 `SourceItemCreate` 로 변환된 뒤 `orchestrator.full_pipeline()` 에 투입된다.
-- 수동 `/ingest` API 와 **완전히 동일한 파이프라인**을 탄다.
-- Step 1.5 이후 BREAKING/CANDIDATE 분류도 동일하게 적용된다.
+- 네이버 수집 기사 중 BREAKING_NOW/CANDIDATE 만 `full_pipeline()` 에 투입된다.
+- HOLD/REJECT 기사는 건너뛰어 일일 제한(20/day) 을 보호한다.
+- 수동 `/ingest` API 와 **완전히 동일한 파이프라인**을 탄다 (BREAKING 알림 / Top5 큐 / 주간 즉시 알림 / KO-only 분기 공유).
+- old direct telegram alert (`_send_news_alert()`) 는 비활성화됨 — full_pipeline 이 대체.
+- `_news_monitor_loop()` 는 `app/main.py` 에 있으며, `news_monitor.py` 가 없으면 자동 비활성화 (ImportError catch).
 - 네이버 API 일일 한도: 25,000 건.
 - 서버에만 존재하는 파일이므로 작업 브랜치에서는 실측 불가. `SERVER_STRUCTURE.md §4` 참조.
 
@@ -152,9 +159,10 @@ Body: { "title": "...", "source_text": "...", "url": "...", ... }
 
 ### 5.2 동작
 
-- 사람이 직접 기사 제목 + 본문 + URL 을 넣는다.
+- 사람이 직접 기사 제목 + 본문 + URL 을 넣는다 (`source_type="manual"`).
 - 텔레그램 봇의 `/start`, `/status`, `/pending` 명령은 조회 전용이며, 기사 인입과 무관하다.
-- 파이프라인 내부 처리는 네이버 자동수집과 100% 동일하다.
+- 파이프라인 내부 처리는 네이버 자동수집(`source_type="naver_auto"`)과 100% 동일하다.
+- 차이: `source_type` 필드로 수동/자동 구분 가능 (정책은 동일).
 
 ---
 

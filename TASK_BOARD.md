@@ -12,21 +12,18 @@
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**네이버 자동수집 파이프라인 검증 완료.** news_monitor와 full_pipeline은 별도 시스템임을 확인. news_monitor는 현재 중단 상태 (APScheduler 초기화 코드 유실).
+**news_monitor → full_pipeline 통합 구현 완료.** 서버 반영 대기.
 
 ## Current Priority
-**news_monitor 복구 여부 결정 필요 (NEEDS_HUMAN).**
-- 옵션 A: news_monitor APScheduler 초기화 복구 → 구 시스템(교차 확인 알림) 재가동
-- 옵션 B: news_monitor → full_pipeline 연결 구축 → 자동수집 기사도 신 파이프라인 경유
-- 옵션 C: 현행 유지 (/ingest 수동 입력만으로 운영)
+**서버 반영 (main.py 교체 + news_monitor.py 패치)**
 
-## ★ news_monitor / full_pipeline 구조 분리 확인 (2026-04-10)
-- news_monitor: 교차 확인(4+출처) → 텔레그램 직접 (구 시스템, full_pipeline 미경유)
-- /ingest → full_pipeline: breaking_classifier → KO-only/approval (신 시스템)
-- news_monitor 현재 중단: APScheduler 초기화 코드 코드베이스에 없음
-- 마지막 run_monitor_cycle: 2026-04-09 08:29 UTC
-- candidate_pool_entries 5건 전부 수동 /ingest 테스트
-- **운영자 결정 필요: 복구 / 연결 / 현행 유지 중 택 1**
+## ★ news_monitor → full_pipeline 통합 (2026-04-10)
+- `app/main.py` — `_news_monitor_loop()` 추가 (APScheduler 대체, 1분 간격)
+- `scripts/patch_news_monitor.py` — 서버 전용 패치 (old alert 비활성화 + full_pipeline 연결)
+- 자동수집 기사: breaking_classifier 사전 분류 → BREAKING/CANDIDATE만 full_pipeline
+- old direct telegram alert 비활성화 (full_pipeline의 Step 1.6/1.5c가 대체)
+- 215 passed, 0 regression
+- 서버 반영 대기 (main.py 교체 + news_monitor.py 패치)
 
 ## ★ KO-only 분기 미동작 수정 (2026-04-09) — 서버 반영 완료
 - `app/services/breaking_classifier.py` (+7줄) — HOLD 가드 내 제목 STRONG 키워드 체크 추가

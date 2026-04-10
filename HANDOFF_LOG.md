@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-04-10 — news_monitor → full_pipeline 통합 (자동수집 신 파이프라인 연결)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 네이버 자동수집 기사를 신 시스템 full_pipeline에 통합.
+- **변경 내용** :
+  1. `app/main.py` — `_news_monitor_loop()` 추가 (APScheduler 대체, asyncio 1분 간격)
+     - `news_monitor.py` 없으면 자동 비활성화 (ImportError catch, fail-open)
+     - `run_all()` 에서 `create_task` 등록
+  2. `scripts/patch_news_monitor.py` — 서버 전용 패치 스크립트
+     - `run_monitor_cycle()` 내부 변경:
+       - 기사별 `breaking_classifier` 사전 분류
+       - BREAKING_NOW/CANDIDATE → `full_pipeline()` 전달 (source_type="naver_auto")
+       - HOLD/REJECT → 건너뜀 (일일 제한 보호)
+     - old direct telegram alert (`_send_news_alert()`) 비활성화 (주석 처리)
+  3. `tests/test_news_monitor_loop.py` — 8 tests 신규
+- **설계 판단** :
+  - 사전 분류 → full_pipeline: HOLD/REJECT 기사로 일일 제한(20/day) 소진 방지
+  - KO-only 대상(금융/투자/크립토/주식)은 Step 1.7에서 단락 → AI API 호출 0
+  - old _send_news_alert 비활성화: full_pipeline의 BREAKING 알림(Step 1.6) + 주간 알림(Step 1.5c)이 대체
+- **Test Result** : 215 passed, 0 regression
+- **서버 반영** : 2개 파일 적용 필요
+  1. `app/main.py` → `git show` 전체 교체
+  2. `news_monitor.py` → `scripts/patch_news_monitor.py` 실행
+- **Runtime Risk** : 낮음 — fail-open 전체 래핑, old path 주석 처리 (삭제 아님)
+- **롤백** :
+  - `cp /tmp/main.py.bak.monitor app/main.py`
+  - `cp /tmp/news_monitor.py.bak.pipeline app/services/news_monitor.py`
+  - `systemctl restart xdashboard`
+
+---
+
 ## 2026-04-10 — 네이버 자동수집 파이프라인 검증 (구조 분리 확인)
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
