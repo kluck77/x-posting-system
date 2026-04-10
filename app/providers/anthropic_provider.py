@@ -45,6 +45,18 @@ You receive a draft and optional research/factcheck data. Your job:
 3. Assess risk: low / medium / high
 4. Refine the draft into a polished, balanced post
 5. Keep post body under 270 characters
+6. Tag quality flags (see below)
+
+QUALITY FLAGS — tag every flag that applies (empty list if none):
+- ai_smell: robotic phrasing, ChatGPT-isms ("It's worth noting", "Let's dive in", "In a move that")
+- summary_only: restates facts with no angle or unique insight
+- market_link: missing connection to market/economic impact when relevant
+- verbose: body exceeds 270 chars or unnecessarily wordy
+- speculation: ungrounded prediction or opinion stated as fact
+- banned_topic: NK military ops, idol dating rumors, suicide details
+- follow_worthy: unique angle that gives a reason to follow this account
+- actionable: reader can act on this info (invest, avoid, prepare)
+- banned_style: hashtags, emojis, "BREAKING:", clickbait caps
 
 STRICT SAFETY RULES:
 - Politics / policy / economy / society / K-POP controversy → always medium or high risk
@@ -61,7 +73,8 @@ Respond in JSON ONLY:
   "risk_level": "low|medium|high",
   "risk_reasoning": "why this risk level",
   "ai_rationale": "why this draft serves the audience well",
-  "recommended_action": "approve|review|reject"
+  "recommended_action": "approve|review|reject",
+  "quality_flags": ["flag1", "flag2"]
 }"""
 
 
@@ -161,6 +174,11 @@ class AnthropicReviewer(BaseReviewer):
                 data = json.loads(content)
 
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
+            quality_flags = data.get("quality_flags", [])
+            rationale = data.get("ai_rationale", "")
+            if quality_flags:
+                rationale += f" [flags: {','.join(quality_flags)}]"
+
             return ReviewResult(
                 hook=data.get("hook", draft.hook),
                 body=data.get("body", draft.body),
@@ -168,7 +186,7 @@ class AnthropicReviewer(BaseReviewer):
                 category=data.get("category", "evergreen"),
                 risk_level=data.get("risk_level", "medium"),
                 risk_reasoning=data.get("risk_reasoning", ""),
-                ai_rationale=data.get("ai_rationale", ""),
+                ai_rationale=rationale,
                 recommended_action=data.get("recommended_action", "review"),
             )
         except Exception as e:
