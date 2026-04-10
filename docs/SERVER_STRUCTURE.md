@@ -169,6 +169,27 @@ from app.providers.base import FactCheckResult, TrendResult
 - DB 테이블: source_items, drafts, post_logs, cta_copies, breaking_dedup_entries, candidate_pool_entries, breaking_sent_keys
 - candidate_pool_entries 5건: 전부 수동 /ingest 테스트
 
+### news_monitor → full_pipeline 통합 — 서버 반영 완료 (2026-04-10 ~01:00 UTC)
+
+| 파일 | 반영 방식 | 상태 |
+|---|---|---|
+| `app/main.py` | `git show` 전체 교체 (기존 Phase F 이후) | ✅ `_news_monitor_loop()` 추가 |
+| `app/services/news_monitor.py` | `scripts/patch_news_monitor.py` 서버 실행 | ✅ full_pipeline 연결, old alert 비활성화 |
+
+- **변경 요약**:
+  - `app/main.py`: `_news_monitor_loop()` 추가 — asyncio 1분 간격 폴링 (APScheduler 대체)
+    - `news_monitor.py` 없으면 ImportError catch → 자동 비활성화
+    - `run_all()` 에서 `asyncio.create_task()` 등록
+  - `news_monitor.py`: `run_monitor_cycle()` 내부 패치
+    - 기사별 `breaking_classifier` 사전 분류 (HOLD/REJECT 건너뜀 → 일일 제한 보호)
+    - BREAKING_NOW/CANDIDATE → `orchestrator.full_pipeline()` 전달 (`source_type="naver_auto"`)
+    - old `_send_news_alert()` 직접 텔레그램 발송 비활성화 (주석 처리, 삭제 아님)
+- **실측 결과** (2026-04-10 01:15 UTC):
+  - source_items id 43-52 (`source_type='naver_auto'`) 10건 적재
+  - candidate_pool_entries id 16-25 (금융/크립토/주식) 10건
+  - KO-only 라우팅 정상, 영어 승인 카드 0건
+- 롤백: `cp /tmp/main.py.bak.monitor app/main.py && cp /tmp/news_monitor.py.bak.pipeline app/services/news_monitor.py && systemctl restart xdashboard`
+
 ### 운영 관측성 수정 (서버 반영 대기)
 
 | 파일 | 변경 내용 | 상태 |
@@ -389,11 +410,21 @@ AI 6축 운영 구조의 전체상은 `docs/AI_OPERATING_LAYER.md` 에 정리되
 |------|------|
 | `app/services/naver_news.py` | 네이버 뉴스 API 호출 |
 | `app/services/naver_usage.py` | 네이버 API 할당량 추적 (25,000/일) |
-| `app/services/news_monitor.py` | 폴링 오케스트레이션 |
+| `app/services/news_monitor.py` | 폴링 오케스트레이션 (full_pipeline 통합 완료) |
 | `app/services/rss_fetcher.py` | RSS 피드 수집 |
 | `app/services/content_fetcher.py` | 기사 본문 추출 |
 
-수집된 기사 → `SourceItemCreate` → `orchestrator.full_pipeline()` (수동 /ingest 와 동일 진입점).
+**아키텍처 (2026-04-10~):**
+```
+_news_monitor_loop() [main.py, asyncio 1분]
+  → run_monitor_cycle() [news_monitor.py]
+    → 기사별 breaking_classifier 사전 분류
+      → HOLD/REJECT: 건너뜀 (일일 제한 보호)
+      → BREAKING_NOW/CANDIDATE: full_pipeline() 전달 (source_type="naver_auto")
+        → Step 1.5~1.7 (KO-only 라우팅, Top5 큐 적재 등)
+```
+수동 /ingest 와 동일한 `full_pipeline()` 진입점 공유.
+old `_send_news_alert()` 직접 텔레그램 경로는 비활성화 (주석 처리).
 
 ### 9.2 서버 고유 AI 기능 (작업 브랜치에 없음)
 

@@ -25,9 +25,17 @@
   - KO-only 대상(금융/투자/크립토/주식)은 Step 1.7에서 단락 → AI API 호출 0
   - old _send_news_alert 비활성화: full_pipeline의 BREAKING 알림(Step 1.6) + 주간 알림(Step 1.5c)이 대체
 - **Test Result** : 215 passed, 0 regression
-- **서버 반영** : 2개 파일 적용 필요
-  1. `app/main.py` → `git show` 전체 교체
-  2. `news_monitor.py` → `scripts/patch_news_monitor.py` 실행
+- **서버 반영** : ✅ 완료 (2026-04-10 ~01:00 UTC)
+  1. `app/main.py` → `git show` 전체 교체 → py_compile OK
+  2. `news_monitor.py` → `scripts/patch_news_monitor.py` 실행 → py_compile OK
+  - 서비스 재시작: `systemctl restart xdashboard` → active (running)
+  - 로그 확인: `[news-monitor] 1분 간격 폴링 등록` 출력
+- **서버 실측 결과** (2026-04-10 01:15 UTC):
+  - Monitor→Pipeline 로그 20+건 (`[Monitor→Pipeline] draft_id=...`)
+  - `source_items` id 43-52: `source_type='naver_auto'` 10건 적재
+  - `candidate_pool_entries` id 16-25: 금융/크립토/주식 도메인 10건
+  - KO-only 라우팅 정상: 영어 승인 카드 0건
+  - 일일 제한 20/20 자연 소진 (15시간 미가동 백로그 — 정상)
 - **Runtime Risk** : 낮음 — fail-open 전체 래핑, old path 주석 처리 (삭제 아님)
 - **롤백** :
   - `cp /tmp/main.py.bak.monitor app/main.py`

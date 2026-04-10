@@ -12,18 +12,24 @@
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**news_monitor → full_pipeline 통합 구현 완료.** 서버 반영 대기.
+**news_monitor → full_pipeline 통합 — 서버 반영 완료.** 네이버 자동수집 기사가 신 파이프라인 경유. 첫 사이클 20건+ 처리 확인.
 
 ## Current Priority
-**서버 반영 (main.py 교체 + news_monitor.py 패치)**
+**없음** — 자동수집 통합 완료. 운영자 다음 지시 대기.
 
-## ★ news_monitor → full_pipeline 통합 (2026-04-10)
+## ★ news_monitor → full_pipeline 통합 (2026-04-10) — 서버 반영 완료
 - `app/main.py` — `_news_monitor_loop()` 추가 (APScheduler 대체, 1분 간격)
 - `scripts/patch_news_monitor.py` — 서버 전용 패치 (old alert 비활성화 + full_pipeline 연결)
 - 자동수집 기사: breaking_classifier 사전 분류 → BREAKING/CANDIDATE만 full_pipeline
 - old direct telegram alert 비활성화 (full_pipeline의 Step 1.6/1.5c가 대체)
 - 215 passed, 0 regression
-- 서버 반영 대기 (main.py 교체 + news_monitor.py 패치)
+- ✅ 서버 반영 완료 (2026-04-10 00:42 UTC)
+  - source_items: naver_auto 20건+ 적재
+  - candidate_pool_entries: 금융/크립토/주식 다수 적재 (id 16~25)
+  - KO-only 라우팅: draft_id 24~43 전부 Pipeline done (KO-only)
+  - 영어 approval 카드 0건
+  - 일일 제한(20/day) 도달 후 자연 차단 (정상)
+  - 롤백: `cp /tmp/main.py.bak.monitor app/main.py && cp /tmp/news_monitor.py.bak.pipeline app/services/news_monitor.py && systemctl restart xdashboard`
 
 ## ★ KO-only 분기 미동작 수정 (2026-04-09) — 서버 반영 완료
 - `app/services/breaking_classifier.py` (+7줄) — HOLD 가드 내 제목 STRONG 키워드 체크 추가
