@@ -15,7 +15,11 @@ Claude Code (claude/x-posting-ops-review-7hlxK)
 **레인별 일일 제한 분리 — 서버 반영 완료.** 기존 20/20 상태에서 KO-only 7건+ 차단 없이 통과 확인.
 
 ## Current Priority
-**없음** — 레인별 제한 서버 반영 완료. 운영자 다음 지시 대기.
+**실전 알림 검증** — 다음 순서:
+1. 05:00 KST Top5 실제 자동 발송 확인
+2. 네이버 자동수집 실기사로 주간 즉시 알림(Lane B) 실동작 확인
+3. AI 5역할 프롬프트 세트
+4. 대시보드
 
 ## ★ 레인별 일일 제한 분리 (2026-04-10) — 서버 반영 완료
 - `app/services/rate_limiter.py` — `can_run_ai_pipeline(source_type)` 추가

@@ -46,8 +46,14 @@
   - `일일 제한 초과` 에러 0건 (패치 후)
 - **Runtime Risk** : 낮음 — fail-open 유지, 기존 메서드 호환, KO-only/BREAKING 경로 무영향
 - **롤백** :
-  - `cp /tmp/rate_limiter.py.bak.lanes app/services/rate_limiter.py`
-  - `cp /tmp/orchestrator.py.bak.lanes app/orchestrator.py`
+  - `cp /tmp/rate_limiter.py.bak.lanes /root/x-posting-system/app/services/rate_limiter.py && cp /tmp/orchestrator.py.bak.lanes /root/x-posting-system/app/orchestrator.py && systemctl restart xdashboard`
+- **운영자 승인** : ✅ 방향 맞음, 승인 가능
+- **향후 관찰 사항** : Lane D-manual = max_ai 전체 → 수동 입력이 많아지면 자동수집 AI가 밀릴 수 있음. 운영 데이터 쌓인 후 재검토 후보.
+- **Next Priority** (운영자 지시):
+  1. 05:00 KST Top5 실제 자동 발송 확인
+  2. 네이버 자동수집 실기사로 주간 즉시 알림(Lane B) 실동작 확인
+  3. AI 5역할 프롬프트 세트
+  4. 대시보드
   - `systemctl restart xdashboard`
 
 ---
