@@ -377,7 +377,7 @@ class Orchestrator:
                 draft_result = await self.ai.draft_writer.generate_draft(
                     title=data.title,
                     source_text=data.source_text + "\n\nIMPROVEMENT REQUIRED: " + " | ".join(criteria_result["flags"]),
-                    language=settings.default_language,
+                    language=data.language or settings.default_language,
                     source_type=data.source_type,
                     criteria_context=draft_criteria_ctx,
                 )
@@ -448,7 +448,7 @@ class Orchestrator:
                 draft_result = await self.ai.draft_writer.generate_draft(
                     title=data.title,
                     source_text=regen_source[:3000],
-                    language=settings.default_language,
+                    language=data.language or settings.default_language,
                     source_type=data.source_type,
                     criteria_context=review_criteria_ctx,
                 )

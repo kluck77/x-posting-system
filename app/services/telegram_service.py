@@ -54,11 +54,11 @@ def _category_emoji(category: ContentCategory) -> str:
 def _recommended_action(draft: Draft) -> str:
     """위험 수준에 따른 추천 액션을 반환합니다."""
     if draft.risk_level == RiskLevel.HIGH:
-        return "⚠️ CAREFUL REVIEW recommended"
+        return "⚠️ 신중한 검토 필요"
     elif draft.risk_level == RiskLevel.MEDIUM:
-        return "👀 Review before approving"
+        return "👀 승인 전 검토 권장"
     else:
-        return "✅ Looks safe to approve"
+        return "✅ 승인 가능"
 
 
 def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
@@ -78,28 +78,28 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     # 텔레그램 MarkdownV2에서 특수문자 이스케이프
     # 간단하게 HTML 모드를 사용합니다
     card = (
-        f"📨 <b>NEW DRAFT FOR REVIEW</b>\n"
+        f"📨 <b>새 초안 검토 요청</b>\n"
         f"{'─' * 30}\n\n"
-        f"🎯 <b>Hook:</b>\n{draft.hook}\n\n"
-        f"📝 <b>Post Text:</b>\n{draft.body}\n\n"
+        f"🎯 <b>훅:</b>\n{draft.hook}\n\n"
+        f"📝 <b>본문:</b>\n{draft.body}\n\n"
     )
 
     if draft.thread_continuation:
-        card += f"🧵 <b>Thread:</b>\n{draft.thread_continuation}\n\n"
+        card += f"🧵 <b>스레드:</b>\n{draft.thread_continuation}\n\n"
 
     card += (
-        f"{cat_em} <b>Category:</b> {draft.category.value}\n"
-        f"{risk_em} <b>Risk:</b> {draft.risk_level.value.upper()}\n"
+        f"{cat_em} <b>카테고리:</b> {draft.category.value}\n"
+        f"{risk_em} <b>위험도:</b> {draft.risk_level.value.upper()}\n"
     )
 
     if source_url:
-        card += f"🔗 <b>Source:</b> {source_url}\n"
+        card += f"🔗 <b>출처:</b> {source_url}\n"
 
     if draft.risk_reasoning:
-        card += f"📊 <b>Risk Reasoning:</b> {draft.risk_reasoning}\n"
+        card += f"📊 <b>위험 판단 근거:</b> {draft.risk_reasoning}\n"
 
     if draft.ai_rationale:
-        card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
+        card += f"🤖 <b>AI 판단 근거:</b> {draft.ai_rationale}\n"
 
     # topic tags (Layer 2, advisory)
     try:
@@ -182,14 +182,14 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         pass
 
-    char_info = f"Characters: {draft.text_length}"
+    char_info = f"글자 수: {draft.text_length}"
     if draft.text_length > 280:
         char_info += " ⚠️ X 한도 초과 — 편집 필요"
 
     card += (
-        f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
+        f"\n💡 <b>추천:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"
-        f"Draft ID: {draft.id} | Version: {draft.version}\n"
+        f"초안 ID: {draft.id} | 버전: {draft.version}\n"
         f"{char_info}"
     )
 
@@ -206,12 +206,12 @@ def build_inline_keyboard(draft_id: int) -> dict:
     keyboard = {
         "inline_keyboard": [
             [
-                {"text": "✅ Approve", "callback_data": f"approve:{draft_id}"},
-                {"text": "❌ Reject", "callback_data": f"reject:{draft_id}"},
+                {"text": "✅ 승인", "callback_data": f"approve:{draft_id}"},
+                {"text": "❌ 거절", "callback_data": f"reject:{draft_id}"},
             ],
             [
-                {"text": "⏸️ Defer", "callback_data": f"defer:{draft_id}"},
-                {"text": "🔄 Regenerate", "callback_data": f"regenerate:{draft_id}"},
+                {"text": "⏸️ 보류", "callback_data": f"defer:{draft_id}"},
+                {"text": "🔄 재생성", "callback_data": f"regenerate:{draft_id}"},
             ],
         ]
     }
@@ -308,15 +308,15 @@ async def send_publish_confirmation(draft: Draft) -> None:
     ko_translation = await _translate_to_korean(original_text)
 
     text = (
-        f"✅ <b>POSTED TO X</b>\n\n"
+        f"✅ <b>X 게시 완료</b>\n\n"
         f"📝 <b>원문:</b>\n{draft.hook}\n\n{draft.body}\n\n"
     )
     if ko_translation:
         text += f"🇰🇷 <b>한국어:</b>\n{ko_translation}\n\n"
     text += (
-        f"🆔 Post ID: {draft.x_post_id}\n"
-        f"🔗 {draft.x_post_url or 'URL not available'}\n"
-        f"📊 Category: {draft.category.value} | Risk: {draft.risk_level.value}"
+        f"🆔 게시 ID: {draft.x_post_id}\n"
+        f"🔗 {draft.x_post_url or 'URL 없음'}\n"
+        f"📊 카테고리: {draft.category.value} | 위험도: {draft.risk_level.value}"
     )
 
     payload = {

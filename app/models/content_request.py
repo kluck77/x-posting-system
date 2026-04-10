@@ -52,7 +52,7 @@ class ContentRequest(BaseModel):
     # 프레이밍 힌트
     target_framing: Optional[str] = Field(None, description="국제 독자 관련성 힌트")
 
-    language: str = Field("english", description="출력 언어")
+    language: str = Field("ko", description="출력 언어")
 
     # ── 정규화 메서드 ──────────────────────────────────────────────────────────
 

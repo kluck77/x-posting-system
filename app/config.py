@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///./x_poster.db")
 
     # --- 앱 설정 ---
-    default_language: str = Field(default="en")
+    default_language: str = Field(default="ko")
     log_level: str = Field(default="INFO")
 
     # --- 속보 모니터 설정 ---
