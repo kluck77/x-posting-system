@@ -130,6 +130,7 @@ class AnthropicDraftWriter(BaseDraftWriter):
 
     async def generate_draft(
         self, title: str, source_text: str, language: str = "ko",
+        source_type: str = "manual", criteria_context: str | None = None,
     ) -> DraftResult:
         logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 
@@ -228,7 +229,16 @@ class AnthropicReviewer(BaseReviewer):
                 )
                 resp.raise_for_status()
                 content = resp.json()["content"][0]["text"]
-                data = json.loads(content)
+                try:
+                    data = json.loads(content)
+                except json.JSONDecodeError:
+                    # Claude가 JSON 앞뒤에 텍스트를 붙인 경우 추출 시도
+                    import re
+                    match = re.search(r'\{.*\}', content, re.DOTALL)
+                    if match:
+                        data = json.loads(match.group())
+                    else:
+                        raise
 
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
             quality_flags = data.get("quality_flags", [])

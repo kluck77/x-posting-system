@@ -88,6 +88,7 @@ class OpenAIDraftWriter(BaseDraftWriter):
 
     async def generate_draft(
         self, title: str, source_text: str, language: str = "ko",
+        source_type: str = "manual", criteria_context: str | None = None,
     ) -> DraftResult:
         logger.info(f"[OpenAI DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 
