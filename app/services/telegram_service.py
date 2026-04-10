@@ -17,8 +17,11 @@
 import json
 import logging
 import httpx
+from zoneinfo import ZoneInfo
 from app.config import settings
 from app.models.content import Draft, RiskLevel, ContentCategory
+
+KST = ZoneInfo("Asia/Seoul")
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +101,96 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     if draft.ai_rationale:
         card += f"🤖 <b>AI Rationale:</b> {draft.ai_rationale}\n"
 
+    # topic tags (Layer 2, advisory)
+    try:
+        _tags = getattr(draft, "topic_tags", None)
+        if _tags:
+            _tag_list = json.loads(_tags)
+            if _tag_list:
+                tag_str = " ".join(f"#{t.lstrip('#')}" for t in _tag_list[:5])
+                card += f"🏷 {tag_str}\n"
+    except Exception:
+        pass
+
+    if getattr(draft, "community_warning", None):
+        card += (
+            f"\n{'─' * 30}\n"
+            f"⚠️ <b>커뮤니티 입력 경고</b>\n"
+            f"{draft.community_warning}\n"
+        )
+
+    if getattr(draft, "predicted_publish_at", None):
+        kst_time = draft.predicted_publish_at.astimezone(KST)
+        card += f"⏰ <b>예측 최적 게시 시간:</b> {kst_time.strftime('%m/%d(%a) %H:%M KST')}\n"
+        if getattr(draft, "prediction_reasoning", None):
+            card += f"   └ {draft.prediction_reasoning}\n"
+
+    # 5-criteria 실시간 평가
+    try:
+        from app.services.quality_scorer import score_5criteria, format_5criteria_report
+        criteria_result = score_5criteria(draft.hook, draft.body)
+        if criteria_result["action"] != "pass" or criteria_result["flags"]:
+            card += f"\n{'─' * 30}\n"
+            card += f"🔬 <b>5-Criteria 품질 분석:</b> {criteria_result['total']}/100\n"
+            for flag in criteria_result["flags"]:
+                card += f"  {flag}\n"
+    except Exception:
+        pass
+
+    # quality advisory — 초안 우선순위 레이블 (Layer 2, advisory only)
+    try:
+        from app.services.advisory import draft_advisory
+        _adv = draft_advisory(draft.hook, draft.body, getattr(draft, "source_type", "news_link"))
+        if _adv:
+            card += (
+                f"\n{'─' * 30}\n"
+                f"📌 <b>초안 우선순위:</b> {_adv} (참고용)\n"
+            )
+    except Exception:
+        pass
+
+    # VoiceGuard — 단일 초안 AI 어투 감지 (Layer 2, advisory only)
+    try:
+        from app.services.voice_guard import check_voice
+        _voice_warnings = check_voice(f"{draft.hook}\n{draft.body}")
+        if _voice_warnings:
+            card += f"\n{'─' * 30}\n"
+            card += "🗣️ <b>Voice 경고</b> (참고용):\n"
+            for _w in _voice_warnings[:3]:
+                card += f"  {_w}\n"
+    except Exception:
+        pass
+
+    # Phase 5: 비즈니스 분류 표시 (Layer 2, advisory only)
+    try:
+        _biz_tags_raw = getattr(draft, "business_tags", None)
+        if _biz_tags_raw:
+            _biz_tags = json.loads(_biz_tags_raw)
+            if _biz_tags and _biz_tags != ["growth"]:
+                _mon_score = getattr(draft, "monetization_score", None) or 0
+                _cta = getattr(draft, "cta_type", None) or "—"
+                _asset = getattr(draft, "asset_goal", None) or "—"
+                card += f"\n{'─' * 30}\n"
+                card += f"💼 <b>비즈니스:</b> {' '.join(_biz_tags)}\n"
+                card += f"   💰 수익화: {_mon_score}/100 | 🎯 CTA: {_cta} | 📦 자산: {_asset}\n"
+                if getattr(draft, "b2b_candidate", False):
+                    _b2b_aud = getattr(draft, "b2b_target_audience", None) or "—"
+                    _b2b_use = getattr(draft, "b2b_use_case", None) or "—"
+                    card += f"   🏢 B2B: {_b2b_aud} / {_b2b_use}\n"
+                if getattr(draft, "premium_reason", None):
+                    card += f"   ⭐ 프리미엄: {draft.premium_reason[:100]}\n"
+    except Exception:
+        pass
+
+    char_info = f"Characters: {draft.text_length}"
+    if draft.text_length > 280:
+        char_info += " ⚠️ X 한도 초과 — 편집 필요"
+
     card += (
         f"\n💡 <b>Recommendation:</b> {_recommended_action(draft)}\n"
         f"{'─' * 30}\n"
         f"Draft ID: {draft.id} | Version: {draft.version}\n"
-        f"Characters: {draft.text_length}"
+        f"{char_info}"
     )
 
     return card
@@ -178,6 +266,35 @@ async def send_approval_card(draft: Draft, source_url: str | None = None) -> int
         return None
 
 
+async def _translate_to_korean(text: str) -> str | None:
+    """
+    Gemini Flash로 영문 텍스트를 한국어로 번역합니다. (Layer 2 — 실패 시 None)
+    """
+    if not settings.has_gemini or not text:
+        return None
+    try:
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.0-flash:generateContent?key={settings.gemini_api_key}"
+        )
+        prompt = (
+            "Translate the following English X/Twitter post into natural, concise Korean. "
+            "Output ONLY the Korean translation — no quotes, no explanation.\n\n"
+            f"{text}"
+        )
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                url,
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+            )
+            r.raise_for_status()
+            data = r.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        logger.warning(f"[Translate] 한국어 번역 실패: {e}")
+        return None
+
+
 async def send_publish_confirmation(draft: Draft) -> None:
     """
     X에 게시 완료 후 텔레그램으로 확인 메시지를 보냅니다.
@@ -186,9 +303,17 @@ async def send_publish_confirmation(draft: Draft) -> None:
         logger.info(f"[MOCK 텔레그램] 게시 확인: draft_id={draft.id}, x_post_id={draft.x_post_id}")
         return
 
+    # 본문(hook + body)을 한국어로 번역 (Layer 2, 실패해도 진행)
+    original_text = f"{draft.hook}\n\n{draft.body}"
+    ko_translation = await _translate_to_korean(original_text)
+
     text = (
         f"✅ <b>POSTED TO X</b>\n\n"
-        f"📝 {draft.hook}\n\n"
+        f"📝 <b>원문:</b>\n{draft.hook}\n\n{draft.body}\n\n"
+    )
+    if ko_translation:
+        text += f"🇰🇷 <b>한국어:</b>\n{ko_translation}\n\n"
+    text += (
         f"🆔 Post ID: {draft.x_post_id}\n"
         f"🔗 {draft.x_post_url or 'URL not available'}\n"
         f"📊 Category: {draft.category.value} | Risk: {draft.risk_level.value}"
@@ -212,6 +337,169 @@ async def send_publish_confirmation(draft: Draft) -> None:
                 logger.warning(f"게시 확인 메시지 전송 실패: {response.text}")
     except httpx.HTTPError as e:
         logger.error(f"게시 확인 메시지 전송 오류: {e}")
+
+
+def build_analysis_card(
+    title: str,
+    content_type: str,
+    research_summary: str,
+    factcheck_summary: str,
+    char_count: int,
+) -> str:
+    """
+    URL/사진 분석 결과 카드 텍스트를 생성합니다.
+    이 카드 아래에 '게시글로 / 댓글로 / 취소' 버튼이 붙습니다.
+    """
+    card = (
+        f"🔍 <b>분석 완료</b>\n"
+        f"{'─' * 30}\n\n"
+        f"📰 <b>제목/주제:</b>\n{title[:200]}\n\n"
+        f"📋 <b>유형:</b> {content_type}\n\n"
+    )
+    if research_summary:
+        card += f"🔬 <b>핵심 내용:</b>\n{research_summary[:400]}\n\n"
+    if factcheck_summary:
+        card += f"✅ <b>팩트체크:</b>\n{factcheck_summary[:300]}\n\n"
+    card += (
+        f"{'─' * 30}\n"
+        f"📏 추출 텍스트: {char_count}자\n\n"
+        f"<b>어떻게 사용할까요?</b>"
+    )
+    return card
+
+
+def build_type_selection_keyboard(pending_id: str) -> dict:
+    """
+    '게시글로 / 댓글로 / 취소' 인라인 키보드.
+    pending_id = 상태 저장 키 (보통 str(message_id))
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📝 새 게시글", "callback_data": f"type_tweet:{pending_id}"},
+                {"text": "💬 댓글로", "callback_data": f"type_reply:{pending_id}"},
+            ],
+            [
+                {"text": "❌ 취소", "callback_data": f"type_cancel:{pending_id}"},
+            ],
+        ]
+    }
+
+
+async def send_analysis_card(
+    title: str,
+    content_type: str,
+    research_summary: str,
+    factcheck_summary: str,
+    char_count: int,
+    pending_id: str,
+) -> int | None:
+    """
+    분석 카드를 텔레그램으로 전송합니다.
+    Returns: 전송된 message_id, 실패 시 None
+    """
+    if not settings.has_telegram_config:
+        logger.info("[MOCK 텔레그램] 분석 카드 전송 스킵")
+        return None
+
+    card_text = build_analysis_card(
+        title, content_type, research_summary, factcheck_summary, char_count
+    )
+    keyboard = build_type_selection_keyboard(pending_id)
+
+    payload = {
+        "chat_id": settings.telegram_chat_id,
+        "text": card_text,
+        "parse_mode": "HTML",
+        "reply_markup": json.dumps(keyboard),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(_get_api_url("sendMessage"), data=payload)
+            response.raise_for_status()
+            result = response.json()
+            if result.get("ok"):
+                return result["result"]["message_id"]
+            logger.error(f"분석 카드 전송 오류: {result}")
+            return None
+    except httpx.HTTPError as e:
+        logger.error(f"분석 카드 전송 실패: {e}")
+        return None
+
+
+def send_content_pack_messages(pack) -> list[dict]:
+    """
+    ContentPack을 텔레그램 전송용 메시지 목록으로 변환합니다.
+    실제 전송은 telegram_bot.py의 update.message.reply_text()가 담당합니다.
+
+    Returns:
+        [{"text": str, "pack_index": int | None, "post_text": str | None}, ...]
+        pack_index: None = 참조용(버튼 없음), 0-2 = 메인포스트, 10 = 짧은버전
+    """
+    messages: list[dict] = []
+
+    # ── 1. 개요 카드 ──────────────────────────────────────────────────────────
+    overview_lines = ["📦 <b>콘텐츠 팩 생성 완료</b>\n"]
+
+    if pack.why_it_matters:
+        overview_lines.append(f"🌏 <b>Why it matters</b>\n{pack.why_it_matters}\n")
+
+    if pack.topic_tags:
+        tags = " ".join(f"#{t}" for t in pack.topic_tags)
+        overview_lines.append(f"🏷 {tags}\n")
+
+    if pack.risk_flags:
+        flags = "\n".join(f"  • {f}" for f in pack.risk_flags)
+        overview_lines.append(f"⚠️ <b>Risk flags</b>\n{flags}\n")
+
+    if pack.style_warnings:
+        warns = "\n".join(f"  • {w}" for w in pack.style_warnings)
+        overview_lines.append(f"🔄 <b>Style warnings</b>\n{warns}\n")
+
+    overview_lines.append(
+        f"<i>메인 {len(pack.main_posts)}개 · 짧은버전 1개 · 댓글초안 {len(pack.reply_drafts)}개"
+        f" · 인용 {len(pack.quote_post_drafts)}개"
+        + (" · 스레드 있음" if pack.thread_option else "")
+        + "</i>"
+    )
+
+    messages.append({"text": "\n".join(overview_lines), "pack_index": None, "post_text": None})
+
+    # ── 2. 메인 포스트 × 3 (승인 버튼 있음) ──────────────────────────────────
+    for i, post in enumerate(pack.main_posts[:3]):
+        label = ["A", "B", "C"][i]
+        text = f"📝 <b>메인 포스트 {label}</b>\n\n<code>{post}</code>"
+        messages.append({"text": text, "pack_index": i, "post_text": post})
+
+    # ── 3. 짧은 버전 (승인 버튼 있음, pack_index=10) ─────────────────────────
+    if pack.short_version:
+        text = f"⚡ <b>짧은 버전</b>\n\n<code>{pack.short_version}</code>"
+        messages.append({"text": text, "pack_index": 10, "post_text": pack.short_version})
+
+    # ── 4. 댓글 초안 × 3 (복사 전용 — 버튼 없음) ────────────────────────────
+    if pack.reply_drafts:
+        reply_text = "💬 <b>댓글 초안</b> (복사해서 사용)\n\n"
+        for j, r in enumerate(pack.reply_drafts[:3], 1):
+            reply_text += f"{j}. <code>{r}</code>\n\n"
+        messages.append({"text": reply_text.strip(), "pack_index": None, "post_text": None})
+
+    # ── 5. 인용 포스트 × 2 (복사 전용) ──────────────────────────────────────
+    if pack.quote_post_drafts:
+        quote_text = "🔁 <b>인용 포스트</b> (복사해서 사용)\n\n"
+        for j, q in enumerate(pack.quote_post_drafts[:2], 1):
+            quote_text += f"{j}. <code>{q}</code>\n\n"
+        messages.append({"text": quote_text.strip(), "pack_index": None, "post_text": None})
+
+    # ── 6. 스레드 옵션 (복사 전용) ───────────────────────────────────────────
+    if pack.thread_option:
+        thread_text = (
+            f"🧵 <b>스레드 시작</b> (복사해서 사용)\n\n"
+            f"<code>{pack.thread_option}</code>"
+        )
+        messages.append({"text": thread_text, "pack_index": None, "post_text": None})
+
+    return messages
 
 
 def parse_callback_data(callback_data: str) -> tuple[str, int] | None:

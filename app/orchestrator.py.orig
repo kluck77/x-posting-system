@@ -145,9 +145,10 @@ class Orchestrator:
         """
         logger.info(f"=== 파이프라인 시작: '{data.title[:50]}' ===")
 
-        # Step 0: (rate check moved to Step 2 — Lane A~C는 AI 비용 없음)
-        # BREAKING_NOW / KO-only / Top5 적재 / 주간 즉시 알림은 항상 실행.
-        # AI 파이프라인(Steps 2-6)만 레인별 제한 적용.
+        # Step 0: 일일 제한 확인
+        can_draft, draft_msg = self.rate_limiter.can_create_draft()
+        if not can_draft:
+            raise RuntimeError(f"일일 제한 초과: {draft_msg}")
 
         # Step 1: 소스 저장
         logger.info("[1/6] 소스 DB 저장")
@@ -172,42 +173,6 @@ class Orchestrator:
                 f"urgency={breaking_result.urgency or '-'}"
             )
 
-            # Step 1.5b: CANDIDATE -> Top5 야간 큐 적재 (fail-open)
-            if breaking_result.classification == "CANDIDATE":
-                try:
-                    from app.services.top5_briefing_service import record_candidate
-                    record_candidate(
-                        title=source_item.title,
-                        body=source_item.source_text,
-                        url=source_item.url,
-                        topic_domain=breaking_result.topic_domain,
-                        matched_keywords=breaking_result.matched_keywords,
-                        breaking_reason=breaking_result.breaking_reason,
-                        urgency=breaking_result.urgency,
-                        collected_at=source_item.created_at,
-                    )
-                except Exception:
-                    pass  # fail-open
-
-                # Step 1.5c: 주간 고점수 CANDIDATE 즉시 알림 (fail-open)
-                # - 05:00~22:00 KST 에만 동작
-                # - 교차검증 4+ / 점수 컴라인 / 즉시성 조건 모두 충송 시 텘렉그램 즉시 알림
-                # - Top5 탐 적재(1.5b)와 독립. 둘다 동작해도 충돌 없음.
-                try:
-                    from app.services.daytime_alert_service import try_daytime_alert
-                    _daytime_sent = await try_daytime_alert(
-                        title=source_item.title,
-                        body=source_item.source_text,
-                        url=source_item.url,
-                        topic_domain=breaking_result.topic_domain,
-                        matched_keywords=breaking_result.matched_keywords,
-                        collected_at=source_item.created_at,
-                    )
-                    if _daytime_sent:
-                        logger.info("[1.5c/6] 주간 고점수 CANDIDATE 즉시 알림 전송")
-                except Exception:
-                    pass  # fail-open
-
             # Step 1.6: BREAKING_NOW 일 때만 분리된 텔레그램 알림 핸드오프
             if breaking_result.classification == "BREAKING_NOW":
                 try:
@@ -219,62 +184,12 @@ class Orchestrator:
                         body=source_item.source_text,
                     )
                     logger.info(f"[1.6/6] breaking alert 핸드오프: sent={sent}")
-                    # Top5 제외 등록 (BREAKING_NOW 전송분은 Top5에서 제외)
-                    if sent:
-                        try:
-                            from app.services.top5_briefing_service import record_breaking_sent
-                            record_breaking_sent(
-                                title=source_item.title,
-                                topic_domain=breaking_result.topic_domain,
-                            )
-                        except Exception:
-                            pass  # fail-open
                 except Exception as e:
                     logger.warning(
                         f"breaking alert 핸드오프 실패 (fail-open, 파이프라인 곃속): {e}"
                     )
         except Exception as e:
             logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
-
-
-        # Step 1.7: KO-only routing - skip English draft pipeline (Phase H, fail-open)
-        _KO_ONLY_DOMAINS = {"금융", "투자", "크립토", "주식"}
-        _KO_ONLY_CLASSES = {"BREAKING_NOW", "CANDIDATE"}
-        try:
-            _br = getattr(source_item, "breaking_result", None)
-            if (_br is not None
-                    and _br.classification in _KO_ONLY_CLASSES
-                    and _br.topic_domain in _KO_ONLY_DOMAINS):
-                logger.info(
-                    f"[1.7/6] English draft skipped: {_br.classification} "
-                    f"domain={_br.topic_domain}"
-                )
-                draft = self.draft_service.create_draft(
-                    source_item=source_item,
-                    hook=f"[{_br.classification}] {data.title[:80]}",
-                    body=f"KO-only pipeline (English draft skipped). domain={_br.topic_domain}",
-                    category=ContentCategory.ECONOMY,
-                    risk_level=RiskLevel.LOW,
-                    risk_reasoning=f"{_br.classification} KO-only routing",
-                    ai_rationale=f"Routed to {_br.classification} pipeline, English draft skipped.",
-                )
-                draft._skip_approval_card = True
-                logger.info(
-                    f"=== Pipeline done (KO-only): draft_id={draft.id}, "
-                    f"routing={_br.classification} ==="
-                )
-                return draft
-        except Exception as e:
-            logger.warning(f"[1.7] KO routing check failed (fail-open): {e}")
-
-        # Step 2 rate check: AI 파이프라인 진입 제한 (비용 보호)
-        # - KO-only/BREAKING 는 Step 1.7 에서 이미 리턴
-        # - source_type 으로 자동수집/수동입력 레인 분리
-        can_ai, ai_msg = self.rate_limiter.can_run_ai_pipeline(
-            source_type=data.source_type,
-        )
-        if not can_ai:
-            raise RuntimeError(f"일일 제한 초과: {ai_msg}")
 
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")
@@ -334,7 +249,7 @@ class Orchestrator:
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
                 source_text=enriched_source[:3000],
-                language=data.language or settings.default_language,
+                language=settings.default_language,
                 source_type=data.source_type,
                 criteria_context=draft_criteria_ctx,
             )
@@ -705,9 +620,7 @@ class Orchestrator:
                 source_type=source.source_type, language=source.language,
             )
             new_draft = await self.ingest_and_generate(new_data)
-            # Phase H: KO-only routing - skip approval card
-            if not getattr(new_draft, '_skip_approval_card', False):
-                await self.send_for_approval(new_draft.id)
+            await self.send_for_approval(new_draft.id)
             return {
                 "success": True,
                 "message": f"재생성 완료! 새 draft ID: {new_draft.id}",
@@ -730,26 +643,10 @@ class Orchestrator:
         return await self._handle_approve(draft)
 
     async def full_pipeline(self, data: SourceItemCreate) -> dict:
-        """전체 파이프띴인: 소스 입력 → 분류 → AI 생성 또는 한국어 전용 라인 처리"""
+        """전체 파이프라인: 소스 입력 → AI 생성 → 텔레그램 승인카드 전송"""
         try:
             draft = await self.ingest_and_generate(data)
-            # Phase H: KO-only routing - skip approval card
-            if getattr(draft, '_skip_approval_card', False):
-                sent = False
-                logger.info(f"[pipeline] approval card skipped (KO-only): draft_id={draft.id}")
-            else:
-                sent = await self.send_for_approval(draft.id)
-            # 실제 처리 경로에 맞는 응답 메시지
-            if getattr(draft, '_skip_approval_card', False):
-                if draft.hook.startswith("[BREAKING_NOW]"):
-                    message = "속보 알림 대상으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
-                else:
-                    message = "한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
-            elif sent:
-                message = "초안 생성 완료. 텔레그램에서 승인해주세요."
-            else:
-                message = "초안 생성 완료."
-
+            sent = await self.send_for_approval(draft.id)
             return {
                 "success": True,
                 "draft_id": draft.id,
@@ -758,7 +655,7 @@ class Orchestrator:
                 "telegram_sent": sent,
                 "hook": draft.hook,
                 "body": draft.body,
-                "message": message,
+                "message": "초안 생성 완료! 텔레그램에서 승인해주세요.",
             }
         except Exception as e:
             logger.error(f"파이프라인 오류: {e}", exc_info=True)

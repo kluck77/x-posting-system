@@ -1,0 +1,181 @@
+"""
+xAI Grok 프로바이더
+====================
+역할: TrendHunter — 실시간 트렌드 탐지.
+X/Twitter에서 한국 관련 트렌딩 토픽을 탐지하고 분석합니다.
+
+Grok API는 OpenAI 호환 형식을 사용합니다.
+"""
+
+import json
+import logging
+import httpx
+from app.config import settings
+from app.providers.base import BaseTrendHunter, TrendResult, CriteriaSignals
+
+logger = logging.getLogger(__name__)
+
+GROK_API_URL = "https://api.x.ai/v1/chat/completions"
+GROK_MODEL = "grok-3-mini-fast"
+
+SYSTEM_PROMPT = """You are the trend hunter for @cheesesvav — an English-language X account that shares Korean community perspectives with global readers.
+
+Your job: Identify what Korean online communities and X/Twitter are talking about RIGHT NOW. Find trending topics that would interest English-speaking audiences who want to understand Korea.
+
+Focus areas:
+- Korean economic news generating buzz
+- Korean online community hot topics (DCInside, FMKorea, crypto boards)
+- Korean government policy reactions
+- K-pop and cultural phenomena with broader implications
+- Korean crypto/market sentiment shifts
+- Social trends (employment, housing, demographics)
+
+══════════════════════════════════════════
+5-CRITERIA QUALITY FILTER — apply before including any trend
+══════════════════════════════════════════
+
+MARKETABILITY CHECK (Criteria 2): Does this trend connect to global markets, supply chains, crypto, or geopolitics?
+- PASS (score 7-10): Connects to USD/KRW, semiconductors, crypto, global trade, or international geopolitics
+- WEAK (score 4-6): Regionally relevant but thin global signal
+- FAIL (score 1-3): Purely domestic story with no international implication → EXCLUDE
+
+FOLLOWER QUALITY CHECK (Criteria 4): Will this attract informed, globally-minded followers?
+- PASS (score 7-10): Attracts investors, analysts, researchers, policy watchers, traders
+- WEAK (score 4-6): Mixed audience, some informed readers
+- FAIL (score 1-3): Entertainment/celebrity/gossip → EXCLUDE
+
+RULE: Only include trends where BOTH marketability_score >= 6 AND follower_fit_score >= 6.
+If a trend fails either check, skip it — do not include it in the output.
+
+For each trend, assess:
+- How much engagement it's getting
+- Whether it's relevant for non-Korean audiences
+- The sentiment (positive/negative/mixed)
+- Time sensitivity (breaking now vs. ongoing)
+
+STRICT RULES:
+- Focus on topics with GLOBAL relevance or surprising aspects
+- Skip purely domestic gossip with no broader implication
+- Prioritize topics where Korean perspective differs from Western coverage
+- Include specific numbers (engagement counts, percentages) when available
+
+Respond in JSON ONLY:
+{
+  "trending_topics": [
+    {
+      "topic": "short topic title",
+      "description": "1-2 sentence description",
+      "sentiment": "positive|negative|mixed|neutral",
+      "urgency": "breaking|trending|ongoing",
+      "relevance_score": 1-10,
+      "marketability_score": 1-10,
+      "follower_fit_score": 1-10,
+      "criteria_note": "why this trend passes the quality filter"
+    }
+  ],
+  "relevance_notes": "overall assessment — how many trends passed the filter and why"
+}"""
+
+
+class GrokTrendHunter(BaseTrendHunter):
+    """xAI Grok을 사용한 트렌드 탐지기."""
+
+    async def find_trends(self, topic_area: str = "korea") -> TrendResult:
+        logger.info(f"[Grok TrendHunter] 트렌드 탐색: '{topic_area}'")
+
+        user_msg = (
+            f"Find current trending topics in Korean online communities and X/Twitter "
+            f"related to: {topic_area}\n\n"
+            f"Focus on topics that would surprise or interest English-speaking audiences.\n"
+            f"Respond in JSON only."
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    GROK_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {settings.grok_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": GROK_MODEL,
+                        "messages": [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": user_msg},
+                        ],
+                        "temperature": 0.5,
+                    },
+                )
+                resp.raise_for_status()
+                raw_text = resp.json()["choices"][0]["message"]["content"]
+
+                # Grok may return markdown-wrapped JSON, strip it
+                text = raw_text.strip()
+                if text.startswith("```"):
+                    text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                    if text.endswith("```"):
+                        text = text[:-3]
+                    text = text.strip()
+
+                data = json.loads(text)
+
+            topics_raw = data.get("trending_topics", [])
+            # Normalize: could be list of strings or list of dicts
+            topics: list[str] = []
+            mkt_scores: list[float] = []
+            fit_scores: list[float] = []
+            filter_summary: list[str] = []
+
+            for t in topics_raw:
+                if isinstance(t, str):
+                    topics.append(t)
+                elif isinstance(t, dict):
+                    topic_name = t.get("topic", str(t))
+                    topics.append(topic_name)
+
+                    mkt = t.get("marketability_score")
+                    fit = t.get("follower_fit_score")
+                    note = t.get("criteria_note", "")
+
+                    if isinstance(mkt, (int, float)):
+                        mkt_scores.append(float(mkt))
+                    if isinstance(fit, (int, float)):
+                        fit_scores.append(float(fit))
+
+                    filter_summary.append(
+                        f"{topic_name} [mkt={mkt or '?'} fit={fit or '?'}]"
+                    )
+                    if note:
+                        logger.debug(f"  └ {note}")
+
+            if filter_summary:
+                logger.info(f"[Grok] 5-criteria 통과 트렌드: {'; '.join(filter_summary)}")
+            logger.info(f"[Grok TrendHunter] {len(topics)}개 트렌드 발견")
+
+            # CriteriaSignals 구성 — 통과한 트렌드 점수 집계
+            avg_mkt = round(sum(mkt_scores) / len(mkt_scores), 1) if mkt_scores else None
+            avg_fit = round(sum(fit_scores) / len(fit_scores), 1) if fit_scores else None
+            criteria_signals = CriteriaSignals(
+                marketability={
+                    "score": avg_mkt,
+                    "note": f"{len(topics)}개 트렌드 평균 (≥6 필터 통과분)",
+                } if avg_mkt is not None else {},
+                follower_quality={
+                    "score": avg_fit,
+                    "note": f"{len(topics)}개 트렌드 평균 follower_fit",
+                } if avg_fit is not None else {},
+            )
+            if criteria_signals.any_populated():
+                logger.info(f"[Grok] criteria_signals: {criteria_signals.to_log_str()}")
+
+            return TrendResult(
+                trending_topics=topics,
+                relevance_notes=data.get("relevance_notes", ""),
+                raw_response=raw_text,
+                criteria_signals=criteria_signals,
+            )
+
+        except Exception as e:
+            logger.error(f"Grok TrendHunter 오류: {e}")
+            raise RuntimeError(f"Grok TrendHunter 오류: {e}") from e
