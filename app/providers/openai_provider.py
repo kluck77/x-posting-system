@@ -87,7 +87,7 @@ class OpenAIDraftWriter(BaseDraftWriter):
     """ChatGPT를 사용한 초안 작성기."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self, title: str, source_text: str, language: str = "ko",
     ) -> DraftResult:
         logger.info(f"[OpenAI DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 

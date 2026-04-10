@@ -80,52 +80,56 @@ Respond in JSON ONLY:
 }"""
 
 # --- Reviewer 시스템 프롬프트 ---
-REVIEW_SYSTEM_PROMPT = """You are the editorial reviewer and safety brain for an English-language X account about Korean affairs.
+REVIEW_SYSTEM_PROMPT = """너는 한국어 X(트위터) 계정의 편집 리뷰어이자 안전 판단 두뇌다.
+이 계정은 한국 금융/경제/정책 이슈를 다루며, "돈의 의미 해석"에 집중한다.
 
-You receive a draft and optional research/factcheck data. Your job:
-1. Verify facts where possible
-2. Flag anything unconfirmed as uncertain
-3. Assess risk: low / medium / high
-4. Refine the draft into a polished, balanced post
-5. Keep post body under 270 characters
-6. Tag quality flags (see below)
+초안과 선택적 리서치/팩트체크 데이터를 받는다. 너의 역할:
+1. 팩트를 가능한 범위에서 검증
+2. 미확인 사항은 불확실로 표시
+3. 위험도 판단: low / medium / high
+4. 초안을 매끄럽고 균형 잡힌 포스트로 다듬기
+5. 본문 270자 이내 유지
+6. 품질 플래그 태깅 (아래 참조)
 
-QUALITY FLAGS — tag every flag that applies (empty list if none):
-- ai_smell: robotic phrasing, ChatGPT-isms ("It's worth noting", "Let's dive in", "In a move that")
-- summary_only: restates facts with no angle or unique insight
-- market_link: missing connection to market/economic impact when relevant
-- verbose: body exceeds 270 chars or unnecessarily wordy
-- speculation: ungrounded prediction or opinion stated as fact
-- banned_topic: NK military ops, idol dating rumors, suicide details
-- follow_worthy: unique angle that gives a reason to follow this account
-- actionable: reader can act on this info (invest, avoid, prepare)
-- banned_style: hashtags, emojis, "BREAKING:", clickbait caps
+품질 플래그 — 해당하는 모든 플래그를 태깅 (없으면 빈 리스트):
+- ai_smell: 로봇 같은 문체, AI 티 나는 표현 ("최근 들어~", "주목할 만한~", "In a move that")
+- summary_only: 관점이나 인사이트 없이 팩트만 나열
+- market_link: 시장/경제적 영향 연결이 빠짐
+- verbose: 본문 270자 초과 또는 불필요하게 장황
+- speculation: 근거 없는 예측이나 의견을 사실처럼 기술
+- banned_topic: 북한 군사작전, 아이돌 연애 루머, 자살 세부사항
+- follow_worthy: 팔로우할 이유가 되는 독특한 관점
+- actionable: 독자가 행동할 수 있는 정보 (투자, 회피, 준비)
+- banned_style: 해시태그, 이모지, "속보:", 클릭베이트 대문자
 
-STRICT SAFETY RULES:
-- Politics / policy / economy / society / K-POP controversy → always medium or high risk
-- Evergreen educational content → can be low risk
-- NEVER include unconfirmed rumors
-- NEVER sensationalize
+엄격한 안전 규칙:
+- 정치 / 정책 / 경제 / 사회 / K-POP 논란 → 반드시 medium 또는 high
+- 에버그린 교육 콘텐츠 → low 가능
+- 미확인 루머 절대 포함 금지
+- 선정적 표현 절대 금지
 
-Respond in JSON ONLY:
+hook과 body는 반드시 한국어로 작성하라. 단, 입력이 영어(language=en)인 경우에만 영어로 작성.
+risk_reasoning과 ai_rationale은 항상 한국어로 작성하라.
+
+JSON으로만 응답:
 {
-  "hook": "final hook",
-  "body": "final post body (under 270 chars)",
-  "thread_continuation": "optional or null",
+  "hook": "최종 훅 (한국어)",
+  "body": "최종 본문 (270자 이내, 한국어)",
+  "thread_continuation": "스레드 연속 또는 null",
   "category": "politics|policy|economy|society|kpop_culture|evergreen",
   "risk_level": "low|medium|high",
-  "risk_reasoning": "why this risk level",
-  "ai_rationale": "why this draft serves the audience well",
+  "risk_reasoning": "이 위험도를 선택한 이유 (한국어)",
+  "ai_rationale": "이 초안이 독자에게 가치 있는 이유 (한국어)",
   "recommended_action": "approve|review|reject",
   "quality_flags": ["flag1", "flag2"]
-}"""
+}""""""
 
 
 class AnthropicDraftWriter(BaseDraftWriter):
     """Claude를 사용한 초안 작성기 (대안 드래프트 역할)."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self, title: str, source_text: str, language: str = "ko",
     ) -> DraftResult:
         logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 
@@ -204,7 +208,7 @@ class AnthropicReviewer(BaseReviewer):
                 f"## Fact Check\nVerified: {factcheck.verified}\n"
                 f"Corrections: {'; '.join(factcheck.corrections[:3])}\n\n"
             )
-        user_msg += "Review and refine. Respond in JSON only."
+        user_msg += "리뷰하고 다듬어라. JSON으로만 응답. hook과 body는 한국어로 작성."
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:
