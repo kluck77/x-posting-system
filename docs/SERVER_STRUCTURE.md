@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-09 21:00 KST (Phase G 서버 반영 완료)
+최종 갱신 : 2026-04-10 KST (Lane B 즉시 알림 검증 완료)
 
 ---
 
@@ -103,6 +103,14 @@ from app.providers.base import FactCheckResult, TrendResult
 
 - orchestrator.py: 680 → 707줄 (+27)
 - 롤백: `cp /tmp/orchestrator.py.bak.phase_e app/orchestrator.py && systemctl restart xdashboard`
+
+### Lane B 즉시 알림 검증 완료 (2026-04-10 03:08 UTC)
+
+- 시뮬레이션: 한국은행 기준금리 동결 기사 (manual /ingest, 5+ STRONG 키워드)
+- 결과: score=74, matched_keywords=5, domain=금융
+- `[daytime-alert] 전송 성공: score=74` → Telegram 직접 API 200 OK
+- Step 1.5c 정상 실행 후 Step 1.7 KO-only 라우팅 → draft_id=273
+- 레인 검증 상태: Lane A ⏳ | Lane B ✅ | Lane C ⏳(04-11) | Lane D ✅
 
 ### Phase F 구현 완료, 서버 반영 대기
 
@@ -220,6 +228,7 @@ Step 0  : 일일 제한 확인
 Step 1  : 소스 DB 저장                          ← 줄 153~155
 Step 1.5: BREAKING 분류 (fail-open)             ← 줄 157~175 ✅ Phase C
 Step 1.5b: CANDIDATE → record_candidate()       ← 줄 175~191 ✅ Phase E
+Step 1.5c: 주간 고점수 CANDIDATE 즉시 알림       ← Step 1.5b 직후 ✅ 검증 완료
 Step 1.6: BREAKING_NOW 텔레그램 핸드오프         ← 줄 193~209 ✅ Phase C+E
           └ record_breaking_sent() (Top5 제외)   ← 줄 200~208 ✅ Phase E
 Step 2  : Researcher — 배경 리서치               ← 줄 221~

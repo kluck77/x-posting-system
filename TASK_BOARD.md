@@ -6,16 +6,27 @@
 ---
 
 ## Updated At
-2026-04-09 21:00 KST
+2026-04-10 KST (Lane B 검증 완료)
 
 ## Updated By
 Claude Code (claude/github-mcp-setup-L0oac)
 
 ## Current Stage
-**전 Phase 서버 반영 완료.** BREAKING + Top5 + 스케줄러 + 영속화 모두 운영 중.
+**Lane B 즉시 알림 검증 완료.** score=74, keywords=5, Telegram 전송 성공 확인. Lane D 레인 분리도 기검증.
 
 ## Current Priority
-**운영 안정화 관찰** — 야간 기사 인입 → CANDIDATE 적재 → 05:00 브리핑 자동 발송 확인 대기.
+**남은 검증 + 다음 기능** — 순서:
+1. ~~05:00 KST Top5 자동 발송 확인~~ → 2026-04-11 05:00 KST 첫 실행 대기
+2. ~~주간 즉시 알림(Lane B) 실동작 확인~~ → ✅ 검증 완료 (2026-04-10)
+3. AI 5역할 프롬프트 세트
+4. 대시보드
+
+## ★ Lane B 즉시 알림 검증 완료 (2026-04-10)
+- 시뮬레이션: 한국은행 기준금리 기사 (5+ STRONG 키워드, manual /ingest)
+- 결과: score=74, matched_keywords=5, domain=금융
+- [daytime-alert] 전송 성공 → Step 1.5c Telegram 직접 API 200 OK
+- draft_id=273, KO-only 라우팅 정상
+- 검증 상태: Lane A ⏳ | Lane B ✅ | Lane C ⏳(04-11) | Lane D ✅
 
 ## ★ Phase G: Dedup/Candidate 영속화 서버 반영 완료 (2026-04-09)
 - `app/models/dedup.py` 신규 배치 (3 테이블)

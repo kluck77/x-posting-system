@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-04-10 — Lane B 즉시 알림 실운영 검증 완료
+
+- **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
+- **Session Goal** : 이미 배포된 레인 시스템의 실운영 검증. 새 기능 추가 금지.
+- **검증 대상** :
+  1. Top5 05:00 KST 자동 발송 — 첫 실행 아직 미도래 (2026-04-11 05:00 KST 예정)
+  2. Lane B 주간 즉시 알림 — **시뮬레이션 검증 완료 ✅**
+- **Lane B 시뮬레이션** :
+  - 입력: 한국은행 기준금리 동결 영향 분석 기사 (manual, 5+ STRONG 키워드)
+  - 키워드 설계: 한국은행, 기준금리, 환율, FOMC, 연준, 한은, 국고채, 금통위
+  - classification=CANDIDATE, domain=금융
+  - matched_keywords=5 (임계값 4 충족)
+  - score=74 (임계값 55 충족, 예상 ~73 vs 실측 74)
+  - **[daytime-alert] 전송 성공**: Step 1.5c에서 Telegram 직접 API 호출 → 200 OK
+  - 이후 Step 1.7에서 KO-only 라우팅 → draft_id=273, approval card 스킵 (정상)
+- **server.log 증거** :
+  ```
+  [2026-04-10 03:08:01] [daytime-alert] 조건 충족: score=74, keywords=5, domain=금융
+  [2026-04-10 03:08:02] [daytime-alert] 전송 성공: score=74
+  [2026-04-10 03:08:02] [1.5c/6] 주간 고점수 CANDIDATE 즉시 알림 전송
+  [2026-04-10 03:08:02] Pipeline done (KO-only): draft_id=273
+  ```
+- **레인 검증 상태 종합** :
+  | Lane | 대상 | 검증 상태 |
+  |------|------|----------|
+  | A | BREAKING_NOW | ⏳ 미발생 (실기사 대기) |
+  | B | 주간 즉시 알림 | ✅ 검증 완료 (score=74, kw=5, Telegram 전송 성공) |
+  | C | Top5 브리핑 | ⏳ 첫 실행 2026-04-11 05:00 KST |
+  | D | AI 파이프라인 | ✅ 검증 완료 (레인 분리 동작, KO-only 제외) |
+- **Top5 (Lane C) 관찰 사항** :
+  - Phase F 서버 반영: 2026-04-09 20:28 UTC
+  - 05:00 KST = 20:00 UTC → 반영 시점에 이미 28분 경과 → 당일 미실행 (정상)
+  - 다음 예정: 2026-04-11 05:00 KST (2026-04-10 20:00 UTC)
+- **코드 변경** : 0 (검증 세션, 문서 업데이트만)
+- **Runtime Risk** : 0
+
+---
+
 ## 2026-04-09 21:00 KST — Phase G : Dedup/Candidate 영속화 서버 반영 완료
 
 - **Updated By** : Claude Code (claude/github-mcp-setup-L0oac)
