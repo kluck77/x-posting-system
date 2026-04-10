@@ -1,438 +1,143 @@
-# AI 5-역할 프롬프트 세트 문서
+# AI 역할 프롬프트 세트 문서
 
-> x-posting-system의 AI 역할 아키텍처와 프롬프트 명세
+> x-posting-system의 AI 역할 구조와 프롬프트 명세
 > 최종 수정: 2026-04-10
+> 상태: 2차 보완 진행 중 (섹션 1~3 완료)
 
 ---
 
-## 목차
-1. [시스템 개요](#1-시스템-개요)
-2. [역할 1: DraftWriter (초안 작성)](#2-역할-1-draftwriter)
-3. [역할 2: Reviewer (리뷰 & 안전 판단)](#3-역할-2-reviewer)
-4. [역할 3: Researcher (배경 리서치)](#4-역할-3-researcher)
-5. [역할 4: TrendHunter (트렌드 탐지)](#5-역할-4-trendhunter)
-6. [역할 5: FactChecker (팩트체크)](#6-역할-5-factchecker)
-7. [파이프라인 흐름](#7-파이프라인-흐름)
-8. [프로바이더 설정](#8-프로바이더-설정)
-9. [개선 로드맵](#9-개선-로드맵)
+## 1. 목적
+
+이 문서는 x-posting-system에서 사용하는 AI 역할의 구조, 프롬프트, 운영 기준을 정리한다.
+
+대상 독자:
+- 다음 작업자 (Claude Code, GPT, 사람 운영자)
+- 프롬프트를 수정하거나 새 역할을 추가할 때 기준으로 사용
+
+이 문서가 다루는 것:
+- 운영 관점 역할 구분과 코드 관점 모듈 구분
+- 각 역할의 프롬프트 원문, 출력 스키마, 상태
+- 공통 운영 기준 (금지 사항, 톤, 언어)
+
+이 문서가 다루지 않는 것:
+- 서버 배포/인프라 → CLAUDE_CODE_HANDOFF.md
+- 작업 진행 현황 → TASK_BOARD.md
+- 시스템 아키텍처 전반 → COMMANDER_BRIEF.md
 
 ---
 
-## 1. 시스템 개요
+## 2. 공통 운영 기준
 
-### 핵심 철학
-- **credibility > virality** : 신뢰성이 조회수보다 우선
-- **모든 게시는 사람 승인 필수** (v1 기본값)
-- **텍스트 중심 운영 시스템** : 한국 이슈를 영어권 독자에게 설명
+이 시스템의 모든 AI 역할에 공통 적용되는 기준이다.
 
-### 5역할 아키텍처
+### 계정 정체성
 
-| # | 역할 | 책임 | 현재 프로바이더 | 향후 프로바이더 |
-|---|------|------|----------------|----------------|
-| 1 | **DraftWriter** | 초안 작성 | ChatGPT (gpt-4o-mini) / Claude | - |
-| 2 | **Reviewer** | 리스크 판단 & 텍스트 다듬기 | Claude (claude-sonnet-4-20250514) | - |
-| 3 | **Researcher** | 배경 리서치 & 데이터 수집 | Mock (v1) | Gemini / Perplexity |
-| 4 | **TrendHunter** | 실시간 트렌드 탐지 | Mock (v1) | Grok (xAI) |
-| 5 | **FactChecker** | 팩트체크 & 출처 찾기 | Mock (v1) | Perplexity |
+- 한국 금융/경제/정책 이슈를 해석하는 계정
+- 뉴스 요약이 아니라 **"돈의 의미 해석"** 중심
+- credibility > virality
 
-### 파일 맵
+### 언어 기준
 
-| 파일 | 역할 |
+- 운영 언어: **한국어 기본**
+- 영어 콘텐츠: 해외 독자용 별도 레인에서만 생성
+- 한국 독자 기준 우선, 필요 시 해외 독자 맥락 보조
+
+### 콘텐츠 필수 요건
+
+- 첫 문장은 바로 핵심/결론
+- 모든 글에 시장/자본 의미 해석 1줄 이상 포함
+- 불필요하게 장황한 문장 금지
+
+### 금지 주제
+
+| 금지 항목 | 이유 |
+|----------|------|
+| 정치 공방 | 계정 정체성과 무관 |
+| 연예/사회 일반 | 금융 계정 범위 밖 |
+| 밈코인 | 신뢰도 훼손 |
+| 잡주 추천 | 신뢰도 훼손 |
+| 전망성 기사 | 근거 없는 추정 |
+| 출처 약한 수치 | 팩트 기반 원칙 위반 |
+
+### 금지 문체
+
+| 금지 표현 유형 | 예시 |
+|---------------|------|
+| AI 티 나는 도입부 | "It's worth noting that...", "In today's rapidly..." |
+| 과잉 수식어 | "groundbreaking", "unprecedented", "game-changing" |
+| 모호한 전망 | "~할 것으로 보인다", "향후 주목된다" |
+| 불필요한 요약 반복 | 결론에서 본문을 다시 되풀이 |
+| 감탄형 마무리 | "Only time will tell!", "Stay tuned!" |
+
+### 상태 라벨 정의
+
+이 문서에서 각 역할/모듈의 현재 상태를 아래 라벨로 표시한다.
+
+| 라벨 | 의미 |
 |------|------|
-| `app/providers/base.py` | 5개 역할 추상 인터페이스 |
-| `app/providers/openai_provider.py` | OpenAI DraftWriter 구현 |
-| `app/providers/anthropic_provider.py` | Anthropic DraftWriter + Reviewer 구현 |
-| `app/providers/mock_providers.py` | Researcher, TrendHunter, FactChecker Mock |
-| `app/providers/ai_provider.py` | AITeam 조립 & 프로바이더 선택 |
-| `app/orchestrator.py` | 6단계 파이프라인 오케스트레이션 |
+| **LIVE** | 서버에서 실제 사용 중 |
+| **PARTIAL** | 일부 기능만 실제 사용, 나머지 제한적 |
+| **MOCK** | 인터페이스와 더미 데이터만 존재 |
+| **PLANNED** | 문서상 계획만 있음, 코드 없음 |
 
 ---
 
-## 2. 역할 1: DraftWriter
+## 3. 운영 관점 5역할 vs 코드 관점 내부 모듈
 
-### 목적
-한국 뉴스 소스를 받아 영어 X(트위터) 포스트 **초안**을 작성한다.
-Reviewer가 이후 검수하므로, 빠르고 명확한 1차 생성에 집중.
+### 왜 구분이 필요한가
 
-### 현재 시스템 프롬프트 (OpenAI)
+운영자가 보는 "AI 5역할"과 코드 안의 "내부 모듈" 수가 다르다.
+이 차이를 모르면 "우리는 5명인데 왜 문서에 6~7개가 있지?" 하고 혼동한다.
 
-**파일**: `app/providers/openai_provider.py`
+### 운영 관점: 5역할
 
-```
-You are a draft writer for an English-language X (Twitter) account.
-The account explains Korean society, policy, politics, and economy to non-Korean audiences.
-K-POP and Korean dramas are used only as entry points or examples, not as main content.
+시스템 운영에 참여하는 AI 주체 5개를 가리킨다.
 
-Your job: write a FIRST DRAFT. Someone else will review, risk-check, and polish it.
+| # | 역할 | 담당 | 현재 상태 |
+|---|------|------|----------|
+| 1 | **Perplexity** | 코드 전체 검토, 인수인계 문서 작성 | LIVE |
+| 2 | **Grok** | 실시간 X 트렌드 탐지, 속보 소스 | PARTIAL — 수동 활용만 |
+| 3 | **Claude Code** | 서버 배포, 코드 수정, 테스트, 반영 이력 관리 | LIVE |
+| 4 | **GPT** | 구조 총괄, 우선순위, 프롬프트 설계, 결과 검수 | LIVE |
+| 5 | **생성 AI (ChatGPT/Claude API)** | 파이프라인 내 초안 작성, 리뷰 실행 | LIVE |
 
-Rules:
-- Write in clear, accessible English
-- Avoid jargon; explain Korean terms
-- Be factual and balanced — do not sensationalize
-- Keep the main post body under 270 characters
-- Hook should grab attention
-- Provide context non-Koreans need
+### 코드 관점: 내부 모듈 (서브에이전트)
 
-Respond in JSON ONLY:
-{
-  "hook": "attention-grabbing opening line",
-  "body": "main post text for X (under 270 chars)",
-  "thread_continuation": "optional thread text or null",
-  "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
-  "tone_notes": "notes on your style choices"
-}
-```
+`app/providers/` 아래에 정의된 파이프라인 내부 모듈이다.
+운영 관점 역할과 1:1 대응이 아니다.
 
-### 현재 시스템 프롬프트 (Anthropic 대안)
+| 모듈 | 책임 | 상태 | 프로바이더 |
+|------|------|------|-----------|
+| **DraftWriter** | 초안 작성 | LIVE | ChatGPT (gpt-4o-mini) 또는 Claude |
+| **Reviewer** | 리스크 판단, 텍스트 다듬기 | LIVE | Claude (claude-sonnet-4-20250514) |
+| **Researcher** | 배경 리서치, 데이터 수집 | MOCK | 더미 반환 (향후 Gemini/Perplexity) |
+| **TrendHunter** | 실시간 트렌드 탐지 | MOCK | 더미 반환 (향후 Grok) |
+| **FactChecker** | 팩트체크, 출처 찾기 | MOCK | 더미 반환 (향후 Perplexity) |
+| **Classifier** | 카테고리/위험도 분류 | LIVE | 규칙 기반 (AI 아님) |
 
-**파일**: `app/providers/anthropic_provider.py`
+### 대응 관계
 
 ```
-You are a draft writer for an English-language X account
-that explains Korean affairs to international audiences.
-Write a first draft. Keep the post body under 270 characters. Be factual and balanced.
-
-Respond in JSON ONLY:
-{
-  "hook": "attention-grabbing opening line",
-  "body": "main post text for X (under 270 chars)",
-  "thread_continuation": "optional thread text or null",
-  "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
-  "tone_notes": "style notes"
-}
+운영 관점                    코드 관점 내부 모듈
+─────────────────────────    ─────────────────────────
+Perplexity                → (파이프라인 외부, 인수인계 전용)
+Grok                      → TrendHunter [MOCK — 향후 연동]
+Claude Code               → (파이프라인 외부, 배포/관리 전용)
+GPT                       → (파이프라인 외부, 설계/검수 전용)
+생성 AI (ChatGPT/Claude)  → DraftWriter [LIVE]
+                          → Reviewer [LIVE]
+                          → Researcher [MOCK]
+                          → FactChecker [MOCK]
+(규칙 기반, AI 아님)       → Classifier [LIVE]
 ```
 
-### 유저 프롬프트 구성
+### 핵심 포인트
 
-```
-Write an X post draft about this Korean topic.
-
-Title: {title}
-
-Source text:
-{source_text[:2000]}
-
-Target language: {language}
-Respond in JSON only.
-```
-
-### 출력 스키마
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `hook` | string | 어텐션 그래빙 오프닝 라인 |
-| `body` | string | X 본문 (270자 이하) |
-| `thread_continuation` | string/null | 스레드 연속 텍스트 |
-| `category_suggestion` | enum | politics/policy/economy/society/kpop_culture/evergreen |
-| `tone_notes` | string | 톤 선택 메모 |
-
-### API 호출 스펙
-
-| 항목 | OpenAI | Anthropic |
-|------|--------|-----------|
-| 모델 | gpt-4o-mini | claude-sonnet-4-20250514 |
-| Temperature | 0.7 | (기본값) |
-| Timeout | 60s | 60s |
-| 응답 형식 | JSON mode 강제 | JSON 지시 |
-
-### 에러 처리
-- API 실패 시 → 기본 초안 폴백 생성 (`"Developing story about: {title}"`)
-- JSON 파싱 실패 시 → 동일 폴백
+- 운영 5역할 중 파이프라인 코드 안에서 직접 실행되는 것은 **생성 AI** 1개뿐
+- Perplexity, Grok, Claude Code, GPT는 파이프라인 밖에서 운영 지원
+- Classifier는 AI가 아닌 규칙 기반이지만 파이프라인 내부 모듈에 포함
+- 따라서 "운영 5역할 = 코드 6모듈"이 아니라, 관점이 다른 별개 분류
 
 ---
 
-## 3. 역할 2: Reviewer
-
-### 목적
-DraftWriter의 초안 + 리서치/팩트체크 데이터를 받아 **최종 판단**을 내린다.
-시스템의 **안전 두뇌** 역할.
-
-### 현재 시스템 프롬프트
-
-**파일**: `app/providers/anthropic_provider.py`
-
-```
-You are the editorial reviewer and safety brain for
-an English-language X account about Korean affairs.
-
-You receive a draft and optional research/factcheck data. Your job:
-1. Verify facts where possible
-2. Flag anything unconfirmed as uncertain
-3. Assess risk: low / medium / high
-4. Refine the draft into a polished, balanced post
-5. Keep post body under 270 characters
-
-STRICT SAFETY RULES:
-- Politics / policy / economy / society / K-POP controversy → always medium or high risk
-- Evergreen educational content → can be low risk
-- NEVER include unconfirmed rumors
-- NEVER sensationalize
-
-Respond in JSON ONLY:
-{
-  "hook": "final hook",
-  "body": "final post body (under 270 chars)",
-  "thread_continuation": "optional or null",
-  "category": "politics|policy|economy|society|kpop_culture|evergreen",
-  "risk_level": "low|medium|high",
-  "risk_reasoning": "why this risk level",
-  "ai_rationale": "why this draft serves the audience well",
-  "recommended_action": "approve|review|reject"
-}
-```
-
-### 유저 프롬프트 구성
-
-```
-Review this X post draft about Korea.
-
-Title: {title}
-
-Original source:
-{source_text[:1500]}
-
-Draft to review:
-Hook: {draft.hook}
-Body: {draft.body}
-Thread: {draft.thread_continuation}
-
-Research notes: {research_summary or 'No research available'}
-
-Fact-check: {factcheck_summary or 'No fact-check available'}
-
-Provide your editorial review in JSON only.
-```
-
-### 출력 스키마
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `hook` | string | 최종 훅 |
-| `body` | string | 최종 본문 (270자 이하) |
-| `thread_continuation` | string/null | 스레드 텍스트 |
-| `category` | enum | 최종 카테고리 |
-| `risk_level` | enum | low / medium / high |
-| `risk_reasoning` | string | 리스크 판단 근거 |
-| `ai_rationale` | string | 왜 이 초안이 독자에게 적합한지 |
-| `recommended_action` | enum | approve / review / reject |
-
-### 안전 규칙 매트릭스
-
-| 카테고리 | 최소 리스크 | 비고 |
-|----------|-----------|------|
-| politics | medium | 항상 |
-| policy | medium | 항상 |
-| economy | medium | 항상 |
-| society | medium | 항상 |
-| kpop_culture (논란) | medium | 논란 포함 시 |
-| evergreen | low | 교육 콘텐츠 |
-
-### 에러 처리
-- Reviewer 실패 시 → DraftWriter 결과를 직접 사용 (risk=medium, action=review)
-
----
-
-## 4. 역할 3: Researcher
-
-### 목적
-주어진 토픽에 대한 **배경 정보, 핵심 사실, 출처**를 수집하여 DraftWriter와 Reviewer에게 제공.
-
-### 현재 상태: **Mock (v1)**
-
-**파일**: `app/providers/mock_providers.py`
-
-### 추상 인터페이스
-
-```python
-async def research(self, query: str, context: str = "") -> ResearchResult
-```
-
-### 출력 스키마
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `summary` | string | 주제 요약 |
-| `key_facts` | list[string] | 핵심 사실 목록 |
-| `sources` | list[string] | 참고 URL 목록 |
-
-### 향후 연동 계획
-- **Gemini** 또는 **Perplexity** API 연동
-- 한국어 소스 → 영어 컨텍스트 변환 역할 수행 예정
-
----
-
-## 5. 역할 4: TrendHunter
-
-### 목적
-X/소셜 미디어에서 **실시간 트렌딩 토픽**을 탐지하여 콘텐츠 타이밍과 주제 선정에 활용.
-
-### 현재 상태: **Mock (v1)**
-
-**파일**: `app/providers/mock_providers.py`
-
-### 추상 인터페이스
-
-```python
-async def find_trends(self, topic_area: str = "korea") -> TrendResult
-```
-
-### 출력 스키마
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `trending_topics` | list[string] | 트렌딩 토픽 목록 |
-| `relevance_notes` | string | 관련성 메모 |
-
-### 향후 연동 계획
-- **Grok (xAI)** API 연동
-- X 플랫폼 네이티브 트렌드 데이터 활용
-
----
-
-## 6. 역할 5: FactChecker
-
-### 목적
-DraftWriter 초안의 **주장(claim)을 검증**하고, 정정이 필요한 경우 Reviewer에게 전달.
-
-### 현재 상태: **Mock (v1)**
-
-**파일**: `app/providers/mock_providers.py`
-
-### 추상 인터페이스
-
-```python
-async def check_facts(self, claim: str, context: str = "") -> FactCheckResult
-```
-
-### 출력 스키마
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `verified` | bool | 사실 여부 |
-| `confidence` | string | 신뢰도 (low/medium/high) |
-| `corrections` | list[string] | 정정 필요 항목 |
-| `sources` | list[string] | 검증 출처 URL |
-| `raw_response` | string | 원본 응답 |
-
-### 향후 연동 계획
-- **Perplexity** API 연동
-- 실시간 웹 검색 기반 팩트체크
-
----
-
-## 7. 파이프라인 흐름
-
-### 6단계 비동기 파이프라인
-
-```
-[1] SourceService     소스 DB 저장
-         │
-         ▼
-[2] Researcher        배경 리서치 (Mock → 소스 텍스트 일부로 대체)
-         │
-         ▼
-[3] DraftWriter       초안 생성 (ChatGPT or Claude)
-         │              실패 시 → 기본 초안 폴백
-         ▼
-[4] FactChecker       팩트체크 (Mock → 무시)
-         │
-         ▼
-[5] Reviewer          최종 판단 & 다듬기 (Claude)
-         │              리스크 판정 + 텍스트 정제
-         │              실패 시 → DraftWriter 결과 직접 사용
-         ▼
-[6] Classifier        카테고리 & 위험도 최종 확정
-                       중복 체크
-```
-
-### 오케스트레이션 파일
-- `app/orchestrator.py` : 파이프라인 전체 흐름
-- 각 단계 실패 시 **폴백** 존재, 전체 파이프라인은 계속 진행
-
-### 재생성 (Regenerate)
-텔레그램 승인 카드에서 Regenerate 선택 시 → 원본 소스로 전체 파이프라인 재실행
-
----
-
-## 8. 프로바이더 설정
-
-### 설정 파일: `app/config.py`
-
-### API 키
-
-| 키 | 용도 | 현재 상태 |
-|----|------|----------|
-| `openai_api_key` | DraftWriter | 활성 |
-| `anthropic_api_key` | Reviewer | 활성 |
-| `gemini_api_key` | Researcher | 미사용 |
-| `grok_api_key` | TrendHunter | 미사용 |
-| `perplexity_api_key` | FactChecker | 미사용 |
-
-### 프로바이더 선택
-
-| 설정 | 옵션 | 기본값 |
-|------|------|--------|
-| `active_draft_provider` | openai / anthropic / mock | mock |
-| `active_research_provider` | gemini / perplexity / mock | mock |
-| `active_factcheck_provider` | perplexity / mock | mock |
-
-### 자동 폴백 로직
-설정된 프로바이더의 API 키가 없으면 → 자동으로 `mock`으로 폴백
-
-### 상태 확인
-`settings.ai_status_summary()` 로 전체 프로바이더 상태 조회 가능
-
----
-
-## 9. 개선 로드맵
-
-### 즉시 (Phase G)
-
-| 항목 | 대상 파일 | 설명 |
-|------|----------|------|
-| DraftWriter 프롬프트 강화 | `openai_provider.py` | 훅 공식 추가, AI 표현 금지 목록, 국제 독자 관점 강화 |
-| Reviewer `quality_flags` 추가 | `anthropic_provider.py` | "sounds like AI?" 체크, 메타데이터 보강 |
-| rate_limiter 외부화 | `rate_limiter.py`, `config.py` | 하드코딩된 제한값 → 설정 파일로 이동 |
-
-### 중기 (Phase H)
-
-| 항목 | 설명 |
-|------|------|
-| Researcher 실제 연동 | Gemini 또는 Perplexity API |
-| FactChecker 실제 연동 | Perplexity API |
-| TrendHunter 실제 연동 | Grok (xAI) API |
-| `topic_memory.py` | 최근 게시 토픽 기억 (중복 방지) |
-| `voice_guard.py` | AI 냄새 나는 표현 감지 |
-
-### 장기
-
-| 항목 | 설명 |
-|------|------|
-| 프롬프트 A/B 테스트 | 훅 공식/톤 변형 성과 비교 |
-| 멀티 프로바이더 폴백 체인 | OpenAI 실패 → Anthropic → Mock |
-| 자동 승인 모드 | low risk + evergreen → 자동 게시 (v2) |
-
----
-
-## 부록: 분류기 (Classifier) 규칙
-
-분류기는 AI가 아닌 **규칙 기반** (`app/services/classifier.py`):
-
-### 카테고리 키워드
-- **politics**: election, president, party, ...
-- **policy**: policy, regulation, law, ...
-- **economy**: economy, gdp, inflation, ...
-- **society**: society, demographic, population, ...
-- **kpop_culture**: kpop, kdrama, idol, ...
-- 매칭 없음 → **evergreen**
-
-### 고위험 키워드
-scandal, corruption, arrest, protest, crisis, conflict, death, suicide, abuse, harassment, war, military, nuclear
-
-### 중위험 키워드
-debate, criticism, oppose, tension, concern, decline, problem, issue, challenge, risk
-
-### 승인 필요 판단
-- v1 기본값: **모든 콘텐츠 승인 필요**
-- politics/policy/economy/society/kpop_controversy → 항상 승인 필요
-- medium/high risk → 항상 승인 필요
+> 이후 섹션 (DraftWriter 프롬프트, Reviewer 프롬프트, Researcher/TrendHunter/FactChecker, 파이프라인 흐름, 프로바이더 설정, 개선 로드맵)은 다음 세션에서 이어서 작성한다.
