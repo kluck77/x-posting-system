@@ -122,7 +122,7 @@ JSON으로만 응답:
   "ai_rationale": "이 초안이 독자에게 가치 있는 이유 (한국어)",
   "recommended_action": "approve|review|reject",
   "quality_flags": ["flag1", "flag2"]
-}""""""
+}"""
 
 
 class AnthropicDraftWriter(BaseDraftWriter):
