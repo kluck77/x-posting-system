@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-04-10 — 네이버 자동수집 파이프라인 검증 (구조 분리 확인)
+
+- **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)
+- **Session Goal** : 네이버 자동수집 실기사가 full_pipeline을 타는지 검증.
+- **핵심 발견** :
+  1. **news_monitor와 full_pipeline은 별도 시스템** — 연결 없음
+     - news_monitor: 교차 확인(4+ 출처) → `_send_news_alert()` → 텔레그램 직접 발송 (구 시스템)
+     - /ingest → full_pipeline: breaking_classifier → KO-only/approval (신 시스템)
+     - `_ingest_article()` 함수명이 혼동을 주지만, 내부적으로 `_story_clusters`에 추가할 뿐 full_pipeline 미호출
+  2. **news_monitor 현재 중단** — APScheduler 초기화 코드가 코드베이스에 없음
+     - 마지막 `run_monitor_cycle` 실행: 2026-04-09 08:29 UTC
+     - `grep -rn "add_job|AsyncIOScheduler" app/` 결과 0건
+     - 원래 main.py에 있던 스케줄러 초기화가 이전 배포에서 유실된 것으로 추정
+  3. **DB 확인** (경로: `x_poster.db`, `data/xposting.db` 아님)
+     - 테이블 7개: source_items, drafts, post_logs, cta_copies, breaking_dedup_entries, candidate_pool_entries, breaking_sent_keys
+     - candidate_pool_entries 5건 — 전부 수동 /ingest 테스트
+     - breaking_dedup_entries / breaking_sent_keys — 비어있음 (BREAKING_NOW 기사 없었으므로 정상)
+- **Changed Files** :
+  - `HANDOFF_LOG.md`, `TASK_BOARD.md`, `docs/SERVER_STRUCTURE.md` 갱신
+- **코드 변경** : 0 (검증 세션)
+- **Runtime Risk** : 0
+
+---
+
 ## 2026-04-10 — Phase F 상태 확정 + 실기사 통합 검증
 
 - **Updated By** : Claude Code (claude/x-posting-ops-review-7hlxK)

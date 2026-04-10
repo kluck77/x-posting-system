@@ -3,7 +3,7 @@
 서버 본체의 물리적 구조와 배포 규칙을 기록한다.
 **이 문서가 없으면 매 세션마다 서버 상태를 처음부터 조사해야 한다.**
 
-최종 갱신 : 2026-04-10 KST (Phase F 상태 확정 + 실기사 통합 검증)
+최종 갱신 : 2026-04-10 KST (네이버 자동수집 파이프라인 검증 — 구조 분리 확인)
 
 ---
 
@@ -153,6 +153,21 @@ from app.providers.base import FactCheckResult, TrendResult
   - telegram_sent=false, 영어 approval 카드 0건
   - DB candidate_pool_entries id=5 적재 확인
 - 검증 범위: classifier → KO-only 분기 → DB 적재 → 응답 문구 전체 정상
+
+### 네이버 자동수집 파이프라인 검증 (2026-04-10 00:15 UTC)
+
+- **결론: news_monitor와 full_pipeline은 별도 시스템 (연결 없음)**
+- news_monitor (`app/services/news_monitor.py`):
+  - APScheduler 1분 간격 → RSS + Naver API 수집 → 교차 확인(4+출처) → 텔레그램 직접 발송
+  - `_ingest_article()` = 클러스터 추가 함수, full_pipeline 미호출
+  - 현재 중단: APScheduler 초기화 코드 코드베이스에 없음 (`grep add_job|AsyncIOScheduler` 0건)
+  - 마지막 실행: 2026-04-09 08:29 UTC
+- /ingest → full_pipeline:
+  - breaking_classifier → BREAKING_NOW/CANDIDATE/HOLD/REJECT → KO-only/approval
+  - 수동 입력 전용 (현재)
+- DB 경로: `/root/x-posting-system/x_poster.db` (`data/xposting.db` 아님)
+- DB 테이블: source_items, drafts, post_logs, cta_copies, breaking_dedup_entries, candidate_pool_entries, breaking_sent_keys
+- candidate_pool_entries 5건: 전부 수동 /ingest 테스트
 
 ### 운영 관측성 수정 (서버 반영 대기)
 
