@@ -36,9 +36,14 @@
   - 수동 입력 5슬롯 보장 — 자동수집이 15슬롯 소진해도 수동 /ingest 가능
   - 기존 `can_create_draft()` 메서드 유지 (하위 호환)
 - **Test Result** : 222 passed, 0 regression
-- **서버 반영** : 2개 파일 적용 필요
+- **서버 반영** : ✅ 완료 (2026-04-10 01:32 UTC)
   1. `rate_limiter.py` → `git show` 전체 교체
-  2. `orchestrator.py` → `scripts/patch_rate_limit_lanes.py` 실행
+  2. `orchestrator.py` → `scripts/patch_rate_limit_lanes.py` 실행 → py_compile OK
+  - 서비스 재시작: `systemctl restart xdashboard` → active (running)
+- **서버 실측 결과** (2026-04-10 01:45~01:48 UTC):
+  - 기존 20/20 한도 소진 상태에서 KO-only 기사 7건+ 차단 없이 통과 (draft_id 100~106)
+  - `Pipeline done (KO-only)` + `approval card skipped` 정상 출력
+  - `일일 제한 초과` 에러 0건 (패치 후)
 - **Runtime Risk** : 낮음 — fail-open 유지, 기존 메서드 호환, KO-only/BREAKING 경로 무영향
 - **롤백** :
   - `cp /tmp/rate_limiter.py.bak.lanes app/services/rate_limiter.py`

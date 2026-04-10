@@ -12,12 +12,12 @@
 Claude Code (claude/x-posting-ops-review-7hlxK)
 
 ## Current Stage
-**레인별 일일 제한 분리 — 브랜치 구현 완료.** rate check를 Step 0 → Step 2 직전으로 이동. BREAKING/KO-only/Top5/주간알림 무제한, AI 파이프라인만 레인별 제한.
+**레인별 일일 제한 분리 — 서버 반영 완료.** 기존 20/20 상태에서 KO-only 7건+ 차단 없이 통과 확인.
 
 ## Current Priority
-**서버 반영 대기** — rate_limiter.py 교체 + orchestrator.py 패치.
+**없음** — 레인별 제한 서버 반영 완료. 운영자 다음 지시 대기.
 
-## ★ 레인별 일일 제한 분리 (2026-04-10) — 브랜치 구현 완료
+## ★ 레인별 일일 제한 분리 (2026-04-10) — 서버 반영 완료
 - `app/services/rate_limiter.py` — `can_run_ai_pipeline(source_type)` 추가
   - KO-only 드래프트 제외 카운트 (body prefix 필터)
   - 자동수집: max_ai - manual_reserved(5) 까지
