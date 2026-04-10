@@ -91,11 +91,12 @@ class Orchestrator:
 
         # Step 3: DraftWriter — 초안 생성
         logger.info("[3/6] DraftWriter: 초안 생성")
+        draft_language = data.language or settings.default_language
         try:
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
                 source_text=data.source_text,
-                language=settings.default_language,
+                language=draft_language,
             )
         except Exception as e:
             logger.warning(f"DraftWriter 실패, 기본 초안 사용: {e}")
