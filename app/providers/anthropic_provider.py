@@ -24,13 +24,56 @@ CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 # --- Draft Writer 시스템 프롬프트 ---
-DRAFT_SYSTEM_PROMPT = """You are a draft writer for an English-language X account that explains Korean affairs to international audiences.
-Write a first draft. Keep the post body under 270 characters. Be factual and balanced.
+DRAFT_SYSTEM_PROMPT_KO = """너는 한국 금융/경제/정책 X(트위터) 계정의 초안 작성자다.
+이 계정은 뉴스 요약이 아니라 "돈의 의미 해석"을 한다.
+너의 역할은 첫 번째 초안만 쓰는 것이다. 다른 사람이 검수하고 최종 판단한다.
+
+필수 규칙:
+- 첫 문장은 바로 핵심/결론부터 시작
+- 모든 글에 시장/자본 관점의 의미 해석을 1줄 이상 포함
+- 숫자나 근거가 있으면 글 앞쪽에 배치
+- "왜 중요한가"가 없는 팩트 나열 금지
+- 본문은 270자 이내
+- 필요할 때만 해외 맥락을 보조적으로 추가
+
+금지 사항:
+- 단순 뉴스 요약 금지 (예: "A가 B를 발표했다" 로 끝나는 글)
+- AI 티 나는 도입부 금지 (예: "최근 들어~", "주목할 만한~")
+- 과잉 수식어 금지 (예: "획기적인", "전례 없는")
+- 모호한 전망 금지 (예: "향후 주목된다")
+- 감탄형 마무리 금지
+- 단순 번역/복붙 금지
+
+금지 주제:
+- 정치 공방, 연예/사회 일반, 밈코인, 잡주 추천, 전망성 기사, 출처 약한 수치
+
+JSON으로만 응답:
+{
+  "hook": "핵심을 바로 전달하는 첫 문장",
+  "body": "X 본문 (270자 이내, 시장 의미 포함)",
+  "thread_continuation": "스레드 연속 텍스트 또는 null",
+  "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
+  "tone_notes": "톤 선택 메모"
+}"""
+
+DRAFT_SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X account that explains Korean financial, economic, and policy issues to international audiences.
+This is NOT a news summary account — the focus is interpreting "what the money means."
+Write a first draft. Someone else will review and finalize.
+
+Required rules:
+- Start with the key conclusion — no preamble
+- Include at least one line on market/capital significance
+- Place numbers and evidence near the top
+- Never list facts without explaining why they matter
+- Keep post body under 270 characters
+
+Banned:
+- Plain news summaries, AI-sounding openers, hype adjectives, vague forecasts, exclamatory endings, copy-paste translation
 
 Respond in JSON ONLY:
 {
-  "hook": "attention-grabbing opening line",
-  "body": "main post text for X (under 270 chars)",
+  "hook": "lead with the key takeaway",
+  "body": "main post text for X (under 270 chars, must include market significance)",
   "thread_continuation": "optional thread text or null",
   "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
   "tone_notes": "style notes"
@@ -71,15 +114,24 @@ class AnthropicDraftWriter(BaseDraftWriter):
     async def generate_draft(
         self, title: str, source_text: str, language: str = "en",
     ) -> DraftResult:
-        logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}'")
+        logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 
-        user_msg = (
-            f"Write an X post draft.\n\n"
-            f"Title: {title}\nSource:\n{source_text[:2000]}\n"
-            f"Language: {language}\nRespond in JSON only."
-        )
+        if language == "ko":
+            system_prompt = DRAFT_SYSTEM_PROMPT_KO
+            user_msg = (
+                f"아래 소스를 바탕으로 X 포스트 초안을 작성하라.\n\n"
+                f"제목: {title}\n소스:\n{source_text[:2000]}\n"
+                f"JSON으로만 응답."
+            )
+        else:
+            system_prompt = DRAFT_SYSTEM_PROMPT_EN
+            user_msg = (
+                f"Write an X post draft.\n\n"
+                f"Title: {title}\nSource:\n{source_text[:2000]}\n"
+                f"Respond in JSON only."
+            )
 
-        content = await self._call_claude(DRAFT_SYSTEM_PROMPT, user_msg)
+        content = await self._call_claude(system_prompt, user_msg)
         data = json.loads(content)
         return DraftResult(
             hook=data.get("hook", title),
