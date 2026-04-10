@@ -2,7 +2,7 @@
 
 > x-posting-system의 AI 역할 구조와 프롬프트 명세
 > 최종 수정: 2026-04-10
-> 상태: 2차 보완 진행 중 (섹션 1~5 완료)
+> 상태: 완료
 
 ---
 
@@ -398,4 +398,280 @@ Respond in JSON ONLY:
 
 ---
 
-> 이후 섹션 (Researcher, TrendHunter, FactChecker, 파이프라인 흐름, 프로바이더 설정, 개선 로드맵)은 다음 세션에서 이어서 작성한다.
+## 6. Researcher — 배경 리서치 모듈
+
+> 상태: **MOCK** | 프로바이더: 더미 반환 (향후 Gemini / Perplexity)
+> 파일: `app/providers/mock_providers.py`, 인터페이스: `app/providers/base.py`
+
+### 역할 정의
+
+주어진 토픽에 대한 배경 정보, 핵심 사실, 출처를 수집하여 DraftWriter와 Reviewer에게 전달한다.
+
+### 현재 실제 사용 수준
+
+**MOCK 상태** — 인터페이스와 더미 데이터만 존재한다.
+- 파이프라인에서 호출은 되지만 하드코딩된 더미 텍스트를 반환
+- 실제 외부 API 호출 없음
+- 실패해도 파이프라인은 계속 진행 (소스 텍스트 일부로 대체)
+
+### 입력 / 출력
+
+| 구분 | 내용 |
+|------|------|
+| 입력 | `query` (검색 키워드), `context` (추가 맥락) |
+| 출력 | `summary` (주제 요약), `key_facts` (핵심 사실 목록), `sources` (참고 URL) |
+
+### 금지사항
+
+- LIVE처럼 표기하거나 실제 리서치가 수행된다고 오해하게 쓰지 말 것
+- Mock 상태에서 리서치 결과를 신뢰하지 말 것
+
+### 향후 계획
+
+- Gemini 또는 Perplexity API 연동 예정
+- 연동 시 한국어 소스 → 영어 컨텍스트 변환 역할 수행
+
+---
+
+## 7. TrendHunter — 트렌드 탐지 모듈
+
+> 상태: **MOCK** | 프로바이더: 더미 반환 (향후 Grok/xAI)
+> 파일: `app/providers/mock_providers.py`, 인터페이스: `app/providers/base.py`
+
+### 역할 정의
+
+X/소셜 미디어에서 실시간 트렌딩 토픽을 탐지하여 콘텐츠 타이밍과 주제 선정에 활용한다.
+
+### 현재 실제 사용 수준
+
+**MOCK 상태** — 인터페이스와 더미 데이터만 존재한다.
+- 하드코딩된 트렌드 목록 반환
+- 실제 X 트렌드 데이터 없음
+- 운영 관점에서 Grok은 수동 활용만 하고 있음 (파이프라인 연동 아님)
+
+### 입력 / 출력
+
+| 구분 | 내용 |
+|------|------|
+| 입력 | `topic_area` (탐색 영역, 기본값 "korea") |
+| 출력 | `trending_topics` (트렌딩 토픽 목록), `relevance_notes` (관련성 메모) |
+
+### 금지사항
+
+- 운영 관점의 Grok 수동 활용과 코드 모듈의 TrendHunter를 혼동하지 말 것
+- Mock 결과를 실제 트렌드로 취급하지 말 것
+
+### 향후 계획
+
+- Grok (xAI) API 연동 예정
+- X 플랫폼 네이티브 트렌드 데이터 활용
+
+---
+
+## 8. FactChecker — 팩트체크 모듈
+
+> 상태: **MOCK** | 프로바이더: 더미 반환 (향후 Perplexity)
+> 파일: `app/providers/mock_providers.py`, 인터페이스: `app/providers/base.py`
+
+### 역할 정의
+
+DraftWriter 초안의 주장(claim)을 검증하고, 정정이 필요한 경우 Reviewer에게 전달한다.
+
+### 현재 실제 사용 수준
+
+**MOCK 상태** — 인터페이스와 더미 데이터만 존재한다.
+- 항상 `verified=True`, `confidence="low"` 반환
+- 실제 검증 없음
+- 실패해도 파이프라인은 계속 진행 (무시)
+
+### 입력 / 출력
+
+| 구분 | 내용 |
+|------|------|
+| 입력 | `claim` (검증 대상 주장), `context` (추가 맥락) |
+| 출력 | `verified` (사실 여부), `confidence` (신뢰도), `corrections` (정정 항목), `sources` (출처 URL), `raw_response` (원본 응답) |
+
+### 금지사항
+
+- Mock 결과의 `verified=True`를 팩트체크 완료로 취급하지 말 것
+- 실제 검증이 필요한 민감한 주장은 사람이 직접 확인할 것
+
+### 향후 계획
+
+- Perplexity API 연동 예정
+- 실시간 웹 검색 기반 팩트체크
+
+---
+
+## 9. 파이프라인 흐름
+
+### 수동 입력 흐름 (/ingest)
+
+운영자가 텔레그램 또는 API로 직접 소스를 입력하는 경우:
+
+```
+운영자 → /ingest (URL, 메모 등)
+  → SourceService: 소스 DB 저장
+  → Researcher: 배경 리서치 [MOCK — 더미 반환]
+  → DraftWriter: 초안 생성 [LIVE — ChatGPT/Claude]
+  → FactChecker: 팩트체크 [MOCK — 더미 반환]
+  → Reviewer: 리스크 판단 & 다듬기 [LIVE — Claude]
+  → Classifier: 카테고리/위험도 확정 [LIVE — 규칙 기반]
+  → 텔레그램 승인 카드 전송
+  → 운영자 승인/거절/보류/재생성
+```
+
+### 자동수집 흐름 (news_monitor)
+
+네이버 뉴스 자동수집 → full_pipeline 통합 경로:
+
+```
+news_monitor: 네이버 뉴스 자동수집
+  → 키워드 매칭 & 점수 산정
+  → 분류 판정:
+      BREAKING (score ≥ 85) → Lane A: 즉시 알림 (무제한)
+      고점수 (score ≥ 70)  → Lane B: 주간 즉시 알림 (무제한)
+      CANDIDATE            → Lane C: Top5 후보 적재 (무제한)
+  → 각 레인별 처리:
+      Lane A/B → 텔레그램 즉시 알림
+      Lane C   → candidate_pool_entries DB 적재
+               → 05:00 KST Top5 스케줄러가 상위 5건 발송
+```
+
+### 레인별 일일 제한
+
+| 레인 | 용도 | 일일 제한 |
+|------|------|----------|
+| Lane A | BREAKING 즉시 알림 | 무제한 |
+| Lane B | 주간 고점수 즉시 알림 | 무제한 |
+| Lane C | Top5 후보 적재 | 무제한 |
+| Lane D | AI 파이프라인 (초안→승인) | 자동수집 max-5 / 수동 무제한 |
+
+### KO-only / 영어 분기
+
+- 한국어(KO) 콘텐츠: 정상 처리
+- 영어 콘텐츠: 승인 카드 우회 (영어 approval 카드 0건 확인됨)
+
+### 어떤 단계에서 어떤 모듈이 개입하는가
+
+```
+소스 입력 ─── SourceService (DB 저장)
+    │
+    ├─ Researcher [MOCK]
+    │
+    ├─ DraftWriter [LIVE] ← 여기서 초안 생성
+    │
+    ├─ FactChecker [MOCK]
+    │
+    ├─ Reviewer [LIVE] ← 여기서 리스크 판단 + 텍스트 정제
+    │
+    ├─ Classifier [LIVE] ← 여기서 카테고리/위험도 확정
+    │
+    └─ 텔레그램 승인 카드 → 운영자 판단
+```
+
+### 에러 시 폴백
+
+| 단계 | 실패 시 |
+|------|--------|
+| Researcher | 소스 텍스트 일부로 대체, 계속 진행 |
+| DraftWriter | 기본 초안 폴백 생성, 계속 진행 |
+| FactChecker | 무시, 계속 진행 |
+| Reviewer | DraftWriter 결과 직접 사용 (risk=medium) |
+| Classifier | 기본값 적용 |
+
+---
+
+## 10. 프로바이더 설정
+
+### 프로바이더 — 역할 연결
+
+| 프로바이더 | 연결 역할 | 현재 상태 | 용도 |
+|-----------|----------|----------|------|
+| **OpenAI** (gpt-4o-mini) | DraftWriter | LIVE | 초안 작성 메인 |
+| **Anthropic** (claude-sonnet-4-20250514) | Reviewer, DraftWriter(대안) | LIVE | 리뷰 메인, 초안 대안 |
+| **Gemini** | Researcher | PLANNED | 배경 리서치 (미연동) |
+| **Grok** (xAI) | TrendHunter | PLANNED | 트렌드 탐지 (미연동) |
+| **Perplexity** | FactChecker, Researcher | PLANNED | 팩트체크/리서치 (미연동) |
+
+### API 키 현황
+
+| 키 | 용도 | 현재 상태 |
+|----|------|----------|
+| `openai_api_key` | DraftWriter | 활성 |
+| `anthropic_api_key` | Reviewer | 활성 |
+| `gemini_api_key` | Researcher | 미설정 |
+| `grok_api_key` | TrendHunter | 미설정 |
+| `perplexity_api_key` | FactChecker | 미설정 |
+
+### 프로바이더 선택 설정
+
+설정 파일: `app/config.py`
+
+| 설정 | 옵션 | 기본값 |
+|------|------|--------|
+| `active_draft_provider` | openai / anthropic / mock | mock |
+| `active_research_provider` | gemini / perplexity / mock | mock |
+| `active_factcheck_provider` | perplexity / mock | mock |
+
+### 폴백 로직
+
+- 설정된 프로바이더의 API 키가 없으면 → 자동으로 `mock`으로 폴백
+- `settings.ai_status_summary()`로 전체 프로바이더 상태 조회 가능
+
+---
+
+## 11. 개선 로드맵
+
+### 원칙
+
+- 현재 운영 품질 개선이 먼저
+- 새 기능 추가는 뒤
+- 대시보드는 마지막
+- 과장된 미래 계획 금지
+
+### 우선순위
+
+| 순위 | 항목 | 대상 | 상태 |
+|------|------|------|------|
+| 1 | 운영 문서 완성 | 이 문서 (AI_ROLE_PROMPT_SET.md) | 완료 |
+| 2 | DraftWriter 프롬프트 코드 반영 | `openai_provider.py` | 대기 — §4 운영 기준 기반 |
+| 3 | Reviewer 프롬프트 코드 반영 | `anthropic_provider.py` | 대기 — §5 quality_flags 기반 |
+| 4 | 실운영 검증 결과 반영 | Top5 자동 발송 등 | 대기 — 04/11 05:00 KST 검증 |
+| 5 | rate_limiter 외부화 | `rate_limiter.py`, `config.py` | 대기 |
+| 6 | 대시보드 | 별도 트랙 | 마지막 |
+
+### DraftWriter 프롬프트 개선 시 반영할 항목
+
+§4 격차표 기준:
+- 한국어 기본 언어 설정
+- 첫 문장 = 결론 지시
+- 시장/자본 의미 필수 지시
+- AI 표현 금지 목록
+- 단순 요약 금지 지시
+- 숫자 앞쪽 배치 지시
+- 금지 주제 목록
+
+### Reviewer 프롬프트 개선 시 반영할 항목
+
+§5 격차표 기준:
+- `quality_flags` 출력 필드 추가
+- AI 냄새 체크 지시
+- 단순 요약 여부 체크
+- 시장/자본 연결 체크
+- 장황함 체크
+- 과장/추정 체크
+- 금지 주제 위반 체크
+- 팔로우 가치 체크
+- 행동 가능성 체크
+- 금지 문체 위반 체크
+
+### 중기 과제 (프롬프트 안정화 이후)
+
+| 항목 | 설명 |
+|------|------|
+| Researcher 실연동 | Gemini 또는 Perplexity API |
+| FactChecker 실연동 | Perplexity API |
+| TrendHunter 실연동 | Grok (xAI) API |
+| `topic_memory.py` | 최근 게시 토픽 기억 (중복 방지) |
+| `voice_guard.py` | AI 냄새 나는 표현 자동 감지 |
