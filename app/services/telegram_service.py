@@ -51,6 +51,29 @@ def _category_emoji(category: ContentCategory) -> str:
     }.get(category.value, "📝")
 
 
+_CATEGORY_KO = {
+    "politics": "정치", "policy": "정책", "economy": "경제",
+    "society": "사회", "kpop_culture": "K-POP/문화", "evergreen": "에버그린",
+}
+
+_RISK_KO = {"low": "낮음", "medium": "보통", "high": "높음"}
+
+_CTA_KO = {
+    "newsletter_signup": "뉴스레터 구독", "premium_waitlist": "프리미엄 대기",
+    "thread_follow": "스레드 팔로우", "poll_engage": "투표 참여",
+}
+
+_ASSET_KO = {
+    "newsletter_push": "뉴스레터", "premium_teaser": "프리미엄 티저",
+    "thread_series": "스레드 시리즈", "community_post": "커뮤니티 포스트",
+}
+
+_BIZ_TAG_KO = {
+    "growth": "성장", "newsletter": "뉴스레터", "premium_candidate": "프리미엄 후보",
+    "data_story": "데이터 스토리", "sponsor_candidate": "스폰서 후보",
+}
+
+
 def _recommended_action(draft: Draft) -> str:
     """위험 수준에 따른 추천 액션을 반환합니다."""
     if draft.risk_level == RiskLevel.HIGH:
@@ -88,8 +111,8 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         card += f"🧵 <b>스레드:</b>\n{draft.thread_continuation}\n\n"
 
     card += (
-        f"{cat_em} <b>카테고리:</b> {draft.category.value}\n"
-        f"{risk_em} <b>위험도:</b> {draft.risk_level.value.upper()}\n"
+        f"{cat_em} <b>카테고리:</b> {_CATEGORY_KO.get(draft.category.value, draft.category.value)}\n"
+        f"{risk_em} <b>위험도:</b> {_RISK_KO.get(draft.risk_level.value, draft.risk_level.value)}\n"
     )
 
     if source_url:
@@ -131,7 +154,7 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         criteria_result = score_5criteria(draft.hook, draft.body)
         if criteria_result["action"] != "pass" or criteria_result["flags"]:
             card += f"\n{'─' * 30}\n"
-            card += f"🔬 <b>5-Criteria 품질 분석:</b> {criteria_result['total']}/100\n"
+            card += f"🔬 <b>5대 기준 품질 분석:</b> {criteria_result['total']}/100\n"
             for flag in criteria_result["flags"]:
                 card += f"  {flag}\n"
     except Exception:
@@ -155,7 +178,7 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         _voice_warnings = check_voice(f"{draft.hook}\n{draft.body}")
         if _voice_warnings:
             card += f"\n{'─' * 30}\n"
-            card += "🗣️ <b>Voice 경고</b> (참고용):\n"
+            card += "🗣️ <b>어투 경고</b> (참고용):\n"
             for _w in _voice_warnings[:3]:
                 card += f"  {_w}\n"
     except Exception:
@@ -171,8 +194,11 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
                 _cta = getattr(draft, "cta_type", None) or "—"
                 _asset = getattr(draft, "asset_goal", None) or "—"
                 card += f"\n{'─' * 30}\n"
-                card += f"💼 <b>비즈니스:</b> {' '.join(_biz_tags)}\n"
-                card += f"   💰 수익화: {_mon_score}/100 | 🎯 CTA: {_cta} | 📦 자산: {_asset}\n"
+                _biz_ko = [_BIZ_TAG_KO.get(t, t) for t in _biz_tags]
+                card += f"💼 <b>비즈니스:</b> {' '.join(_biz_ko)}\n"
+                _cta_ko = _CTA_KO.get(_cta, _cta)
+                _asset_ko = _ASSET_KO.get(_asset, _asset)
+                card += f"   💰 수익화: {_mon_score}/100 | 🎯 CTA: {_cta_ko} | 📦 자산: {_asset_ko}\n"
                 if getattr(draft, "b2b_candidate", False):
                     _b2b_aud = getattr(draft, "b2b_target_audience", None) or "—"
                     _b2b_use = getattr(draft, "b2b_use_case", None) or "—"
