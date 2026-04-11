@@ -35,8 +35,12 @@ DEFAULT_MAX_POSTS_PER_DAY = 3
 DEFAULT_MAX_AI_DRAFTS_PER_DAY = 20   # AI 파이프라인 총 제한 (Steps 2-6)
 DEFAULT_MANUAL_RESERVED = 5           # 수동 입력 보장 슬롯
 
-# KO-only 드래프트 식별 (body prefix — Step 1.7 에서 생성)
-KO_ONLY_BODY_PREFIX = "한국어 전용 라인 처리"
+# KST timezone — 운영자 기준 '오늘' 달력일
+KST = timezone(timedelta(hours=9))
+
+# KO-only 드래프트 식별 (body prefix — orchestrator Step 1.7 에서 실제로 기록하는 문자열)
+# orchestrator.py line 255: body=f"KO-only pipeline (English draft skipped). domain={...}"
+KO_ONLY_BODY_PREFIX = "KO-only pipeline (English draft skipped)"
 
 
 class RateLimiter:
@@ -59,9 +63,21 @@ class RateLimiter:
         self.manual_reserved = manual_reserved
 
     def _today_start(self) -> datetime:
-        """오늘 00:00 UTC를 반환합니다."""
-        now = datetime.now(timezone.utc)
-        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+        """
+        '오늘'(KST 달력 기준) 00:00 시각을 naive UTC datetime 으로 반환.
+
+        의도:
+        - 운영자는 한국에 있으므로 '오늘' = KST 달력일이다.
+          UTC 기준으로 하면 KST 자정~09:00 사이 드래프트가 전부 '어제'
+          카운트로 빠져 rate limit 판정이 어긋난다.
+        - 반환값은 naive datetime 이다. Draft.created_at 이
+          Column(DateTime) (naive) 이고 SQLAlchemy 가 저장 시 aware→naive
+          UTC 로 변환해 저장하므로, WHERE 비교도 같은 naive UTC 기준이어야
+          aware/naive 혼합으로 인한 경고·예기치 않은 lex 비교 결과를 피할 수 있다.
+        """
+        now_kst = datetime.now(KST)
+        kst_midnight = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+        return kst_midnight.astimezone(timezone.utc).replace(tzinfo=None)
 
     def get_today_draft_count(self) -> int:
         """오늘 생성된 초안 수를 반환합니다."""
