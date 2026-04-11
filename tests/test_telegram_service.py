@@ -185,16 +185,24 @@ class TestCardConsistencyRegression:
     실제 운영에서 본 충돌 케이스 재현 회귀 테스트.
 
     시나리오 (draft_id=819 가 실제로 찍은 카드):
-      - 한국어 hook/body (한국은행 기준금리 동결)
-      - 5대 기준 품질 분석: 20/100 (Korean 본문은 5-criteria 에서
-        해석/marketability/follower_quality 신호 부족)
-      - 초안 우선순위: 🔴 우선 (이전엔 score_draft=65 → 잘못된 품질-as-우선순위)
-      - 추천: ✅ 승인 가능 (이전엔 risk=LOW 만 보고 승인)
+      - 한국어 hook/body (한국은행 기준금리 동결, 해석·관점이 빈약한 요약)
+      - 이전 버그 관측값:
+          · 5대 기준 품질 분석: 20/100 (영어 regex 전용이라 한국어는 0점 수렴)
+          · 초안 우선순위: 🔴 우선 (score_draft 를 잘못 품질-as-우선순위로 라벨링)
+          · 추천: ✅ 승인 가능 (risk=LOW 만 보고 승인)
+      - 세 값이 서로 모순.
 
-    수정 후 기대:
-      - 5대 기준: 20/100 변화 없음 (score_5criteria 는 그대로)
-      - 초안 우선순위: source_type 기준 → manual 이면 🔴 유지 (의미는 '시의성')
-      - 추천: 품질 reject 로 ❌ 거절 권장 → 충돌 해소
+    수정 이력:
+      (1) 2026-04-11 a: draft_advisory 를 시의성 축으로 분리, _recommended_action
+          에 품질 게이트 추가.
+      (2) 2026-04-11 b: score_5criteria 에 한국어 패턴 추가 → 한국어 본문도 정상
+          평가. 이 BOK 본문은 해석/글로벌/팔로워/재방문 신호가 모두 부실해 점수가
+          30 근처로 오르지만 여전히 reject 영역(<50)에 머문다 — 즉 "빈약한 한국어
+          요약은 여전히 거절 권장" 이라는 운영 불변량이 유지된다.
+
+    불변량:
+      - 초안 우선순위: source_type=manual → 🔴 (시의성 축)
+      - 추천: 품질 reject 이므로 ❌ 거절 권장 (승인 가능 아님)
     """
 
     def test_korean_bok_draft_no_longer_recommends_approve(self):
@@ -207,12 +215,13 @@ class TestCardConsistencyRegression:
         )
 
         result = score_5criteria(hook, body)
-        # 현재 5-criteria 는 한국어 패턴에서 reject 가 나옴 — 이 자체는 latent
-        # 이슈이지만 이번 세션 범위 밖. 중요한 것은 추천이 그 reject 를 존중하는 것.
+        # 해석/글로벌/팔로워/재방문 신호가 없는 한국어 요약이므로 reject(<50) 여야 한다.
+        # 한국어 패턴 추가 후에도 이 불변량은 유지된다. 만약 이 본문이 warn/pass 로
+        # 올라온다면 한국어 패턴이 너무 느슨해 저품질 요약도 통과시키는 것이므로
+        # 패턴을 다시 조여야 한다.
         assert result["action"] == "reject", (
-            f"회귀 테스트 전제가 깨짐: score_5criteria 가 한국어 BOK 본문에 "
-            f"대해 더 이상 reject 가 아님. total={result['total']}. "
-            f"5criteria scorer 자체가 개선된 거면 이 테스트는 삭제/갱신 필요."
+            f"회귀 전제 깨짐: 해석 없는 한국어 요약이 더 이상 reject 가 아님. "
+            f"total={result['total']}. 한국어 패턴이 너무 느슨함. scorer 를 다시 조여라."
         )
 
         rec = _recommended_action(

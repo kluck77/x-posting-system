@@ -315,6 +315,68 @@ _TRANSLATION_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# ─── 한국어 5-criteria 신호 패턴 ─────────────────────────────────────────────
+# 배경: 위 영어 regex 는 전부 `\b` word boundary 를 사용한다. Python `re` 의 `\b`
+# 는 ASCII word character 기준이라 한국어 글자 경계에서는 동작이 보장되지 않고,
+# 결과적으로 한국어 Reviewer 출력은 expertise/marketability/follower_quality/
+# repeat_consumption 에서 전부 0 점에 수렴해 total=20 근처로 고정됐다 (실관측).
+# 그래서 한국어 본문은 품질과 무관하게 무조건 reject 로 떨어져 "한국어 기본"
+# 운영 정책과 충돌했다.
+#
+# 해결: 기존 영어 regex 는 손대지 않는다. 대신 `\b` 없는 substring 매치용
+# 한국어 패턴을 모듈 레벨에 별도로 두고, score_5criteria 내부에서 OR 결합만
+# 한다. 이렇게 하면:
+#   1) 영어 본문 점수/판정은 완전히 보존된다 (기존 회귀 동일).
+#   2) 한국어 본문도 해석/글로벌/팔로워/재방문 신호가 실제 있으면 점수가 오른다.
+#   3) 해석 없는 단순 요약 한국어 본문은 여전히 낮은 점수를 받는다 (억지 인플 없음).
+#
+# 주의: 한국어 regex 에 `\b` 를 쓰면 안 된다 (substring 매치가 의도).
+
+_INTERPRETATION_SIGNALS_KO = re.compile(
+    r"때문에|때문|의미|의미하는|의미는|배경|핵심은|핵심 배경|핵심 이유|"
+    r"사실상|구조적|구조는|본질|본질적|진짜 이유|진짜 원인|원인은|"
+    r"주목할|주목해야|보여준다|보여주는|드러난|드러내|"
+    r"시사한다|시사하는|시사점|결국|결과적으로"
+)
+
+_MARKETABILITY_SIGNALS_KO = re.compile(
+    r"글로벌|해외|국제|달러|원달러|환율|공급망|밸류체인|반도체|배터리|"
+    r"지정학|지경학|외국인|외국계|자본유출|자본유입|자금흐름|"
+    r"연준|FOMC|월가|수출|수입|무역|원화|유가|원유|국채|"
+    r"미국|중국|일본|유럽|대만|인도"
+)
+
+_REPEAT_SIGNALS_KO = re.compile(
+    r"추적|추적해야|관찰|관찰해야|지켜봐야|주시해야|주의 깊게|"
+    r"패턴|반복|후속|이어서|계속|향후|앞으로|"
+    r"다음 주|다음주|이번 주|이번주|다음 달|이번 달|매주|매일|"
+    r"시리즈|연속적|다음 편|이 흐름|이 추세"
+)
+
+_WRONG_AUDIENCE_SIGNALS_KO = re.compile(
+    r"충격|대박|소름|난리|품절대란|열풍|"
+    r"스캔들|열애|루머|가십|파경|결별|"
+    r"실화|레전드|짜릿|헉|쇼킹"
+)
+
+# Consistency — 4-pillar 필러 한국어
+_PILLAR_SIGNALS_KO = re.compile(
+    r"경제|거시|경기|금리|통화정책|가계부채|환율|국채|채권|"
+    r"크립토|암호화폐|비트코인|이더리움|코인|"
+    r"정책|규제|지정학|정치|외교|"
+    r"금융|은행|증권|펀드|"
+    r"무역|수출|수입|공급망|"
+    r"커뮤니티|산업|반도체|배터리|조선|"
+    r"증시|주식|코스피|코스닥|부동산|주택"
+)
+
+# Follower quality — 정보 지향 독자 유인 한국어
+_RIGHT_AUDIENCE_SIGNALS_KO = re.compile(
+    r"투자자|개인 투자자|기관 투자자|분석가|애널리스트|"
+    r"트레이더|전략가|리서치|연구원|이코노미스트|"
+    r"헤지펀드|정책입안자|시장 참여자"
+)
+
 
 def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
     """
@@ -340,7 +402,7 @@ def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
 
     # ── 1. Expertise (해석 vs 번역) ──────────────────────────────────────────
     exp_score = 0
-    if _INTERPRETATION_SIGNALS.search(full):
+    if _INTERPRETATION_SIGNALS.search(full) or _INTERPRETATION_SIGNALS_KO.search(full):
         exp_score += 15
     if not _TRANSLATION_PATTERNS.search(hook):
         exp_score += 5
@@ -350,9 +412,16 @@ def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
 
     # ── 2. Marketability (해외 독자 관련성) ─────────────────────────────────
     mkt_score = 0
-    if _MARKETABILITY_SIGNALS.search(full):
+    has_mkt_signal = (
+        _MARKETABILITY_SIGNALS.search(full) is not None
+        or _MARKETABILITY_SIGNALS_KO.search(full) is not None
+    )
+    if has_mkt_signal:
         mkt_score += 20
-    elif re.search(r"\b(korea|korean|seoul|won|kospi)\b", full_lower):
+    elif (
+        re.search(r"\b(korea|korean|seoul|won|kospi)\b", full_lower)
+        or re.search(r"한국|서울|원화|코스피|코스닥", full)
+    ):
         mkt_score += 8  # 한국 언급은 있지만 글로벌 연결 없음
     scores["marketability"] = min(mkt_score, 20)
     if mkt_score < 10:
@@ -360,14 +429,14 @@ def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
 
     # ── 3. Consistency (브랜드 일관성) ──────────────────────────────────────
     con_score = 20
-    if _WRONG_AUDIENCE_SIGNALS.search(full):
+    if _WRONG_AUDIENCE_SIGNALS.search(full) or _WRONG_AUDIENCE_SIGNALS_KO.search(full):
         con_score -= 15
         flags.append("❌ Consistency FAIL: 클릭베이트/엔터테인먼트 신호 감지.")
     pillar_pattern = re.compile(
         r"\b(economy|crypto|geopolit|policy|community|finance|trade|politic)\w*\b",
         re.IGNORECASE,
     )
-    if not pillar_pattern.search(full):
+    if not (pillar_pattern.search(full) or _PILLAR_SIGNALS_KO.search(full)):
         con_score -= 5
         flags.append("⚠️ Consistency WEAK: 4개 필러 중 어느 것도 명확하지 않음.")
     scores["consistency"] = max(0, con_score)
@@ -379,9 +448,9 @@ def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
         r"economist|policy|analyst|strategist)\b",
         re.IGNORECASE,
     )
-    if right_audience.search(full):
+    if right_audience.search(full) or _RIGHT_AUDIENCE_SIGNALS_KO.search(full):
         fq_score += 10
-    if _MARKETABILITY_SIGNALS.search(full):
+    if has_mkt_signal:
         fq_score += 5
     if re.search(r"\byou\b|\byour\b", full_lower):
         fq_score += 5
@@ -391,9 +460,9 @@ def score_5criteria(hook: str, body: str, source_type: str = "manual") -> dict:
 
     # ── 5. Repeat Consumption (재방문 유인) ──────────────────────────────────
     rc_score = 0
-    if _REPEAT_SIGNALS.search(full):
+    if _REPEAT_SIGNALS.search(full) or _REPEAT_SIGNALS_KO.search(full):
         rc_score += 20
-    elif re.search(r"\bfollow\b", full_lower):
+    elif re.search(r"\bfollow\b", full_lower) or re.search(r"팔로우|구독", full):
         rc_score += 10  # CTA는 있지만 패턴/시리즈 신호 없음
     scores["repeat_consumption"] = min(rc_score, 20)
     if rc_score < 10:
