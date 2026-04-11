@@ -126,9 +126,20 @@ def _reset_stores_for_tests() -> None:
 
 
 def _current_cycle_date() -> str:
-    """현재 브리핑 사이클 날짜 (YYYY-MM-DD KST). 05:00 전이면 당일, 이후면 익일."""
+    """현재 브리핑 사이클 날짜 (YYYY-MM-DD KST).
+
+    경계 규칙:
+    - 00:00 ~ 04:59 KST → 당일 사이클
+    - 05:00 ~ 05:00:59 KST → 당일 사이클 (브리핑 실행 순간 포함)
+    - 05:01 ~ 23:59 KST → 익일 사이클 (다음 날 05:00 브리핑 준비)
+
+    버그 히스토리:
+    이전 `hour < 5` 단독 조건은 05:00:00.xxx 에 스케줄러가 돌 때
+    이미 "익일"로 플립되어, 22:00~04:59 에 수집된 후보(당일 cycle_date)와
+    불일치하는 익일 cycle_date 로 조회하게 되어 상시 0건을 반환했다.
+    """
     now_kst = datetime.now(tz=_KST)
-    if now_kst.hour < 5:
+    if now_kst.hour < 5 or (now_kst.hour == 5 and now_kst.minute == 0):
         return now_kst.strftime("%Y-%m-%d")
     return (now_kst + timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -426,6 +437,7 @@ def _group_by_issue(candidates: list[CandidateEntry]) -> dict[str, list[Candidat
 def select_top5(
     *,
     ref_kst: Optional[datetime] = None,
+    fallback: bool = False,
 ) -> list[CandidateEntry]:
     """
     야간 CANDIDATE 저장소에서 Top5 선정.
@@ -433,7 +445,11 @@ def select_top5(
     - 야간 시간대 필터
     - 점수 산정 + 패널티
     - 자산군 균형 (§10.2)
-    - 60점 하한선 (§10.4)
+    - 60점 하한선 (§10.4) — fallback=True 면 건너뜀
+
+    fallback 모드:
+    60점 이상 후보 0건일 때 호출. 60점 하한선만 비활성화하고 나머지
+    로직(야간 필터, BREAKING 제외, 중복 제거, 자산군 캡, Top5 제한)은 동일 유지.
     """
     if ref_kst is None:
         ref_kst = datetime.now(tz=_KST)
@@ -463,8 +479,9 @@ def select_top5(
         best = max(entries, key=lambda x: x.score)
         deduped.append(best)
 
-    # 5) 60점 하한선
-    deduped = [c for c in deduped if c.score >= _SCORE_THRESHOLD]
+    # 5) 60점 하한선 — fallback 모드면 건너뜀
+    if not fallback:
+        deduped = [c for c in deduped if c.score >= _SCORE_THRESHOLD]
 
     # 6) 점수 내림차순 정렬 + 동률 처리 (§10.3)
     deduped.sort(key=lambda c: (
@@ -521,8 +538,13 @@ def build_top5_briefing_text(
     selected: list[CandidateEntry],
     *,
     ref_kst: Optional[datetime] = None,
+    is_fallback: bool = False,
 ) -> str:
-    """§9 복붙 템플릿 기반 Top5 카드 텍스트 생성."""
+    """§9 복붙 템플릿 기반 Top5 카드 텍스트 생성.
+
+    is_fallback=True 면 "60점 이상 후보가 없어 상위 N건을 대신 정리했다"
+    헤더로 바뀐다. 카드 본문 구조는 동일.
+    """
     if ref_kst is None:
         ref_kst = datetime.now(tz=_KST)
 
@@ -534,11 +556,20 @@ def build_top5_briefing_text(
     end_str = end_kst.strftime("%Y-%m-%d %H:%M")
 
     lines: list[str] = []
-    lines.append(f"[새벽 5시 브리핑] {date_str} — Top {len(selected)}")
+    if is_fallback:
+        lines.append(f"[새벽 5시 브리핑] {date_str} — 상위 후보 {len(selected)}건")
+    else:
+        lines.append(f"[새벽 5시 브리핑] {date_str} — Top {len(selected)}")
     lines.append("")
     lines.append(f"기간 : {start_str} ~ {end_str}")
-    lines.append("기준 : 야간 CANDIDATE 점수 상위 5건. BREAKING_NOW 발송분 제외.")
+    if is_fallback:
+        lines.append("기준 : 야간 수집 후보 상위 요약 (BREAKING_NOW 제외)")
+    else:
+        lines.append("기준 : 야간 CANDIDATE 점수 상위 5건. BREAKING_NOW 발송분 제외.")
     lines.append("")
+    if is_fallback:
+        lines.append("참고: 오늘은 60점 이상 후보가 없어, 야간 상위 후보를 대신 정리했습니다.")
+        lines.append("")
 
     urls: list[str] = []
     for i, entry in enumerate(selected, 1):
@@ -575,9 +606,16 @@ async def send_top5_briefing(
 ) -> bool:
     """
     Top5 브리핑 카드 생성 + 텔레그램 전송.
-    - 60점 이상 후보 0건이면 브리핑 생략 (True 반환).
+
+    전송 정책 (fallback 구조):
+    - 60점 이상 후보 5건 이상 → 정상 Top5 카드
+    - 60점 이상 후보 1~4건  → 정상 Top N 카드 (Top5 와 동일 템플릿)
+    - 60점 이상 후보 0건 + 야간 수집 후보 1건 이상 → fallback 카드
+    - 야간 수집 후보 자체가 0건 → 브리핑 생략 (True 반환)
     - fail-open.
     """
+    is_fallback = False
+
     try:
         selected = select_top5(ref_kst=ref_kst)
     except Exception as e:
@@ -585,10 +623,19 @@ async def send_top5_briefing(
         return False
 
     if not selected:
-        logger.info("[top5] 60점 이상 후보 0건 — 05:00 브리핑 생략")
+        logger.info("[top5] 60점 이상 후보 0건 — fallback 선정 시도")
+        try:
+            selected = select_top5(ref_kst=ref_kst, fallback=True)
+        except Exception as e:
+            logger.warning(f"[top5] fallback 선정 실패 (fail-open): {e}")
+            return False
+        is_fallback = True
+
+    if not selected:
+        logger.info("[top5] 야간 후보 자체가 0건 — 05:00 브리핑 생략")
         return True
 
-    text = build_top5_briefing_text(selected, ref_kst=ref_kst)
+    text = build_top5_briefing_text(selected, ref_kst=ref_kst, is_fallback=is_fallback)
 
     if not settings.has_telegram_config:
         logger.info(f"[MOCK 텔레그램] Top5 briefing:\n{text}")
@@ -608,7 +655,8 @@ async def send_top5_briefing(
             response.raise_for_status()
             result = response.json()
             if result.get("ok"):
-                logger.info(f"[top5] 브리핑 전송 성공 ({len(selected)}건)")
+                mode = "fallback" if is_fallback else "normal"
+                logger.info(f"[top5] 브리핑 전송 성공 ({len(selected)}건, mode={mode})")
                 return True
             logger.warning(f"[top5] 텔레그램 응답 ok=false: {result}")
             return False
