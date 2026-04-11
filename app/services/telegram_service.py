@@ -74,14 +74,51 @@ _BIZ_TAG_KO = {
 }
 
 
-def _recommended_action(draft: Draft) -> str:
-    """위험 수준에 따른 추천 액션을 반환합니다."""
+def _recommended_action(
+    draft: Draft,
+    quality_action: str | None = None,
+) -> str:
+    """
+    최종 추천 산정 — 품질 게이트 × 위험 게이트.
+
+    이 함수는 승인 카드의 '추천' 라인을 만든다. 카드에 동시에 노출되는
+    '5대 기준 품질 분석' (score_5criteria) 과 반드시 일관되어야 한다.
+
+    품질 우선 원칙:
+      - quality_action == "reject" (5-criteria total < 50)
+        → 위험과 무관하게 ❌ 거절 권장
+      - quality_action == "warn"   (50 ≤ total < 70)
+        + 위험 HIGH  → ❌ 거절 권장 (품질 경고 + 고위험)
+        + 위험 MED/LOW → ⚠️ 검토 필요 (품질 경고)
+      - quality_action == "pass"   (total ≥ 70)
+        + 위험 HIGH  → ⚠️ 신중한 검토 필요
+        + 위험 MED   → 👀 승인 전 검토 권장
+        + 위험 LOW   → ✅ 승인 가능
+      - quality_action is None (scorer 실패/미호출)
+        → 구식 위험-only 경로로 폴백 (기존 동작 보존)
+
+    '초안 우선순위' 는 여기 반영하지 않는다 — 그건 '시의성' 축이고
+    최종 추천은 품질+위험 축이다. 우선순위가 🔴 라도 품질이 낮으면
+    절대 '승인 가능' 이 뜨지 않는다.
+    """
+    # 품질 게이트 — 최우선
+    if quality_action == "reject":
+        return "❌ 거절 권장 (품질 미달)"
+
+    # 고위험 경로 — 품질 warn 과 결합되면 거절, 아니면 신중 검토
     if draft.risk_level == RiskLevel.HIGH:
+        if quality_action == "warn":
+            return "❌ 거절 권장 (품질 경고 + 고위험)"
         return "⚠️ 신중한 검토 필요"
-    elif draft.risk_level == RiskLevel.MEDIUM:
+
+    # 품질 경고는 위험 무관 검토 필요
+    if quality_action == "warn":
+        return "⚠️ 검토 필요 (품질 경고)"
+
+    # 품질 OK 경로 — 위험별
+    if draft.risk_level == RiskLevel.MEDIUM:
         return "👀 승인 전 검토 권장"
-    else:
-        return "✅ 승인 가능"
+    return "✅ 승인 가능"
 
 
 def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
@@ -97,6 +134,19 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     """
     risk_em = _risk_emoji(draft.risk_level)
     cat_em = _category_emoji(draft.category)
+
+    # ── 5-criteria 품질 평가: 한 번 계산해서 카드 표시 + 추천 게이트에 공유.
+    # 이전에는 표시/추천이 서로 다른 신호로 계산돼 '품질 20 + 추천 승인 가능' 모순이
+    # 났다. 이 결과는 아래 5대 기준 표시 블록과 마지막 _recommended_action 호출이
+    # 동시에 소비한다.
+    quality_action: str | None = None
+    criteria_result: dict | None = None
+    try:
+        from app.services.quality_scorer import score_5criteria
+        criteria_result = score_5criteria(draft.hook, draft.body)
+        quality_action = criteria_result.get("action")
+    except Exception:
+        logger.debug("[Card] 5-criteria 평가 실패", exc_info=True)
 
     # 텔레그램 MarkdownV2에서 특수문자 이스케이프
     # 간단하게 HTML 모드를 사용합니다
@@ -148,29 +198,34 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         if getattr(draft, "prediction_reasoning", None):
             card += f"   └ {draft.prediction_reasoning}\n"
 
-    # 5-criteria 실시간 평가
-    try:
-        from app.services.quality_scorer import score_5criteria, format_5criteria_report
-        criteria_result = score_5criteria(draft.hook, draft.body)
-        if criteria_result["action"] != "pass" or criteria_result["flags"]:
-            card += f"\n{'─' * 30}\n"
-            card += f"🔬 <b>5대 기준 품질 분석:</b> {criteria_result['total']}/100\n"
-            for flag in criteria_result["flags"]:
-                card += f"  {flag}\n"
-    except Exception:
-        pass
+    # 5대 기준 품질 분석 — 위에서 계산한 criteria_result 를 재사용
+    if criteria_result is not None and (
+        criteria_result.get("action") != "pass" or criteria_result.get("flags")
+    ):
+        card += f"\n{'─' * 30}\n"
+        card += f"🔬 <b>5대 기준 품질 분석:</b> {criteria_result['total']}/100\n"
+        for flag in criteria_result.get("flags", []):
+            card += f"  {flag}\n"
 
-    # quality advisory — 초안 우선순위 레이블 (Layer 2, advisory only)
+    # 초안 우선순위 레이블 — '시의성/운영 중요도' 기준 (품질과 독립)
+    # source_type 은 Draft 에 직접 없다. SourceItem.source_type 에 있으므로
+    # draft.source_item.source_type 으로 조회. 관계가 없거나 로드 실패해도
+    # getattr fallback 으로 "news_link" 사용.
     try:
         from app.services.advisory import draft_advisory
-        _adv = draft_advisory(draft.hook, draft.body, getattr(draft, "source_type", "news_link"))
+        _src_type = "news_link"
+        _si = getattr(draft, "source_item", None)
+        if _si is not None:
+            _src_type = getattr(_si, "source_type", None) or "news_link"
+        _adv = draft_advisory(draft.hook, draft.body, _src_type)
         if _adv:
             card += (
                 f"\n{'─' * 30}\n"
-                f"📌 <b>초안 우선순위:</b> {_adv} (참고용)\n"
+                f"📌 <b>초안 우선순위:</b> {_adv} "
+                f"(시의성 기준, 품질과 독립)\n"
             )
     except Exception:
-        pass
+        logger.debug("[Card] 우선순위 라벨 계산 실패", exc_info=True)
 
     # VoiceGuard — 단일 초안 AI 어투 감지 (Layer 2, advisory only)
     try:
@@ -213,7 +268,8 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         char_info += " ⚠️ X 한도 초과 — 편집 필요"
 
     card += (
-        f"\n💡 <b>추천:</b> {_recommended_action(draft)}\n"
+        f"\n💡 <b>추천:</b> "
+        f"{_recommended_action(draft, quality_action=quality_action)}\n"
         f"{'─' * 30}\n"
         f"초안 ID: {draft.id} | 버전: {draft.version}\n"
         f"{char_info}"
