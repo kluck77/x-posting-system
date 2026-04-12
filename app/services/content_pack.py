@@ -57,7 +57,60 @@ class ContentPack:
 
 # ─── 시스템 프롬프트 ──────────────────────────────────────────────────────────
 
-_SYSTEM_PROMPT = """You are a senior content strategist for an English-language X account (@cheesesvav) that explains Korean affairs to international readers.
+_SYSTEM_PROMPT_KO = """당신은 한국어 X 계정(@cheesesvav)의 시니어 콘텐츠 전략가입니다.
+
+계정 정체성:
+- "헤드라인 너머: 한국이 실제로 어떻게 돌아가고, 느끼고, 변하는지."
+- 단순 번역이 아님. 해석, 맥락, 주류 미디어가 놓치는 시각을 제공.
+- 독자: 경제·지정학·테크·크립토에 관심 있는 25-45세 전문직.
+- 어투: 신뢰감 있고, 분석적이며, 간간이 재치. 자극적이거나 설교조 금지.
+
+작업:
+주어진 소스 자료를 기반으로 구조화된 콘텐츠 팩을 JSON으로 생성하라.
+**모든 출력 텍스트는 반드시 한국어로 작성하라.**
+
+아래 스키마와 정확히 일치하는 JSON만 출력:
+{
+  "main_posts": [
+    "훅 라인\\n\\n본문. 총 280자 이내.",
+    "훅 라인\\n\\n본문. 총 280자 이내.",
+    "훅 라인\\n\\n본문. 총 280자 이내."
+  ],
+  "short_version": "핵심만 담은 짧은 트윗. 200자 이내. 설명 없이.",
+  "reply_drafts": [
+    "맥락이나 데이터를 추가하는 답글. 200자 이내. 정보 있는 관찰자 어투.",
+    "통념에 도전하는 답글. 200자 이내.",
+    "관련 관찰을 공유하는 답글. 200자 이내."
+  ],
+  "quote_post_drafts": [
+    "인용 트윗 프레이밍. 220자 이내. 한국 내부자 시각 추가.",
+    "인용 트윗 프레이밍. 220자 이내. 첫 번째와 다른 각도."
+  ],
+  "thread_option": "선택: 이야기가 충분히 복잡하면 4트윗 스레드의 첫 트윗. 불필요하면 null.",
+  "risk_flags": ["민감도 이슈 구체적으로. 예: '2024 계엄 언급 — 게시 전 확인 필요'"],
+  "topic_tags": ["경제", "한은", "금리"],
+  "why_it_matters": "한 문장: 왜 지금 이 이야기가 중요한지.",
+  "style_warnings": ["선택: 예: '지난주 재벌 포스트와 유사 — 각도 변경 필요'"]
+}
+
+main_posts 규칙:
+1. 각 포스트는 다른 각도 (데이터 기반 / 인간적 시각 / 반론적)
+2. 훅이 "한국은" 또는 "한국의"로 시작하면 안 됨
+3. 훅에 숫자, 통계, 구체적 이름 포함
+4. 금지 표현: 그러나, 더욱이, 게다가, 주목할 점은, 결론적으로
+5. CTA 또는 생각을 유발하는 질문으로 마무리
+6. 총 280자 이내 (훅 + 본문 합산)
+
+reply_drafts 규칙:
+- 브랜드 계정이 아닌, 관심 있고 정보력 있는 개인처럼
+- 데이터, 맥락, 진짜 인사이트로 가치 추가
+- 각 200자 이내
+
+risk_flags 규칙:
+- 구체적으로. "정치적으로 민감"은 쓸모없음. "2024 계엄 참조 — 게시 전 검증 필요"는 유용함.
+- 위험 없으면 빈 배열 []."""
+
+_SYSTEM_PROMPT_EN = """You are a senior content strategist for an English-language X account (@cheesesvav) that explains Korean affairs to international readers.
 
 Account identity:
 - "Beyond headlines: how Korea really works, feels, and changes."
@@ -110,6 +163,13 @@ Rules for risk_flags:
 - Empty array [] if no significant risks."""
 
 
+def _get_system_prompt(language: str) -> str:
+    """language에 따라 시스템 프롬프트 반환. 기본은 한국어."""
+    if language.lower() in ("en", "english", "eng"):
+        return _SYSTEM_PROMPT_EN
+    return _SYSTEM_PROMPT_KO
+
+
 # ─── 생성 함수 ────────────────────────────────────────────────────────────────
 
 async def generate_content_pack(request: ContentRequest) -> ContentPack:
@@ -126,13 +186,18 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
     """
     source_text = request.to_source_text()
     title = request.to_title()
+    language = getattr(request, "language", "ko") or "ko"
 
     user_prompt = f"Source type: {request.source_type}\n"
     if request.source_url:
         user_prompt += f"URL: {request.source_url}\n"
-    user_prompt += f"\nContent:\n{source_text or title}\n\nGenerate the content pack JSON now."
+    user_prompt += f"\nContent:\n{source_text or title}\n\n"
+    if language.lower() in ("en", "english", "eng"):
+        user_prompt += "Generate the content pack JSON now."
+    else:
+        user_prompt += "콘텐츠 팩 JSON을 생성하라. 모든 텍스트는 한국어로."
 
-    raw = await _call_ai(user_prompt)
+    raw = await _call_ai(user_prompt, language=language)
 
     if raw:
         pack = _parse_response(raw)
@@ -183,9 +248,11 @@ def _apply_guards(pack: "ContentPack") -> None:
         logger.warning(f"[RepetitionGuard] 실패 (무시): {e}")
 
 
-async def _call_ai(user_prompt: str) -> Optional[str]:
+async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:
     """AI 호출. OpenAI → Anthropic → None 순서."""
     from app.config import settings
+
+    system_prompt = _get_system_prompt(language)
 
     # OpenAI 시도
     if settings.openai_api_key:
@@ -198,7 +265,7 @@ async def _call_ai(user_prompt: str) -> Optional[str]:
                     json={
                         "model": "gpt-4o-mini",
                         "messages": [
-                            {"role": "system", "content": _SYSTEM_PROMPT},
+                            {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
                         ],
                         "temperature": 0.8,
@@ -225,7 +292,7 @@ async def _call_ai(user_prompt: str) -> Optional[str]:
                     json={
                         "model": "claude-haiku-4-5-20251001",
                         "max_tokens": 2000,
-                        "system": _SYSTEM_PROMPT,
+                        "system": system_prompt,
                         "messages": [{"role": "user", "content": user_prompt}],
                     },
                 )
@@ -278,26 +345,54 @@ def _ensure_list(value, max_items: Optional[int]) -> list:
 def _mock_pack(request: ContentRequest) -> ContentPack:
     """Mock 팩 — API 키 없을 때 / 파싱 실패 시."""
     title = request.to_title()[:60]
+    language = getattr(request, "language", "ko") or "ko"
+
+    if language.lower() in ("en", "english", "eng"):
+        return ContentPack(
+            main_posts=[
+                f"[Mock A] {title}\n\nThis is the data-driven angle for international readers.",
+                f"[Mock B] {title}\n\nThis is the human-interest angle with on-the-ground context.",
+                f"[Mock C] {title}\n\nThis is the contrarian angle that challenges the Western narrative.",
+            ],
+            short_version=f"[Mock short] {title[:80]} — the context Western media skips.",
+            reply_drafts=[
+                "[Mock reply 1] Worth adding: the regulatory context here is different from what most assume.",
+                "[Mock reply 2] Counter-point: the data from Q3 tells a different story.",
+                "[Mock reply 3] Saw this developing for months. The signal was in the bond market.",
+            ],
+            quote_post_drafts=[
+                f"[Mock quote 1] This is why the Korea angle matters for global markets.",
+                f"[Mock quote 2] The untold part: what this means for the rest of Asia.",
+            ],
+            thread_option="[Mock thread] 1/ Here's what everyone is missing about this story...",
+            risk_flags=["Mock mode — no real risk analysis available"],
+            topic_tags=["mock", "korea", "economy"],
+            why_it_matters="Mock mode: international readers care because this affects regional dynamics.",
+            style_warnings=[],
+            source_url=request.source_url,
+            source_type=request.source_type,
+        )
+
     return ContentPack(
         main_posts=[
-            f"[Mock A] {title}\n\nThis is the data-driven angle for international readers.",
-            f"[Mock B] {title}\n\nThis is the human-interest angle with on-the-ground context.",
-            f"[Mock C] {title}\n\nThis is the contrarian angle that challenges the Western narrative.",
+            f"[Mock A] {title}\n\n데이터 기반 시각으로 본 핵심 분석.",
+            f"[Mock B] {title}\n\n현장 맥락을 담은 인간적 시각.",
+            f"[Mock C] {title}\n\n통념에 도전하는 반론적 시각.",
         ],
-        short_version=f"[Mock short] {title[:80]} — the context Western media skips.",
+        short_version=f"[Mock 짧은] {title[:80]} — 주류 미디어가 놓친 맥락.",
         reply_drafts=[
-            "[Mock reply 1] Worth adding: the regulatory context here is different from what most assume.",
-            "[Mock reply 2] Counter-point: the data from Q3 tells a different story.",
-            "[Mock reply 3] Saw this developing for months. The signal was in the bond market.",
+            "[Mock 답글 1] 추가할 점: 여기서 규제 맥락은 대부분의 예상과 다르다.",
+            "[Mock 답글 2] 반론: 3분기 데이터는 다른 이야기를 한다.",
+            "[Mock 답글 3] 수개월 전부터 전개 감지. 신호는 채권 시장에 있었다.",
         ],
         quote_post_drafts=[
-            f"[Mock quote 1] This is why the Korea angle matters for global markets.",
-            f"[Mock quote 2] The untold part: what this means for the rest of Asia.",
+            f"[Mock 인용 1] 이게 왜 글로벌 시장에 중요한지.",
+            f"[Mock 인용 2] 알려지지 않은 부분: 아시아 전체에 미치는 의미.",
         ],
-        thread_option="[Mock thread] 1/ Here's what everyone is missing about this story...",
-        risk_flags=["Mock mode — no real risk analysis available"],
-        topic_tags=["mock", "korea", "economy"],
-        why_it_matters="Mock mode: international readers care because this affects regional dynamics.",
+        thread_option="[Mock 스레드] 1/ 이 이야기에서 모두가 놓치고 있는 것...",
+        risk_flags=["Mock 모드 — 실제 위험 분석 불가"],
+        topic_tags=["mock", "한국", "경제"],
+        why_it_matters="Mock 모드: 지역 역학에 영향을 미치기 때문에 중요.",
         style_warnings=[],
         source_url=request.source_url,
         source_type=request.source_type,

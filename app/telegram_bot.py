@@ -1273,7 +1273,7 @@ async def _handle_pack_select_callback(
             url=pack.source_url or "",
             source_text=post_text,
             source_type="manual",
-            language="english",
+            language="ko",
         )
 
         orchestrator = Orchestrator()

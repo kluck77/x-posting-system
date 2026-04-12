@@ -528,7 +528,7 @@ def send_content_pack_messages(pack) -> list[dict]:
     overview_lines = ["📦 <b>콘텐츠 팩 생성 완료</b>\n"]
 
     if pack.why_it_matters:
-        overview_lines.append(f"🌏 <b>Why it matters</b>\n{pack.why_it_matters}\n")
+        overview_lines.append(f"🌏 <b>왜 중요한가</b>\n{pack.why_it_matters}\n")
 
     if pack.topic_tags:
         tags = " ".join(f"#{t}" for t in pack.topic_tags)
@@ -536,11 +536,11 @@ def send_content_pack_messages(pack) -> list[dict]:
 
     if pack.risk_flags:
         flags = "\n".join(f"  • {f}" for f in pack.risk_flags)
-        overview_lines.append(f"⚠️ <b>Risk flags</b>\n{flags}\n")
+        overview_lines.append(f"⚠️ <b>위험 신호</b>\n{flags}\n")
 
     if pack.style_warnings:
         warns = "\n".join(f"  • {w}" for w in pack.style_warnings)
-        overview_lines.append(f"🔄 <b>Style warnings</b>\n{warns}\n")
+        overview_lines.append(f"🔄 <b>스타일 경고</b>\n{warns}\n")
 
     overview_lines.append(
         f"<i>메인 {len(pack.main_posts)}개 · 짧은버전 1개 · 댓글초안 {len(pack.reply_drafts)}개"
