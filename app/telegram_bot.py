@@ -457,14 +457,19 @@ async def _run_pipeline(
             draft.reply_to_tweet_id = reply_to_tweet_id
             orchestrator.db.commit()
 
-        await orchestrator.send_for_approval(draft.id)
+        card_sent = await orchestrator.send_for_approval(draft.id)
 
         mode_label = "📝 새 게시글" if post_mode == "tweet" else f"💬 댓글 (→{reply_to_tweet_id})"
+        card_status = (
+            "텔레그램으로 승인 카드가 전송됐어요."
+            if card_sent
+            else "⚠️ 승인 카드 전송 실패 — 서버 로그를 확인하세요."
+        )
         await update.message.reply_text(
             f"✅ <b>초안 생성 완료!</b>\n"
             f"모드: {mode_label}\n"
             f"초안 ID: {draft.id}\n\n"
-            f"텔레그램으로 승인 카드가 전송됐어요.",
+            f"{card_status}",
             parse_mode="HTML",
         )
     except Exception as e:

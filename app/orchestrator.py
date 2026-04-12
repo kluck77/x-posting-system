@@ -654,12 +654,15 @@ class Orchestrator:
 
     async def _handle_approve(self, draft: Draft) -> dict:
         """승인 처리 (X 자동 게시 없음 — 수동 게시 전용)"""
-        from app.services.text_cleaner import sanitize_internal_tags
         self.draft_service.update_status(draft.id, ApprovalStatus.APPROVED)
 
-        hook, body = sanitize_internal_tags(
-            draft.hook or "", draft.body or "",
-        )
+        try:
+            from app.services.text_cleaner import sanitize_internal_tags
+            hook, body = sanitize_internal_tags(
+                draft.hook or "", draft.body or "",
+            )
+        except Exception:
+            hook, body = draft.hook or "", draft.body or ""
 
         # 새니타이즈 후 본문이 없으면 재생성 안내
         if not body:

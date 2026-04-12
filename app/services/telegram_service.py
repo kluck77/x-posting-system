@@ -148,9 +148,12 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         logger.debug("[Card] 5-criteria 평가 실패", exc_info=True)
 
-    # 내부 라우팅 문구 새니타이즈 (DB 기존 레코드 방어)
-    from app.services.text_cleaner import sanitize_internal_tags, sanitize_reasoning
-    _hook, _body = sanitize_internal_tags(draft.hook or "", draft.body or "")
+    # 내부 라우팅 문구 새니타이즈 (DB 기존 레코드 방어, fail-safe)
+    try:
+        from app.services.text_cleaner import sanitize_internal_tags, sanitize_reasoning
+        _hook, _body = sanitize_internal_tags(draft.hook or "", draft.body or "")
+    except Exception:
+        _hook, _body = draft.hook or "", draft.body or ""
 
     # 텔레그램 MarkdownV2에서 특수문자 이스케이프
     # 간단하게 HTML 모드를 사용합니다
@@ -175,11 +178,17 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     if source_url:
         card += f"🔗 <b>출처:</b> {source_url}\n"
 
-    _risk_reason = sanitize_reasoning(draft.risk_reasoning or "")
+    try:
+        _risk_reason = sanitize_reasoning(draft.risk_reasoning or "")
+    except Exception:
+        _risk_reason = draft.risk_reasoning or ""
     if _risk_reason:
         card += f"📊 <b>위험 판단 근거:</b> {_risk_reason}\n"
 
-    _ai_rationale = sanitize_reasoning(draft.ai_rationale or "")
+    try:
+        _ai_rationale = sanitize_reasoning(draft.ai_rationale or "")
+    except Exception:
+        _ai_rationale = draft.ai_rationale or ""
     if _ai_rationale:
         card += f"🤖 <b>AI 판단 근거:</b> {_ai_rationale}\n"
 
