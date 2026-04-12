@@ -48,3 +48,48 @@ class TestContentPackLanguageDefault:
         ko = _get_system_prompt("ko")
         en = _get_system_prompt("en")
         assert ko != en
+
+
+class TestContentPackPromptQuality:
+    """프롬프트 품질 고도화 — few-shot 예시 포함 여부 회귀 검증."""
+
+    def test_ko_prompt_has_good_hook_examples(self):
+        """한국어 프롬프트에 좋은 훅 예시가 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "12년 만 최고 금리, 문제는 물가보다 가계부채다" in prompt
+        assert "삼성전자 영업이익 10배 반등" in prompt
+
+    def test_ko_prompt_has_bad_hook_examples(self):
+        """한국어 프롬프트에 나쁜 훅 예시가 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "한국 기준금리 3.50%, 12년 만 최고" in prompt
+        assert "사실 나열" in prompt
+
+    def test_ko_prompt_has_good_why_examples(self):
+        """한국어 프롬프트에 좋은 why_it_matters 예시가 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "원화와 외국인 자금 흐름이 먼저 흔들린다" in prompt
+
+    def test_ko_prompt_has_bad_why_examples(self):
+        """한국어 프롬프트에 나쁜 why_it_matters 예시가 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "이는 경제에 중요한 의미를 가진다" in prompt
+
+    def test_ko_prompt_has_reply_tone_guidance(self):
+        """한국어 프롬프트에 댓글 대화체 지시가 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "대화체" in prompt
+        assert "보고서 문체 금지" in prompt
+
+    def test_ko_prompt_has_quote_post_types(self):
+        """한국어 프롬프트에 인용 포스트 3유형이 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "반론형" in prompt
+        assert "시장영향형" in prompt
+        assert "해외설명형" in prompt
+
+    def test_ko_prompt_has_short_version_rules(self):
+        """한국어 프롬프트에 짧은 버전 규칙이 포함되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "단순 축약하지 마라" in prompt
+        assert "훅형 압축문" in prompt
