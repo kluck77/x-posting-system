@@ -153,5 +153,8 @@ class GeminiResearcher(BaseResearcher):
             )
 
         except Exception as e:
-            logger.error(f"Gemini Researcher 오류: {e}")
-            raise RuntimeError(f"Gemini Researcher 오류: {e}") from e
+            safe_msg = str(e)
+            if settings.gemini_api_key:
+                safe_msg = safe_msg.replace(settings.gemini_api_key, "***")
+            logger.error(f"Gemini Researcher 오류: {safe_msg}")
+            raise RuntimeError(f"Gemini Researcher 오류: {safe_msg}") from e

@@ -373,7 +373,10 @@ async def _translate_to_korean(text: str) -> str | None:
             data = r.json()
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as e:
-        logger.warning(f"[Translate] 한국어 번역 실패: {e}")
+        safe_msg = str(e)
+        if settings.gemini_api_key:
+            safe_msg = safe_msg.replace(settings.gemini_api_key, "***")
+        logger.warning(f"[Translate] 한국어 번역 실패: {safe_msg}")
         return None
 
 
