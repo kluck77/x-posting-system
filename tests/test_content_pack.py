@@ -179,3 +179,12 @@ class TestContentPackHouseStyle:
         """낡은 수치 단정 금지 규칙이 골든 룰에 있다."""
         prompt = _get_system_prompt("ko")
         assert "현재 시점과 어긋나는 수치는 신뢰를 깎는다" in prompt
+
+    def test_ko_prompt_data_backed_assertion_rule(self):
+        """데이터 없는 단정 금지 규칙이 골든 룰에 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "데이터 없는 단정 금지" in prompt
+        assert "지역/대상" in prompt
+        assert "기간/비교 시점" in prompt
+        assert "수치/변화폭" in prompt
+        assert "톤을 낮춰라" in prompt
