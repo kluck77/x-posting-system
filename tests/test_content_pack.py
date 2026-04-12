@@ -5,7 +5,7 @@
 """
 
 from app.services.content_pack import (
-    _get_system_prompt, _mock_pack,
+    _get_system_prompt, _mock_pack, _is_short_input, _classify_topic,
     FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
 )
 from app.models.content_request import ContentRequest
@@ -252,6 +252,12 @@ class TestFactSheetExtraction:
         sheet = extract_fact_sheet(text)
         assert sheet.topic == "크립토"
 
+    def test_single_keyword_classifies(self):
+        """키워드 1개만으로도 주제 분류."""
+        assert _classify_topic("서울 부동산") == "부동산"
+        assert _classify_topic("업비트 점유율") == "크립토"
+        assert _classify_topic("한국 금리") == "금리"
+
     def test_unknown_topic_fallback(self):
         """매칭 키워드 부족 시 기타로 분류."""
         text = "오늘 날씨가 좋아서 산책을 했다."
@@ -441,4 +447,57 @@ class TestFactSheetIntegration:
         text = "정부가 새로운 규제를 검토하고 있다. 시장에 큰 영향을 줄 것으로 보인다."
         sheet = extract_fact_sheet(text)
         passed, missing = check_density(sheet)
+        assert passed is False
+
+
+class TestInputTypeSplit:
+    """입력 유형 분리 (기사형 vs 탐색형) 테스트."""
+
+    def test_short_input_detection(self):
+        """100자 이하는 짧은 입력."""
+        assert _is_short_input("서울 부동산") is True
+        assert _is_short_input("한국 금리 전망") is True
+        assert _is_short_input("업비트 점유율") is True
+
+    def test_long_input_detection(self):
+        """100자 초과는 기사형 입력."""
+        long_text = "서울 강남구 아파트 매매가격이 2024년 3월 기준 전월비 0.5% 하락했다. " * 3
+        assert _is_short_input(long_text) is False
+
+    def test_short_input_topic_classification(self):
+        """짧은 입력도 주제 분류가 정확해야 한다."""
+        sheet = extract_fact_sheet("서울 부동산")
+        assert sheet.topic == "부동산"
+        assert "서울" in sheet.entities
+
+    def test_short_crypto_topic(self):
+        """짧은 크립토 입력 주제 분류."""
+        sheet = extract_fact_sheet("업비트 점유율")
+        assert sheet.topic == "크립토"
+        assert "업비트" in sheet.entities
+
+    def test_short_rate_topic(self):
+        """짧은 금리 입력 주제 분류."""
+        sheet = extract_fact_sheet("한국 금리")
+        assert sheet.topic == "금리"
+
+    def test_short_input_not_blocked_by_density(self):
+        """짧은 입력은 밀도 검증에 실패해도 차단 대상이 아니다."""
+        sheet = extract_fact_sheet("서울 부동산")
+        passed, missing = check_density(sheet)
+        # 밀도 검증은 실패하지만, generate_content_pack에서 short_input이면 우회
+        assert passed is False  # 밀도는 부족
+        # 하지만 _is_short_input이 True이므로 게이트 우회됨
+
+    def test_long_vague_still_blocked(self):
+        """긴 분위기문은 여전히 차단."""
+        text = (
+            "최근 크립토 시장의 불안정성이 커지고 있다. "
+            "투자자들의 심리가 위축되면서 시장 전반에 걸쳐 "
+            "불확실성이 확대되는 양상이다. "
+            "전문가들은 당분간 이런 추세가 이어질 것으로 전망하고 있다."
+        )
+        assert _is_short_input(text) is False
+        sheet = extract_fact_sheet(text)
+        passed, _ = check_density(sheet)
         assert passed is False

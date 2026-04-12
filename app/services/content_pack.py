@@ -122,12 +122,21 @@ TOPIC_MIN_FIELDS: dict[str, list[str]] = {
 
 
 def _classify_topic(text: str) -> str:
-    """키워드 빈도 기반 주제 분류."""
+    """키워드 빈도 기반 주제 분류. 1개 이상 매칭이면 분류."""
     scores: dict[str, int] = {}
     for topic, keywords in _TOPIC_KEYWORDS.items():
         scores[topic] = sum(1 for kw in keywords if kw in text)
     best = max(scores, key=scores.get)
-    return best if scores[best] >= 2 else "기타"
+    return best if scores[best] >= 1 else "기타"
+
+
+# 짧은 입력 판별 임계값 (이 이하면 탐색형)
+_SHORT_INPUT_THRESHOLD = 100
+
+
+def _is_short_input(source_text: str) -> bool:
+    """짧은 주제/아이디어 입력인지 판별."""
+    return len(source_text.strip()) <= _SHORT_INPUT_THRESHOLD
 
 
 def _extract_figures(text: str) -> list[str]:
@@ -570,52 +579,82 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
     title = request.to_title()
     language = getattr(request, "language", "ko") or "ko"
 
-    # ── STEP 0: 규칙 기반 팩트 시트 추출 + 밀도 검증 ──
-    fact_sheet = extract_fact_sheet(source_text or title)
-    passed, missing = check_density(fact_sheet)
+    # ── STEP 0: 입력 유형 판별 + 팩트 시트 ──
+    raw_input = source_text or title
+    short_input = _is_short_input(raw_input)
+    fact_sheet = extract_fact_sheet(raw_input)
 
-    if not passed:
-        logger.warning(
-            f"근거 부족 — topic={fact_sheet.topic}, "
-            f"missing={missing}, score={fact_sheet.data_density_score}"
-        )
-        return ContentPack(
-            main_posts=[f"[근거 부족] {title[:80]}"],
-            why_it_matters=f"데이터 밀도 부족: {', '.join(missing)} 누락",
-            insufficient_data=True,
-            missing_fields=missing,
-            fact_sheet_summary=(
-                f"topic={fact_sheet.topic}, "
-                f"entities={fact_sheet.entities}, "
-                f"figures={fact_sheet.figures}"
-            ),
-            source_url=request.source_url,
-            source_type=request.source_type,
-            topic_tags=[fact_sheet.topic],
+    # 긴 입력(기사/원문) → 밀도 게이트 적용
+    if not short_input:
+        passed, missing = check_density(fact_sheet)
+        if not passed:
+            logger.warning(
+                f"근거 부족 — topic={fact_sheet.topic}, "
+                f"missing={missing}, score={fact_sheet.data_density_score}"
+            )
+            return ContentPack(
+                main_posts=[f"[근거 부족] {title[:80]}"],
+                why_it_matters=f"데이터 밀도 부족: {', '.join(missing)} 누락",
+                insufficient_data=True,
+                missing_fields=missing,
+                fact_sheet_summary=(
+                    f"topic={fact_sheet.topic}, "
+                    f"entities={fact_sheet.entities}, "
+                    f"figures={fact_sheet.figures}"
+                ),
+                source_url=request.source_url,
+                source_type=request.source_type,
+                topic_tags=[fact_sheet.topic],
+            )
+    else:
+        logger.info(
+            f"탐색형 입력 — topic={fact_sheet.topic}, "
+            f"input='{raw_input[:60]}'"
         )
 
-    # ── STEP 1: 팩트 시트 기반 프롬프트 구성 ──
+    # ── STEP 1: 프롬프트 구성 ──
     user_prompt = f"Source type: {request.source_type}\n"
     if request.source_url:
         user_prompt += f"URL: {request.source_url}\n"
 
-    user_prompt += "\n=== 검증된 팩트 시트 (이 데이터를 반드시 활용하라) ===\n"
-    user_prompt += f"주제: {fact_sheet.topic}\n"
-    if fact_sheet.entities:
-        user_prompt += f"주체/대상: {', '.join(fact_sheet.entities)}\n"
-    if fact_sheet.figures:
-        user_prompt += f"수치: {', '.join(fact_sheet.figures)}\n"
-    if fact_sheet.timeframe:
-        user_prompt += f"기간: {fact_sheet.timeframe}\n"
-    if fact_sheet.key_facts:
-        user_prompt += "핵심 사실:\n"
-        for i, kf in enumerate(fact_sheet.key_facts, 1):
-            user_prompt += f"  {i}. {kf}\n"
-    user_prompt += "===========================\n"
+    if short_input:
+        # 탐색형: 주제 키워드 기반 생성 지시
+        user_prompt += f"\n=== 탐색형 입력 ===\n"
+        user_prompt += f"주제: {fact_sheet.topic}\n"
+        if fact_sheet.entities:
+            user_prompt += f"관련 대상: {', '.join(fact_sheet.entities)}\n"
+        user_prompt += (
+            "이 주제에서 지금 핵심으로 볼 포인트 중심으로 생성하라.\n"
+            "구체 뉴스가 없으므로 단정형 해설 금지.\n"
+            "대신 현재 흐름·논점·주목할 신호 중심으로 써라.\n"
+            "불확실한 수치는 쓰지 마라.\n"
+            "========================\n"
+        )
+    else:
+        # 기사형: 팩트 시트 삽입
+        user_prompt += "\n=== 검증된 팩트 시트 (이 데이터를 반드시 활용하라) ===\n"
+        user_prompt += f"주제: {fact_sheet.topic}\n"
+        if fact_sheet.entities:
+            user_prompt += f"주체/대상: {', '.join(fact_sheet.entities)}\n"
+        if fact_sheet.figures:
+            user_prompt += f"수치: {', '.join(fact_sheet.figures)}\n"
+        if fact_sheet.timeframe:
+            user_prompt += f"기간: {fact_sheet.timeframe}\n"
+        if fact_sheet.key_facts:
+            user_prompt += "핵심 사실:\n"
+            for i, kf in enumerate(fact_sheet.key_facts, 1):
+                user_prompt += f"  {i}. {kf}\n"
+        user_prompt += "===========================\n"
 
-    user_prompt += f"\nContent:\n{source_text or title}\n\n"
+    user_prompt += f"\nContent:\n{raw_input}\n\n"
     if language.lower() in ("en", "english", "eng"):
         user_prompt += "Generate the content pack JSON now."
+    elif short_input:
+        user_prompt += (
+            "콘텐츠 팩 JSON을 생성하라. "
+            "탐색형 주제이므로 현재 흐름과 논점 중심으로 써라. "
+            "모든 텍스트는 한국어로."
+        )
     else:
         user_prompt += (
             "콘텐츠 팩 JSON을 생성하라. "
