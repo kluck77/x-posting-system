@@ -235,7 +235,9 @@ class Orchestrator:
             logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
 
 
-        # Step 1.7: KO-only routing - skip English draft pipeline (Phase H, fail-open)
+        # Step 1.7: KO-only routing — 한국어 전용 도메인 로그만 남기고
+        # AI 파이프라인(Step 2~6)은 정상 진행한다.
+        # (이전: placeholder 텍스트로 Draft 생성 후 조기 리턴 → 내부 문구 유출 문제)
         _KO_ONLY_DOMAINS = {"금융", "투자", "크립토", "주식"}
         _KO_ONLY_CLASSES = {"BREAKING_NOW", "CANDIDATE"}
         try:
@@ -244,24 +246,9 @@ class Orchestrator:
                     and _br.classification in _KO_ONLY_CLASSES
                     and _br.topic_domain in _KO_ONLY_DOMAINS):
                 logger.info(
-                    f"[1.7/6] English draft skipped: {_br.classification} "
-                    f"domain={_br.topic_domain}"
+                    f"[1.7/6] KO-only domain detected: {_br.classification} "
+                    f"domain={_br.topic_domain} — AI pipeline continues"
                 )
-                draft = self.draft_service.create_draft(
-                    source_item=source_item,
-                    hook=f"[{_br.classification}] {data.title[:80]}",
-                    body=f"KO-only pipeline (English draft skipped). domain={_br.topic_domain}",
-                    category=ContentCategory.ECONOMY,
-                    risk_level=RiskLevel.LOW,
-                    risk_reasoning=f"{_br.classification} KO-only routing",
-                    ai_rationale=f"Routed to {_br.classification} pipeline, English draft skipped.",
-                )
-                draft._skip_approval_card = True
-                logger.info(
-                    f"=== Pipeline done (KO-only): draft_id={draft.id}, "
-                    f"routing={_br.classification} ==="
-                )
-                return draft
         except Exception as e:
             logger.warning(f"[1.7] KO routing check failed (fail-open): {e}")
 
