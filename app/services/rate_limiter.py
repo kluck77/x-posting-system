@@ -38,8 +38,9 @@ DEFAULT_MANUAL_RESERVED = 5           # 수동 입력 보장 슬롯
 # KST timezone — 운영자 기준 '오늘' 달력일
 KST = timezone(timedelta(hours=9))
 
-# KO-only 드래프트 식별 (body prefix — orchestrator Step 1.7 에서 실제로 기록하는 문자열)
-# orchestrator.py line 255: body=f"KO-only pipeline (English draft skipped). domain={...}"
+# KO-only 드래프트 식별 — 구형 placeholder body 필터.
+# orchestrator Step 1.7 조기 리턴 제거(47d2830) 이후 새 Draft 에는
+# 이 prefix 가 기록되지 않는다. 기존 DB 레코드 호환을 위해 상수만 유지.
 KO_ONLY_BODY_PREFIX = "KO-only pipeline (English draft skipped)"
 
 

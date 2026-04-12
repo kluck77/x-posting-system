@@ -253,7 +253,6 @@ class Orchestrator:
             logger.warning(f"[1.7] KO routing check failed (fail-open): {e}")
 
         # Step 2 rate check: AI 파이프라인 진입 제한 (비용 보호)
-        # - KO-only/BREAKING 는 Step 1.7 에서 이미 리턴
         # - source_type 으로 자동수집/수동입력 레인 분리
         can_ai, ai_msg = self.rate_limiter.can_run_ai_pipeline(
             source_type=data.source_type,
@@ -677,9 +676,7 @@ class Orchestrator:
                 source_type=source.source_type, language=source.language,
             )
             new_draft = await self.ingest_and_generate(new_data)
-            # Phase H: KO-only routing - skip approval card
-            if not getattr(new_draft, '_skip_approval_card', False):
-                await self.send_for_approval(new_draft.id)
+            await self.send_for_approval(new_draft.id)
             return {
                 "success": True,
                 "message": f"재생성 완료! 새 draft ID: {new_draft.id}",
@@ -702,22 +699,11 @@ class Orchestrator:
         return await self._handle_approve(draft)
 
     async def full_pipeline(self, data: SourceItemCreate) -> dict:
-        """전체 파이프띴인: 소스 입력 → 분류 → AI 생성 또는 한국어 전용 라인 처리"""
+        """전체 파이프라인: 소스 입력 → 분류 → AI 생성 → 승인 카드"""
         try:
             draft = await self.ingest_and_generate(data)
-            # Phase H: KO-only routing - skip approval card
-            if getattr(draft, '_skip_approval_card', False):
-                sent = False
-                logger.info(f"[pipeline] approval card skipped (KO-only): draft_id={draft.id}")
-            else:
-                sent = await self.send_for_approval(draft.id)
-            # 실제 처리 경로에 맞는 응답 메시지
-            if getattr(draft, '_skip_approval_card', False):
-                if draft.hook.startswith("[BREAKING_NOW]"):
-                    message = "속보 알림 대상으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
-                else:
-                    message = "한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
-            elif sent:
+            sent = await self.send_for_approval(draft.id)
+            if sent:
                 message = "초안 생성 완료. 텔레그램에서 승인해주세요."
             else:
                 message = "초안 생성 완료."
