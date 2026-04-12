@@ -652,15 +652,57 @@ class Orchestrator:
         else:
             return {"success": False, "error": f"알 수 없는 액션: {action}"}
 
+    @staticmethod
+    def _sanitize_post_text(hook: str, body: str) -> tuple[str, str]:
+        """게시용 텍스트에서 내부 라우팅/placeholder 문구를 제거한다.
+
+        DB 기존 레코드에 남아 있는 구형 문자열이 사용자 출력으로
+        승격되지 않도록 차단하는 최종 방어선.
+        """
+        # [BREAKING_NOW] / [CANDIDATE] 접두사 제거
+        for tag in ("[BREAKING_NOW] ", "[CANDIDATE] ",
+                     "[BREAKING_NOW]", "[CANDIDATE]"):
+            if hook.startswith(tag):
+                hook = hook[len(tag):].lstrip()
+                break
+
+        # KO-only placeholder body 제거
+        if body.startswith("KO-only pipeline"):
+            body = ""
+
+        # "Routed to ... pipeline" 내부 rationale이 body로 들어온 경우
+        if body.startswith("Routed to "):
+            body = ""
+
+        return hook.strip(), body.strip()
+
     async def _handle_approve(self, draft: Draft) -> dict:
         """승인 처리 (X 자동 게시 없음 — 수동 게시 전용)"""
         self.draft_service.update_status(draft.id, ApprovalStatus.APPROVED)
+
+        hook, body = self._sanitize_post_text(
+            draft.hook or "", draft.body or "",
+        )
+
+        # 새니타이즈 후 본문이 없으면 재생성 안내
+        if not body:
+            return {
+                "success": True,
+                "message": (
+                    "승인 완료 — 단, 이 초안은 본문이 없습니다. "
+                    "🔄 재생성을 눌러 AI 본문을 생성하세요."
+                ),
+                "draft_id": draft.id,
+                "hook": hook,
+                "body": "",
+            }
+
         return {
             "success": True,
             "message": "승인 완료 — 아래 내용을 복사해서 직접 게시하세요.",
             "draft_id": draft.id,
-            "hook": draft.hook or "",
-            "body": draft.body or "",
+            "hook": hook,
+            "body": body,
         }
 
     async def _handle_regenerate(self, draft: Draft) -> dict:
