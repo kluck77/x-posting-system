@@ -524,7 +524,7 @@ def _get_health() -> dict:
         return {
             "db_ok": db_ok,
             "telegram_configured": settings.has_telegram_config,
-            "x_configured": settings.has_x_credentials,
+            "x_configured": False,  # 자동 게시 제거됨
             "mock_mode": settings.is_full_mock_mode,
             "auto_post_enabled": settings.enable_auto_post_low_risk,
         }

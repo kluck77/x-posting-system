@@ -546,22 +546,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = await orchestrator.handle_approval(draft_id, action)
 
         if result.get("success"):
-            if action == "approve" and result.get("x_post_id"):
-                reply_label = ""
-                from app.db import get_db
-                from app.services.draft_service import DraftService
-                db = get_db()
-                try:
-                    d = DraftService(db).get_by_id(draft_id)
-                    if d and getattr(d, "reply_to_tweet_id", None):
-                        reply_label = f"\n💬 답글 대상: {d.reply_to_tweet_id}"
-                finally:
-                    db.close()
-
+            if action == "approve" and result.get("hook"):
+                hook = result.get("hook", "")
+                body = result.get("body", "")
+                post_text = f"{hook}\n\n{body}" if body else hook
                 response_text = (
-                    f"✅ <b>X 게시 완료!</b>{reply_label}\n\n"
-                    f"Post ID: {result['x_post_id']}\n"
-                    f"URL: {result.get('x_post_url', 'N/A')}"
+                    f"✅ <b>승인 완료</b>\n\n"
+                    f"<b>📋 게시용 텍스트:</b>\n"
+                    f"<code>{post_text}</code>"
                 )
             else:
                 response_text = f"✅ {result.get('message', 'Done!')}"

@@ -45,13 +45,8 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(default="", description="텔레그램 봇 토큰")
     telegram_chat_id: str = Field(default="", description="텔레그램 채팅 ID")
 
-    # --- X (트위터) API ---
+    # --- X (트위터) --- 자동 게시 제거됨, 수동 게시 전용
     x_username: str = Field(default="sskorea02", description="X 계정 사용자명 (@ 없이, 답글 모니터에서 사용)")
-    x_bearer_token: str = Field(default="", description="X Bearer Token")
-    x_api_key: str = Field(default="", description="X API Key")
-    x_api_secret: str = Field(default="", description="X API Secret")
-    x_access_token: str = Field(default="", description="X Access Token")
-    x_access_token_secret: str = Field(default="", description="X Access Token Secret")
 
     # --- 데이터베이스 ---
     database_url: str = Field(default="sqlite:///./x_poster.db")
@@ -130,10 +125,8 @@ class Settings(BaseSettings):
 
     @property
     def has_x_credentials(self) -> bool:
-        return all([
-            self._has(self.x_api_key), self._has(self.x_api_secret),
-            self._has(self.x_access_token), self._has(self.x_access_token_secret),
-        ])
+        """자동 게시 제거됨 — 항상 False."""
+        return False
 
     @property
     def is_full_mock_mode(self) -> bool:
@@ -206,7 +199,7 @@ class Settings(BaseSettings):
             "trend":         self.get_effective_trend_provider(),
             "factcheck":     self.get_effective_factcheck_provider(),
             "telegram":      "LIVE" if self.has_telegram_config else "MOCK",
-            "x_api":         "LIVE" if self.has_x_credentials else "MOCK",
+            "x_api":         "MANUAL (자동 게시 제거됨)",
         }
 
     def provider_keys_status(self) -> dict[str, bool]:
@@ -247,11 +240,7 @@ def validate_settings(s: Settings) -> list[str]:
             ".env에 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 설정 필요."
         )
 
-    if not s.has_x_credentials:
-        warnings.append(
-            "[X API] 인증정보 불완전. Mock 포스팅 모드. "
-            ".env에 X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET 설정 필요."
-        )
+    # X 자동 게시 제거됨 — 수동 게시 전용
 
     return warnings
 

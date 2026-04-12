@@ -56,7 +56,7 @@ async def health_check():
         status="ok",
         mock_mode=settings.is_full_mock_mode,
         telegram_configured=settings.has_telegram_config,
-        x_configured=settings.has_x_credentials,
+        x_configured=False,  # 자동 게시 제거됨
         database_ok=db_ok,
     )
 

@@ -253,50 +253,13 @@ class PostQueue:
         if not post:
             return None
 
-        try:
-            result = await self._publish_to_x(post)
-            if result:
-                post.published_at = datetime.now(timezone.utc)
-                post.post_id = result
-                self._last_published = post.published_at
-                self._save()
-                logger.info(f"✓ 승인 후 발행 완료: {post.text[:40]}...")
-                return post
-        except Exception as e:
-            logger.error(f"승인 후 발행 실패: {e}")
-
-        return None
-
-    async def _publish_to_x(self, post: QueuedPost) -> str | None:
-        """X API v2로 트윗 발행. 성공 시 tweet_id 반환."""
-        from app.config import settings
-        if not settings.has_x_credentials:
-            logger.info(f"[Mock] 발행: {post.text[:60]}")
-            return f"mock_{int(datetime.now(timezone.utc).timestamp())}"
-
-        from requests_oauthlib import OAuth1
-        import httpx
-
-        text = post.text
-        # 해시태그 본문 뒤에 추가 (최대 2개)
-        if post.hashtags:
-            text += " " + " ".join(f"#{t.lstrip('#')}" for t in post.hashtags)
-
-        auth = OAuth1(
-            client_key=settings.x_api_key,
-            client_secret=settings.x_api_secret,
-            resource_owner_key=settings.x_access_token,
-            resource_owner_secret=settings.x_access_token_secret,
-        )
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(
-                "https://api.x.com/2/tweets",
-                auth=auth,
-                json={"text": text},
-            )
-            r.raise_for_status()
-            data = r.json()
-            return data.get("data", {}).get("id")
+        # X 자동 게시 제거됨 — 승인만 처리
+        post.published_at = datetime.now(timezone.utc)
+        post.post_id = f"approved_{int(datetime.now(timezone.utc).timestamp())}"
+        self._last_published = post.published_at
+        self._save()
+        logger.info(f"✓ 승인 완료 (수동 게시): {post.text[:40]}...")
+        return post
 
 
 # 싱글턴

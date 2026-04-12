@@ -33,8 +33,7 @@ from app.services.classifier import (
     classify_community_risk, build_community_warning,
 )
 from app.services.prediction_service import predict_publish_time
-from app.services.telegram_service import send_approval_card, send_publish_confirmation
-from app.services.x_publisher import XPublisher
+from app.services.telegram_service import send_approval_card
 from app.services.rate_limiter import RateLimiter
 from app.services.quality_scorer import (
     score_draft, score_5criteria, format_5criteria_report,
@@ -119,14 +118,13 @@ class Orchestrator:
 
     파이프라인 흐름:
     [Source] → [Researcher] → [DraftWriter] → [Reviewer] → [분류/위험도]
-            → [DB 저장] → [텔레그램 승인카드] → [승인] → [X 게시]
+            → [DB 저장] → [텔레그램 승인카드] → [승인] → [수동 게시]
     """
 
     def __init__(self, db: Session | None = None):
         self.db = db or get_db()
         self.source_service = SourceService(self.db)
         self.draft_service = DraftService(self.db)
-        self.x_publisher = XPublisher(self.db)
         self.rate_limiter = RateLimiter(self.db)
         self.ai: AITeam = create_ai_team()
 
@@ -669,28 +667,15 @@ class Orchestrator:
             return {"success": False, "error": f"알 수 없는 액션: {action}"}
 
     async def _handle_approve(self, draft: Draft) -> dict:
-        """승인 → X에 게시"""
-        # 일일 게시 제한 확인
-        can_post, post_msg = self.rate_limiter.can_publish()
-        if not can_post:
-            return {"success": False, "error": f"일일 게시 한도 초과: {post_msg}"}
-
+        """승인 처리 (X 자동 게시 없음 — 수동 게시 전용)"""
         self.draft_service.update_status(draft.id, ApprovalStatus.APPROVED)
-        result = await self.x_publisher.publish(draft)
-
-        if result.success:
-            self.draft_service.mark_published(draft.id, result.post_id, result.post_url)
-            updated = self.draft_service.get_by_id(draft.id)
-            await send_publish_confirmation(updated)
-            return {
-                "success": True,
-                "message": "X에 게시 완료!",
-                "x_post_id": result.post_id,
-                "x_post_url": result.post_url,
-            }
-        else:
-            self.draft_service.mark_failed(draft.id, result.error_message or "Unknown")
-            return {"success": False, "error": f"X 게시 실패: {result.error_message}"}
+        return {
+            "success": True,
+            "message": "승인 완료 — 아래 내용을 복사해서 직접 게시하세요.",
+            "draft_id": draft.id,
+            "hook": draft.hook or "",
+            "body": draft.body or "",
+        }
 
     async def _handle_regenerate(self, draft: Draft) -> dict:
         """재생성 → 같은 소스로 다시 파이프라인 실행"""
