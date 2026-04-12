@@ -8,6 +8,7 @@ AI가 생성한 포스트 초안을 데이터베이스에 저장하고 관리합
 import logging
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from app.models.content import (
     Draft, SourceItem, ApprovalStatus, ContentCategory, RiskLevel
 )
@@ -168,6 +169,22 @@ class DraftService:
         if draft:
             draft.telegram_message_id = telegram_message_id
             self.db.commit()
+
+    def get_recent_operator_hints(self, limit: int = 3) -> list[str]:
+        """최근 Draft의 manual_notes에서 operator hints를 가져옵니다."""
+        drafts = (
+            self.db.query(Draft)
+            .filter(
+                and_(
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+            )
+            .order_by(Draft.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [d.manual_notes.strip() for d in drafts if d.manual_notes and d.manual_notes.strip()]
 
     def is_duplicate_text(self, text: str) -> bool:
         """
