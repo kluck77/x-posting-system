@@ -875,31 +875,28 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start"""
     await update.message.reply_text(
         "🇰🇷 <b>@cheesesvav 콘텐츠 시스템</b>\n\n"
-        "아래 버튼 또는 URL/텍스트/사진을 보내세요.\n\n"
-        "<b>── 글쓰기 ──</b>\n"
+        "버튼을 누르거나 URL / 텍스트 / 사진을 보내세요.\n\n"
+        "<b>── 자주 쓰는 기능 ──</b>\n"
         "/draft — 단일 초안\n"
-        "/pack — 콘텐츠 팩 (메인3+댓글+인용)\n"
+        "/pack — 콘텐츠 팩\n"
         "/thread — 스레드\n"
         "/trends — 트렌드 탐색\n"
         "/hunt — 댓글 기회\n\n"
-        "<b>── 관리 ──</b>\n"
+        "<b>── 확인 / 관리 ──</b>\n"
         "/queue — 게시 큐\n"
-        "/pending — 대기 초안\n"
         "/status — 시스템 상태\n"
+        "/pending — 대기 초안\n"
         "/monitor — 멘션 모니터\n\n"
         "<b>── 분석 ──</b>\n"
         "/digest — 모닝 다이제스트\n"
         "/report — 주간 리포트\n"
-        "/weekly — 주간 운영\n"
         "/biz — 비즈니스 요약\n\n"
         "<b>── 메모 ──</b>\n"
-        "/note — 초안 메모\n"
-        "/hint — 장기 힌트\n"
-        "/perf — 성과 기록\n\n"
+        "/note · /hint · /perf\n\n"
         "<b>── 비즈니스 ──</b>\n"
         "/premium · /brief · /b2b · /cta\n"
         "/newsletter · /lead · /email\n\n"
-        "<i>각 명령어 단독 입력하면 사용법 나옴</i>",
+        "<i>각 명령어만 입력하면 사용법이 나옵니다.</i>",
         parse_mode="HTML",
         reply_markup=MAIN_KEYBOARD,
     )
