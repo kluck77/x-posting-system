@@ -93,3 +93,59 @@ class TestContentPackPromptQuality:
         prompt = _get_system_prompt("ko")
         assert "단순 축약하지 마라" in prompt
         assert "훅형 압축문" in prompt
+
+
+class TestContentPackHouseStyle:
+    """하우스 스타일 골든 룰 + 시리즈 라벨 + 자기 검증 회귀 검증."""
+
+    def test_ko_prompt_has_golden_rules(self):
+        """골든 룰 6개 항목이 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "하우스 스타일 골든 룰" in prompt
+        assert "해석 > 사실" in prompt
+        assert "구체 > 추상" in prompt
+        assert "대화체 > 보고서체" in prompt
+        assert "credibility > virality" in prompt
+        assert "다음에 볼 것" in prompt
+        assert "기사 제목 재진술 금지" in prompt
+
+    def test_ko_prompt_has_series_labels(self):
+        """시리즈 라벨 2개가 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "Korea in One Line:" in prompt
+        assert "한국 밖에서 보면:" in prompt
+
+    def test_ko_prompt_has_self_verification(self):
+        """main_posts 자기 검증 규칙이 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "자기 검증" in prompt
+        assert "기사 제목과 구분이 안 되면" in prompt
+        assert '"그래서?"' in prompt
+
+    def test_ko_prompt_has_why_three_elements(self):
+        """why_it_matters 3요소 필수 규칙이 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "직접 영향받는 대상" in prompt
+        assert "해외 독자가 봐야 하는 이유" in prompt
+        assert "다음에 볼 지표" in prompt
+        assert "3요소 중 하나라도 빠지면 다시 써라" in prompt
+
+    def test_ko_prompt_has_reply_data_rule(self):
+        """reply_drafts에 데이터 필수 규칙이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "데이터 규칙" in prompt
+
+    def test_ko_prompt_has_reply_anti_patterns(self):
+        """reply_drafts에 당위형 금지가 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "당위형" in prompt
+
+    def test_ko_prompt_has_quote_independence_rule(self):
+        """인용 포스트 독립 가치 규칙이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "이 인용만으로 가치를 느껴야" in prompt
+
+    def test_ko_prompt_account_goal(self):
+        """계정 목표가 뉴스 요약이 아닌 이해 기반임이 명시되어 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "뉴스 요약 계정이 아님" in prompt
