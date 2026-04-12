@@ -524,3 +524,59 @@ class TestInputTypeSplit:
         sheet = extract_fact_sheet(text)
         passed, _ = check_density(sheet)
         assert passed is False
+
+
+class TestTopicModePrompt:
+    """탐색형(주제형) 입력 전용 프롬프트 규칙 테스트."""
+
+    def test_topic_mode_axis_split_in_prompt(self):
+        """탐색형 축 분리 규칙(A=어디/B=왜/C=뭘 봐야)이 user_prompt에 삽입되는지 간접 검증."""
+        # 탐색형 프롬프트 블록이 content_pack.py에 존재하는지 확인
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "지금 어디가 움직이는가" in source
+        assert "왜 그런가" in source
+        assert "뭘 봐야 하나" in source
+
+    def test_topic_mode_subregion_rule(self):
+        """탐색형에서 하위 지역/변수 구체화 규칙이 존재하는지."""
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "강남" in source
+        assert "마포·성동" in source or "마포" in source
+        assert "하위로 내려가라" in source
+
+    def test_topic_mode_reply_rules(self):
+        """탐색형 댓글 규칙: 질문형/반응형, 요약 반복 금지."""
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "질문형/반응형" in source
+        assert "요약 반복 금지" in source
+
+    def test_topic_mode_quote_perspective_split(self):
+        """탐색형 인용 규칙: 시장/실수요자/해외독자 관점 분리."""
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "시장 관점" in source
+        assert "실수요자 관점" in source
+        assert "해외독자 관점" in source
+
+    def test_topic_mode_why_concrete(self):
+        """탐색형 why_it_matters: 추상 금지, 구체 파급 경로 필수."""
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "구체 파급 경로" in source
+        assert "추적할 지표" in source
+
+    def test_topic_mode_generalism_banned(self):
+        """탐색형에서 일반론 금지 규칙이 명시되어 있는지."""
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "일반론" in source
+        assert "상위 주제" in source
