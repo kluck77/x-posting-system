@@ -14,7 +14,7 @@ from app.providers.base import BaseResearcher, ResearchResult, CriteriaSignals
 logger = logging.getLogger(__name__)
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 SYSTEM_INSTRUCTION = """You are the research analyst for @cheesesvav — an English-language X account that shares Korean community perspectives with global readers.
 
