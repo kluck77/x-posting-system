@@ -26,13 +26,12 @@ logger = logging.getLogger(__name__)
 RSS_FEEDS: list[dict] = [
     # ── 한국 뉴스 ─────────────────────────────────────────────────────────────
     {"url": "https://www.hankyung.com/feed/economy",              "category": "economy",  "source": "한국경제",        "region": "KR"},
-    {"url": "https://rss.mk.co.kr/rss/30200030/",                 "category": "economy",  "source": "매일경제",        "region": "KR"},
+    {"url": "https://www.mk.co.kr/rss/30000001/",                  "category": "economy",  "source": "매일경제",        "region": "KR"},
     {"url": "https://www.yna.co.kr/rss/politics.xml",             "category": "politics", "source": "연합뉴스",        "region": "KR"},
     {"url": "https://www.yna.co.kr/rss/economy.xml",              "category": "economy",  "source": "연합뉴스",        "region": "KR"},
     {"url": "https://www.coindeskkorea.com/feed/",                "category": "crypto",   "source": "코인데스크코리아", "region": "KR"},
     # ── 미국/글로벌 뉴스 ──────────────────────────────────────────────────────
-    {"url": "https://feeds.reuters.com/reuters/topNews",          "category": "economy",  "source": "Reuters",        "region": "US"},
-    {"url": "https://feeds.apnews.com/rss/apf-topnews",           "category": "politics", "source": "AP News",        "region": "US"},
+    {"url": "https://apnews.com/feed",                             "category": "politics", "source": "AP News",        "region": "US"},
     {"url": "https://feeds.bbci.co.uk/news/business/rss.xml",     "category": "economy",  "source": "BBC Business",   "region": "US"},
     {"url": "https://www.cnbc.com/id/100003114/device/rss/rss.html","category": "economy", "source": "CNBC",           "region": "US"},
     {"url": "https://feeds.marketwatch.com/marketwatch/topstories/","category": "economy", "source": "MarketWatch",    "region": "US"},
