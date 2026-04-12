@@ -357,7 +357,7 @@ async def _translate_to_korean(text: str) -> str | None:
     try:
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-2.0-flash:generateContent?key={settings.gemini_api_key}"
+            f"gemini-2.5-flash:generateContent?key={settings.gemini_api_key}"
         )
         prompt = (
             "Translate the following English X/Twitter post into natural, concise Korean. "
