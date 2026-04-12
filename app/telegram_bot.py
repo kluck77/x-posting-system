@@ -65,6 +65,24 @@ def _clear(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop(PENDING_KEY, None)
 
 
+def _safe_error_msg(e: Exception) -> str:
+    """에러 메시지에서 API 키를 마스킹하여 텔레그램 전송에 안전하게 만든다."""
+    msg = str(e)[:200]
+    for key in (settings.gemini_api_key, getattr(settings, "perplexity_api_key", ""),
+                getattr(settings, "openai_api_key", ""), getattr(settings, "anthropic_api_key", "")):
+        if key:
+            msg = msg.replace(key, "***")
+    return msg
+
+
+async def _safe_remove_markup(query) -> None:
+    """인라인 키보드 제거. 메시지 삭제/만료 시 조용히 무시."""
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        logger.debug("edit_message_reply_markup 실패 (무시)", exc_info=True)
+
+
 def _parse_draft_id(args: list[str], pos: int = 0) -> tuple[int | None, str]:
     """
     args[pos]를 draft_id(int)로 파싱한다.
@@ -430,7 +448,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
       regenerate:{draft_id}  — 초안 재생성
     """
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception:
+        logger.debug("query.answer() 실패 (무시)", exc_info=True)
 
     callback_data = query.data
     logger.info(f"콜백 수신: {callback_data}")
@@ -468,12 +489,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- 기존 승인/거절 콜백 ---
     parsed = parse_callback_data(callback_data)
     if not parsed:
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         await query.message.reply_text("⚠️ 잘못된 요청입니다.")
         return
 
     action, draft_id = parsed
-    await query.edit_message_reply_markup(reply_markup=None)
+    await _safe_remove_markup(query)
 
     orchestrator = Orchestrator()
     try:
@@ -506,7 +527,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"콜백 처리 오류: {e}", exc_info=True)
-        await query.message.reply_text(f"❌ 오류: {str(e)[:200]}")
+        await query.message.reply_text(f"❌ 오류: {_safe_error_msg(e)}")
     finally:
         orchestrator.close()
 
@@ -555,19 +576,19 @@ async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):
     data = query.data  # "queue_approve:2026-04-05T12:34:56.789012+00:00"
     parts = data.split(":", 1)
     if len(parts) != 2 or parts[0] != "queue_approve":
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         await query.message.reply_text("⚠️ 잘못된 큐 요청입니다.")
         return
 
     post_key = parts[1]
-    await query.edit_message_reply_markup(reply_markup=None)
+    await _safe_remove_markup(query)
 
     queue = get_post_queue()
     try:
         post = await queue.approve_queued_post(post_key)
     except Exception as e:
         logger.error(f"큐 게시 실패: {e}", exc_info=True)
-        await query.message.reply_text(f"❌ 게시 실패: {str(e)[:200]}")
+        await query.message.reply_text(f"❌ 게시 실패: {_safe_error_msg(e)}")
         return
 
     if post:
@@ -597,11 +618,11 @@ async def _handle_reply_callback(query, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     parts = data.split(":", 1)
     if len(parts) != 2:
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         return
 
     action, reply_id = parts[0], parts[1]
-    await query.edit_message_reply_markup(reply_markup=None)
+    await _safe_remove_markup(query)
 
     if action == "reply_skip":
         await query.message.reply_text("⏭ 건너뜀.")
@@ -640,11 +661,11 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
     data = query.data  # "news_draft:abc123" or "news_skip:abc123"
     parts = data.split(":", 1)
     if len(parts) != 2:
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         return
 
     action, article_hash = parts[0], parts[1]
-    await query.edit_message_reply_markup(reply_markup=None)
+    await _safe_remove_markup(query)
 
     if action == "news_skip":
         remove_pending_article(article_hash)
@@ -756,7 +777,7 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"뉴스 초안 생성 오류: {e}", exc_info=True)
-        await query.message.reply_text(f"❌ 초안 생성 실패: {str(e)[:200]}")
+        await query.message.reply_text(f"❌ 초안 생성 실패: {_safe_error_msg(e)}")
 
 
 async def _handle_type_callback(query, context: ContextTypes.DEFAULT_TYPE):
@@ -764,13 +785,13 @@ async def _handle_type_callback(query, context: ContextTypes.DEFAULT_TYPE):
     data = query.data  # type_tweet:123 / type_reply:123 / type_cancel:123
     parts = data.split(":", 1)
     if len(parts) != 2:
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         return
 
     action, msg_id = parts[0], parts[1]
 
     # 버튼 제거
-    await query.edit_message_reply_markup(reply_markup=None)
+    await _safe_remove_markup(query)
 
     if action == "type_cancel":
         _clear(context)
@@ -976,7 +997,7 @@ async def trends_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text(f"⚠️ {result.get('error', 'Unknown')[:200]}")
     except Exception as e:
-        await update.message.reply_text(f"❌ 오류: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 오류: {_safe_error_msg(e)}")
     finally:
         orchestrator.close()
 
@@ -1081,7 +1102,7 @@ async def _generate_and_send_thread(
 
     except Exception as e:
         logger.error(f"스레드 생성 오류: {e}")
-        await msg.edit_text(f"❌ 스레드 생성 실패: {str(e)[:200]}")
+        await msg.edit_text(f"❌ 스레드 생성 실패: {_safe_error_msg(e)}")
 
 
 # =============================================================================
@@ -1189,7 +1210,7 @@ async def _run_content_pack(
 
     except Exception as e:
         logger.error(f"콘텐츠 팩 생성 오류: {e}", exc_info=True)
-        await msg.edit_text(f"❌ 콘텐츠 팩 생성 실패: {str(e)[:200]}")
+        await msg.edit_text(f"❌ 콘텐츠 팩 생성 실패: {_safe_error_msg(e)}")
 
 
 async def _handle_pack_select_callback(
@@ -1201,16 +1222,16 @@ async def _handle_pack_select_callback(
     """
     parts = query.data.split(":", 1)
     if len(parts) != 2:
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         return
 
     try:
         pack_index = int(parts[1])
     except ValueError:
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _safe_remove_markup(query)
         return
 
-    await query.edit_message_reply_markup(reply_markup=None)
+    await _safe_remove_markup(query)
 
     pack = context.user_data.get(CONTENT_PACK_KEY)
     if not pack:
@@ -1277,7 +1298,7 @@ async def _handle_pack_select_callback(
     except Exception as e:
         logger.error(f"팩 선택 → 파이프라인 오류: {e}", exc_info=True)
         await query.message.reply_text(
-            f"⚠️ 승인 카드 생성 중 오류: {str(e)[:200]}\n"
+            f"⚠️ 승인 카드 생성 중 오류: {_safe_error_msg(e)}\n"
             "텍스트를 직접 복사해서 X에 게시할 수 있습니다.",
         )
 
@@ -1606,7 +1627,7 @@ async def hunt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"/hunt 오류: {e}", exc_info=True)
-        await msg.edit_text(f"❌ 탐색 실패: {str(e)[:200]}")
+        await msg.edit_text(f"❌ 탐색 실패: {_safe_error_msg(e)}")
 
 
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1657,7 +1678,7 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"/report 오류: {e}", exc_info=True)
-        await msg.edit_text(f"❌ 리포트 생성 실패: {str(e)[:200]}")
+        await msg.edit_text(f"❌ 리포트 생성 실패: {_safe_error_msg(e)}")
 
 
 async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1671,7 +1692,7 @@ async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("✅ 다이제스트를 생성하여 전송했습니다.")
     except Exception as e:
         logger.error(f"/digest 오류: {e}", exc_info=True)
-        await msg.edit_text(f"❌ 다이제스트 생성 실패: {str(e)[:200]}")
+        await msg.edit_text(f"❌ 다이제스트 생성 실패: {_safe_error_msg(e)}")
 
 
 async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1706,7 +1727,7 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         except Exception as e:
             logger.error(f"/perf 목록 조회 오류: {e}", exc_info=True)
-            await update.message.reply_text(f"❌ 목록 조회 실패: {str(e)[:200]}")
+            await update.message.reply_text(f"❌ 목록 조회 실패: {_safe_error_msg(e)}")
         finally:
             db.close()
         return
@@ -1742,7 +1763,7 @@ async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"[/perf] draft_id={draft_id} 성과 메모: {note_text[:60]}")
     except Exception as e:
         logger.error(f"/perf 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 성과 메모 저장 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 성과 메모 저장 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -1932,7 +1953,7 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/premium 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 프리미엄 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 프리미엄 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -2156,7 +2177,7 @@ async def brief_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/brief 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Brief 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ Brief 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -2530,7 +2551,7 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
     except Exception as e:
         logger.error(f"/cta 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ CTA 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ CTA 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -2697,7 +2718,7 @@ async def lead_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/lead 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 리드 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 리드 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -2868,7 +2889,7 @@ async def email_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/email 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 이메일 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 이메일 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -2940,7 +2961,7 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/weekly 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 주간 리포트 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 주간 리포트 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -3118,7 +3139,7 @@ async def newsletter_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
     except Exception as e:
         logger.error(f"/newsletter 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 뉴스레터 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 뉴스레터 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -3444,7 +3465,7 @@ async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/b2b 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ B2B 명령 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ B2B 명령 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -3518,7 +3539,7 @@ async def biz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"/biz 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 비즈니스 조회 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 비즈니스 조회 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -3561,7 +3582,7 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         db.rollback()
         logger.error(f"/note 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 메모 저장 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 메모 저장 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -3606,7 +3627,7 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"[/hint clear] draft_id={draft_id} had_hints={had_hints}")
         except Exception as e:
             logger.error(f"/hint clear 오류: {e}", exc_info=True)
-            await update.message.reply_text(f"❌ 힌트 제거 실패: {str(e)[:200]}")
+            await update.message.reply_text(f"❌ 힌트 제거 실패: {_safe_error_msg(e)}")
         finally:
             db.close()
         return
@@ -3649,7 +3670,7 @@ async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         db.rollback()
         logger.error(f"/hint 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 힌트 저장 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 힌트 저장 실패: {_safe_error_msg(e)}")
     finally:
         db.close()
 
@@ -3662,7 +3683,7 @@ async def hints_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         items = DraftService(db).get_hint_lines_with_draft_id(limit=10)
     except Exception as e:
         logger.error(f"/hints 조회 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 힌트 조회 실패: {str(e)[:200]}")
+        await update.message.reply_text(f"❌ 힌트 조회 실패: {_safe_error_msg(e)}")
         return
     finally:
         db.close()
