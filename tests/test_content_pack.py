@@ -92,14 +92,14 @@ class TestContentPackPromptQuality:
         """한국어 프롬프트에 짧은 버전 규칙이 포함되어 있다."""
         prompt = _get_system_prompt("ko")
         assert "단순 축약하지 마라" in prompt
-        assert "훅형 압축문" in prompt
+        assert "독립 훅" in prompt
 
 
 class TestContentPackHouseStyle:
     """하우스 스타일 골든 룰 + 시리즈 라벨 + 자기 검증 회귀 검증."""
 
     def test_ko_prompt_has_golden_rules(self):
-        """골든 룰 6개 항목이 프롬프트에 존재한다."""
+        """골든 룰 7개 항목이 프롬프트에 존재한다."""
         prompt = _get_system_prompt("ko")
         assert "하우스 스타일 골든 룰" in prompt
         assert "해석 > 사실" in prompt
@@ -108,12 +108,21 @@ class TestContentPackHouseStyle:
         assert "credibility > virality" in prompt
         assert "다음에 볼 것" in prompt
         assert "기사 제목 재진술 금지" in prompt
+        assert "낡은 수치 단정 금지" in prompt
 
     def test_ko_prompt_has_series_labels(self):
-        """시리즈 라벨 2개가 프롬프트에 존재한다."""
+        """시리즈 라벨이 한국어로 존재한다."""
         prompt = _get_system_prompt("ko")
-        assert "Korea in One Line:" in prompt
+        assert "한줄:" in prompt
         assert "한국 밖에서 보면:" in prompt
+
+    def test_ko_prompt_no_english_series_label(self):
+        """영어 시리즈 라벨이 좋은 예시에 없다."""
+        prompt = _get_system_prompt("ko")
+        # "Korea in One Line:" 은 나쁜 예시에만 존재해야 함
+        good_section = prompt.split("✅ 좋은 예:")[1].split("❌")[0] if "✅ 좋은 예:" in prompt else ""
+        # short_version 좋은 예시 영역에 영어 라벨 없어야 함
+        assert "Korea in One Line:" not in good_section.split("═══")[0]
 
     def test_ko_prompt_has_self_verification(self):
         """main_posts 자기 검증 규칙이 프롬프트에 존재한다."""
@@ -149,3 +158,24 @@ class TestContentPackHouseStyle:
         """계정 목표가 뉴스 요약이 아닌 이해 기반임이 명시되어 있다."""
         prompt = _get_system_prompt("ko")
         assert "뉴스 요약 계정이 아님" in prompt
+
+    def test_ko_prompt_main_posts_axis_rule(self):
+        """main_posts 3개가 서로 다른 핵심축을 가져야 한다는 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "서로 다른 핵심축" in prompt
+
+    def test_ko_prompt_reply_length_rule(self):
+        """reply_drafts가 1~2문장 답글형을 강제한다."""
+        prompt = _get_system_prompt("ko")
+        assert "1~2문장" in prompt
+        assert "칼럼 축약이 아니다" in prompt
+
+    def test_ko_prompt_quote_overlap_check(self):
+        """인용 포스트에 겹침 체크 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "겹침 체크" in prompt
+
+    def test_ko_prompt_no_stale_data_rule(self):
+        """낡은 수치 단정 금지 규칙이 골든 룰에 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "현재 시점과 어긋나는 수치는 신뢰를 깎는다" in prompt
