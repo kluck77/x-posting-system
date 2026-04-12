@@ -324,6 +324,8 @@ async def run_monitor_cycle() -> int:
         _cleanup_old_clusters()
 
         alerts_sent = 0
+        _db_dup_count = 0
+        _pipeline_count = 0
         for article in new_articles:
             # 오버나이트 버퍼 수집 (수면 시간 여부 무관하게)
             if sleeping:
@@ -349,6 +351,21 @@ async def run_monitor_cycle() -> int:
                     url=article.url,
                 )
                 if _br.classification in ("BREAKING_NOW", "CANDIDATE"):
+                    # URL 사전 중복 체크 (DB) — Orchestrator 생성 전에 걸러냄
+                    from app.db import SessionLocal
+                    from app.models.content import SourceItem
+                    _pre_db = SessionLocal()
+                    try:
+                        _url_exists = _pre_db.query(SourceItem.id).filter(
+                            SourceItem.url == article.url.strip()
+                        ).first() is not None
+                    finally:
+                        _pre_db.close()
+                    if _url_exists:
+                        _db_dup_count += 1
+                        continue
+
+                    _pipeline_count += 1
                     from app.models.content import SourceItemCreate
                     from app.orchestrator import Orchestrator
                     _payload = SourceItemCreate(
@@ -382,6 +399,14 @@ async def run_monitor_cycle() -> int:
             logger.info(f"[Monitor] 속보 전송: {alerts_sent}건")
         elif sleeping:
             logger.debug(f"[Monitor] 수면 모드 — 버퍼 누적: {len(overnight_buffer)}건")
+
+        # 사이클 요약 로그
+        if _db_dup_count > 0 or _pipeline_count > 0:
+            logger.info(
+                f"[Monitor] 사이클: 수집={len(all_articles)} "
+                f"신규={len(new_articles)} DB중복={_db_dup_count} "
+                f"파이프라인={_pipeline_count}"
+            )
 
         return len(new_articles)
 
