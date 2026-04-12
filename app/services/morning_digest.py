@@ -205,21 +205,22 @@ async def _generate_digest_tweets(top5: list[dict]) -> list[str]:
         )
 
     system_prompt = (
-        "You are the draft writer for @cheesesvav — 'Beyond headlines: how Korea really works, feels, and changes.'\n"
-        "Task: Convert overnight news items into ready-to-post X (Twitter) tweet drafts.\n\n"
-        "For each news item, write ONE tweet (max 270 chars) following this formula:\n"
-        "- Start with a number, contradiction, or timing signal (NOT 'South Korea' or 'Korea's')\n"
-        "- One specific fact or number\n"
-        "- One-line take or implication\n"
-        "- End with a short CTA variant\n"
-        "Each tweet must stand alone. Write in English. Be opinionated. No hedging."
+        "당신은 X 계정 @cheesesvav의 초안 작성자입니다.\n"
+        "계정 정체성: '헤드라인 너머: 한국이 실제로 어떻게 돌아가고, 느끼고, 변하는지.'\n\n"
+        "작업: 오버나이트 뉴스를 바로 게시 가능한 X 트윗 초안으로 변환하라.\n\n"
+        "각 뉴스마다 트윗 1개(최대 270자)를 아래 공식으로 작성:\n"
+        "- 숫자, 모순, 타이밍 신호로 시작 ('한국은' 또는 '한국의'로 시작 금지)\n"
+        "- 구체적 팩트 또는 숫자 1개\n"
+        "- 해석 또는 함의 한 줄\n"
+        "- 짧은 CTA로 마무리\n"
+        "각 트윗은 독립적이어야 한다. 한국어로 작성. 해석 중심. 애매한 표현 금지."
     )
 
     user_prompt = (
-        f"Convert these {len(top5)} overnight news items into individual tweet drafts.\n\n"
+        f"아래 {len(top5)}개 오버나이트 뉴스를 각각 트윗 초안으로 변환하라.\n\n"
         f"{articles_text}\n"
-        f"Return a JSON array of tweet strings:\n"
-        f'["tweet 1 text (max 270 chars)", "tweet 2 text", ...]'
+        f"트윗 문자열의 JSON 배열로 반환:\n"
+        f'["트윗 1 (최대 270자)", "트윗 2", ...]'
     )
 
     result = await _call_ai(system_prompt, user_prompt)
@@ -284,7 +285,7 @@ async def _send_digest(tweets: list[str], top5: list[dict]) -> None:
     # 헤더 메시지
     header = (
         f"🌅 <b>오버나이트 TOP {len(top5)} — {now_kst} KST</b>\n"
-        f"<i>Beyond headlines: how Korea really works, feels, and changes.</i>\n"
+        f"<i>헤드라인 너머: 한국이 실제로 어떻게 돌아가고, 느끼고, 변하는지.</i>\n"
         f"{'─' * 30}\n"
         f"아래 각 트윗 초안을 복사해서 X에 바로 게시하세요 👇"
     )
