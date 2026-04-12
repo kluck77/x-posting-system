@@ -463,7 +463,7 @@ async def _run_pipeline(
         await update.message.reply_text(
             f"✅ <b>초안 생성 완료!</b>\n"
             f"모드: {mode_label}\n"
-            f"Draft ID: {draft.id}\n\n"
+            f"초안 ID: {draft.id}\n\n"
             f"텔레그램으로 승인 카드가 전송됐어요.",
             parse_mode="HTML",
         )
@@ -556,7 +556,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"<code>{post_text}</code>"
                 )
             else:
-                response_text = f"✅ {result.get('message', 'Done!')}"
+                response_text = f"✅ {result.get('message', '완료!')}"
         else:
             response_text = f"⚠️ {result.get('error', '오류 발생')}"
 
@@ -774,7 +774,7 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
         score_line = f"📊 품질: {score}/100"
 
         char_count = len(draft_text)
-        char_line = f"Characters: {char_count}"
+        char_line = f"글자 수: {char_count}"
         if char_count > 280:
             char_line += " ⚠️ X 한도 초과 — 편집 필요"
 
@@ -962,7 +962,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     approval_label = "수동 승인 ✅" if not settings.enable_auto_post_low_risk else "자동 게시 ⚠️"
 
     text = (
-        "📊 <b>System Status</b>\n\n"
+        "📊 <b>시스템 상태</b>\n\n"
         f"<b>AI 프로바이더</b>\n{ai_lines}\n\n"
         f"멘션 모니터: {monitor_label}\n"
         f"게시 큐: {queue_label}\n"
@@ -991,7 +991,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not drafts:
             await update.message.reply_text("📭 대기 중인 초안이 없습니다.")
             return
-        text = "📋 <b>Pending Drafts</b>\n\n"
+        text = "📋 <b>대기 초안</b>\n\n"
         for d in drafts[:10]:
             reply_note = f" 💬→{d.reply_to_tweet_id}" if getattr(d, "reply_to_tweet_id", None) else ""
             text += (
@@ -1012,7 +1012,7 @@ async def trends_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = await orchestrator.get_trending_topics(topic)
         if result.get("success") and result.get("topics"):
-            text = f"📈 <b>Trending ({topic})</b>\n\n"
+            text = f"📈 <b>현재 트렌드 ({topic})</b>\n\n"
             for i, t in enumerate(result["topics"][:10], 1):
                 text += f"{i}. {t}\n"
             if result.get("notes"):
@@ -1021,7 +1021,7 @@ async def trends_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif result.get("success"):
             await update.message.reply_text("📭 현재 감지된 트렌드가 없습니다.")
         else:
-            await update.message.reply_text(f"⚠️ {result.get('error', 'Unknown')[:200]}")
+            await update.message.reply_text(f"⚠️ {result.get('error', '알 수 없는 오류')[:200]}")
     except Exception as e:
         await update.message.reply_text(f"❌ 오류: {_safe_error_msg(e)}")
     finally:
@@ -1086,14 +1086,14 @@ async def _generate_and_send_thread(
             from app.providers.openai_provider import ThreadResult
             result = ThreadResult(
                 tweets=[
-                    f"[MOCK] Hook: {title[:80]}",
-                    "[MOCK] The key fact with a specific number.",
-                    "[MOCK] Your take — one opinion, no hedging.",
-                    "[MOCK] In Korean forums, the reaction is...",
-                    "[MOCK] Global impact + Follow for more Korea signal.",
+                    f"[Mock] 훅: {title[:80]}",
+                    "[Mock] 핵심 팩트 — 구체적 숫자 포함.",
+                    "[Mock] 해석 — 하나의 의견, 애매한 표현 없이.",
+                    "[Mock] 한국 커뮤니티 반응은...",
+                    "[Mock] 글로벌 영향 + 팔로우 유도.",
                 ],
                 content_pillar="economy",
-                optimal_post_time="09:00 EST",
+                optimal_post_time="09:00 KST",
             )
 
         # 스레드 포맷 전송
@@ -1951,12 +1951,12 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"──────────────\n"
                     f"ID: {item['draft_id']} | 💰{item['monetization_score'] or 0} | "
                     f"[{item['premium_status']}]\n"
-                    f"Hook: {item['hook'][:60]}…\n"
-                    f"Category: {item['category']} | Risk: {item['risk_level']}\n"
-                    f"Reason: {item['premium_reason'] or '—'}\n"
-                    f"Note: {item['premium_note'] or '—'}\n"
-                    f"Reader: {item['target_reader_type'] or '—'}\n"
-                    f"Source: {item['source_title'] or '—'}"
+                    f"훅: {item['hook'][:60]}…\n"
+                    f"분류: {item['category']} | 위험도: {item['risk_level']}\n"
+                    f"사유: {item['premium_reason'] or '—'}\n"
+                    f"메모: {item['premium_note'] or '—'}\n"
+                    f"독자: {item['target_reader_type'] or '—'}\n"
+                    f"출처: {item['source_title'] or '—'}"
                 )
             # 텔레그램 메시지 길이 제한 (4096자)
             text = "\n".join(lines)
@@ -2177,11 +2177,11 @@ async def brief_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"──────────────\n"
                     f"ID: {item['draft_id']} | 💰{item['monetization_score'] or 0} | "
                     f"[{item['premium_status']}]\n"
-                    f"Hook: {item['hook'][:60]}…\n"
-                    f"Type: {item['brief_type'] or '—'} | "
-                    f"Tier: {tier_icon}{tier} | "
-                    f"Reader: {item['target_reader_type'] or '—'}\n"
-                    f"Note: {item['brief_summary_note'] or '—'}"
+                    f"훅: {item['hook'][:60]}…\n"
+                    f"유형: {item['brief_type'] or '—'} | "
+                    f"티어: {tier_icon}{tier} | "
+                    f"독자: {item['target_reader_type'] or '—'}\n"
+                    f"메모: {item['brief_summary_note'] or '—'}"
                 )
             text = "\n".join(lines)
             if len(text) > 4000:
@@ -2399,7 +2399,7 @@ async def cta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"──────────────\n"
                         f"#{item['id']} [{item['cta_type']}] {status}\n"
                         f"Copy: {item['copy_text'][:80]}…\n"
-                        f"Note: {item['note'] or '—'}"
+                        f"메모: {item['note'] or '—'}"
                     )
                 text = "\n".join(lines)
                 if len(text) > 4000:
@@ -2721,10 +2721,10 @@ async def lead_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"──────────────\n"
                     f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
                     f"💰{item['monetization_score'] or 0}\n"
-                    f"Hook: {item['hook'][:60]}…\n"
+                    f"훅: {item['hook'][:60]}…\n"
                     f"Asset: {item['lead_asset_name'] or '—'} "
                     f"({item['lead_asset_type'] or '—'})\n"
-                    f"Note: {item['lead_asset_note'] or '—'}"
+                    f"메모: {item['lead_asset_note'] or '—'}"
                 )
             text = "\n".join(lines)
             if len(text) > 4000:
@@ -2892,7 +2892,7 @@ async def email_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"──────────────\n"
                     f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
                     f"💰{item['monetization_score'] or 0}\n"
-                    f"Hook: {item['hook'][:60]}…\n"
+                    f"훅: {item['hook'][:60]}…\n"
                     f"Asset: {item['lead_asset_name'] or '—'} ({item['lead_asset_type'] or '—'})\n"
                     f"Bucket: {item['email_bucket'] or '—'} | Goal: {item['email_goal'] or '—'}"
                 )
@@ -3096,10 +3096,10 @@ async def newsletter_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         f"──────────────\n"
                         f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
                         f"💰{item['monetization_score'] or 0}\n"
-                        f"Hook: {item['hook'][:60]}…\n"
+                        f"훅: {item['hook'][:60]}…\n"
                         f"Asset: {item['lead_asset_name'] or '—'} "
                         f"({item['lead_asset_type'] or '—'})\n"
-                        f"Note: {item['lead_asset_note'] or '—'}\n"
+                        f"메모: {item['lead_asset_note'] or '—'}\n"
                         f"Bucket: {item['email_bucket'] or '—'} | "
                         f"Goal: {item['email_goal'] or '—'}"
                     )
@@ -3140,7 +3140,7 @@ async def newsletter_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     f"──────────────\n"
                     f"ID: {item['draft_id']} | CTA: {item['cta_type'] or '—'} | "
                     f"💰{item['monetization_score'] or 0}\n"
-                    f"Hook: {item['hook'][:60]}…\n"
+                    f"훅: {item['hook'][:60]}…\n"
                     f"Bucket: {item['email_bucket'] or '—'} | "
                     f"Goal: {item['email_goal'] or '—'}\n"
                     f"Asset: {item['lead_asset_name'] or '—'}"
@@ -3461,11 +3461,11 @@ async def b2b_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"──────────────\n"
                     f"ID: {item['draft_id']} | 💰{item['monetization_score'] or 0} | "
                     f"[{item['b2b_status']}]\n"
-                    f"Hook: {item['hook'][:60]}…\n"
-                    f"Category: {item['category']} | Risk: {item['risk_level']}\n"
+                    f"훅: {item['hook'][:60]}…\n"
+                    f"분류: {item['category']} | 위험도: {item['risk_level']}\n"
                     f"Audience: {item['b2b_target_audience'] or '—'}\n"
                     f"Use Case: {item['b2b_use_case'] or '—'}\n"
-                    f"Note: {item['b2b_note'] or '—'}"
+                    f"메모: {item['b2b_note'] or '—'}"
                     f"{premium}"
                 )
             text = "\n".join(lines)
