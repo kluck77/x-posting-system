@@ -204,7 +204,7 @@ class TestContentPackHouseStyle:
         assert "핵심축 3개 선택" in prompt
 
     def test_ko_prompt_has_qa_checklist(self):
-        """최종 QA 체크리스트 10항목이 프롬프트에 존재한다."""
+        """최종 QA 체크리스트 12항목이 프롬프트에 존재한다."""
         prompt = _get_system_prompt("ko")
         assert "최종 QA 체크리스트" in prompt
         assert "제목 재진술 아닌가" in prompt
@@ -215,6 +215,8 @@ class TestContentPackHouseStyle:
         assert "추상어 과다" in prompt
         assert "why_it_matters 3요소" in prompt
         assert "시리즈 라벨 과다" in prompt
+        assert "첫 2문장 핵심축" in prompt
+        assert "포스트당 축 단일" in prompt
         assert "3개 이상 실패하면 전체 재작성" in prompt
 
     def test_ko_prompt_has_core_values(self):
@@ -235,6 +237,27 @@ class TestContentPackHouseStyle:
         """데이터 게이트가 크립토·정책도 커버한다."""
         prompt = _get_system_prompt("ko")
         assert "정책·크립토" in prompt
+
+    def test_ko_prompt_has_axis_lead_rule(self):
+        """첫 2문장 핵심축 선행 규칙이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "첫 2문장 안에" in prompt
+        assert "핵심축" in prompt
+        assert "부차 디테일" in prompt
+
+    def test_ko_prompt_has_single_axis_rule(self):
+        """포스트당 핵심축 단일화 규칙이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "한 포스트 = 핵심축 1개" in prompt
+        assert "축 혼합 금지" in prompt
+
+    def test_ko_prompt_has_market_variable_priority(self):
+        """지정학·정책 글에서 시장 변수 우선 규칙이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "시장 참가자가 먼저 볼 변수" in prompt
+        assert "유가" in prompt
+        assert "해운·보험" in prompt
+        assert "수입물가" in prompt
 
 
 class TestFactSheetExtraction:
