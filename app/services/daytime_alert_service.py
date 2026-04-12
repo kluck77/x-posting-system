@@ -127,10 +127,12 @@ def build_daytime_alert_text(
     t = title.strip() or "-"
     title_clipped = t if len(t) <= _TITLE_MAX else t[: _TITLE_MAX - 1] + "\u2026"
 
-    # 핵심 요지 (본문 선두 2문장)
+    # 핵심 요지 (본문 선두 2문장, UI 잡문 제거 후)
     summary = title_clipped
     if body and body.strip():
-        sents = _SENTENCE_SPLIT_RE.split(body.strip())
+        from app.services.text_cleaner import clean_article_text
+        _clean_body = clean_article_text(body)
+        sents = _SENTENCE_SPLIT_RE.split(_clean_body) if _clean_body else []
         picked = " ".join(s.strip() for s in sents[:2] if s.strip())
         if picked:
             summary = picked if len(picked) <= _SUMMARY_MAX else picked[: _SUMMARY_MAX - 1] + "\u2026"

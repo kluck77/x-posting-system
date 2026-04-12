@@ -148,14 +148,21 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         logger.debug("[Card] 5-criteria 평가 실패", exc_info=True)
 
+    # 내부 라우팅 문구 새니타이즈 (DB 기존 레코드 방어)
+    from app.services.text_cleaner import sanitize_internal_tags, sanitize_reasoning
+    _hook, _body = sanitize_internal_tags(draft.hook or "", draft.body or "")
+
     # 텔레그램 MarkdownV2에서 특수문자 이스케이프
     # 간단하게 HTML 모드를 사용합니다
     card = (
         f"📨 <b>새 초안 검토 요청</b>\n"
         f"{'─' * 30}\n\n"
-        f"🎯 <b>훅:</b>\n{draft.hook}\n\n"
-        f"📝 <b>본문:</b>\n{draft.body}\n\n"
+        f"🎯 <b>훅:</b>\n{_hook}\n\n"
     )
+    if _body:
+        card += f"📝 <b>본문:</b>\n{_body}\n\n"
+    else:
+        card += "📝 <b>본문:</b>\n⚠️ 본문 없음 — 재생성 필요\n\n"
 
     if draft.thread_continuation:
         card += f"🧵 <b>스레드:</b>\n{draft.thread_continuation}\n\n"
@@ -168,11 +175,13 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     if source_url:
         card += f"🔗 <b>출처:</b> {source_url}\n"
 
-    if draft.risk_reasoning:
-        card += f"📊 <b>위험 판단 근거:</b> {draft.risk_reasoning}\n"
+    _risk_reason = sanitize_reasoning(draft.risk_reasoning or "")
+    if _risk_reason:
+        card += f"📊 <b>위험 판단 근거:</b> {_risk_reason}\n"
 
-    if draft.ai_rationale:
-        card += f"🤖 <b>AI 판단 근거:</b> {draft.ai_rationale}\n"
+    _ai_rationale = sanitize_reasoning(draft.ai_rationale or "")
+    if _ai_rationale:
+        card += f"🤖 <b>AI 판단 근거:</b> {_ai_rationale}\n"
 
     # topic tags (Layer 2, advisory)
     try:

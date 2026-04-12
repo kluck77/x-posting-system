@@ -368,9 +368,11 @@ async def run_monitor_cycle() -> int:
                     _pipeline_count += 1
                     from app.models.content import SourceItemCreate
                     from app.orchestrator import Orchestrator
+                    from app.services.text_cleaner import clean_article_text
+                    _raw_text = article.summary or article.title
                     _payload = SourceItemCreate(
                         title=article.title,
-                        source_text=article.summary or article.title,
+                        source_text=clean_article_text(_raw_text),
                         url=article.url,
                         source_type="naver_auto",
                         language="ko",
