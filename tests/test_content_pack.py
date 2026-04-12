@@ -201,7 +201,7 @@ class TestContentPackHouseStyle:
         assert "핵심축 3개 선택" in prompt
 
     def test_ko_prompt_has_qa_checklist(self):
-        """최종 QA 체크리스트가 프롬프트에 존재한다."""
+        """최종 QA 체크리스트 10항목이 프롬프트에 존재한다."""
         prompt = _get_system_prompt("ko")
         assert "최종 QA 체크리스트" in prompt
         assert "제목 재진술 아닌가" in prompt
@@ -210,4 +210,25 @@ class TestContentPackHouseStyle:
         assert "댓글 답글형" in prompt
         assert "인용 독립" in prompt
         assert "추상어 과다" in prompt
+        assert "why_it_matters 3요소" in prompt
+        assert "시리즈 라벨 과다" in prompt
         assert "3개 이상 실패하면 전체 재작성" in prompt
+
+    def test_ko_prompt_has_core_values(self):
+        """계정 핵심 가치 3개가 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "혼란 속의 명료함" in prompt
+        assert "안티 하이프 현실주의" in prompt
+        assert "조기 신호 감각" in prompt
+
+    def test_ko_prompt_has_universal_axis_frame(self):
+        """범용 축 프레임이 STEP 2에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "구조/원인 축" in prompt
+        assert "신호/지표 축" in prompt
+        assert "글로벌 맥락/투자 의미 축" in prompt
+
+    def test_ko_prompt_data_gate_includes_crypto_policy(self):
+        """데이터 게이트가 크립토·정책도 커버한다."""
+        prompt = _get_system_prompt("ko")
+        assert "정책·크립토" in prompt
