@@ -177,7 +177,7 @@ class DraftService:
         existing = (
             self.db.query(Draft)
             .filter(
-                Draft.body == text.strip(),
+                Draft.body == (text or "").strip(),
                 Draft.approval_status.in_([
                     ApprovalStatus.PENDING,
                     ApprovalStatus.APPROVED,

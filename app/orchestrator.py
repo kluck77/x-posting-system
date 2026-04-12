@@ -4,18 +4,21 @@
 전체 워크플로를 조율합니다:
 
 1. 소스 입력 → DB 저장
-2. Researcher: 리서치 (v1: mock)
-3. DraftWriter: 초안 생성 (ChatGPT / Claude / mock)
-4. Reviewer: 리스크 판단 & 최종 다듬기 (Claude / mock)
-5. 분류 & 위험도 확정
-6. 텔레그램 승인 카드 전송
-7. 승인 → X 게시
-8. 결과 DB 저장 & 텔레그램 확인
+2. Researcher: 리서치 (Gemini / Mock)
+3. DraftWriter: 초안 생성 (ChatGPT / Claude / Mock)
+4. FactChecker: 팩트체크 (Perplexity / Mock)
+5. Reviewer: 리스크 판단 & 최종 다듬기 (Claude / Mock)
+6. 분류 & 위험도 확정
+7. 텔레그램 승인 카드 전송
+8. 승인 → X 게시
+9. 결과 DB 저장 & 텔레그램 확인
 
-모든 게시는 사람의 승인이 필요합니다 (v1 기본값).
+별도: TrendHunter (Grok / Mock) — /trends 명령으로 트렌드 탐색
+모든 게시는 사람의 승인이 필요합니다.
 """
 
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
@@ -25,14 +28,89 @@ from app.models.content import (
 )
 from app.services.source_service import SourceService
 from app.services.draft_service import DraftService
-from app.services.classifier import classify_category, classify_risk
+from app.services.classifier import (
+    classify_category, classify_risk,
+    classify_community_risk, build_community_warning,
+)
+from app.services.prediction_service import predict_publish_time
 from app.services.telegram_service import send_approval_card, send_publish_confirmation
 from app.services.x_publisher import XPublisher
 from app.services.rate_limiter import RateLimiter
+from app.services.quality_scorer import (
+    score_draft, score_5criteria, format_5criteria_report,
+    should_regenerate, REGEN_THRESHOLD,
+)
 from app.providers.ai_provider import AITeam, create_ai_team
-from app.providers.base import DraftResult, ResearchResult
+from app.providers.base import DraftResult, ResearchResult, FactCheckResult, TrendResult
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Layer 2 헬퍼 — criteria 신호 → 프롬프트 컨텍스트 빌더
+# =============================================================================
+
+def _build_criteria_context(
+    research: ResearchResult | None = None,
+    factcheck: FactCheckResult | None = None,
+    trends: TrendResult | None = None,
+) -> str:
+    """
+    가용한 5-criteria 신호를 프롬프트용 텍스트 블록으로 변환합니다.
+
+    - 비어있는 신호는 생략 (empty dict / empty str / None)
+    - 호출 실패 시 "" 반환 (Layer 1 보호)
+    - interpretation_gaps는 orchestrator Step 3에서 이미 enriched_source에 포함됨 →
+      여기서는 fact_labels(고가치 팩트)와 factcheck 신호만 추가
+
+    반환값: "[UPSTREAM CRITERIA SIGNALS]\\n..." 또는 ""
+    """
+    lines = []
+
+    # Grok TrendHunter 신호 (main pipeline에서는 보통 None — /trends 명령 전용)
+    if trends and trends.criteria_signals.any_populated():
+        cs = trends.criteria_signals
+        if cs.marketability:
+            score = cs.marketability.get("score")
+            note = (cs.marketability.get("note") or "").strip()
+            score_str = f"{score:.1f}/10" if score is not None else "—"
+            lines.append(
+                f"- Trend marketability: {score_str}" + (f" ({note})" if note else "")
+            )
+        if cs.follower_quality:
+            score = cs.follower_quality.get("score")
+            note = (cs.follower_quality.get("note") or "").strip()
+            score_str = f"{score:.1f}/10" if score is not None else "—"
+            lines.append(
+                f"- Follower quality: {score_str}" + (f" ({note})" if note else "")
+            )
+
+    # Gemini Researcher — 고가치 팩트 (challenges_assumption / missing_context)
+    # interpretation_gaps는 Step 3의 enriched_source에 이미 포함되므로 중복 생략
+    if research and research.fact_labels:
+        high_value = [
+            k[:80]
+            for k, v in research.fact_labels.items()
+            if v in ("challenges_assumption", "missing_context")
+        ]
+        if high_value:
+            lines.append(
+                f"- High-value facts ({len(high_value)}): {high_value[0]}"
+            )
+
+    # Perplexity FactChecker 신호
+    if factcheck:
+        if factcheck.interpretation_opportunity:
+            lines.append(
+                f"- Interpretation opportunity: {factcheck.interpretation_opportunity[:120]}"
+            )
+        if factcheck.marketability_signal:
+            lines.append(f"- Marketability: {factcheck.marketability_signal}")
+
+    if not lines:
+        return ""
+
+    return "[UPSTREAM CRITERIA SIGNALS]\n" + "\n".join(lines)
 
 
 class Orchestrator:
@@ -67,14 +145,136 @@ class Orchestrator:
         """
         logger.info(f"=== 파이프라인 시작: '{data.title[:50]}' ===")
 
-        # Step 0: 일일 제한 확인
-        can_draft, draft_msg = self.rate_limiter.can_create_draft()
-        if not can_draft:
-            raise RuntimeError(f"일일 제한 초과: {draft_msg}")
+        # Step 0: (rate check moved to Step 2 — Lane A~C는 AI 비용 없음)
+        # BREAKING_NOW / KO-only / Top5 적재 / 주간 즉시 알림은 항상 실행.
+        # AI 파이프라인(Steps 2-6)만 레인별 제한 적용.
 
         # Step 1: 소스 저장
         logger.info("[1/6] 소스 DB 저장")
         source_item = self.source_service.ingest_manual(data)
+
+        # Step 1.5: BREAKING 분류 (fail-open, 메모리 결과만, 알림 미전송)
+        # - breaking_classifier 호출만 수행. 텔레그램 / Top5 / DB 저장 연결은 아직 없음.
+        # - 실패 시 기존 파이프라인 곃속 진행 (fail-open).
+        try:
+            from app.services.breaking_classifier import classify_article
+            breaking_result = classify_article(
+                title=source_item.title,
+                body=source_item.source_text,
+                publisher=None,
+                published_at=source_item.created_at,
+                url=source_item.url,
+            )
+            source_item.breaking_result = breaking_result  # type: ignore[attr-defined]
+            logger.info(
+                f"[1.5/6] breaking classify: {breaking_result.classification} "
+                f"domain={breaking_result.topic_domain} "
+                f"urgency={breaking_result.urgency or '-'}"
+            )
+
+            # Step 1.5b: CANDIDATE -> Top5 야간 큐 적재 (fail-open)
+            if breaking_result.classification == "CANDIDATE":
+                try:
+                    from app.services.top5_briefing_service import record_candidate
+                    record_candidate(
+                        title=source_item.title,
+                        body=source_item.source_text,
+                        url=source_item.url,
+                        topic_domain=breaking_result.topic_domain,
+                        matched_keywords=breaking_result.matched_keywords,
+                        breaking_reason=breaking_result.breaking_reason,
+                        urgency=breaking_result.urgency,
+                        collected_at=source_item.created_at,
+                    )
+                except Exception:
+                    pass  # fail-open
+
+                # Step 1.5c: 주간 고점수 CANDIDATE 즉시 알림 (fail-open)
+                # - 05:00~22:00 KST 에만 동작
+                # - 교차검증 4+ / 점수 컴라인 / 즉시성 조건 모두 충송 시 텘렉그램 즉시 알림
+                # - Top5 탐 적재(1.5b)와 독립. 둘다 동작해도 충돌 없음.
+                try:
+                    from app.services.daytime_alert_service import try_daytime_alert
+                    _daytime_sent = await try_daytime_alert(
+                        title=source_item.title,
+                        body=source_item.source_text,
+                        url=source_item.url,
+                        topic_domain=breaking_result.topic_domain,
+                        matched_keywords=breaking_result.matched_keywords,
+                        collected_at=source_item.created_at,
+                    )
+                    if _daytime_sent:
+                        logger.info("[1.5c/6] 주간 고점수 CANDIDATE 즉시 알림 전송")
+                except Exception:
+                    pass  # fail-open
+
+            # Step 1.6: BREAKING_NOW 일 때만 분리된 텔레그램 알림 핸드오프
+            if breaking_result.classification == "BREAKING_NOW":
+                try:
+                    from app.services.breaking_alert_service import send_breaking_alert
+                    sent = await send_breaking_alert(
+                        breaking_result=breaking_result,
+                        title=source_item.title,
+                        url=source_item.url,
+                        body=source_item.source_text,
+                    )
+                    logger.info(f"[1.6/6] breaking alert 핸드오프: sent={sent}")
+                    # Top5 제외 등록 (BREAKING_NOW 전송분은 Top5에서 제외)
+                    if sent:
+                        try:
+                            from app.services.top5_briefing_service import record_breaking_sent
+                            record_breaking_sent(
+                                title=source_item.title,
+                                topic_domain=breaking_result.topic_domain,
+                            )
+                        except Exception:
+                            pass  # fail-open
+                except Exception as e:
+                    logger.warning(
+                        f"breaking alert 핸드오프 실패 (fail-open, 파이프라인 곃속): {e}"
+                    )
+        except Exception as e:
+            logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
+
+
+        # Step 1.7: KO-only routing - skip English draft pipeline (Phase H, fail-open)
+        _KO_ONLY_DOMAINS = {"금융", "투자", "크립토", "주식"}
+        _KO_ONLY_CLASSES = {"BREAKING_NOW", "CANDIDATE"}
+        try:
+            _br = getattr(source_item, "breaking_result", None)
+            if (_br is not None
+                    and _br.classification in _KO_ONLY_CLASSES
+                    and _br.topic_domain in _KO_ONLY_DOMAINS):
+                logger.info(
+                    f"[1.7/6] English draft skipped: {_br.classification} "
+                    f"domain={_br.topic_domain}"
+                )
+                draft = self.draft_service.create_draft(
+                    source_item=source_item,
+                    hook=f"[{_br.classification}] {data.title[:80]}",
+                    body=f"KO-only pipeline (English draft skipped). domain={_br.topic_domain}",
+                    category=ContentCategory.ECONOMY,
+                    risk_level=RiskLevel.LOW,
+                    risk_reasoning=f"{_br.classification} KO-only routing",
+                    ai_rationale=f"Routed to {_br.classification} pipeline, English draft skipped.",
+                )
+                draft._skip_approval_card = True
+                logger.info(
+                    f"=== Pipeline done (KO-only): draft_id={draft.id}, "
+                    f"routing={_br.classification} ==="
+                )
+                return draft
+        except Exception as e:
+            logger.warning(f"[1.7] KO routing check failed (fail-open): {e}")
+
+        # Step 2 rate check: AI 파이프라인 진입 제한 (비용 보호)
+        # - KO-only/BREAKING 는 Step 1.7 에서 이미 리턴
+        # - source_type 으로 자동수집/수동입력 레인 분리
+        can_ai, ai_msg = self.rate_limiter.can_run_ai_pipeline(
+            source_type=data.source_type,
+        )
+        if not can_ai:
+            raise RuntimeError(f"일일 제한 초과: {ai_msg}")
 
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")
@@ -82,6 +282,10 @@ class Orchestrator:
             research = await self.ai.researcher.research(
                 query=data.title, context=data.source_text[:1000],
             )
+            if research.criteria_signals.any_populated():
+                logger.info(
+                    f"[Researcher criteria] {research.criteria_signals.to_log_str()}"
+                )
         except Exception as e:
             logger.warning(f"리서치 실패, 빈 결과 사용: {e}")
             research = ResearchResult(
@@ -91,11 +295,48 @@ class Orchestrator:
 
         # Step 3: DraftWriter — 초안 생성
         logger.info("[3/6] DraftWriter: 초안 생성")
+
+        # Layer 2: research 신호로 DraftWriter 컨텍스트 빌드 (실패 시 "" — Layer 1 보호)
         try:
+            draft_criteria_ctx = _build_criteria_context(research=research)
+            if draft_criteria_ctx:
+                logger.debug(
+                    f"[criteria_context] DraftWriter 주입: {len(draft_criteria_ctx)}자"
+                )
+        except Exception as _ctx_err:
+            logger.warning(f"[criteria_context] DraftWriter 빌드 실패 (무시): {_ctx_err}")
+            draft_criteria_ctx = ""
+
+        # Layer 2: operator hints (manual_notes → DraftWriter advisory, 실패 시 무시)
+        try:
+            hints = self.draft_service.get_recent_operator_hints(limit=3)
+            if hints:
+                hints_block = "[OPERATOR HINTS]\n" + "\n".join(f"- {h}" for h in hints)
+                draft_criteria_ctx = (
+                    (draft_criteria_ctx + "\n\n" + hints_block).strip()
+                    if draft_criteria_ctx
+                    else hints_block
+                )
+                logger.debug(f"[OperatorHints] DraftWriter 주입: {len(hints)}개")
+        except Exception as _hint_err:
+            logger.warning(f"[OperatorHints] 주입 실패 (무시): {_hint_err}")
+
+        try:
+            # Gemini interpretation_gaps를 source_text에 추가 → DraftWriter가 해석 각도 활용
+            enriched_source = data.source_text
+            if research.interpretation_gaps:
+                gaps_text = "\n".join(f"- {g}" for g in research.interpretation_gaps[:3])
+                enriched_source = (
+                    f"{data.source_text}\n\n"
+                    f"[Researcher identified interpretation gaps — use these for your angle]:\n"
+                    f"{gaps_text}"
+                )
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
-                source_text=data.source_text,
-                language=settings.default_language,
+                source_text=enriched_source[:3000],
+                language=data.language or settings.default_language,
+                source_type=data.source_type,
+                criteria_context=draft_criteria_ctx,
             )
         except Exception as e:
             logger.warning(f"DraftWriter 실패, 기본 초안 사용: {e}")
@@ -111,9 +352,50 @@ class Orchestrator:
             factcheck = await self.ai.fact_checker.check_facts(
                 claim=draft_result.body, context=data.source_text[:500],
             )
+            if factcheck and factcheck.criteria_signals.any_populated():
+                logger.info(
+                    f"[FactChecker criteria] {factcheck.criteria_signals.to_log_str()}"
+                )
         except Exception as e:
             logger.warning(f"FactChecker 실패: {e}")
             factcheck = None
+
+        # Step 4.5: 5-Criteria 품질 필터 (Reviewer 전 사전 체크)
+        criteria_result = score_5criteria(
+            draft_result.hook, draft_result.body, data.source_type
+        )
+        logger.info(
+            f"5-Criteria 결과: {criteria_result['total']}/100 [{criteria_result['action']}] "
+            f"flags={criteria_result['flags']}"
+        )
+        if criteria_result["action"] == "reject":
+            logger.warning(
+                "5-Criteria REJECT — 초안이 품질 기준 미달. "
+                "재생성 시도 (최대 1회)."
+            )
+            try:
+                draft_result = await self.ai.draft_writer.generate_draft(
+                    title=data.title,
+                    source_text=data.source_text + "\n\nIMPROVEMENT REQUIRED: " + " | ".join(criteria_result["flags"]),
+                    language=data.language or settings.default_language,
+                    source_type=data.source_type,
+                    criteria_context=draft_criteria_ctx,
+                )
+            except Exception as e:
+                logger.warning(f"재생성 실패, 원본 사용: {e}")
+
+        # Layer 2: research + factcheck 신호로 Reviewer 컨텍스트 빌드 (실패 시 "" — Layer 1 보호)
+        try:
+            review_criteria_ctx = _build_criteria_context(
+                research=research, factcheck=factcheck
+            )
+            if review_criteria_ctx:
+                logger.debug(
+                    f"[criteria_context] Reviewer 주입: {len(review_criteria_ctx)}자"
+                )
+        except Exception as _ctx_err:
+            logger.warning(f"[criteria_context] Reviewer 빌드 실패 (무시): {_ctx_err}")
+            review_criteria_ctx = ""
 
         # Step 5: Reviewer — 리스크 판단 & 최종 다듬기
         logger.info("[5/6] Reviewer: 최종 판단")
@@ -124,6 +406,7 @@ class Orchestrator:
                 draft=draft_result,
                 research=research,
                 factcheck=factcheck,
+                criteria_context=review_criteria_ctx,
             )
         except Exception as e:
             logger.warning(f"Reviewer 실패, DraftWriter 결과 직접 사용: {e}")
@@ -136,6 +419,65 @@ class Orchestrator:
                 risk_level="medium",
                 risk_reasoning=f"Reviewer 실패, 안전하게 medium 설정: {e}",
                 ai_rationale="Fallback: reviewer unavailable.",
+            )
+
+        # Step 5.5: Reviewer regenerate 권고 처리 (루프 + 안전장치)
+        MAX_REGEN_ATTEMPTS = 2
+        regen_attempts = 0
+
+        while review.recommended_action == "regenerate" and regen_attempts < MAX_REGEN_ATTEMPTS:
+            # regeneration_hint 우선, 없으면 ai_rationale 사용
+            hint = (review.regeneration_hint or review.ai_rationale or "").strip()
+            if not hint:
+                logger.warning(
+                    f"[Regen] regenerate 권고지만 hint 없음 — 무한루프 방지를 위해 건너뜀"
+                )
+                break
+
+            regen_attempts += 1
+            logger.warning(
+                f"[Regen {regen_attempts}/{MAX_REGEN_ATTEMPTS}] "
+                f"재생성 시도: {hint[:120]}"
+            )
+
+            try:
+                regen_source = (
+                    data.source_text
+                    + f"\n\n[REGENERATION GUIDANCE #{regen_attempts}]: {hint}"
+                )
+                draft_result = await self.ai.draft_writer.generate_draft(
+                    title=data.title,
+                    source_text=regen_source[:3000],
+                    language=data.language or settings.default_language,
+                    source_type=data.source_type,
+                    criteria_context=review_criteria_ctx,
+                )
+                review = await self.ai.reviewer.review_and_refine(
+                    title=data.title,
+                    source_text=data.source_text,
+                    draft=draft_result,
+                    research=research,
+                    factcheck=factcheck,
+                    criteria_context=review_criteria_ctx,
+                )
+                logger.info(
+                    f"[Regen {regen_attempts}] 재평가 완료: "
+                    f"action={review.recommended_action}"
+                )
+            except Exception as e:
+                logger.warning(f"[Regen {regen_attempts}] 재생성 실패: {e}")
+                break
+
+        # 최대 시도 후에도 regenerate → 수동 검토로 전환
+        if review.recommended_action == "regenerate":
+            logger.error(
+                f"[Regen] 최대 재생성 횟수({MAX_REGEN_ATTEMPTS}회) 도달 — "
+                f"수동 검토 필요로 전환"
+            )
+            review.recommended_action = "review"
+            review.ai_rationale = (
+                f"[재생성 {regen_attempts}회 후 미통과 — 수동 검토 필요] "
+                + review.ai_rationale
             )
 
         # Step 6: 분류 & 위험도 확정
@@ -153,6 +495,18 @@ class Orchestrator:
                 data.title, data.source_text, category,
             )
 
+        # 커뮤니티 입력 리스크 강제 적용
+        is_community = data.source_type == "community_input"
+        community_warning = None
+        if is_community:
+            logger.info("커뮤니티 입력 감지 — 리스크 재평가 적용")
+            risk_level, risk_reasoning = classify_community_risk(
+                data.title, data.source_text, category, risk_level, risk_reasoning,
+            )
+            community_warning = build_community_warning(
+                data.title, data.source_text, category, risk_level,
+            )
+
         # 중복 체크
         if self.draft_service.is_duplicate_text(review.body):
             logger.warning("중복 텍스트 감지!")
@@ -168,6 +522,97 @@ class Orchestrator:
             ai_rationale=review.ai_rationale,
             thread_continuation=review.thread_continuation,
         )
+
+        # 커뮤니티 경고 저장
+        if community_warning:
+            draft.community_warning = community_warning
+            self.db.commit()
+            logger.info(f"커뮤니티 경고 저장: draft_id={draft.id}")
+
+        # Phase 5: 비즈니스 분류 (Layer 2 — 실패해도 파이프라인 영향 없음)
+        try:
+            from app.services.business_classifier import (
+                classify_business, business_tags_to_json,
+            )
+            import json as _json
+
+            # topic_tags 파싱
+            _topic_tags = None
+            if draft.topic_tags:
+                try:
+                    _topic_tags = _json.loads(draft.topic_tags)
+                except Exception:
+                    pass
+
+            biz = classify_business(
+                title=data.title,
+                body=review.body,
+                category=category.value,
+                risk_level=risk_level.value,
+                topic_tags=_topic_tags,
+            )
+            draft.business_tags = business_tags_to_json(biz.business_tags)
+            draft.cta_type = biz.cta_type
+            draft.monetization_score = biz.monetization_score
+            draft.asset_goal = biz.asset_goal
+            draft.premium_reason = biz.premium_reason
+            draft.b2b_candidate = biz.b2b_candidate
+            draft.b2b_target_audience = biz.b2b_target_audience
+            draft.b2b_use_case = biz.b2b_use_case
+            # Phase 3: 프리미엄 후보 자동 초기화
+            if "premium_candidate" in biz.business_tags:
+                draft.premium_status = "new"
+                draft.premium_updated_at = datetime.now(timezone.utc)
+            # Phase 5-B2B: B2B 후보 자동 초기화
+            if biz.b2b_candidate and not draft.b2b_status:
+                draft.b2b_status = "new"
+                draft.b2b_updated_at = datetime.now(timezone.utc)
+            # Phase 7: 이메일 버킷/목표 자동 초기화 (수동 설정 보호)
+            if not draft.email_bucket:
+                _cta = biz.cta_type
+                _asset = biz.asset_goal
+                if _cta in ("premium_waitlist", "premium_teaser") or _asset == "premium_teaser":
+                    draft.email_bucket = "premium_teaser"
+                elif biz.b2b_candidate:
+                    draft.email_bucket = "b2b_nurture"
+                elif _cta == "lead_magnet" or _asset == "lead_magnet_push":
+                    draft.email_bucket = "lead_nurture"
+                elif _cta == "newsletter_signup" or _asset == "newsletter_push":
+                    draft.email_bucket = "weekly_free"
+            if not draft.email_goal:
+                _cta = biz.cta_type
+                _asset = biz.asset_goal
+                if _cta in ("premium_waitlist", "premium_teaser") or _asset == "premium_teaser":
+                    draft.email_goal = "tease"
+                elif _cta == "lead_magnet" or _asset == "lead_magnet_push":
+                    draft.email_goal = "nurture"
+                elif _cta == "newsletter_signup" or _asset == "newsletter_push":
+                    draft.email_goal = "signup"
+                elif biz.b2b_candidate:
+                    draft.email_goal = "nurture"
+            self.db.commit()
+            logger.info(
+                f"[BusinessClassifier] draft_id={draft.id} "
+                f"tags={biz.business_tags} cta={biz.cta_type} "
+                f"score={biz.monetization_score} asset={biz.asset_goal} "
+                f"b2b={biz.b2b_candidate}"
+            )
+        except Exception as e:
+            logger.warning(f"[BusinessClassifier] 분류 실패 (무시): {e}")
+
+        # 예측 게시 시간 계산
+        try:
+            pred_time, pred_reason = predict_publish_time(
+                category=draft.category,
+                risk_level=draft.risk_level,
+                now=datetime.now(timezone.utc),
+            )
+            draft.predicted_publish_at = pred_time
+            draft.prediction_reasoning = pred_reason
+            self.db.commit()
+            logger.info(f"예측 게시 시간: {pred_time.isoformat()} — {pred_reason}")
+        except Exception as e:
+            logger.warning(f"예측 게시 시간 계산 실패 (무시): {e}")
 
         logger.info(
             f"=== 파이프라인 완료: draft_id={draft.id}, "
@@ -260,7 +705,9 @@ class Orchestrator:
                 source_type=source.source_type, language=source.language,
             )
             new_draft = await self.ingest_and_generate(new_data)
-            await self.send_for_approval(new_draft.id)
+            # Phase H: KO-only routing - skip approval card
+            if not getattr(new_draft, '_skip_approval_card', False):
+                await self.send_for_approval(new_draft.id)
             return {
                 "success": True,
                 "message": f"재생성 완료! 새 draft ID: {new_draft.id}",
@@ -283,10 +730,26 @@ class Orchestrator:
         return await self._handle_approve(draft)
 
     async def full_pipeline(self, data: SourceItemCreate) -> dict:
-        """전체 파이프라인: 소스 입력 → AI 생성 → 텔레그램 승인카드 전송"""
+        """전체 파이프띴인: 소스 입력 → 분류 → AI 생성 또는 한국어 전용 라인 처리"""
         try:
             draft = await self.ingest_and_generate(data)
-            sent = await self.send_for_approval(draft.id)
+            # Phase H: KO-only routing - skip approval card
+            if getattr(draft, '_skip_approval_card', False):
+                sent = False
+                logger.info(f"[pipeline] approval card skipped (KO-only): draft_id={draft.id}")
+            else:
+                sent = await self.send_for_approval(draft.id)
+            # 실제 처리 경로에 맞는 응답 메시지
+            if getattr(draft, '_skip_approval_card', False):
+                if draft.hook.startswith("[BREAKING_NOW]"):
+                    message = "속보 알림 대상으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
+                else:
+                    message = "한국어 전용 라인으로 처리되었습니다. 영어 승인 초안은 생성하지 않았습니다."
+            elif sent:
+                message = "초안 생성 완료. 텔레그램에서 승인해주세요."
+            else:
+                message = "초안 생성 완료."
+
             return {
                 "success": True,
                 "draft_id": draft.id,
@@ -295,11 +758,25 @@ class Orchestrator:
                 "telegram_sent": sent,
                 "hook": draft.hook,
                 "body": draft.body,
-                "message": "초안 생성 완료! 텔레그램에서 승인해주세요.",
+                "message": message,
             }
         except Exception as e:
             logger.error(f"파이프라인 오류: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+
+    async def get_trending_topics(self, topic_area: str = "korea") -> dict:
+        """TrendHunter를 사용해 현재 트렌딩 토픽을 탐색합니다."""
+        logger.info(f"트렌드 탐색: '{topic_area}'")
+        try:
+            result = await self.ai.trend_hunter.find_trends(topic_area)
+            return {
+                "success": True,
+                "topics": result.trending_topics,
+                "notes": result.relevance_notes,
+            }
+        except Exception as e:
+            logger.error(f"트렌드 탐색 실패: {e}")
+            return {"success": False, "error": str(e), "topics": []}
 
     def close(self):
         if self.db:
