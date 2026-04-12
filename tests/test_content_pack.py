@@ -4,7 +4,10 @@
 한국어 기본 / 영어 명시 시만 영어 규칙을 검증합니다.
 """
 
-from app.services.content_pack import _get_system_prompt, _mock_pack
+from app.services.content_pack import (
+    _get_system_prompt, _mock_pack,
+    FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
+)
 from app.models.content_request import ContentRequest
 
 
@@ -232,3 +235,210 @@ class TestContentPackHouseStyle:
         """데이터 게이트가 크립토·정책도 커버한다."""
         prompt = _get_system_prompt("ko")
         assert "정책·크립토" in prompt
+
+
+class TestFactSheetExtraction:
+    """규칙 기반 팩트 시트 추출 테스트."""
+
+    def test_real_estate_topic_classification(self):
+        """부동산 키워드 2개 이상이면 부동산으로 분류."""
+        text = "서울 아파트 전세 가격이 3개월 연속 하락했다."
+        sheet = extract_fact_sheet(text)
+        assert sheet.topic == "부동산"
+
+    def test_crypto_topic_classification(self):
+        """크립토 키워드 2개 이상이면 크립토로 분류."""
+        text = "업비트 비트코인 거래량이 40% 감소했다."
+        sheet = extract_fact_sheet(text)
+        assert sheet.topic == "크립토"
+
+    def test_unknown_topic_fallback(self):
+        """매칭 키워드 부족 시 기타로 분류."""
+        text = "오늘 날씨가 좋아서 산책을 했다."
+        sheet = extract_fact_sheet(text)
+        assert sheet.topic == "기타"
+
+    def test_figures_extraction_percentage(self):
+        """퍼센트 수치 추출."""
+        text = "전월비 2.3% 하락, 거래량은 15% 감소"
+        sheet = extract_fact_sheet(text)
+        assert any("2.3%" in f or "2.3 %" in f for f in sheet.figures)
+
+    def test_figures_extraction_korean_amount(self):
+        """한국식 금액 추출."""
+        text = "부동산 시장에서 거래액이 350억원을 기록했다."
+        sheet = extract_fact_sheet(text)
+        assert any("350억" in f for f in sheet.figures)
+
+    def test_figures_must_contain_numbers(self):
+        """figures에 숫자가 없는 추상 문구는 포함되지 않는다."""
+        text = "시장이 위축되고 거래량이 감소하는 추세다."
+        sheet = extract_fact_sheet(text)
+        assert all(any(c.isdigit() for c in f) for f in sheet.figures)
+
+    def test_timeframe_extraction(self):
+        """날짜/기간 표현 추출."""
+        text = "2024년 3월 기준 전월비 하락세가 이어졌다."
+        sheet = extract_fact_sheet(text)
+        assert "2024년 3월" in sheet.timeframe
+
+    def test_entities_extraction_known(self):
+        """고유명사 사전 매칭."""
+        text = "한국은행이 기준금리를 동결하고 삼성전자 실적을 주시하고 있다."
+        sheet = extract_fact_sheet(text)
+        assert "한국은행" in sheet.entities
+        assert "삼성전자" in sheet.entities
+
+    def test_key_facts_contain_numbers(self):
+        """key_facts는 숫자 포함 문장만."""
+        text = "서울 아파트 매매가 2.3% 하락. 시장 분위기가 좋지 않다. 거래량은 1500건이다."
+        sheet = extract_fact_sheet(text)
+        for fact in sheet.key_facts:
+            assert any(c.isdigit() for c in fact)
+
+    def test_empty_input(self):
+        """빈 입력에도 크래시 없이 빈 시트 반환."""
+        sheet = extract_fact_sheet("")
+        assert sheet.topic == "기타"
+        assert sheet.figures == []
+        assert sheet.entities == []
+
+
+class TestDensityCheck:
+    """밀도 검증 테스트."""
+
+    def test_real_estate_all_fields(self):
+        """부동산 3필드 모두 충족 → 통과."""
+        sheet = FactSheet(
+            topic="부동산",
+            entities=["서울"],
+            figures=["전월비 -2.3%"],
+            timeframe="2024년 3월",
+        )
+        passed, missing = check_density(sheet)
+        assert passed is True
+        assert missing == []
+        assert sheet.data_density_score == 3
+
+    def test_real_estate_two_fields(self):
+        """부동산 2필드 충족 → 통과."""
+        sheet = FactSheet(
+            topic="부동산",
+            entities=["강남"],
+            figures=["3.5%"],
+            timeframe="",
+        )
+        passed, missing = check_density(sheet)
+        assert passed is True
+
+    def test_real_estate_insufficient(self):
+        """부동산 0~1필드 → 차단."""
+        sheet = FactSheet(topic="부동산", entities=[], figures=[], timeframe="")
+        passed, missing = check_density(sheet)
+        assert passed is False
+        assert len(missing) == 3
+
+    def test_crypto_sufficient(self):
+        """크립토 3필드 충족 → 통과."""
+        sheet = FactSheet(
+            topic="크립토",
+            entities=["업비트"],
+            figures=["40%"],
+            key_facts=["업비트 거래량 40% 급감"],
+        )
+        passed, missing = check_density(sheet)
+        assert passed is True
+
+    def test_crypto_insufficient(self):
+        """크립토 0필드 → 차단."""
+        sheet = FactSheet(topic="크립토", entities=[], figures=[], key_facts=[])
+        passed, missing = check_density(sheet)
+        assert passed is False
+
+    def test_figures_without_numbers_fail(self):
+        """figures에 숫자 없는 값만 있으면 미충족 처리."""
+        sheet = FactSheet(
+            topic="부동산",
+            entities=["서울"],
+            figures=["하락세", "위축"],
+            timeframe="2024년",
+        )
+        passed, missing = check_density(sheet)
+        assert "figures" in missing
+
+    def test_timeframe_without_numbers_fail(self):
+        """timeframe에 숫자 없으면 미충족 처리."""
+        sheet = FactSheet(
+            topic="금리",
+            entities=["한국은행"],
+            figures=["3.5%"],
+            timeframe="최근",
+        )
+        passed, missing = check_density(sheet)
+        assert "timeframe" in missing
+
+    def test_unknown_topic_uses_fallback(self):
+        """알 수 없는 주제는 기타 기준 적용."""
+        sheet = FactSheet(topic="알수없음", key_facts=["사실1"], entities=["대상1"])
+        passed, missing = check_density(sheet)
+        assert passed is True
+
+    def test_content_pack_insufficient_fields(self):
+        """ContentPack insufficient_data 필드 동작."""
+        pack = ContentPack(
+            insufficient_data=True,
+            missing_fields=["figures", "timeframe"],
+        )
+        assert pack.insufficient_data is True
+        assert "figures" in pack.missing_fields
+        assert len(pack.missing_fields) == 2
+
+    def test_content_pack_default_not_insufficient(self):
+        """기본 ContentPack은 insufficient_data=False."""
+        pack = ContentPack()
+        assert pack.insufficient_data is False
+        assert pack.missing_fields == []
+
+
+class TestFactSheetIntegration:
+    """팩트 시트 → 밀도 검증 통합 테스트."""
+
+    def test_data_rich_real_estate_passes(self):
+        """데이터 풍부한 부동산 기사 → 통과."""
+        text = (
+            "서울 강남구 아파트 매매가격이 2024년 3월 기준 "
+            "전월비 0.5% 하락했다. 거래량은 1,200건으로 전년 동기 대비 30% 감소."
+        )
+        sheet = extract_fact_sheet(text)
+        passed, missing = check_density(sheet)
+        assert passed is True
+        assert sheet.topic == "부동산"
+        assert len(sheet.figures) >= 2
+
+    def test_vague_crypto_blocked(self):
+        """데이터 없는 크립토 분위기문 → 차단."""
+        text = (
+            "최근 크립토 가격이 급락하고 시장의 신뢰도가 하락하고 있다. "
+            "투자자들의 회의감이 커지고 있으며 거래량도 줄어드는 추세다."
+        )
+        sheet = extract_fact_sheet(text)
+        passed, missing = check_density(sheet)
+        assert passed is False
+
+    def test_data_rich_crypto_passes(self):
+        """데이터 있는 크립토 기사 → 통과."""
+        text = (
+            "업비트 비트코인 거래량이 2024년 3월 기준 "
+            "일평균 1조2000억원에서 7000억원으로 40% 감소했다."
+        )
+        sheet = extract_fact_sheet(text)
+        passed, missing = check_density(sheet)
+        assert passed is True
+        assert "업비트" in sheet.entities
+
+    def test_vague_policy_blocked(self):
+        """구체 데이터 없는 정책 기사 → 차단."""
+        text = "정부가 새로운 규제를 검토하고 있다. 시장에 큰 영향을 줄 것으로 보인다."
+        sheet = extract_fact_sheet(text)
+        passed, missing = check_density(sheet)
+        assert passed is False

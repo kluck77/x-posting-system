@@ -22,6 +22,7 @@
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -47,12 +48,185 @@ class ContentPack:
     # 메타
     source_url: Optional[str] = None
     source_type: str = "news_link"
+    # 팩트 시트 게이트
+    insufficient_data: bool = False
+    missing_fields: list[str] = field(default_factory=list)
+    fact_sheet_summary: str = ""
 
     def is_valid(self) -> bool:
         return bool(self.main_posts and self.why_it_matters)
 
     def topic_tags_str(self) -> str:
         return " ".join(f"#{t}" for t in self.topic_tags) if self.topic_tags else ""
+
+
+# ─── 팩트 시트 (규칙 기반) ───────────────────────────────────────────────────
+
+@dataclass
+class FactSheet:
+    """원문에서 규칙 기반으로 추출한 구조화된 팩트 카드."""
+    topic: str = ""
+    entities: list[str] = field(default_factory=list)
+    figures: list[str] = field(default_factory=list)
+    timeframe: str = ""
+    key_facts: list[str] = field(default_factory=list)
+    data_density_score: int = 0
+
+
+# 주제 분류 키워드
+_TOPIC_KEYWORDS: dict[str, list[str]] = {
+    "부동산": ["부동산", "아파트", "전세", "매매", "분양", "청약", "주택", "토지",
+              "건설", "임대", "재건축", "재개발", "오피스텔", "공시가격"],
+    "크립토": ["크립토", "비트코인", "이더리움", "코인", "거래소", "업비트", "빗썸",
+              "바이낸스", "토큰", "블록체인", "디파이", "NFT", "스테이블코인", "가상자산"],
+    "금리": ["금리", "기준금리", "한국은행", "통화정책", "금통위", "채권", "국채",
+            "금리 인하", "금리 인상", "콜금리", "수익률곡선"],
+    "정책": ["정책", "법안", "국회", "정부", "규제", "시행령", "개정", "입법",
+            "행정명령", "대통령령", "고시"],
+    "반도체": ["반도체", "삼성전자", "SK하이닉스", "TSMC", "파운드리", "HBM",
+              "DRAM", "낸드", "NAND", "웨이퍼", "EUV", "패키징"],
+}
+
+# 고유명사 사전
+_KNOWN_ENTITIES: list[str] = [
+    # 기관
+    "한국은행", "금융위원회", "금감원", "국토부", "기재부", "산업부",
+    "국회", "대통령실", "기획재정부", "통계청", "한국감정원",
+    "국토교통부", "금융감독원", "공정거래위원회",
+    # 기업
+    "삼성전자", "SK하이닉스", "LG에너지솔루션", "현대차", "카카오", "네이버",
+    "삼성바이오", "셀트리온", "포스코", "현대중공업", "LG화학",
+    # 거래소
+    "업비트", "빗썸", "코인원", "바이낸스", "코인베이스", "크라켄",
+    # 지역
+    "서울", "강남", "강북", "수도권", "지방", "세종", "부산", "인천",
+    "경기", "대구", "대전", "광주", "울산", "제주", "송파", "마포",
+    "성동", "용산", "영등포", "강서", "노원",
+    # 국제
+    "Fed", "연준", "ECB", "BOJ", "IMF", "OECD", "SEC",
+    "미국", "중국", "일본", "유럽", "EU",
+    # 크립토
+    "비트코인", "이더리움", "리플", "솔라나", "도지코인", "XRP",
+    "테더", "USDC", "BTC", "ETH",
+]
+
+# 주제별 최소 필드 요구사항
+TOPIC_MIN_FIELDS: dict[str, list[str]] = {
+    "부동산": ["entities", "timeframe", "figures"],
+    "크립토": ["entities", "figures", "key_facts"],
+    "금리":   ["entities", "figures", "timeframe"],
+    "정책":   ["entities", "key_facts", "timeframe"],
+    "반도체": ["entities", "figures", "timeframe"],
+    "기타":   ["key_facts", "entities"],
+}
+
+
+def _classify_topic(text: str) -> str:
+    """키워드 빈도 기반 주제 분류."""
+    scores: dict[str, int] = {}
+    for topic, keywords in _TOPIC_KEYWORDS.items():
+        scores[topic] = sum(1 for kw in keywords if kw in text)
+    best = max(scores, key=scores.get)
+    return best if scores[best] >= 2 else "기타"
+
+
+def _extract_figures(text: str) -> list[str]:
+    """숫자·퍼센트·금액 표현 추출. 숫자 포함 필수."""
+    patterns = [
+        r'\d[\d,\.]*\s*[%％]',
+        r'\d[\d,\.]*\s*[조억만천백]\s*원?',
+        r'\d[\d,\.]*\s*(?:건|명|개|호|채|가구|달러|위안|엔)',
+        r'[+-]?\d[\d,\.]*\s*(?:bp|포인트|bps)',
+        r'\$\s*\d[\d,\.]*',
+        r'(?:전[월년분기]비|전년\s*동[월기]\s*대비)\s*[+-]?\d[\d,\.]*\s*[%％]?',
+    ]
+    results: list[str] = []
+    for pattern in patterns:
+        for m in re.finditer(pattern, text):
+            results.append(m.group().strip())
+    return list(dict.fromkeys(results))[:10]
+
+
+def _extract_timeframe(text: str) -> str:
+    """날짜·기간 표현 추출."""
+    patterns = [
+        r'20\d{2}년\s*\d{1,2}월',
+        r'20\d{2}년',
+        r'\d{1,2}월',
+        r'전[월년분기]비',
+        r'전년\s*동[월기]',
+        r'최근\s*\d+\s*개?\s*[월년주일]',
+        r'\d+분기',
+        r'[상하]반기',
+    ]
+    found: list[str] = []
+    for pattern in patterns:
+        for m in re.finditer(pattern, text):
+            found.append(m.group().strip())
+    unique = list(dict.fromkeys(found))[:5]
+    return ", ".join(unique) if unique else ""
+
+
+def _extract_entities(text: str) -> list[str]:
+    """고유명사 사전 매칭."""
+    return list(dict.fromkeys(e for e in _KNOWN_ENTITIES if e in text))[:10]
+
+
+def _extract_key_facts(text: str) -> list[str]:
+    """숫자를 포함하는 문장만 추출 (원문 기반 사실)."""
+    sentences = re.split(r'[.。!\n]+', text)
+    facts: list[str] = []
+    for sent in sentences:
+        sent = sent.strip()
+        if len(sent) < 15:
+            continue
+        if re.search(r'\d', sent):
+            facts.append(sent[:150])
+            if len(facts) >= 5:
+                break
+    return facts
+
+
+def extract_fact_sheet(source_text: str) -> FactSheet:
+    """규칙 기반 팩트 시트 추출. AI 호출 없음, 환각 위험 0."""
+    topic = _classify_topic(source_text)
+    figures = _extract_figures(source_text)
+    timeframe = _extract_timeframe(source_text)
+    entities = _extract_entities(source_text)
+    key_facts = _extract_key_facts(source_text)
+    return FactSheet(
+        topic=topic,
+        entities=entities,
+        figures=figures,
+        timeframe=timeframe,
+        key_facts=key_facts,
+    )
+
+
+def check_density(sheet: FactSheet) -> tuple[bool, list[str]]:
+    """주제별 최소 조건 충족 여부. 3개 중 2개 이상이면 통과. 질 검증 포함."""
+    min_fields = TOPIC_MIN_FIELDS.get(sheet.topic, TOPIC_MIN_FIELDS["기타"])
+    missing: list[str] = []
+    for f in min_fields:
+        val = getattr(sheet, f, None)
+        if f == "figures":
+            if not val or not any(re.search(r'\d', v) for v in val):
+                missing.append(f)
+        elif f == "timeframe":
+            if not val or not re.search(r'\d', val):
+                missing.append(f)
+        elif f == "entities":
+            if not val or len(val) == 0:
+                missing.append(f)
+        elif f == "key_facts":
+            if not val or len(val) == 0:
+                missing.append(f)
+        else:
+            if not val or (isinstance(val, list) and len(val) == 0):
+                missing.append(f)
+    filled = len(min_fields) - len(missing)
+    sheet.data_density_score = filled
+    return filled >= 2, missing
 
 
 # ─── 시스템 프롬프트 ──────────────────────────────────────────────────────────
@@ -384,27 +558,72 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
     """
     ContentRequest → ContentPack.
 
-    AI 우선순위: OpenAI → Anthropic → Mock
-    실패 시 Mock 폴백 — 절대 예외 발생 안 함.
+    흐름:
+      1. 규칙 기반 팩트 시트 추출 (AI 없음)
+      2. 밀도 검증 → 부족하면 insufficient_data 반환 (fail-closed)
+      3. 충분하면 팩트 시트를 프롬프트에 삽입 후 AI 생성
+      4. Layer 2 가드 적용
 
-    Layer 2 (try/except 보호):
-      - RepetitionGuard: 최근 승인 초안과 Jaccard 유사도 비교
-      - VoiceGuard: AI 어투 패턴 감지
-    두 가드 실패 시 pack 정상 반환 (style_warnings만 누락).
+    AI 우선순위: OpenAI → Anthropic → Mock
     """
     source_text = request.to_source_text()
     title = request.to_title()
     language = getattr(request, "language", "ko") or "ko"
 
+    # ── STEP 0: 규칙 기반 팩트 시트 추출 + 밀도 검증 ──
+    fact_sheet = extract_fact_sheet(source_text or title)
+    passed, missing = check_density(fact_sheet)
+
+    if not passed:
+        logger.warning(
+            f"근거 부족 — topic={fact_sheet.topic}, "
+            f"missing={missing}, score={fact_sheet.data_density_score}"
+        )
+        return ContentPack(
+            main_posts=[f"[근거 부족] {title[:80]}"],
+            why_it_matters=f"데이터 밀도 부족: {', '.join(missing)} 누락",
+            insufficient_data=True,
+            missing_fields=missing,
+            fact_sheet_summary=(
+                f"topic={fact_sheet.topic}, "
+                f"entities={fact_sheet.entities}, "
+                f"figures={fact_sheet.figures}"
+            ),
+            source_url=request.source_url,
+            source_type=request.source_type,
+            topic_tags=[fact_sheet.topic],
+        )
+
+    # ── STEP 1: 팩트 시트 기반 프롬프트 구성 ──
     user_prompt = f"Source type: {request.source_type}\n"
     if request.source_url:
         user_prompt += f"URL: {request.source_url}\n"
+
+    user_prompt += "\n=== 검증된 팩트 시트 (이 데이터를 반드시 활용하라) ===\n"
+    user_prompt += f"주제: {fact_sheet.topic}\n"
+    if fact_sheet.entities:
+        user_prompt += f"주체/대상: {', '.join(fact_sheet.entities)}\n"
+    if fact_sheet.figures:
+        user_prompt += f"수치: {', '.join(fact_sheet.figures)}\n"
+    if fact_sheet.timeframe:
+        user_prompt += f"기간: {fact_sheet.timeframe}\n"
+    if fact_sheet.key_facts:
+        user_prompt += "핵심 사실:\n"
+        for i, kf in enumerate(fact_sheet.key_facts, 1):
+            user_prompt += f"  {i}. {kf}\n"
+    user_prompt += "===========================\n"
+
     user_prompt += f"\nContent:\n{source_text or title}\n\n"
     if language.lower() in ("en", "english", "eng"):
         user_prompt += "Generate the content pack JSON now."
     else:
-        user_prompt += "콘텐츠 팩 JSON을 생성하라. 모든 텍스트는 한국어로."
+        user_prompt += (
+            "콘텐츠 팩 JSON을 생성하라. "
+            "위 팩트 시트의 구체 수치와 주체를 반드시 포함하라. "
+            "모든 텍스트는 한국어로."
+        )
 
+    # ── STEP 2: AI 생성 ──
     raw = await _call_ai(user_prompt, language=language)
 
     if raw:
@@ -412,9 +631,12 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
         if pack and pack.is_valid():
             pack.source_url = request.source_url
             pack.source_type = request.source_type
+            pack.fact_sheet_summary = (
+                f"topic={fact_sheet.topic}, score={fact_sheet.data_density_score}"
+            )
             logger.info(
                 f"콘텐츠 팩 생성 완료: {len(pack.main_posts)} posts, "
-                f"tags={pack.topic_tags}"
+                f"tags={pack.topic_tags}, fact_sheet={pack.fact_sheet_summary}"
             )
             _apply_guards(pack)
             return pack
