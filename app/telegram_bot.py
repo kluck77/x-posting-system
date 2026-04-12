@@ -10,7 +10,7 @@
   4. 분석 결과 카드 + [📝 새 게시글] [💬 댓글로] [❌ 취소] 버튼
   5a. 새 게시글 선택 → AI 파이프라인 → 승인 카드
   5b. 댓글 선택 → "답글 달 트윗 URL 보내줘" → 입력 후 → AI 파이프라인 → 승인 카드
-  6. Approve → X 게시
+  6. Approve → 텍스트 복사 → 수동 게시
 
 사용자 상태는 context.user_data에 저장합니다 (인메모리, 재시작 시 초기화).
 """
@@ -629,12 +629,12 @@ async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if post:
-        x_url = f"https://x.com/sskorea02/status/{post.post_id}" if post.post_id else "N/A"
         await query.message.reply_text(
-            f"✅ <b>게시 완료!</b>\n\n"
-            f"<code>{post.text[:200]}</code>\n\n"
-            f"🔗 {x_url}\n"
-            f"📋 큐 잔여: {queue.count_pending()}개",
+            f"✅ <b>승인 완료!</b>\n\n"
+            f"📋 <b>게시용 텍스트:</b>\n"
+            f"<code>{post.text[:300]}</code>\n\n"
+            f"📋 큐 잔여: {queue.count_pending()}개\n"
+            f"위 텍스트를 복사해서 X에 붙여넣기 해주세요.",
             parse_mode="HTML",
         )
     else:
@@ -880,7 +880,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• <code>/draft https://뉴스URL</code> — 분석 없이 즉시 초안 생성\n"
         "• URL / 스크린샷 / 텍스트 전송 → 분석 카드에서 모드 선택\n\n"
         "<b>분석 카드 모드:</b>\n"
-        "   • [📝 새 게시글] — 단일 포스트 → 승인 후 X 게시\n"
+        "   • [📝 새 게시글] — 단일 포스트 → 승인 후 복사하여 게시\n"
         "   • [📦 콘텐츠 팩] — 메인 3개+댓글+인용+짧은버전 일괄 생성\n"
         "   • [💬 댓글로] — 특정 트윗에 답글\n\n"
         "<b>Commands:</b>\n"
