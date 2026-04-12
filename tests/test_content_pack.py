@@ -99,7 +99,7 @@ class TestContentPackHouseStyle:
     """하우스 스타일 골든 룰 + 시리즈 라벨 + 자기 검증 회귀 검증."""
 
     def test_ko_prompt_has_golden_rules(self):
-        """골든 룰 7개 항목이 프롬프트에 존재한다."""
+        """골든 룰 9개 항목이 프롬프트에 존재한다."""
         prompt = _get_system_prompt("ko")
         assert "하우스 스타일 골든 룰" in prompt
         assert "해석 > 사실" in prompt
@@ -109,6 +109,8 @@ class TestContentPackHouseStyle:
         assert "다음에 볼 것" in prompt
         assert "기사 제목 재진술 금지" in prompt
         assert "낡은 수치 단정 금지" in prompt
+        assert "데이터 없는 단정 금지" in prompt
+        assert "메인 3축 분리" in prompt
 
     def test_ko_prompt_has_series_labels(self):
         """시리즈 라벨이 한국어로 존재한다."""
@@ -188,3 +190,24 @@ class TestContentPackHouseStyle:
         assert "기간/비교 시점" in prompt
         assert "수치/변화폭" in prompt
         assert "톤을 낮춰라" in prompt
+
+    def test_ko_prompt_has_generation_steps(self):
+        """3단계 생성 절차가 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "STEP 1" in prompt
+        assert "STEP 2" in prompt
+        assert "STEP 3" in prompt
+        assert "입력 데이터 점검" in prompt
+        assert "핵심축 3개 선택" in prompt
+
+    def test_ko_prompt_has_qa_checklist(self):
+        """최종 QA 체크리스트가 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "최종 QA 체크리스트" in prompt
+        assert "제목 재진술 아닌가" in prompt
+        assert "데이터 충족" in prompt
+        assert "메인 축 분리" in prompt
+        assert "댓글 답글형" in prompt
+        assert "인용 독립" in prompt
+        assert "추상어 과다" in prompt
+        assert "3개 이상 실패하면 전체 재작성" in prompt
