@@ -18,7 +18,7 @@
 import asyncio
 import json
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
     Application, CallbackQueryHandler, CommandHandler,
     MessageHandler, ContextTypes, filters,
@@ -28,6 +28,30 @@ from app.services.telegram_service import parse_callback_data, send_analysis_car
 from app.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
+
+# ─── 메인 빠른 키보드 (입력창 위 고정) ─────────────────────────────────────────
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["📝 초안", "📦 콘텐츠 팩", "📈 트렌드"],
+        ["📊 현황", "📋 대기 큐", "🧵 스레드"],
+        ["📰 다이제스트", "📊 주간", "💡 도움말"],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
+
+# 버튼 텍스트 → 명령 매핑 (text_message_handler에서 디스패치)
+_KEYBOARD_DISPATCH: dict[str, str] = {
+    "📝 초안":       "draft",
+    "📦 콘텐츠 팩":  "pack",
+    "📈 트렌드":     "trends",
+    "📊 현황":       "status",
+    "📋 대기 큐":    "queue",
+    "🧵 스레드":     "thread",
+    "📰 다이제스트": "digest",
+    "📊 주간":       "report",
+    "💡 도움말":     "start",
+}
 
 # 사용자 상태 키
 STATE_KEY = "state"
@@ -267,6 +291,27 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     """사용자가 일반 텍스트(커뮤 복붙 등)를 보낸 경우."""
     text = update.message.text.strip()
     logger.info(f"텍스트 수신: {text[:60]}")
+
+    # ── 메인 키보드 버튼 디스패치 ──
+    cmd_name = _KEYBOARD_DISPATCH.get(text)
+    if cmd_name:
+        handler_map = {
+            "draft": draft_command,
+            "pack": pack_command,
+            "trends": trends_command,
+            "status": status_command,
+            "queue": queue_command,
+            "thread": thread_command,
+            "digest": digest_command,
+            "report": report_command,
+            "start": start_command,
+        }
+        handler = handler_map.get(cmd_name)
+        if handler:
+            # context.args 초기화 (인자 없는 호출)
+            context.args = []
+            await handler(update, context)
+            return
 
     # 스레드 생성 대기 중
     if _get_state(context) == STATE_AWAITING_THREAD_INPUT:
@@ -873,6 +918,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/pending — 대기 초안\n"
         "/cancel — 취소\n",
         parse_mode="HTML",
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
