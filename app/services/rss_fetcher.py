@@ -31,7 +31,6 @@ RSS_FEEDS: list[dict] = [
     {"url": "https://www.yna.co.kr/rss/economy.xml",              "category": "economy",  "source": "연합뉴스",        "region": "KR"},
     {"url": "https://www.coindeskkorea.com/feed/",                "category": "crypto",   "source": "코인데스크코리아", "region": "KR"},
     # ── 미국/글로벌 뉴스 ──────────────────────────────────────────────────────
-    {"url": "https://apnews.com/feed",                             "category": "politics", "source": "AP News",        "region": "US"},
     {"url": "https://feeds.bbci.co.uk/news/business/rss.xml",     "category": "economy",  "source": "BBC Business",   "region": "US"},
     {"url": "https://www.cnbc.com/id/100003114/device/rss/rss.html","category": "economy", "source": "CNBC",           "region": "US"},
     {"url": "https://feeds.marketwatch.com/marketwatch/topstories/","category": "economy", "source": "MarketWatch",    "region": "US"},
