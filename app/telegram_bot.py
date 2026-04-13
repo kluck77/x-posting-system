@@ -168,14 +168,18 @@ async def _run_analysis_and_show_card(
 
         # 결과 정리
         research_summary = ""
-        if not isinstance(research, Exception):
+        if isinstance(research, Exception):
+            logger.error(f"[분석] Gemini 리서치 실패: {research}")
+        else:
             facts = research.key_facts[:3]
             research_summary = research.summary[:300]
             if facts:
                 research_summary += "\n• " + "\n• ".join(facts)
 
         factcheck_summary = ""
-        if not isinstance(factcheck, Exception):
+        if isinstance(factcheck, Exception):
+            logger.error(f"[분석] Perplexity 팩트체크 실패: {factcheck}")
+        else:
             status = "✅ 검증됨" if factcheck.verified else "⚠️ 미검증"
             confidence = factcheck.confidence
             factcheck_summary = f"{status} (신뢰도: {confidence})"
