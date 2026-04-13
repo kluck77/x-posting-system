@@ -19,6 +19,7 @@ from app.services.content_pack import (
     _CERTAINTY_RANK,
     _should_invoke_claude_review, _CLAUDE_REVIEW_PROMPT,
     _SENSITIVE_TOPICS, _WEAK_PATTERNS,
+    _FACT_NARRATION_STARTS,
 )
 from app.models.content_request import ContentRequest
 
@@ -1517,14 +1518,16 @@ class TestCandidatePromptRules:
             assert field in p
 
     def test_hook_sentence_form_rules(self):
-        """훅 후보가 문장형 강제 규칙을 포함."""
+        """훅 후보가 해석 문장 강제 규칙을 포함."""
         p = _CANDIDATE_PROMPT_KO
         assert "hook_candidates 규칙" in p
-        assert "문장형" in p
-        # 금지: 화살표 나열형
-        assert "→" in p and "금지" in p
-        # 필수: 좋은 예시가 문장형
-        assert "오세훈" in p or "호르무즈 봉쇄" in p
+        assert "해석 문장" in p
+        # 금지: 기자 질문형
+        assert "기자 질문형" in p
+        assert "무엇일까" in p
+        assert "어떻게 될까" in p
+        # 좋은 예시
+        assert "호르무즈 봉쇄" in p or "항로 리스크" in p
 
     def test_no_complete_sentence_instruction(self):
         """완성 문장 금지 지시가 있다."""
@@ -1689,10 +1692,11 @@ class TestFinalizePromptRules:
         assert "다른 방향" in p
 
     def test_first_sentence_meaning_first(self):
-        """골든룰 2: 첫 문장은 핵심 의미부터."""
+        """골든룰 2: 첫 문장은 해석/의미 선행."""
         p = _FINALIZE_PROMPT_KO
-        assert "핵심 의미" in p
+        assert "왜 중요한가" in p
         assert "사실 나열" in p
+        assert "보도가 나왔다" in p  # 금지 예시
 
     def test_impact_path_max_2(self):
         """골든룰 3: 파급 경로 최대 2개."""
@@ -1782,11 +1786,11 @@ class TestFinalizePromptRules:
         p = _FINALIZE_PROMPT_KO
         assert "구조 자체도 바꿔라" in p
 
-    def test_first_sentence_hook_copy_ban(self):
-        """첫 문장 훅 복붙 금지 규칙."""
+    def test_first_sentence_fact_narration_ban(self):
+        """첫 문장 사실나열 금지 규칙."""
         p = _FINALIZE_PROMPT_KO
-        assert "훅을 그대로 복붙하지 마라" in p
-        assert "왜 중요한지" in p
+        assert "기사 사실 요약으로 시작하면 실패" in p
+        assert "것으로 전해졌다" in p
 
     def test_tone_temperature_rule(self):
         """문장 온도 규칙: 과장 표현 약화."""
@@ -2165,16 +2169,17 @@ class TestCandidatePromptHookSentenceForm:
         assert "명사형 제목" in p and "금지" in p
 
     def test_good_hook_examples(self):
-        """좋은 훅 예시가 문장형."""
+        """좋은 훅 예시가 해석 문장형."""
         p = _CANDIDATE_PROMPT_KO
-        # 완성된 문장형 예시가 있어야 함
-        assert "오세훈" in p or "서울시장 선거" in p
-        assert "호르무즈 봉쇄 리스크" in p
+        # 나쁜→좋은 변환 예시가 있어야 함
+        assert "정부가 이걸 어디까지 알고 있었는가" in p
+        assert "항로 리스크" in p
 
     def test_bad_hook_examples(self):
-        """나쁜 훅 예시가 포함."""
+        """나쁜 훅 예시 (기자 질문형) 포함."""
         p = _CANDIDATE_PROMPT_KO
-        assert "부동산 지옥 예고" in p
+        assert "정부의 공식 입장은 무엇일까" in p
+        assert "어떻게 될까" in p
 
 
 class TestClaudeReviewPromptUpdated:
@@ -2195,6 +2200,82 @@ class TestClaudeReviewPromptUpdated:
         p = _CLAUDE_REVIEW_PROMPT
         assert "가능성이 커졌다" in p
         assert "핵심은" in p
+
+
+class TestFactNarrationDetection:
+    """첫 문장 사실나열 감지 테스트."""
+
+    def test_detects_report_start(self):
+        """'~보도가 나왔다' 패턴 감지."""
+        post = "호르무즈 해협을 지나는 선박이 통과했다라는 보도가 나왔다. 정부는 확인 중."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("사실나열" in w for w in warnings)
+
+    def test_detects_jeonhaejyeotda(self):
+        """'~것으로 전해졌다' 패턴 감지."""
+        post = "한국 선박이 해협을 통과한 것으로 전해졌다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("사실나열" in w for w in warnings)
+
+    def test_clean_start_no_warning(self):
+        """해석 선행 첫 문장은 경고 없음."""
+        post = "외교 뉴스처럼 보이지만 먼저 흔들리는 건 비용이다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert not any("사실나열" in w for w in warnings)
+
+    def test_fact_narration_starts_not_empty(self):
+        """_FACT_NARRATION_STARTS 리스트가 비어있지 않음."""
+        assert len(_FACT_NARRATION_STARTS) >= 5
+
+
+class TestNewBannedEndingPatterns:
+    """새로 추가된 금지 마감 패턴 테스트."""
+
+    def test_journalist_question_banned(self):
+        """기자 질문형 마감 감지."""
+        post = "이 사안은 앞으로 어떻게 될까."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("금지 마감" in w or "뻔한 표현" in w for w in warnings)
+
+    def test_market_reaction_banned(self):
+        """시장 반응을 봐야 한다 감지."""
+        post = "결국 시장 반응을 봐야 한다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("금지 마감" in w or "뻔한 표현" in w for w in warnings)
+
+
+class TestRoleLoyaltyInPrompt:
+    """역할 충성 원칙이 프롬프트에 포함된 테스트."""
+
+    def test_finalize_role_loyalty(self):
+        """마감 프롬프트에 역할 충성 원칙이 있음."""
+        p = _FINALIZE_PROMPT_KO
+        assert "역할 충성 원칙" in p
+        assert "기억에 남는 해석" in p
+        assert "안전한 설명문" in p
+
+    def test_finalize_forbidden_actions(self):
+        """마감 프롬프트에 금지 행동이 명시."""
+        p = _FINALIZE_PROMPT_KO
+        assert "기사 내용을 다시 줄줄 요약" in p
+        assert "뉴스 후기" in p
+
+    def test_candidate_hook_critical(self):
+        """후보 카드 훅 규칙이 CRITICAL 레벨."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "CRITICAL" in p
+        assert "전체 재작성" in p
+
+    def test_claude_review_news_review_detection(self):
+        """Claude 감수 프롬프트에 뉴스 후기 판정 기준이 있음."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "뉴스 후기 느낌" in p
+        assert "반드시 리라이트" in p
+
+    def test_ending_type_d_compression(self):
+        """D. 압축형 결론 유형이 프롬프트에 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "압축형" in p
 
 
 class TestSendCandidateCardMessages:

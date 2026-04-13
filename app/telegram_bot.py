@@ -25,9 +25,49 @@ from telegram.ext import (
 )
 from app.config import settings
 from app.services.telegram_service import parse_callback_data, send_analysis_card
+import re
+
 from app.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
+
+
+# ─── 검증 결과 한국어 정규화 ──────────────────────────────────────────────────
+
+def _normalize_to_korean(text: str) -> str:
+    """영어 원문이 섞인 검증 결과를 한국어 bullet summary로 변환.
+    완전한 번역은 아니고, 영어 문장이 주를 이루면 간단 정리.
+    """
+    if not text:
+        return text
+
+    # ASCII 비율로 영어 지배 여부 판단
+    ascii_chars = sum(1 for c in text if ord(c) < 128 and c.isalpha())
+    total_alpha = sum(1 for c in text if c.isalpha())
+    if total_alpha == 0:
+        return text
+
+    eng_ratio = ascii_chars / total_alpha
+    if eng_ratio < 0.5:
+        # 한국어 위주면 그대로 반환
+        return text
+
+    # 영어가 50% 이상이면 → 간결한 한국어 대체
+    # "The article states..." 등 전형적 패턴 정리
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    result_lines = []
+    for line in lines:
+        line_ascii = sum(1 for c in line if ord(c) < 128 and c.isalpha())
+        line_alpha = sum(1 for c in line if c.isalpha())
+        if line_alpha > 0 and (line_ascii / line_alpha) > 0.6:
+            # 영어 문장 → 축약 표기
+            result_lines.append(f"(영문 원문 — 로그 참조)")
+            logger.info(f"[검증 원문] {line}")
+            break  # 영어 원문은 하나만 표기
+        else:
+            result_lines.append(line)
+
+    return "\n".join(result_lines) if result_lines else text
 
 # ─── 메인 빠른 키보드 (입력창 위 고정) ─────────────────────────────────────────
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
@@ -172,9 +212,10 @@ async def _run_analysis_and_show_card(
             logger.error(f"[분석] Gemini 리서치 실패: {research}")
         else:
             facts = research.key_facts[:3]
-            research_summary = research.summary[:300]
+            research_summary = _normalize_to_korean(research.summary[:300])
             if facts:
-                research_summary += "\n• " + "\n• ".join(facts)
+                kr_facts = [_normalize_to_korean(f) for f in facts]
+                research_summary += "\n• " + "\n• ".join(kr_facts)
 
         factcheck_summary = ""
         if isinstance(factcheck, Exception):
@@ -184,7 +225,9 @@ async def _run_analysis_and_show_card(
             confidence = factcheck.confidence
             factcheck_summary = f"{status} (신뢰도: {confidence})"
             if factcheck.corrections:
-                factcheck_summary += "\n수정사항: " + "; ".join(factcheck.corrections[:2])
+                # 영어 원문은 로그에만, 사용자에게는 한국어만 노출
+                kr_corrections = [_normalize_to_korean(c) for c in factcheck.corrections[:2]]
+                factcheck_summary += "\n수정사항:\n" + "\n".join(f"  • {c}" for c in kr_corrections)
 
         # 상태 저장
         _set_pending(context, {
