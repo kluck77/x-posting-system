@@ -1475,9 +1475,21 @@ async def _run_candidate_card(
             await msg.edit_text("⚠️ 콘텐츠 내용이 부족합니다.")
             return
 
+        # 검증 컨텍스트 조립 (상단 분석 결과 → 후보 카드에 전달)
+        verification_context = ""
+        if pending:
+            parts = []
+            fc = pending.get("factcheck_summary", "")
+            if fc:
+                parts.append(fc)
+            rs = pending.get("research_summary", "")
+            if rs:
+                parts.append(f"리서치: {rs[:300]}")
+            verification_context = "\n".join(parts)
+
         # 후보 카드 생성 (hard timeout)
         card = await asyncio.wait_for(
-            generate_candidate_card(req),
+            generate_candidate_card(req, verification_context=verification_context),
             timeout=_PACK_TIMEOUT,
         )
 

@@ -1300,12 +1300,40 @@ _CANDIDATE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정을 위한 "소
 4. 원문 밖 해석을 과도하게 확장하지 말 것.
 5. 후보 카드는 짧고 구조화된 재료 중심으로 작성할 것.
 
+━━━ 검증 연동 규칙 (반드시 준수) ━━━
+
+입력에 "상단 검증 결과" 섹션이 있으면 반드시 따를 것:
+
+1. 검증 결과가 "미검증", "신뢰도: low", "no matching", "unrelated",
+   "확인 실패", "추가 확인 필요" 중 하나라도 포함하면:
+   - certainty_level을 "확정"으로 쓰지 마라. "미확인" 또는 "상충"만 허용.
+   - key_facts에 확인되지 않은 사실을 단정형으로 쓰지 마라.
+   - cautions에 "출처 미검증" 또는 "추가 확인 필요"를 반드시 포함.
+   - risk_flags에 검증 실패 사유를 포함.
+
+2. 검증 결과의 주제/엔티티를 벗어나는 확장 금지:
+   - 원문에 없는 새 시장축(부동산/환율/주식시장/피해액 등)을 임의 추가하지 마라.
+   - topic_tags, hook_candidates, key_facts는 소스 원문의 주제 범위 안에서만 생성.
+   - "소스에 없지만 관련될 수 있는" 해설을 만들지 마라.
+
+3. certainty_level 상한:
+   - 입력에 "certainty_level 상한: X"가 명시되면 그 이상으로 올리지 마라.
+   - 검증 결과 없이 소스 텍스트만으로 판단할 경우에도
+     "확정"은 공식 발표/법안/수치 확인이 된 경우에만 사용.
+
+4. 검증 실패 시 억지 해설 금지:
+   - 소스가 불충분하면 빈칸을 일반 경제 해설로 메우지 마라.
+   - key_facts를 억지로 5개 채우려 하지 마라. 확인된 것만 적어라.
+   - 차라리 "소스 확인 부족 — 추가 검증 필요"를 넣어라.
+
 QA 체크:
 1. 숫자/사실이 소스에 있는가?
 2. 미확인 사안을 확정처럼 쓰지 않았는가?
 3. 발언과 조치를 혼동하지 않았는가?
 4. certainty_level이 내용과 일치하는가?
 5. 훅 후보가 서로 다른 방향을 제시하는가?
+6. 상단 검증 결과와 certainty_level이 일관되는가?
+7. 원문 밖 시장축을 임의 확장하지 않았는가?
 
 출력 규칙:
 - 한국어 JSON만 출력하라.
@@ -1455,9 +1483,17 @@ final_short 예시 C (독립 버전):
 
 # ─── 1차: 후보 카드 생성 ─────────────────────────────────────────────────────
 
-async def generate_candidate_card(request: ContentRequest) -> CandidateCard:
+async def generate_candidate_card(
+    request: ContentRequest,
+    verification_context: str = "",
+) -> CandidateCard:
     """
     ContentRequest → CandidateCard (1차 후보 카드).
+
+    Args:
+        request: 소스 콘텐츠
+        verification_context: 상단 분석(Gemini/Perplexity) 검증 결과 요약.
+            예: "⚠️ 미검증 (신뢰도: low)\n수정사항: ..."
 
     흐름:
       1. 규칙 기반 팩트 시트 추출
@@ -1470,10 +1506,23 @@ async def generate_candidate_card(request: ContentRequest) -> CandidateCard:
     raw_input = source_text or title
     fact_sheet = extract_fact_sheet(raw_input)
 
+    # 검증 결과에서 certainty 상한 결정
+    verification_ceiling = _decide_certainty_ceiling(verification_context)
+
     # 프롬프트 구성
     user_prompt = f"Source type: {request.source_type}\n"
     if request.source_url:
         user_prompt += f"URL: {request.source_url}\n"
+
+    # 검증 결과 삽입 (상단 분석이 있을 때)
+    if verification_context:
+        user_prompt += (
+            f"\n=== 상단 검증 결과 (반드시 반영) ===\n"
+            f"{verification_context}\n"
+            f"⚠️ 위 검증 결과를 무시하고 자체 해설을 만들지 마라.\n"
+            f"⚠️ certainty_level 상한: {verification_ceiling}\n"
+            f"===\n"
+        )
 
     # 팩트 시트 삽입
     user_prompt += "\n=== 팩트 시트 ===\n"
@@ -1500,7 +1549,7 @@ async def generate_candidate_card(request: ContentRequest) -> CandidateCard:
     raw = await _call_ai_with_prompt(_CANDIDATE_PROMPT_KO, user_prompt)
 
     if raw:
-        card = _parse_candidate_card(raw)
+        card = _parse_candidate_card(raw, certainty_ceiling=verification_ceiling)
         if card and card.is_valid():
             card.source_url = request.source_url
             card.source_type = request.source_type
@@ -1688,10 +1737,55 @@ async def _call_ai_with_prompt(
     return None
 
 
+# ─── 검증 상한 결정 ──────────────────────────────────────────────────────────
+
+# 검증 실패 키워드 (하나라도 포함 시 certainty 상한 제한)
+_VERIFICATION_FAIL_KEYWORDS = [
+    "미검증", "신뢰도: low", "신뢰도:low",
+    "no matching", "unrelated",
+    "확인 실패", "추가 확인 필요", "검색 결과 없음",
+    "무관한 검색", "기사 확인 실패",
+]
+
+# certainty 우선순위: 확정 > 상충 > 미확인
+_CERTAINTY_RANK = {"확정": 2, "상충": 1, "미확인": 0}
+_RANK_TO_CERTAINTY = {2: "확정", 1: "상충", 0: "미확인"}
+
+
+def _decide_certainty_ceiling(verification_context: str) -> str:
+    """
+    검증 컨텍스트에서 certainty_level 상한을 결정.
+
+    반환값: "확정" | "상충" | "미확인"
+    - 검증 실패 키워드 존재 → "미확인"
+    - 신뢰도 medium → "상충"
+    - 검증 결과 없음 또는 신뢰도 high → "확정" (제한 없음)
+    """
+    if not verification_context:
+        return "확정"  # 검증 정보 없으면 제한하지 않음
+
+    ctx_lower = verification_context.lower()
+
+    # 검증 실패 키워드 감지
+    for keyword in _VERIFICATION_FAIL_KEYWORDS:
+        if keyword.lower() in ctx_lower:
+            logger.info(f"[CertaintyCeiling] 검증 실패 키워드 감지: '{keyword}' → 상한 '미확인'")
+            return "미확인"
+
+    # 신뢰도 medium → 상충까지만
+    if "신뢰도: medium" in ctx_lower or "신뢰도:medium" in ctx_lower:
+        return "상충"
+
+    return "확정"
+
+
 # ─── 파서 ────────────────────────────────────────────────────────────────────
 
-def _parse_candidate_card(raw: str) -> Optional[CandidateCard]:
-    """AI 응답 JSON → CandidateCard."""
+def _parse_candidate_card(
+    raw: str,
+    certainty_ceiling: str = "확정",
+) -> Optional[CandidateCard]:
+    """AI 응답 JSON → CandidateCard. certainty_level 상한 보정 포함."""
     try:
         text = raw.strip()
         if "```" in text:
@@ -1700,13 +1794,25 @@ def _parse_candidate_card(raw: str) -> Optional[CandidateCard]:
             if start != -1 and end > start:
                 text = text[start:end]
         data = json.loads(text)
+
+        # certainty_level 상한 강제
+        ai_certainty = str(data.get("certainty_level", "미확인"))
+        ceiling_rank = _CERTAINTY_RANK.get(certainty_ceiling, 0)
+        ai_rank = _CERTAINTY_RANK.get(ai_certainty, 0)
+        if ai_rank > ceiling_rank:
+            logger.warning(
+                f"[CertaintyCeiling] AI가 '{ai_certainty}'로 응답했으나 "
+                f"상한 '{certainty_ceiling}'으로 하향 보정"
+            )
+            ai_certainty = certainty_ceiling
+
         return CandidateCard(
             key_facts=_ensure_list(data.get("key_facts"), 5),
             hook_candidates=_ensure_list(data.get("hook_candidates"), 5),
             one_liner=_ensure_list(data.get("one_liner"), 3),
             cautions=_ensure_list(data.get("cautions"), 3),
             watch_points=_ensure_list(data.get("watch_points"), 5),
-            certainty_level=str(data.get("certainty_level", "미확인")),
+            certainty_level=ai_certainty,
             topic_tags=_ensure_list(data.get("topic_tags"), None),
             risk_flags=_ensure_list(data.get("risk_flags"), None),
         )

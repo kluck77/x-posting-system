@@ -13,6 +13,8 @@ from app.services.content_pack import (
     _CANDIDATE_PROMPT_KO, _FINALIZE_PROMPT_KO,
     _parse_candidate_card, _parse_final_post,
     _validate_final_post, _BANNED_ENDINGS, _TONE_SOFTENERS,
+    _decide_certainty_ceiling, _VERIFICATION_FAIL_KEYWORDS,
+    _CERTAINTY_RANK,
 )
 from app.models.content_request import ContentRequest
 
@@ -1521,6 +1523,152 @@ class TestCandidatePromptRules:
         p = _CANDIDATE_PROMPT_KO
         assert "완성 글을 쓰지 마라" in p
         assert "완성 게시글 문체로 길게 쓰지 마라" in p
+
+    def test_verification_linkage_section(self):
+        """검증 연동 규칙 섹션이 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "검증 연동 규칙" in p
+        assert "미검증" in p
+        assert "certainty_level 상한" in p
+
+    def test_verification_fail_keywords_in_prompt(self):
+        """검증 실패 키워드가 프롬프트에 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "신뢰도: low" in p
+        assert "no matching" in p
+        assert "추가 확인 필요" in p
+
+    def test_no_arbitrary_expansion_rule(self):
+        """원문 밖 시장축 임의 확장 금지."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "부동산/환율/주식시장/피해액" in p
+        assert "임의 추가하지 마라" in p
+
+    def test_force_fill_ban(self):
+        """억지 해설 금지 규칙."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "억지 해설 금지" in p
+        assert "빈칸을 일반 경제 해설로 메우지 마라" in p
+
+    def test_qa_check_extended(self):
+        """QA 체크 7개로 확장."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "상단 검증 결과와 certainty_level이 일관" in p
+        assert "원문 밖 시장축을 임의 확장하지 않았는가" in p
+
+
+class TestDecideCertaintyCeiling:
+    """_decide_certainty_ceiling 로직 검증."""
+
+    def test_no_context_returns_confirmed(self):
+        """검증 컨텍스트 없으면 제한 없음."""
+        assert _decide_certainty_ceiling("") == "확정"
+
+    def test_unverified_low_returns_unconfirmed(self):
+        """미검증 + 신뢰도 low → 미확인."""
+        ctx = "⚠️ 미검증 (신뢰도: low)"
+        assert _decide_certainty_ceiling(ctx) == "미확인"
+
+    def test_low_confidence_returns_unconfirmed(self):
+        """신뢰도 low만으로도 미확인."""
+        ctx = "✅ 검증됨 (신뢰도: low)"
+        assert _decide_certainty_ceiling(ctx) == "미확인"
+
+    def test_medium_confidence_returns_conflicting(self):
+        """신뢰도 medium → 상충."""
+        ctx = "✅ 검증됨 (신뢰도: medium)"
+        assert _decide_certainty_ceiling(ctx) == "상충"
+
+    def test_high_confidence_no_restriction(self):
+        """신뢰도 high → 제한 없음."""
+        ctx = "✅ 검증됨 (신뢰도: high)"
+        assert _decide_certainty_ceiling(ctx) == "확정"
+
+    def test_no_matching_detected(self):
+        """no matching 키워드 감지."""
+        ctx = "검색 결과: no matching articles found"
+        assert _decide_certainty_ceiling(ctx) == "미확인"
+
+    def test_article_verification_failed(self):
+        """기사 확인 실패 키워드 감지."""
+        ctx = "YTN 기사 확인 실패, 무관한 검색 결과 혼입"
+        assert _decide_certainty_ceiling(ctx) == "미확인"
+
+    def test_additional_verification_needed(self):
+        """추가 확인 필요 키워드 감지."""
+        ctx = "일부 수치 추가 확인 필요"
+        assert _decide_certainty_ceiling(ctx) == "미확인"
+
+    def test_all_fail_keywords_covered(self):
+        """_VERIFICATION_FAIL_KEYWORDS 모두 감지 확인."""
+        for keyword in _VERIFICATION_FAIL_KEYWORDS:
+            ctx = f"분석 결과: {keyword}"
+            result = _decide_certainty_ceiling(ctx)
+            assert result == "미확인", f"키워드 '{keyword}'가 감지되지 않음"
+
+
+class TestCertaintyCeilingEnforcement:
+    """_parse_candidate_card의 certainty 상한 보정 검증."""
+
+    def test_confirmed_downgraded_to_unconfirmed(self):
+        """AI가 확정으로 응답했지만 상한이 미확인이면 하향."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["훅1"],
+            "certainty_level": "확정",
+        })
+        card = _parse_candidate_card(raw, certainty_ceiling="미확인")
+        assert card is not None
+        assert card.certainty_level == "미확인"
+
+    def test_confirmed_downgraded_to_conflicting(self):
+        """AI가 확정 → 상한 상충이면 상충으로."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["훅1"],
+            "certainty_level": "확정",
+        })
+        card = _parse_candidate_card(raw, certainty_ceiling="상충")
+        assert card is not None
+        assert card.certainty_level == "상충"
+
+    def test_unconfirmed_not_upgraded(self):
+        """AI가 미확인 → 상한 확정이어도 그대로 미확인."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["훅1"],
+            "certainty_level": "미확인",
+        })
+        card = _parse_candidate_card(raw, certainty_ceiling="확정")
+        assert card is not None
+        assert card.certainty_level == "미확인"
+
+    def test_no_ceiling_default(self):
+        """기본값은 제한 없음 (확정 허용)."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["훅1"],
+            "certainty_level": "확정",
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert card.certainty_level == "확정"
+
+    def test_conflicting_within_ceiling(self):
+        """AI가 상충 → 상한 상충이면 그대로."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["훅1"],
+            "certainty_level": "상충",
+        })
+        card = _parse_candidate_card(raw, certainty_ceiling="상충")
+        assert card is not None
+        assert card.certainty_level == "상충"
 
 
 class TestFinalizePromptRules:
