@@ -21,6 +21,9 @@ from app.services.content_pack import (
     _SENSITIVE_TOPICS, _WEAK_PATTERNS,
     _FACT_NARRATION_STARTS,
     _OPINION_PATTERNS,
+    # Phase 2: Gemini 대안 의견 카드
+    _GEMINI_OPINION_PROMPT, GeminiOpinionCard,
+    _should_invoke_extended_review, _EXTENDED_REVIEW_TOPICS,
 )
 from app.models.content_request import ContentRequest
 
@@ -2654,3 +2657,157 @@ class TestClaudeAlwaysOnIntegrator:
         from app.services.content_pack import _claude_review_final
         sig = inspect.signature(_claude_review_final)
         assert "selected_hook" in sig.parameters
+
+    def test_claude_review_accepts_gemini_opinion(self):
+        """_claude_review_final이 gemini_opinion 키워드 인자를 받음."""
+        import inspect
+        from app.services.content_pack import _claude_review_final
+        sig = inspect.signature(_claude_review_final)
+        assert "gemini_opinion" in sig.parameters
+
+
+# ─── Phase 2: Gemini 대안 의견 카드 테스트 ──────────────────────────────────────
+
+
+class TestGeminiOpinionPrompt:
+    """Gemini 대안 의견 카드 프롬프트 검증."""
+
+    def test_role_is_opinion_card(self):
+        """역할이 '대안 의견 카드 생성기'."""
+        assert "대안 의견 카드" in _GEMINI_OPINION_PROMPT
+
+    def test_first_line_priority(self):
+        """first_line_suggestion이 가장 우선순위 높음."""
+        p = _GEMINI_OPINION_PROMPT
+        assert "first_line_suggestion" in p
+        # 1번으로 나와야 함
+        idx_first = p.find("1. first_line_suggestion")
+        idx_alt = p.find("2. alt_short")
+        assert idx_first < idx_alt
+
+    def test_no_full_rewrite(self):
+        """본문 전체 재작성 금지."""
+        assert "전체 재작성 금지" in _GEMINI_OPINION_PROMPT
+
+    def test_no_new_facts(self):
+        """새 사실 추가 금지."""
+        assert "새 사실" in _GEMINI_OPINION_PROMPT
+        assert "금지" in _GEMINI_OPINION_PROMPT
+
+    def test_tone_model_sync(self):
+        """문체 모델이 동기화되어 있음."""
+        assert "증권사" in _GEMINI_OPINION_PROMPT
+
+    def test_json_output_schema(self):
+        """출력 스키마에 4개 필드 존재."""
+        p = _GEMINI_OPINION_PROMPT
+        for field in ["first_line_suggestion", "alt_short", "alt_angle", "alt_hooks"]:
+            assert field in p
+
+    def test_cautions_constraint(self):
+        """cautions 상한선 규칙 존재."""
+        assert "cautions" in _GEMINI_OPINION_PROMPT or "검증 결과" in _GEMINI_OPINION_PROMPT
+
+
+class TestGeminiOpinionCardDataclass:
+    """GeminiOpinionCard 데이터클래스 검증."""
+
+    def test_default_values(self):
+        """기본값이 빈 문자열/빈 리스트."""
+        card = GeminiOpinionCard()
+        assert card.first_line_suggestion == ""
+        assert card.alt_short == ""
+        assert card.alt_angle == ""
+        assert card.alt_hooks == []
+
+    def test_with_values(self):
+        """값 할당 정상 동작."""
+        card = GeminiOpinionCard(
+            first_line_suggestion="테스트 첫 줄",
+            alt_hooks=["훅1", "훅2"],
+        )
+        assert card.first_line_suggestion == "테스트 첫 줄"
+        assert len(card.alt_hooks) == 2
+
+
+class TestShouldInvokeExtendedReview:
+    """_should_invoke_extended_review() 조건 함수 검증."""
+
+    def _make_card(self, **kwargs):
+        defaults = {
+            "hook_candidates": ["훅1", "훅2", "훅3"],
+            "key_facts": ["팩트1"],
+            "certainty_level": "확인",
+            "topic_tags": [],
+            "cautions": [],
+            "one_liner": [],
+            "watch_points": [],
+            "risk_flags": [],
+        }
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    def _make_draft(self, post="정상 첫 문장이다.\n해석 축.\n변수는 시행령이다.", short="독립 짧은 버전."):
+        return FinalPost(final_post=post, final_short=short)
+
+    def test_sensitive_topic_triggers(self):
+        """민감 토픽이면 True."""
+        card = self._make_card(topic_tags=["외교", "경제"])
+        draft = self._make_draft()
+        assert _should_invoke_extended_review(card, draft) is True
+
+    def test_unconfirmed_certainty_triggers(self):
+        """certainty_level 미확인이면 True."""
+        card = self._make_card(certainty_level="미확인")
+        draft = self._make_draft()
+        assert _should_invoke_extended_review(card, draft) is True
+
+    def test_conflicting_certainty_triggers(self):
+        """certainty_level 상충이면 True."""
+        card = self._make_card(certainty_level="상충")
+        draft = self._make_draft()
+        assert _should_invoke_extended_review(card, draft) is True
+
+    def test_weak_pattern_triggers(self):
+        """뻔한 표현 포함 시 True."""
+        card = self._make_card()
+        draft = self._make_draft(post="이 사안의 추이를 봐야 한다.")
+        assert _should_invoke_extended_review(card, draft) is True
+
+    def test_fact_narration_first_line_triggers(self):
+        """첫 줄 사실나열이면 True."""
+        card = self._make_card()
+        draft = self._make_draft(post="라는 보도가 나왔다. 후속 조치 예상.")
+        assert _should_invoke_extended_review(card, draft) is True
+
+    def test_short_same_as_post_triggers(self):
+        """final_short가 final_post 첫 문장과 동일하면 True."""
+        card = self._make_card()
+        draft = self._make_draft(
+            post="동일한 문장이다. 두 번째.",
+            short="동일한 문장이다. 다른 내용.",
+        )
+        assert _should_invoke_extended_review(card, draft) is True
+
+    def test_clean_post_no_trigger(self):
+        """깨끗한 포스트+일반 토픽이면 False."""
+        card = self._make_card(topic_tags=["기술", "IT"])
+        draft = self._make_draft(
+            post="이 뉴스에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행령 여부다.",
+            short="환율 1400원대, 변수는 시행령이다.",
+        )
+        assert _should_invoke_extended_review(card, draft) is False
+
+    def test_extended_review_topics_includes_international(self):
+        """국제/지정학/거시경제도 확장 토픽에 포함."""
+        for topic in ["국제", "지정학", "거시경제"]:
+            assert topic in _EXTENDED_REVIEW_TOPICS
+
+    def test_multiple_warnings_trigger(self):
+        """validation 경고 2개 이상이면 True."""
+        card = self._make_card()
+        # 첫 문장 사실나열 + 금지 마감 = 경고 2개
+        draft = self._make_draft(
+            post="라는 보도가 나왔다. 시장 반응을 봐야 한다.",
+        )
+        assert _should_invoke_extended_review(card, draft) is True

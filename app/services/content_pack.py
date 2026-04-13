@@ -1826,9 +1826,18 @@ async def generate_final_post(
                 f"short={len(result.final_short)}자"
             )
 
+            # Phase 2: 조건부 Gemini 대안 의견 카드
+            gemini_opinion = None
+            if _should_invoke_extended_review(card, result):
+                gemini_opinion = await _gemini_opinion_card(
+                    card, result, selected_hook=selected_hook
+                )
+
             # Phase 1: Claude 상시 최종 통합 — 항상 호출
             reviewed = await _claude_review_final(
-                card, result, selected_hook=selected_hook
+                card, result,
+                selected_hook=selected_hook,
+                gemini_opinion=gemini_opinion,
             )
             if reviewed:
                 logger.info(
@@ -1998,8 +2007,226 @@ Perplexity 검증 결과와 cautions를 반영해서 사실 상한선을 넘지 
 }"""
 
 
-async def _claude_review_final(
+# ─── Phase 2: Gemini 대안 의견 카드 ──────────────────────────────────────────
+
+# Gemini 대안 의견 카드용 토픽 (확장 리뷰 트리거)
+_EXTENDED_REVIEW_TOPICS = {
+    "정치", "외교", "안보", "군사", "부동산", "정책",
+    "국제", "지정학", "거시경제", "규제", "국방", "북한",
+}
+
+_GEMINI_OPINION_PROMPT = """너는 X 게시글 "대안 의견 카드" 생성기다.
+
+━━━ 역할 ━━━
+
+OpenAI가 작성한 1차 초안(final_post, final_short)을 읽고,
+"더 읽히는 대안"만 제안하라.
+본문 전체를 다시 쓰지 마라. 의견 카드만 반환하라.
+
+━━━ 네가 할 일 (우선순위 순) ━━━
+
+1. first_line_suggestion (가장 중요)
+   - 초안의 첫 문장보다 더 읽히는 첫 문장 1개
+   - 기사 요약/사실 나열 금지
+   - "왜 봐야 하는가"로 시작하는 해석형 문장
+   - 초안 첫 문장이 이미 좋으면 빈 문자열 ""
+
+2. alt_short
+   - 초안 final_short보다 더 살아있는 짧은 버전 1개
+   - final_post 축약본이 아닌 독립 문장
+   - 초안 short가 이미 좋으면 빈 문자열 ""
+
+3. alt_angle
+   - 같은 기사를 다르게 읽는 해석 축 1개
+   - 한국 관점 연결 필수 (환율/비용/기업/증시/정부 등)
+   - 새로운 축이 없으면 빈 문자열 ""
+
+4. alt_hooks
+   - 대안 훅 1~2개
+   - 기사 제목과 구별되는 해석형 문장
+   - 대안이 없으면 빈 배열 []
+
+━━━ 절대 금지 ━━━
+
+- 새 사실/새 수치 추가 금지 (원문에 없는 것)
+- 기사 밖 확장 금지
+- cautions/검증 결과보다 강한 주장 금지
+- 최종 글 전체 재작성 금지
+
+━━━ 문체 모델 ━━━
+
+"트위터 팔로워 10만인 한국 증권사 출신 해설자"
+
+━━━ 출력 ━━━
+한국어 JSON만 출력:
+{
+  "first_line_suggestion": "더 읽히는 첫 문장 1개",
+  "alt_short": "더 나은 short 1개",
+  "alt_angle": "다른 해석 각도 1개",
+  "alt_hooks": ["대안 훅 1", "대안 훅 2"]
+}"""
+
+
+@dataclass
+class GeminiOpinionCard:
+    """Gemini 대안 의견 카드."""
+    first_line_suggestion: str = ""
+    alt_short: str = ""
+    alt_angle: str = ""
+    alt_hooks: list[str] = field(default_factory=list)
+
+
+def _should_invoke_extended_review(
+    card: CandidateCard, draft: FinalPost
+) -> bool:
+    """Gemini 대안 의견 카드를 호출할지 판단. True면 호출."""
+    reasons: list[str] = []
+
+    # 1. 민감/확장 토픽
+    if card.topic_tags:
+        overlap = _EXTENDED_REVIEW_TOPICS & set(card.topic_tags)
+        if overlap:
+            reasons.append(f"확장리뷰토픽: {overlap}")
+
+    # 2. 미확인/상충
+    if card.certainty_level in ("미확인", "상충"):
+        reasons.append(f"certainty={card.certainty_level}")
+
+    # 3. validation warning 2개 이상
+    _, _, warnings = _validate_final_post(draft.final_post, draft.final_short)
+    if len(warnings) >= 2:
+        reasons.append(f"validation경고 {len(warnings)}개")
+
+    # 4. 첫 줄 밋밋한 패턴
+    first_line = draft.final_post.split("\n")[0].strip() if draft.final_post else ""
+    for narr in _FACT_NARRATION_STARTS:
+        if narr in first_line:
+            reasons.append(f"첫줄 사실나열: '{narr}'")
+            break
+
+    # 5. 뻔한 표현 포함
+    for pat in _WEAK_PATTERNS:
+        if pat in draft.final_post:
+            reasons.append(f"뻔한표현: '{pat}'")
+            break
+
+    # 6. final_short가 final_post 첫 문장과 동일 (요약문 느낌)
+    first_sentence = draft.final_post.split(".")[0].split("\n")[0].strip()
+    short_first = (
+        draft.final_short.split(".")[0].split("\n")[0].strip()
+        if draft.final_short else ""
+    )
+    if first_sentence and short_first and first_sentence == short_first:
+        reasons.append("short가 요약문")
+
+    if reasons:
+        logger.info(f"[Gemini의견카드] 호출 결정: {', '.join(reasons)}")
+        return True
+
+    logger.info("[Gemini의견카드] 조건 미충족 — 스킵")
+    return False
+
+
+async def _gemini_opinion_card(
     card: CandidateCard, draft: FinalPost, *, selected_hook: str = ""
+) -> Optional[GeminiOpinionCard]:
+    """Gemini로 대안 의견 카드 생성. 실패 시 None."""
+    from app.config import settings
+
+    if not settings.has_gemini:
+        return None
+
+    user_prompt = (
+        f"━━━ 1차 초안 (OpenAI) ━━━\n"
+        f"final_post: {draft.final_post}\n"
+        f"final_short: {draft.final_short}\n\n"
+        f"━━━ 선택된 훅 ━━━\n"
+        f"{selected_hook}\n\n"
+        f"━━━ 카드 정보 ━━━\n"
+        f"certainty_level: {card.certainty_level}\n"
+    )
+    if card.key_facts:
+        user_prompt += "핵심 팩트:\n"
+        for i, fact in enumerate(card.key_facts, 1):
+            user_prompt += f"  {i}. {fact}\n"
+    if card.cautions:
+        user_prompt += "cautions:\n"
+        for c in card.cautions:
+            user_prompt += f"  - {c}\n"
+    if card.topic_tags:
+        user_prompt += f"topic_tags: {', '.join(card.topic_tags)}\n"
+
+    user_prompt += "\n위 초안을 보고 대안 의견 카드를 JSON으로 반환하라."
+
+    try:
+        import httpx
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta"
+            "/models/gemini-2.5-flash:generateContent"
+        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                url,
+                params={"key": settings.gemini_api_key},
+                headers={"Content-Type": "application/json"},
+                json={
+                    "system_instruction": {
+                        "parts": [{"text": _GEMINI_OPINION_PROMPT}],
+                    },
+                    "contents": [
+                        {"parts": [{"text": user_prompt}]},
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.8,
+                        "responseMimeType": "application/json",
+                    },
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            usage = data.get("usageMetadata", {})
+            logger.info(
+                f"[API-COST] gemini gemini-2.5-flash "
+                f"in={usage.get('promptTokenCount', '?')} "
+                f"out={usage.get('candidatesTokenCount', '?')} "
+                f"caller=GeminiOpinionCard"
+            )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage(
+                    "gemini", "gemini-2.5-flash", "GeminiOpinionCard",
+                    usage.get("promptTokenCount", 0),
+                    usage.get("candidatesTokenCount", 0),
+                )
+            except Exception:
+                pass
+
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = json.loads(raw_text)
+            result = GeminiOpinionCard(
+                first_line_suggestion=str(parsed.get("first_line_suggestion", "")),
+                alt_short=str(parsed.get("alt_short", "")),
+                alt_angle=str(parsed.get("alt_angle", "")),
+                alt_hooks=[str(h) for h in parsed.get("alt_hooks", [])],
+            )
+            logger.info(
+                f"[Gemini의견카드] 생성 완료: "
+                f"first_line={'있음' if result.first_line_suggestion else '없음'}, "
+                f"alt_hooks={len(result.alt_hooks)}개"
+            )
+            return result
+
+    except Exception as e:
+        logger.warning(f"[Gemini의견카드] 호출 실패: {e}")
+        return None
+
+
+async def _claude_review_final(
+    card: CandidateCard,
+    draft: FinalPost,
+    *,
+    selected_hook: str = "",
+    gemini_opinion: Optional[GeminiOpinionCard] = None,
 ) -> Optional[FinalPost]:
     """Anthropic Claude 최종 통합. 실패 시 None (OpenAI 결과로 폴백)."""
     from app.config import settings
@@ -2022,6 +2249,27 @@ async def _claude_review_final(
             user_prompt += f"  - {c}\n"
     if card.topic_tags:
         user_prompt += f"topic_tags: {', '.join(card.topic_tags)}\n"
+
+    # Gemini 대안 의견 카드가 있으면 참고 자료로 추가
+    if gemini_opinion:
+        user_prompt += (
+            "\n━━━ Gemini 대안 의견 (참고자료 — 좋은 것만 흡수, 별로면 무시) ━━━\n"
+        )
+        if gemini_opinion.first_line_suggestion:
+            user_prompt += f"first_line_suggestion: {gemini_opinion.first_line_suggestion}\n"
+        if gemini_opinion.alt_short:
+            user_prompt += f"alt_short: {gemini_opinion.alt_short}\n"
+        if gemini_opinion.alt_angle:
+            user_prompt += f"alt_angle: {gemini_opinion.alt_angle}\n"
+        if gemini_opinion.alt_hooks:
+            user_prompt += "alt_hooks:\n"
+            for h in gemini_opinion.alt_hooks:
+                user_prompt += f"  - {h}\n"
+        user_prompt += (
+            "주의: Gemini 의견은 참고일 뿐이다. "
+            "새 사실 추가 금지. 검증 결과보다 강한 주장 금지. "
+            "여러 AI 문장 이어붙인 느낌 금지. 최종 문체는 하나여야 한다.\n"
+        )
 
     user_prompt += (
         "\n위 초안을 최종 통합 편집하고, JSON으로 반환하라."
