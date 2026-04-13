@@ -27,9 +27,9 @@ from app.models.content import Draft, SourceItem, PostLog, ApprovalStatus
 logger = logging.getLogger(__name__)
 
 # 기본 일일 제한값 (기존 호환)
-DEFAULT_MAX_DRAFTS_PER_DAY = 5
-DEFAULT_MAX_TELEGRAM_PER_DAY = 5
-DEFAULT_MAX_POSTS_PER_DAY = 3
+DEFAULT_MAX_DRAFTS_PER_DAY = 50
+DEFAULT_MAX_TELEGRAM_PER_DAY = 50
+DEFAULT_MAX_POSTS_PER_DAY = 30
 
 # 레인별 AI 파이프라인 제한값
 DEFAULT_MAX_AI_DRAFTS_PER_DAY = 50   # AI 파이프라인 총 제한 (Steps 2-6)
