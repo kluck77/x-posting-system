@@ -262,14 +262,21 @@ _SYSTEM_PROMPT_KO = """당신은 한국어 X 계정(@cheesesvav)의 시니어 �
 4. credibility > virality: 과장·선동·루머 금지. 신뢰가 팔로우 이유
 5. "다음에 볼 것" 남기기: 독자가 추적할 수 있는 후속 지표 1개
 6. 기사 제목 재진술 금지: 원본 헤드라인을 그대로 옮기면 실패
-7. 낡은 수치 단정 금지: 연도·분기·성장률 등 구체 수치는 입력 데이터에 명확히 있을 때만 사용. 불확실하면 "최근" "올해" 등 일반화 표현 사용. 현재 시점과 어긋나는 수치는 신뢰를 깎는다.
-8. 데이터 없는 단정 금지: 경제·부동산·금리·환율·주식·정책·크립토 주제에서 아래 3개 중 최소 2개가 없으면 강한 단정("상승했다" "회복됐다" "반등했다")을 쓰지 마라.
-   ① 지역/대상 (어디? 무엇이?)
-   ② 기간/비교 시점 (언제 대비?)
-   ③ 수치/변화폭 (얼마나?)
-   2개 미만이면 톤을 낮춰라: 상승→상승 조짐, 회복→회복 신호, 반등→제한적 반등 가능성, 급등→오름세.
-   부동산 글은 특히 지역명 1개 + 비교 기준 1개를 우선 포함하라.
+7. ★ 숫자 사용 절대 규칙 (CRITICAL):
+   구체 수치(환율·지수·가격·비율·거래량·성장률)는 아래 조건 중 하나일 때만 사용:
+   ① 소스 원문에 명시적으로 등장  ② 팩트시트 "수치" 필드에 존재
+   조건 미충족 시: 구체 수치 생성 절대 금지. 정성 표현("최근" "올해" "상승세" "약세 흐름")으로 대체.
+   실시간 시세(환율, 주가, 코인 가격, 지수)는 특히 위험 — 원문에 없으면 절대 쓰지 마라.
+   틀린 수치 1개 = 글 전체 신뢰 상실. 없으면 안 쓰는 게 낫다.
+8. ★ 강한 단정 약화 규칙 (CRITICAL):
+   아래 표현은 지역/기간/수치 중 2개 이상 있을 때만 허용. 2개 미만이면 반드시 약화:
+   급증/급등 → 증가 조짐/오름세 | 급락/급감 → 하락 압력/약세 흐름
+   활발/폭증 → 거래 움직임/관심 증가 | 붕괴/폭락 → 하락 압력/약화
+   ~가능성 높다 → ~가능성도 거론된다 | ~확실하다 → ~가능성이 있다
+   ~시작됐다 → ~조짐이 보인다 | 수요 폭증 → 수요 증가 신호
+   부동산·환율·주식·크립토는 특히 엄격 적용.
 9. 메인 3축 분리: A/B/C는 반드시 서로 다른 핵심축(렌즈)으로 써라. 같은 논지를 말 바꿔 반복하면 실패.
+10. 댓글·인용 보수성 규칙: reply_drafts/quote_post_drafts는 본문보다 더 보수적 표현 사용. 소스에 없는 수치를 댓글/인용에 절대 넣지 마라. 댓글의 팩트 오류는 원글보다 더 빠르게 퍼진다.
 
 시리즈 라벨 (자연스러울 때만, 한국어로):
 - short_version → "한줄:" 접두어 사용 가능 (영어 라벨 금지)
@@ -513,17 +520,18 @@ STEP 3 — 글 생성 + QA 검증:
 JSON 출력 전에 아래 12개를 내부적으로 점검하라. 3개 이상 실패하면 전체 재작성.
 
 □ 1. 제목 재진술 아닌가? — 훅이 기사 제목 복사면 실패
-□ 2. 데이터 충족? — 경제·부동산·정책·크립토 글에서 지역/기간/수치 중 2개 이상 있는가
+□ 2. 데이터 충족? — 경제·부동산·정책·크립토 글에서 지역/기간/수치 중 2개 이상? 사용한 수치가 소스 원문에 실제 있는가?
 □ 3. 메인 축 분리? — A/B/C가 서로 다른 핵심축인가 (같은 논지 반복이면 실패)
 □ 4. 댓글 답글형? — 각 1~2문장이고 대화체인가 (3문장 이상이면 실패)
 □ 5. 인용 독립? — 메인과 다른 렌즈이며 축약본이 아닌가
 □ 6. 짧은 버전 독립? — 메인 축약이 아닌 독립 훅인가
 □ 7. 추상어 과다? — "중요하다/주목된다/영향을 줄 수 있다"가 2회 이상이면 구체화
-□ 8. 데이터 없는 단정? — 근거 없이 "상승/회복/반등"을 단정했으면 톤 다운
+□ 8. 데이터 없는 단정? — "급증/급등/급락/활발/가능성 높다" 등 강한 표현에 뒷받침 수치 있는가? 없으면 약화
 □ 9. why_it_matters 3요소? — ①영향 대상 ②해외 독자 이유 ③다음 지표 — 하나라도 빠지면 실패
 □ 10. 시리즈 라벨 과다? — "한줄:" "한국 밖에서 보면:" 등이 2곳 이상에 동시 노출이면 1개만 남겨라
 □ 11. 첫 2문장 핵심축? — 각 메인 포스트의 첫 2문장에 핵심축이 박혀 있는가. 부차 디테일이 먼저 오면 실패
-□ 12. 포스트당 축 단일? — 한 포스트에 축이 2개 이상 섞여 있으면 분리하라"""
+□ 12. 포스트당 축 단일? — 한 포스트에 축이 2개 이상 섞여 있으면 분리하라
+□ 13. 댓글·인용 수치 보수성? — reply/quote에 소스에 없는 수치를 넣지 않았는가"""
 
 _SYSTEM_PROMPT_EN = """You are a senior content strategist for an English-language X account (@cheesesvav) that explains Korean affairs to international readers.
 
@@ -663,6 +671,8 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
             "■ 톤 규칙:\n"
             "  - '상승/하락 확정' 대신 '지금 봐야 할 핵심 변수/신호' 중심\n"
             "  - 불확실한 수치 단정 금지. '~조짐' '~신호' '~추이 주목' 허용\n"
+            "  - 구체 수치(환율·지수·가격) 생성 금지. 소스에 없는 숫자를 만들지 마라\n"
+            "  - '급증/급등/급락/활발' 등 강한 단정 금지. '조짐/신호/움직임'으로 약화\n"
             "  - 일반론('시장이 복잡하다', '불확실성이 크다') 금지\n\n"
             "■ 댓글(reply_drafts) 탐색형 규칙:\n"
             "  - 1문장 또는 최대 2문장. 요약 반복 금지.\n"
@@ -690,6 +700,18 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
             for i, kf in enumerate(fact_sheet.key_facts, 1):
                 user_prompt += f"  {i}. {kf}\n"
         user_prompt += "===========================\n"
+
+        # ── 숫자 사용 허용 범위 명시 ──
+        if fact_sheet.figures:
+            user_prompt += (
+                f"\n⚠️ 허용된 수치 목록: {', '.join(fact_sheet.figures)}\n"
+                f"위 목록에 없는 수치(환율·지수·가격·비율)는 절대 생성하지 마라.\n"
+            )
+        else:
+            user_prompt += (
+                "\n⚠️ 소스에 구체 수치 없음. "
+                "환율·지수·가격·비율 등 구체 숫자 사용 금지. 정성 표현만 사용하라.\n"
+            )
 
     user_prompt += f"\nContent:\n{raw_input}\n\n"
     if language.lower() in ("en", "english", "eng"):
@@ -725,6 +747,7 @@ async def generate_content_pack(request: ContentRequest) -> ContentPack:
                 f"tags={pack.topic_tags}, fact_sheet={pack.fact_sheet_summary}"
             )
             _apply_guards(pack)
+            _audit_numeric_safety(pack, fact_sheet)
             return pack
 
     logger.warning("AI 응답 파싱 실패 — Mock 팩 반환")
@@ -762,6 +785,75 @@ def _apply_guards(pack: "ContentPack") -> None:
                 pack.style_warnings.append(w)
     except Exception as e:
         logger.warning(f"[RepetitionGuard] 실패 (무시): {e}")
+
+
+# ─── 숫자 안전성 감사 (post-generation) ──────────────────────────────────────
+
+_FINANCIAL_NUM_RE = re.compile(
+    r"\d+\.\d+"              # 소수점 수치 (99.085, 1493.9, 3.2)
+    r"|\d{4,}[\d,]*"         # 4자리+ 숫자 (1493, 1500, 12345)
+    r"|\d[\d,]*\s*[%％]"     # 퍼센트 (15%, 3.2%)
+    r"|\d[\d,]*\s*[조억만]\s*원?"  # 한국 금액 (3조, 12만)
+    r"|\d[\d,]*\s*원"        # 원화 (1500원)
+    r"|\$\s*\d[\d,\.]*"      # 달러 ($99)
+)
+
+_STRONG_ASSERTION_RE = re.compile(
+    r"급증|급등|급락|급감|폭등|폭락|붕괴|폭증|활발"
+)
+
+
+def _audit_numeric_safety(
+    pack: "ContentPack",
+    fact_sheet: "FactSheet",
+) -> None:
+    """
+    생성된 콘텐츠에서 소스에 없는 수치와 근거 없는 강한 단정을 탐지한다.
+    탐지 결과는 pack.style_warnings에 추가.
+    """
+    # 소스 수치에서 핵심 숫자 추출 (비교용)
+    source_nums: set[str] = set()
+    for fig in fact_sheet.figures:
+        for m in re.findall(r"\d+\.?\d*", re.sub(r"[,\s]", "", fig)):
+            if len(m) >= 2:  # 1자리 숫자는 잡음
+                source_nums.add(m)
+
+    # 전체 생성 텍스트 수집
+    all_texts = (
+        pack.main_posts
+        + [pack.short_version]
+        + pack.reply_drafts
+        + pack.quote_post_drafts
+        + ([pack.thread_option] if pack.thread_option else [])
+    )
+    full_text = "\n".join(t for t in all_texts if t)
+
+    # 1. 미확인 수치 탐지
+    ungrounded: list[str] = []
+    for match in _FINANCIAL_NUM_RE.finditer(full_text):
+        num_str = match.group().strip()
+        core = re.sub(r"[,\s%％원조억만달러$]", "", num_str)
+        if not core or len(core) < 2:
+            continue
+        # 소스에 있는지 확인
+        if not any(core in sn or sn in core for sn in source_nums):
+            ungrounded.append(num_str)
+
+    if ungrounded:
+        unique = list(dict.fromkeys(ungrounded))[:5]
+        pack.style_warnings.append(
+            f"⚠️ 숫자 안전: 소스에 없는 수치 감지 — {', '.join(unique)}. "
+            f"원문 확인 필요."
+        )
+
+    # 2. 강한 단정 표현 탐지
+    strong_matches = _STRONG_ASSERTION_RE.findall(full_text)
+    if strong_matches:
+        unique_a = list(dict.fromkeys(strong_matches))[:3]
+        pack.style_warnings.append(
+            f"⚠️ 단정 강도: 강한 표현 감지 — {'·'.join(unique_a)}. "
+            f"뒷받침 데이터 확인 필요."
+        )
 
 
 async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:

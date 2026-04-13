@@ -7,6 +7,7 @@
 from app.services.content_pack import (
     _get_system_prompt, _mock_pack, _is_short_input, _classify_topic,
     FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
+    _audit_numeric_safety,
 )
 from app.models.content_request import ContentRequest
 
@@ -111,8 +112,8 @@ class TestContentPackHouseStyle:
         assert "credibility > virality" in prompt
         assert "다음에 볼 것" in prompt
         assert "기사 제목 재진술 금지" in prompt
-        assert "낡은 수치 단정 금지" in prompt
-        assert "데이터 없는 단정 금지" in prompt
+        assert "숫자 사용 절대 규칙" in prompt
+        assert "강한 단정 약화 규칙" in prompt
         assert "메인 3축 분리" in prompt
 
     def test_ko_prompt_has_series_labels(self):
@@ -181,18 +182,19 @@ class TestContentPackHouseStyle:
         assert "겹침 체크" in prompt
 
     def test_ko_prompt_no_stale_data_rule(self):
-        """낡은 수치 단정 금지 규칙이 골든 룰에 있다."""
+        """숫자 사용 절대 규칙이 골든 룰에 있다."""
         prompt = _get_system_prompt("ko")
-        assert "현재 시점과 어긋나는 수치는 신뢰를 깎는다" in prompt
+        assert "틀린 수치 1개" in prompt
+        assert "절대 금지" in prompt
 
     def test_ko_prompt_data_backed_assertion_rule(self):
-        """데이터 없는 단정 금지 규칙이 골든 룰에 있다."""
+        """강한 단정 약화 규칙이 골든 룰에 있다."""
         prompt = _get_system_prompt("ko")
-        assert "데이터 없는 단정 금지" in prompt
-        assert "지역/대상" in prompt
-        assert "기간/비교 시점" in prompt
-        assert "수치/변화폭" in prompt
-        assert "톤을 낮춰라" in prompt
+        assert "강한 단정 약화 규칙" in prompt
+        assert "지역/대상" in prompt       # STEP 1에 유지
+        assert "기간/비교 시점" in prompt   # STEP 1에 유지
+        assert "수치/변화폭" in prompt     # STEP 1에 유지
+        assert "반드시 약화" in prompt     # 룰 8 본문
 
     def test_ko_prompt_has_generation_steps(self):
         """3단계 생성 절차가 프롬프트에 존재한다."""
@@ -524,6 +526,120 @@ class TestInputTypeSplit:
         sheet = extract_fact_sheet(text)
         passed, _ = check_density(sheet)
         assert passed is False
+
+
+class TestNumericSafetyAudit:
+    """후처리 숫자 안전성 감사 테스트."""
+
+    def test_ungrounded_number_flagged(self):
+        """소스에 없는 수치가 생성되면 경고."""
+        pack = ContentPack(
+            main_posts=["환율 1493.9원 돌파, 위기 신호"],
+            short_version="",
+            reply_drafts=[],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])  # 소스에 수치 없음
+        _audit_numeric_safety(pack, sheet)
+        assert any("숫자 안전" in w for w in pack.style_warnings)
+
+    def test_grounded_number_ok(self):
+        """소스에 있는 수치는 경고 안 함."""
+        pack = ContentPack(
+            main_posts=["환율 1493.9원 돌파"],
+            short_version="",
+            reply_drafts=[],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=["1493.9원"])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("숫자 안전" in w for w in pack.style_warnings)
+
+    def test_strong_assertion_flagged(self):
+        """급증/급등/폭락 등 강한 단정 표현이 경고됨."""
+        pack = ContentPack(
+            main_posts=["강남 아파트 수요 급증, 거래 활발"],
+            short_version="",
+            reply_drafts=[],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_no_assertion_no_warning(self):
+        """강한 단정 없으면 경고 없음."""
+        pack = ContentPack(
+            main_posts=["강남 아파트 거래 움직임, 관심 증가"],
+            short_version="",
+            reply_drafts=[],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_reply_ungrounded_number_caught(self):
+        """댓글에 있는 미확인 수치도 감지."""
+        pack = ContentPack(
+            main_posts=["분석글"],
+            short_version="",
+            reply_drafts=["달러인덱스 99.085 기준으로 보면"],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("숫자 안전" in w for w in pack.style_warnings)
+
+    def test_percentage_from_source_ok(self):
+        """소스에 있는 퍼센트는 통과."""
+        pack = ContentPack(
+            main_posts=["전월 대비 3.2% 하락"],
+            short_version="",
+            reply_drafts=[],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=["전월비 3.2%"])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("숫자 안전" in w for w in pack.style_warnings)
+
+
+class TestNumericSafetyPromptRules:
+    """프롬프트에 숫자 안전성/단정 강도 규칙이 포함되어 있는지."""
+
+    def test_critical_numeric_rule(self):
+        """골든 룰 7에 CRITICAL 마크가 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "숫자 사용 절대 규칙 (CRITICAL)" in prompt
+
+    def test_assertion_weakening_table(self):
+        """골든 룰 8에 약화 표현 매핑이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "급증/급등 → 증가 조짐/오름세" in prompt
+        assert "급락/급감 → 하락 압력/약세 흐름" in prompt
+
+    def test_reply_conservatism_rule(self):
+        """골든 룰 10에 댓글/인용 보수성 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "댓글·인용 보수성 규칙" in prompt
+        assert "본문보다 더 보수적" in prompt
+
+    def test_qa_numeric_source_check(self):
+        """QA 체크리스트에 수치 출처 확인이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "소스 원문에 실제 있는가" in prompt
+
+    def test_qa_reply_numeric_check(self):
+        """QA 체크리스트에 댓글/인용 수치 항목이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "댓글·인용 수치 보수성" in prompt
+
+    def test_exploratory_no_number_rule(self):
+        """탐색형 프롬프트에 수치 생성 금지 규칙이 있다."""
+        import inspect
+        from app.services.content_pack import generate_content_pack
+        source = inspect.getsource(generate_content_pack)
+        assert "소스에 없는 숫자를 만들지 마라" in source
 
 
 class TestTopicModePrompt:
