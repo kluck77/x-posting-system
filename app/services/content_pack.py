@@ -1108,6 +1108,12 @@ async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:
                     f"out={usage.get('completion_tokens', '?')} "
                     f"caller=ContentPack"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("openai", "gpt-4o-mini", "ContentPack",
+                                 usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                except Exception:
+                    pass
                 return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenAI 콘텐츠 팩 호출 실패: {e}")
@@ -1139,6 +1145,12 @@ async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:
                     f"out={usage.get('output_tokens', '?')} "
                     f"caller=ContentPack"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("anthropic", "claude-haiku-4-5", "ContentPack",
+                                 usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+                except Exception:
+                    pass
                 return data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"Anthropic 콘텐츠 팩 호출 실패: {e}")
@@ -1562,6 +1574,12 @@ async def _call_ai_with_prompt(
                     f"out={usage.get('completion_tokens', '?')} "
                     f"caller=CandidateCard/Finalize"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("openai", "gpt-4o-mini", "CandidateCard/Finalize",
+                                 usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                except Exception:
+                    pass
                 return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenAI 후보카드/마감 호출 실패: {e}")
@@ -1593,6 +1611,12 @@ async def _call_ai_with_prompt(
                     f"out={usage.get('output_tokens', '?')} "
                     f"caller=CandidateCard/Finalize"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("anthropic", "claude-haiku-4-5", "CandidateCard/Finalize",
+                                 usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+                except Exception:
+                    pass
                 return data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"Anthropic 후보카드/마감 호출 실패: {e}")

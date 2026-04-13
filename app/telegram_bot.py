@@ -35,7 +35,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ["📝 초안", "📦 콘텐츠 팩", "📈 트렌드"],
         ["📊 현황", "📋 대기 큐", "🧵 스레드"],
         ["📰 다이제스트", "📊 주간", "💡 도움말"],
-        ["🔄 한도 초기화"],
+        ["💰 API 비용", "🔄 한도 초기화"],
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -52,6 +52,7 @@ _KEYBOARD_DISPATCH: dict[str, str] = {
     "📰 다이제스트": "digest",
     "📊 주간":       "report",
     "💡 도움말":     "start",
+    "💰 API 비용":    "cost",
     "🔄 한도 초기화": "reset_limit",
 }
 
@@ -337,6 +338,7 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "digest": digest_command,
             "report": report_command,
             "start": start_command,
+            "cost": cost_command,
             "reset_limit": reset_limit_command,
         }
         handler = handler_map.get(cmd_name)
@@ -679,6 +681,8 @@ async def _handle_quick_callback(query, context: ContextTypes.DEFAULT_TYPE):
         await monitor_command(u, context)
     elif action == "quick_recover":
         await recover_command(u, context)
+    elif action == "quick_cost":
+        await cost_command(u, context)
     elif action == "quick_reset_limit":
         await reset_limit_command(u, context)
 
@@ -968,6 +972,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/status — 시스템 상태\n"
         "/pending — 대기 초안\n"
         "/monitor — 멘션 모니터\n"
+        "/cost — AI API 사용량/비용 확인\n"
         "/reset_limit — 일일 한도 초기화\n\n"
         "<b>── 분석 ──</b>\n"
         "/digest — 모닝 다이제스트\n"
@@ -992,12 +997,28 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📊 오늘 현황",    callback_data="quick_status")],
         [InlineKeyboardButton("👀 모니터 확인",  callback_data="quick_monitor")],
         [InlineKeyboardButton("🛟 복구 점검",    callback_data="quick_recover")],
+        [InlineKeyboardButton("💰 API 비용",     callback_data="quick_cost")],
         [InlineKeyboardButton("🔄 한도 초기화",  callback_data="quick_reset_limit")],
     ])
     await update.message.reply_text(
         "⚡ <b>오퍼레이터 메뉴</b>\n무엇을 할까요?",
         reply_markup=keyboard,
         parse_mode="HTML",
+    )
+
+
+async def cost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/cost — AI API 사용량 및 예상 비용 표시."""
+    try:
+        from app.services.api_cost_tracker import get_usage_summary
+        text = get_usage_summary()
+    except Exception as e:
+        text = f"API 비용 추적 로드 실패: {e}"
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
@@ -4085,6 +4106,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
+    app.add_handler(CommandHandler("cost", cost_command))
     app.add_handler(CommandHandler("reset_limit", reset_limit_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("recover", recover_command))

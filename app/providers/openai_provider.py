@@ -136,6 +136,12 @@ class OpenAIDraftWriter(BaseDraftWriter):
                     f"out={usage.get('completion_tokens', '?')} "
                     f"caller=DraftWriter"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("openai", OPENAI_MODEL, "DraftWriter",
+                                 usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                except Exception:
+                    pass
                 data = json.loads(resp_data["choices"][0]["message"]["content"])
 
             logger.info("[OpenAI DraftWriter] 초안 생성 성공")

@@ -120,6 +120,13 @@ class GeminiResearcher(BaseResearcher):
                     f"out={usage_meta.get('candidatesTokenCount', '?')} "
                     f"caller=Researcher"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("gemini", GEMINI_MODEL, "Researcher",
+                                 usage_meta.get("promptTokenCount", 0),
+                                 usage_meta.get("candidatesTokenCount", 0))
+                except Exception:
+                    pass
                 raw_text = resp_data["candidates"][0]["content"]["parts"][0]["text"]
                 data = json.loads(raw_text)
 

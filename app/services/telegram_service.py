@@ -415,6 +415,13 @@ async def _translate_to_korean(text: str) -> str | None:
                 f"out={usage_meta.get('candidatesTokenCount', '?')} "
                 f"caller=Translate"
             )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage("gemini", "gemini-2.5-flash", "Translate",
+                             usage_meta.get("promptTokenCount", 0),
+                             usage_meta.get("candidatesTokenCount", 0))
+            except Exception:
+                pass
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as e:
         safe_msg = str(e)

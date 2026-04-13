@@ -116,6 +116,12 @@ class PerplexityFactChecker(BaseFactChecker):
                     f"out={usage.get('completion_tokens', '?')} "
                     f"caller=FactChecker"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("perplexity", PERPLEXITY_MODEL, "FactChecker",
+                                 usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                except Exception:
+                    pass
                 raw_text = resp_data["choices"][0]["message"]["content"]
 
                 # Handle potential markdown-wrapped JSON

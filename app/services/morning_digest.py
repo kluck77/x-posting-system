@@ -168,6 +168,12 @@ async def _call_ai(system_prompt: str, user_prompt: str) -> str | None:
                     f"out={usage.get('output_tokens', '?')} "
                     f"caller=MorningDigest"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("anthropic", "claude-haiku-4-5", "MorningDigest",
+                                 usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+                except Exception:
+                    pass
                 return resp_data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"Claude 다이제스트 호출 오류: {e}")
@@ -200,6 +206,12 @@ async def _call_ai(system_prompt: str, user_prompt: str) -> str | None:
                     f"out={usage.get('completion_tokens', '?')} "
                     f"caller=MorningDigest"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("openai", "gpt-4o-mini", "MorningDigest",
+                                 usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                except Exception:
+                    pass
                 return resp_data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenAI 다이제스트 호출 오류: {e}")

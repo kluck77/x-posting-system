@@ -114,6 +114,12 @@ async def extract_from_image(image_bytes: bytes, mime_type: str = "image/jpeg") 
                 f"out={usage.get('output_tokens', '?')} "
                 f"caller=Vision"
             )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage("anthropic", VISION_MODEL, "Vision",
+                             usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+            except Exception:
+                pass
             raw = resp_data["content"][0]["text"]
 
         # 제목 추출 시도

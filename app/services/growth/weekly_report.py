@@ -238,6 +238,12 @@ X 알고리즘: 답글 = 좋아요 × 27배, 재게시 = 좋아요 × 2배
                     f"out={usage.get('output_tokens', '?')} "
                     f"caller=WeeklyReport"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("anthropic", "claude-haiku-4-5", "WeeklyReport",
+                                 usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+                except Exception:
+                    pass
                 return resp_data["content"][0]["text"].strip()
         except Exception as e:
             logger.warning(f"AI 분석 실패: {e}")

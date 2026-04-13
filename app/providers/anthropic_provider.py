@@ -184,6 +184,12 @@ class AnthropicDraftWriter(BaseDraftWriter):
                 f"out={usage.get('output_tokens', '?')} "
                 f"caller=DraftWriter"
             )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage("anthropic", CLAUDE_MODEL, "DraftWriter",
+                             usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+            except Exception:
+                pass
             return resp_data["content"][0]["text"]
 
 
@@ -244,6 +250,12 @@ class AnthropicReviewer(BaseReviewer):
                     f"out={usage.get('output_tokens', '?')} "
                     f"caller=Reviewer"
                 )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("anthropic", CLAUDE_MODEL, "Reviewer",
+                                 usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+                except Exception:
+                    pass
                 content = resp_data["content"][0]["text"]
                 try:
                     data = json.loads(content)
