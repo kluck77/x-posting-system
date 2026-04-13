@@ -350,7 +350,7 @@ async def run_monitor_cycle() -> int:
                     body=article.summary or "",
                     url=article.url,
                 )
-                if _br.classification in ("BREAKING_NOW", "CANDIDATE"):
+                if _br.classification == "BREAKING_NOW":
                     # URL 사전 중복 체크 (DB) — Orchestrator 생성 전에 걸러냄
                     from app.db import SessionLocal
                     from app.models.content import SourceItem
