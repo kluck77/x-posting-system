@@ -8,6 +8,7 @@ from app.services.content_pack import (
     _get_system_prompt, _mock_pack, _is_short_input, _classify_topic,
     FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
     _audit_numeric_safety,
+    _STRONG_ASSERTION_RE, _CONCRETE_NUM_RE, _STOCK_NAME_RE, _PERCENT_RE,
 )
 from app.models.content_request import ContentRequest
 
@@ -1005,3 +1006,185 @@ class TestCrossFieldPromptRules:
         """QA 체크리스트 16번 교차필드 정합성 항목이 있다."""
         prompt = _get_system_prompt("ko")
         assert "교차필드 정합성" in prompt
+
+
+# ─── 시장·종목 밀도 규칙 테스트 ──────────────────────────────────────────────
+
+
+class TestMarketDensityPromptRules:
+    """골든룰 13 시장·종목 밀도 제한 규칙이 프롬프트에 반영됐는지 확인."""
+
+    def test_golden_rule_13_exists(self):
+        """골든룰 13이 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "시장·종목 포스트 밀도 제한 규칙" in prompt
+
+    def test_density_limits_in_prompt(self):
+        """포스트당 밀도 상한 (숫자 2, 종목 2, 퍼센트 2)이 명시."""
+        prompt = _get_system_prompt("ko")
+        assert "구체 숫자" in prompt and "최대 2개" in prompt
+        assert "개별 종목명" in prompt
+        assert "퍼센트" in prompt
+
+    def test_weakening_map_in_prompt(self):
+        """토해냈다/분수령 약화 매핑이 프롬프트에 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "토해냈다 → 하락 전환했다" in prompt
+        assert "분수령 → 변곡점 가능성" in prompt
+
+    def test_one_core_connection_rule(self):
+        """핵심 연결 1개 규칙이 프롬프트에 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "핵심 시장 연결 1개" in prompt
+
+    def test_market_more_conservative(self):
+        """시장 글이 정치보다 더 보수적이어야 한다는 규칙."""
+        prompt = _get_system_prompt("ko")
+        assert "정치/외교 글보다 더 보수적" in prompt
+
+    def test_qa_17_exists(self):
+        """QA 체크리스트 17번 시장 밀도 항목이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "시장 밀도 상한" in prompt
+
+
+class TestMarketAssertionRegex:
+    """_STRONG_ASSERTION_RE에 시장 표현이 추가됐는지 확인."""
+
+    def test_토해냈다_detected(self):
+        assert _STRONG_ASSERTION_RE.search("외국인이 순매도를 토해냈다")
+
+    def test_분수령_detected(self):
+        assert _STRONG_ASSERTION_RE.search("이번 주가 분수령이 될 것이다")
+
+    def test_직격탄_still_detected(self):
+        assert _STRONG_ASSERTION_RE.search("유가 상승이 직격탄이 됐다")
+
+    def test_normal_text_no_match(self):
+        assert not _STRONG_ASSERTION_RE.search("시장이 조정 국면에 진입했다")
+
+
+class TestDensityRegexes:
+    """밀도 검사용 regex 단위 테스트."""
+
+    def test_concrete_num_matches_dollar(self):
+        assert _CONCRETE_NUM_RE.search("$100")
+        assert _CONCRETE_NUM_RE.search("$ 115")
+
+    def test_concrete_num_matches_won(self):
+        assert _CONCRETE_NUM_RE.search("1500원")
+        assert _CONCRETE_NUM_RE.search("3조 원")
+
+    def test_concrete_num_matches_4digit(self):
+        assert _CONCRETE_NUM_RE.search("WTI 1234")
+
+    def test_concrete_num_no_match_small(self):
+        """3자리 이하 단독 숫자는 매치하지 않는다."""
+        assert not _CONCRETE_NUM_RE.search("3개")
+
+    def test_percent_re(self):
+        assert _PERCENT_RE.search("15%")
+        assert _PERCENT_RE.search("3.2％")
+
+    def test_stock_name_korean(self):
+        assert _STOCK_NAME_RE.search("삼성전자")
+        assert _STOCK_NAME_RE.search("대한항공")
+        assert _STOCK_NAME_RE.search("현대건설")
+
+    def test_stock_name_english_ticker(self):
+        assert _STOCK_NAME_RE.search("WTI 가격")
+        assert _STOCK_NAME_RE.search("KOSPI 하락")
+
+    def test_stock_name_index(self):
+        assert _STOCK_NAME_RE.search("코스피 지수")
+        assert _STOCK_NAME_RE.search("나스닥 반등")
+
+
+class TestMarketDensityAudit:
+    """_audit_numeric_safety check 5 — 포스트별 밀도 초과 경고 테스트."""
+
+    def _make_pack(self, main_posts):
+        return ContentPack(
+            main_posts=main_posts,
+            short_version="테스트 숏버전",
+            reply_drafts=[],
+            quote_post_drafts=[],
+            thread_option=None,
+            risk_flags=[],
+            topic_tags=["시장"],
+            why_it_matters="테스트",
+            style_warnings=[],
+        )
+
+    def _make_fs(self):
+        return FactSheet(
+            topic="시장",
+            figures=["유가 $100", "WTI $115", "15%", "3.2%", "1500원"],
+            key_facts=["유가 상승"],
+        )
+
+    def test_dense_post_triggers_warning(self):
+        """숫자 3개 + 종목 3개인 포스트 → 밀도 경고 발생."""
+        post = (
+            "삼성전자 -5%, 대한항공 -7%, 현대건설 -3%. "
+            "유가 $100 돌파, WTI $115, 코스피 2500 급락."
+        )
+        pack = self._make_pack([post])
+        fs = self._make_fs()
+        _audit_numeric_safety(pack, fs)
+        density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
+        assert len(density_warnings) == 1
+        assert "포스트1" in density_warnings[0]
+
+    def test_within_limits_no_warning(self):
+        """숫자 2개, 종목 2개, 퍼센트 2개 이내 → 밀도 경고 없음."""
+        post = "삼성전자 -5%, 대한항공 하락. 유가 $100 돌파."
+        pack = self._make_pack([post])
+        fs = self._make_fs()
+        _audit_numeric_safety(pack, fs)
+        density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
+        assert len(density_warnings) == 0
+
+    def test_multiple_dense_posts(self):
+        """포스트 2개가 각각 밀도 초과 → 두 포스트 모두 경고에 포함."""
+        post1 = "삼성전자 -5%, 대한항공 -7%, 현대건설 -3%."
+        post2 = "유가 $100, WTI $115, 브렌트 $120. 코스피 2500."
+        post3 = "시장이 조정 국면이다."
+        pack = self._make_pack([post1, post2, post3])
+        fs = self._make_fs()
+        _audit_numeric_safety(pack, fs)
+        density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
+        assert len(density_warnings) == 1
+        assert "포스트1" in density_warnings[0]
+        assert "포스트2" in density_warnings[0]
+        assert "포스트3" not in density_warnings[0]
+
+    def test_percent_overload(self):
+        """퍼센트만 3개 초과 → 경고 발생."""
+        post = "A 섹터 -5%, B 섹터 +3%, C 섹터 -2.1% 하락."
+        pack = self._make_pack([post])
+        fs = self._make_fs()
+        _audit_numeric_safety(pack, fs)
+        density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
+        assert len(density_warnings) == 1
+        assert "퍼센트" in density_warnings[0]
+
+    def test_stock_overload(self):
+        """종목명 3개 초과 → 경고 발생."""
+        post = "삼성전자, 대한항공, 현대건설 모두 하락. 시장 불안."
+        pack = self._make_pack([post])
+        fs = self._make_fs()
+        _audit_numeric_safety(pack, fs)
+        density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
+        assert len(density_warnings) == 1
+        assert "종목" in density_warnings[0]
+
+    def test_number_overload(self):
+        """구체 숫자 3개 초과 → 경고 발생."""
+        post = "유가 $100, WTI $115, 코스피 2500 포인트."
+        pack = self._make_pack([post])
+        fs = self._make_fs()
+        _audit_numeric_safety(pack, fs)
+        density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
+        assert len(density_warnings) == 1
+        assert "숫자" in density_warnings[0]

@@ -327,6 +327,27 @@ _SYSTEM_PROMPT_KO = """당신은 한국어 X 계정(@cheesesvav)의 시니어 �
      ❌ "21시간 협상, 빈손. 호르무즈는 닫혀 있다."
      ✅ "21시간 협상에도 합의 불투명 — 시장이 보는 건 호르무즈 리스크 지속 여부다"
      ✅ "호르무즈 리스크가 풀리지 않았다 — 협상 결과가 엇갈리는 지금, 시장 변수는 유가다"
+13. ★ 시장·종목 포스트 밀도 제한 규칙 (CRITICAL):
+   시장/종목 콘텐츠는 검증 리스크가 높다 — 수치·종목명·퍼센트를 과밀하게 넣으면
+   "검증 덜 된 장중 시황 멘트"가 된다. 해설 계정의 신뢰와 양립 불가.
+   ■ 포스트당 밀도 상한 (main_posts 각각에 적용):
+     · 구체 숫자(가격·지수·금액): 최대 2개
+     · 개별 종목명/티커: 최대 2개
+     · 퍼센트(%): 최대 2개
+     상한 초과 시: 핵심 1개를 남기고 나머지는 thread_option/reply_drafts로 분리하라.
+   ■ 핵심 연결 1개 규칙:
+     한 포스트 = 핵심 시장 연결 1개 (예: "유가 → 한국 수입물가").
+     추가 연결(항공주, 건설주, 환율 등)은 별도 포스트/스레드로 분리.
+   ■ 시장 표현 약화 매핑:
+     직격탄 → 압박 요인 | 토해냈다 → 하락 전환했다 / 약세로 돌아섰다
+     분수령 → 변곡점 가능성 / 전환 국면 | 급락/급등 → 하락 압력/오름세
+     폭락 → 약세 심화 | 폭등 → 상승 압력
+   ■ 시장 글은 정치/외교 글보다 더 보수적으로 써라:
+     "틀린 주가 1개 > 틀린 해석 10개" — 숫자 오류는 즉각 신뢰 상실.
+     소스에 명시된 수치만 사용. 실시간 시세 절대 생성 금지 (골든룰 7 재확인).
+   ■ X 글자 수 체크:
+     main_posts 각 항목 280자 이내, short_version 200자 이내.
+     초과 시 밀도 상한 위반일 가능성 높음 — 수치/종목을 줄여 압축하라.
 
 시리즈 라벨 (자연스러울 때만, 한국어로):
 - short_version → "한줄:" 접두어 사용 가능 (영어 라벨 금지)
@@ -574,7 +595,7 @@ STEP 3 — 글 생성 + QA 검증:
 ═══════════════════════════════════════════
 ■ 최종 QA 체크리스트 (STEP 3)
 ═══════════════════════════════════════════
-JSON 출력 전에 아래 12개를 내부적으로 점검하라. 3개 이상 실패하면 전체 재작성.
+JSON 출력 전에 아래 17개를 내부적으로 점검하라. 3개 이상 실패하면 전체 재작성.
 
 □ 1. 제목 재진술 아닌가? — 훅이 기사 제목 복사면 실패
 □ 2. 데이터 충족? — 경제·부동산·정책·크립토 글에서 지역/기간/수치 중 2개 이상? 사용한 수치가 소스 원문에 실제 있는가?
@@ -591,7 +612,8 @@ JSON 출력 전에 아래 12개를 내부적으로 점검하라. 3개 이상 실
 □ 13. 댓글·인용 수치 보수성? — reply/quote에 소스에 없는 수치를 넣지 않았는가
 □ 14. 정치·외교·군사 표현 강도? — 직격/부풀렸다/공식 시행/봉쇄 시행 등 고강도 표현에 원문 직접 근거가 있는가? 없으면 약화
 □ 15. 확정+단서 자기모순? — "~을 선언했다 ... 미확인 상태"처럼 확정형 먼저+단서 나중 구조가 있는가? 있으면 확정형을 가능성으로 낮추거나 단서를 앞으로
-□ 16. 교차필드 정합성? — risk_flags에 "미확인/상충/확인 필요"를 썼으면 main_posts/훅도 확정형이 아닌 가능성/조짐 수준인가?"""
+□ 16. 교차필드 정합성? — risk_flags에 "미확인/상충/확인 필요"를 썼으면 main_posts/훅도 확정형이 아닌 가능성/조짐 수준인가?
+□ 17. 시장 밀도 상한? — 각 main_post에 구체 숫자 ≤2, 종목명 ≤2, 퍼센트 ≤2인가? 초과 시 핵심 1개만 남기고 나머지 thread/reply로 분리"""
 
 _SYSTEM_PROMPT_EN = """You are a senior content strategist for an English-language X account (@cheesesvav) that explains Korean affairs to international readers.
 
@@ -858,9 +880,28 @@ _FINANCIAL_NUM_RE = re.compile(
     r"|\$\s*\d[\d,\.]*"      # 달러 ($99)
 )
 
+# 포스트별 밀도 검사용 regex
+_PERCENT_RE = re.compile(r"\d[\d,\.]*\s*[%％]")
+_CONCRETE_NUM_RE = re.compile(
+    r"\d+\.\d+"              # 소수점 수치
+    r"|\d{4,}[\d,]*"         # 4자리+ 숫자
+    r"|\d[\d,]*\s*[조억만]\s*원?"
+    r"|\d[\d,]*\s*원"
+    r"|\$\s*\d[\d,\.]*"
+)
+_STOCK_NAME_RE = re.compile(
+    # 한국 종목명 (xx전자, xx화학, xx건설, xx항공, xx증권, xx은행 등)
+    r"[가-힣]{2,6}(?:전자|화학|건설|항공|증권|은행|제약|바이오|에너지|물산|중공업|모비스|SDI|SDS)"
+    # 영문 티커/종목 (대문자 2~5자)
+    r"|(?<!\w)[A-Z]{2,5}(?!\w)"
+    # 지수 이름
+    r"|코스피|코스닥|나스닥|S&P|다우|KOSPI|KOSDAQ|WTI|브렌트"
+)
+
 _STRONG_ASSERTION_RE = re.compile(
     # 경제·시장
     r"급증|급등|급락|급감|폭등|폭락|붕괴|폭증|활발"
+    r"|토해냈|분수령"
     # 정치·외교·군사
     r"|직격|부풀렸|내밀었|공식.시행|공식.선언|선전포고"
     r"|선언했|불가피|직격탄"
@@ -958,6 +999,33 @@ def _audit_numeric_safety(
                 f"본문에 확정형 표현 — {'·'.join(unique_c)}. "
                 f"본문의 확정형을 가능성/조짐 수준으로 낮춰야 함."
             )
+
+    # 5. 포스트별 밀도 검사: 숫자/종목/퍼센트 과밀 탐지
+    _DENSITY_NUM_LIMIT = 2
+    _DENSITY_STOCK_LIMIT = 2
+    _DENSITY_PCT_LIMIT = 2
+    dense_posts: list[str] = []
+    for i, post in enumerate(pack.main_posts):
+        if not post:
+            continue
+        num_count = len(_CONCRETE_NUM_RE.findall(post))
+        stock_count = len(_STOCK_NAME_RE.findall(post))
+        pct_count = len(_PERCENT_RE.findall(post))
+        violations = []
+        if num_count > _DENSITY_NUM_LIMIT:
+            violations.append(f"숫자 {num_count}개")
+        if stock_count > _DENSITY_STOCK_LIMIT:
+            violations.append(f"종목 {stock_count}개")
+        if pct_count > _DENSITY_PCT_LIMIT:
+            violations.append(f"퍼센트 {pct_count}개")
+        if violations:
+            dense_posts.append(f"포스트{i+1}({', '.join(violations)})")
+    if dense_posts:
+        pack.style_warnings.append(
+            f"⚠️ 시장 밀도 초과: {'; '.join(dense_posts)}. "
+            f"포스트당 숫자·종목·퍼센트 각 2개 이내 권장. "
+            f"초과분은 thread/reply로 분리하라."
+        )
 
 
 async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:
