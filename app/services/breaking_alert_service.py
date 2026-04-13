@@ -113,12 +113,16 @@ def _extract_summary(body: Optional[str], fallback_title: str) -> str:
     """
     §3 필드 2 : 핵심 요지 1~2문장.
 
-    - body 가 주어지면 선두 최대 2문장 추출
+    - body 가 주어지면 UI 잡문 제거 후 선두 최대 2문장 추출
     - body 가 없거나 파싱 실패 시 fallback_title (제목) 을 요지 자리로 재활용
       (§4 "보수가 기본값" — 요약을 지어내지 않는다).
     """
     if body:
-        text = body.strip()
+        try:
+            from app.services.text_cleaner import clean_article_text
+            text = clean_article_text(body).strip()
+        except Exception:
+            text = body.strip()
         if text:
             sents = _SENTENCE_SPLIT_RE.split(text)
             picked = " ".join(s.strip() for s in sents[:_SUMMARY_MAX_SENTENCES] if s.strip())

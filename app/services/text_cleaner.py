@@ -32,6 +32,11 @@ _JUNK_SUBSTRINGS: list[str] = [
     "앱에서 만나보세요",
     "앱 다운로드",
     "앱으로 보기",
+    # Naver PICK / 언론사 안내
+    "언론사가 주요기사로 선정한 기사입니다.",
+    "언론사가 주요기사로 선정한 기사입니다",
+    "언론사별 바로가기",
+    "PICK 안내",
 ]
 
 # 줄 단위 제거 대상 (줄 전체가 이 패턴이면 삭제)
@@ -87,10 +92,24 @@ _JUNK_LINE_RES: list[re.Pattern] = [
     # App Store / Play 스토어
     re.compile(r"^\s*(App Store|Google Play|Play 스토어)", re.IGNORECASE),
     re.compile(r"^\s*다운로드\s*$"),
+    # Naver PICK / 언론사 안내
+    re.compile(r"^\s*\S+\s+PICK\s*(안내)?\s*$"),
+    re.compile(r"^\s*닫기\s*$"),
 ]
 
 _MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
 _MULTI_SPACE_RE = re.compile(r"[ \t]{2,}")
+
+# 인라인 제거 대상 (줄 경계 무관, 텍스트 내부에서도 제거)
+_JUNK_INLINE_RES: list[re.Pattern] = [
+    # "서다희 기자 서다희 기자" — 기자명 중복 패턴
+    re.compile(r"\S{2,5}\s*기자\s+\S{2,5}\s*기자"),
+    # "입력 2026.04.13." — Naver 입력/수정 시각 (인라인)
+    re.compile(r"입력\s*\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}\.?"),
+    re.compile(r"수정\s*\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}\.?"),
+    # "닫기" 앞에 공백만 있을 때 (UI 버튼 텍스트)
+    re.compile(r"\s+닫기\s+"),
+]
 
 
 def clean_article_text(text: str) -> str:
@@ -115,7 +134,11 @@ def clean_article_text(text: str) -> str:
         clean.append(line)
     text = "\n".join(clean)
 
-    # 3. 공백 정규화
+    # 3. 인라인 잡문 제거 (줄 경계 무관)
+    for p in _JUNK_INLINE_RES:
+        text = p.sub(" ", text)
+
+    # 4. 공백 정규화
     text = _MULTI_NEWLINE_RE.sub("\n\n", text)
     text = _MULTI_SPACE_RE.sub(" ", text)
 

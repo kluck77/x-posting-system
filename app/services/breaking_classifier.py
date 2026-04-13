@@ -24,7 +24,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 Classification = Literal["BREAKING_NOW", "CANDIDATE", "HOLD", "REJECT"]
-TopicDomain = Literal["금융", "투자", "크립토", "주식", "none"]
+TopicDomain = Literal["금융", "투자", "크립토", "주식", "정치", "none"]
 Urgency = Literal["high", "medium"]
 
 
@@ -63,6 +63,13 @@ STRONG_KEYWORDS: dict[str, list[str]] = {
         "상장폐지", "서킷브레이커", "거래정지",
         "삼성전자", "SK하이닉스",
     ],
+    "정치": [
+        "대통령", "지지율", "국정운영",
+        "국회", "여당", "야당", "국무회의",
+        "탄핵", "계엄", "비상",
+        "총선", "대선", "선거", "여론조사",
+        "국무총리", "대통령실",
+    ],
 }
 
 SUPPORT_KEYWORDS: dict[str, list[str]] = {
@@ -70,6 +77,7 @@ SUPPORT_KEYWORDS: dict[str, list[str]] = {
     "투자": ["자금", "포트폴리오", "헤지"],
     "크립토": ["가상자산", "디지털자산", "블록체인", "알트코인"],
     "주식": ["종목", "수급", "시가총액", "배당"],
+    "정치": ["정당", "의원", "장관", "민생", "정책"],
 }
 
 EXCLUDE_KEYWORDS: list[str] = [
@@ -273,7 +281,7 @@ def _match_domains(
     return result
 
 
-_DOMAIN_PRIORITY = ["금융", "투자", "크립토", "주식"]
+_DOMAIN_PRIORITY = ["금융", "정치", "투자", "크립토", "주식"]
 
 
 def _pick_primary(matches: dict[str, list[str]]) -> tuple[TopicDomain, list[str]]:
