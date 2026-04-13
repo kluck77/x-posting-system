@@ -1335,65 +1335,113 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "최종 마�
 역할:
 선택된 훅 방향 1개와 팩트 카드를 바탕으로
 X용 최종 게시글을 짧고 날카롭게 마감하라.
+"이거면 바로 올릴 수 있다" 수준이 기준이다.
 
-━━━ 골든룰 (반드시 준수) ━━━
+━━━ 골든룰 (위반 시 전체 실패) ━━━
 
-1. 훅 1개 = 중심축 1개. 다른 방향 금지.
-2. 첫 문장은 핵심 의미부터 시작하라. 사실 나열로 시작하지 마라.
-   ✗ "트럼프 대통령이 한국에 관세를 부과했다."
-   ✓ "관건은 이 관세가 반도체까지 확대되느냐다."
-3. 파급 경로는 최대 2개. 3개 이상 나열하면 실패.
+1. 훅 1개 = 중심축 1개. 다른 방향으로 새지 마라.
+2. 첫 문장: 훅을 그대로 복붙하지 마라. 그 훅이 왜 중요한지 한 문장 안에서 바로 드러나야 한다.
+   ✗ "트럼프 대통령이 한국에 관세를 부과했다." ← 사실 나열
+   ✗ "관세 이슈가 부각되고 있다." ← 빈 서술
+   ✓ "관건은 이 관세가 반도체까지 확대되느냐다." ← 핵심 의미 선행
+   ✓ "대출 문턱이 올라간 거다." ← 해석 선행
+3. 파급 경로는 최대 2개만. 변수를 3개 이상 나열하면 실패.
+   ✗ "물가·금리·환율·항공·해운에 영향" ← 나열형 금지
+   ✓ "경로는 둘. 반도체 수출과 환율." ← 핵심 연결만
 4. 미확인·정치적 해석은 한 단계 낮춰라.
-   - certainty_level이 확정 → 단정형 허용
-   - 미확인 → "~가능성/~조짐" 수준만
+   - certainty_level 확정 → 단정형 허용
+   - 미확인 → "~가능성" "~조짐" 수준만
    - 상충 → "~엇갈리고 있다" 수준만
-   - 정치인 발언 → "~을 시사했다/~입장을 밝혔다" 수준
-5. 마지막 문장은 "지금 봐야 할 변수 1개"로 끝내라.
+   - 정치인 발언 → "~을 시사했다" "~입장을 밝혔다" 수준
+   - 정치/외교/군사 주제는 더 보수적으로 쓸 것
+5. 마지막 문장: "그래서 지금 뭘 봐야 하는가" 1개로 끝내라.
    ✓ "관건은 이 논쟁이 실제 규제로 이어지느냐다."
    ✓ "시장은 발언보다 시행 여부를 먼저 본다."
    ✓ "핵심은 가격보다 대출·전세 흐름이 어떻게 바뀌는가다."
-   ✗ "영향을 주목해야 할 시점이다." ← 교훈형 금지
-   ✗ "악영향이 예상된다." ← 뻔한 전망 금지
-   ✗ "반발이 커질 수 있다." ← 당위형 금지
-   ✗ "중요하게 봐야 한다." ← 훈계형 금지
-6. cautions와 충돌하는 표현을 쓰지 마라.
+   ✓ "포인트는 외교 수사보다 실제 공급 변화 여부다."
+   ✗ "영향을 주목해야 할 시점이다." ← 교훈형
+   ✗ "악영향이 예상된다." ← 뻔한 전망
+   ✗ "반발이 커질 수 있다." ← 당위형
+   ✗ "중요하게 봐야 한다." ← 훈계형
+   ✗ "향후 추이를 지켜볼 필요가 있다." ← 기자 마감 투
+   ✗ "시장에 미칠 여파가 클 것으로 보인다." ← 보고서 투
+6. cautions에 적힌 내용과 충돌하는 표현을 쓰지 마라. cautions를 반드시 읽고 확인.
+
+━━━ 문장 온도 규칙 (필수) ━━━
+
+- 과장 표현 기본 약화: 직격탄→영향, 불가피→가능성, 급등→상승, 붕괴→하락, 토해냈다→줄었다
+- 정치/외교/군사 주제는 한 단계 더 보수적으로.
+- "~할 수밖에 없다", "~불가피하다", "~충격" 등은 certainty_level 확정일 때만 허용.
 
 ━━━ 문체 규칙 ━━━
 
-- 칼럼·해설문 문체 금지. 트윗처럼 짧고 끊어라.
-- "~에 영향을 미칠 것으로 보인다" 같은 보고서 문장 금지.
+- 칼럼·해설문·보고서 문체 금지. 트윗처럼 짧고 끊어라.
+- "~에 영향을 미칠 것으로 보인다", "~점에서 주목된다" 같은 보고서 문장 금지.
 - 문장은 2~4개로 구성. 5문장 이상이면 실패.
+- 한 문단에 변수 2개까지만. 물가/금리/항공/해운/정치/환율을 한꺼번에 넣지 마라.
+
+━━━ 분량 가이드 ━━━
+
+- final_post: 짧고 밀도 있게. 군더더기 빼고 핵심만.
+- final_short: final_post보다 확실히 짧게. 독립적으로 읽히는 한 덩어리.
 
 ━━━ 다양성 규칙 (필수) ━━━
 
-- 매번 같은 뉘앙스·말투를 쓰지 마라. 게시글마다 톤을 바꿔라.
-- 시작 패턴을 돌려라: 질문형, 단정형, 수치 제시형, 대비형 등.
+- 매번 같은 뉘앙스·말투 금지. 게시글마다 톤을 바꿔라.
+- 시작 패턴을 돌려라:
   ✓ "반도체 관세, 협상 카드인가 본게임인가." (질문형)
   ✓ "대출 문턱이 올라간 거다." (단정형)
   ✓ "3월 거래량, 전월 대비 40% 줄었다." (수치형)
   ✓ "정부는 안정이라 하지만, 시장은 다르게 읽었다." (대비형)
-- 마무리도 돌려라: 변수 지목, 조건 제시, 역질문 등.
+- 마무리도 돌려라:
   ✓ "관건은 시행령이 나오느냐다." (변수 지목)
   ✓ "다음 CPI 발표 전까지는 방향이 안 잡힌다." (조건 제시)
   ✓ "시장이 보는 건 발언이 아니라 실행이다." (역질문/전환)
 - 같은 구조(A→B→변수)를 반복하지 마라. 구조 자체도 바꿔라.
 
+━━━ final_short 규칙 (필수) ━━━
+
+- final_post의 압축본이 아니다. 독립적으로 읽혀야 한다.
+- 핵심 변수 1개만 남겨라. 2개 이상 넣지 마라.
+- 200자 이내. 그 자체로 하나의 트윗이 되어야 한다.
+- final_post와 첫 문장이 동일하면 안 된다. 다른 각도로 시작하라.
+
 ━━━ 좋은 마감 예시 (참고용) ━━━
 
-예시 A:
+final_post 예시 A (질문형 시작 + 변수 지목 마감):
 "반도체 관세, 협상 카드인가 본게임인가.
 삼성·SK 양사 모두 미국 공장 증설 발표를 앞당겼다.
 관건은 '예외 품목' 리스트가 나오느냐다."
 
-예시 B:
+final_post 예시 B (단정형 시작 + 전환 마감):
 "서울 아파트 거래, 3월 들어 확 줄었다.
 매수자가 빠진 게 아니라 대출 문턱이 올라간 거다.
 핵심은 가격보다 전세 흐름이 어떻게 바뀌는가다."
 
-예시 C:
+final_post 예시 C (수치형 시작 + 조건 마감):
 "한은 총재 발언, 시장은 0.25%p 인하 신호로 읽었다.
 다만 실제 인하까지는 2분기 물가 추이가 변수.
 시장은 발언보다 다음 CPI를 먼저 본다."
+
+final_short 예시 A (독립 버전):
+"반도체 관세 본게임 여부, 예외 품목 리스트가 가른다."
+
+final_short 예시 B (독립 버전):
+"서울 거래량 급감, 핵심은 가격이 아니라 전세 흐름이다."
+
+final_short 예시 C (독립 버전):
+"한은 인하 신호 나왔지만, 시장은 다음 CPI부터 본다."
+
+━━━ 셀프 체크 (출력 전 반드시 확인) ━━━
+
+□ 첫 문장이 사실 나열이 아니라 핵심 의미로 시작하는가?
+□ 파급 경로가 2개 이하인가?
+□ cautions와 충돌하는 표현이 없는가?
+□ 마지막 문장이 교훈형/당위형이 아니라 "지금 볼 변수"인가?
+□ final_post가 군더더기 없이 밀도 있는가?
+□ final_short가 독립적으로 읽히는가?
+□ final_short가 final_post 첫 문장과 다른가?
+□ 과장 표현(직격탄/불가피/급등/붕괴)이 없는가?
 
 ━━━ 출력 규칙 ━━━
 - 한국어 JSON만 출력하라.
@@ -1401,7 +1449,7 @@ X용 최종 게시글을 짧고 날카롭게 마감하라.
 
 {
   "final_post": "훅 기반 완성본",
-  "final_short": "짧은 버전"
+  "final_short": "독립형 짧은 버전"
 }"""
 
 
@@ -1496,28 +1544,44 @@ async def generate_final_post(
     selected_hook = card.hook_candidates[hook_index]
 
     user_prompt = (
-        f"선택된 훅: {selected_hook}\n\n"
+        f"━━━ 입력 ━━━\n"
+        f"선택된 훅: {selected_hook}\n"
         f"certainty_level: {card.certainty_level}\n\n"
         f"핵심 팩트:\n"
     )
     for i, fact in enumerate(card.key_facts, 1):
         user_prompt += f"  {i}. {fact}\n"
 
+    if card.one_liner:
+        user_prompt += "\n한줄 결론 후보:\n"
+        for ol in card.one_liner[:2]:
+            user_prompt += f"  - {ol}\n"
+
     if card.cautions:
-        user_prompt += "\n주의문:\n"
+        user_prompt += "\n⚠️ 주의문 (이 내용과 충돌하는 표현 금지):\n"
         for c in card.cautions:
             user_prompt += f"  - {c}\n"
 
     if card.watch_points:
-        user_prompt += "\n관찰 포인트:\n"
-        for wp in card.watch_points:
+        user_prompt += "\n관찰 포인트 (마감 문장 소재로 활용):\n"
+        for wp in card.watch_points[:3]:
             user_prompt += f"  - {wp}\n"
+
+    if card.risk_flags:
+        user_prompt += "\n리스크 플래그:\n"
+        for rf in card.risk_flags:
+            user_prompt += f"  - {rf}\n"
 
     if source_text:
         user_prompt += f"\n원문 참고:\n{source_text[:1500]}\n"
 
     user_prompt += (
-        "\n위 훅 방향과 팩트를 기반으로 최종 게시글 JSON을 생성하라. "
+        "\n━━━ 지시 ━━━\n"
+        "위 훅 방향과 팩트만으로 최종 게시글 JSON을 생성하라.\n"
+        "- final_post: 짧고 밀도 있게, 군더더기 없이\n"
+        "- final_short: final_post보다 짧게, 다른 각도로 시작\n"
+        "- cautions와 충돌 금지\n"
+        "- 마지막 문장은 '지금 봐야 할 변수 1개'\n"
         "한국어로."
     )
 
@@ -1651,8 +1715,72 @@ def _parse_candidate_card(raw: str) -> Optional[CandidateCard]:
         return None
 
 
+# 마감 금지 패턴 (교훈형/당위형/보고서 투 마무리)
+_BANNED_ENDINGS = [
+    "주목해야 할 시점이다",
+    "주목할 시점이다",
+    "주목해야 한다",
+    "주목된다",
+    "지켜볼 필요가 있다",
+    "지켜봐야 한다",
+    "지켜봐야 할 것이다",
+    "중요하게 봐야 한다",
+    "중요해지고 있다",
+    "영향을 미칠 것으로 보인다",
+    "여파가 클 것으로 보인다",
+    "악영향이 예상된다",
+    "반발이 커질 수 있다",
+    "불가피해 보인다",
+    "불가피할 전망이다",
+    "귀추가 주목된다",
+]
+
+# 과장 표현 → 약화 매핑
+_TONE_SOFTENERS = {
+    "직격탄": "영향",
+    "불가피": "가능성",
+    "급등": "상승",
+    "급락": "하락",
+    "붕괴": "하락",
+    "폭락": "하락",
+    "폭등": "급상승",
+    "토해냈다": "줄었다",
+    "충격": "영향",
+}
+
+
+def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str]]:
+    """마감 결과 검증 및 자동 보정. (post, short, warnings) 반환."""
+    warnings = []
+
+    # 금지 마무리 패턴 감지
+    for banned in _BANNED_ENDINGS:
+        if post.rstrip().endswith(banned) or post.rstrip().endswith(banned + "."):
+            warnings.append(f"final_post 금지 마감 패턴: '{banned}'")
+            break
+        if short and (short.rstrip().endswith(banned) or short.rstrip().endswith(banned + ".")):
+            warnings.append(f"final_short 금지 마감 패턴: '{banned}'")
+            break
+
+    # 과장 표현 자동 약화
+    for strong, soft in _TONE_SOFTENERS.items():
+        if strong in post:
+            post = post.replace(strong, soft)
+            warnings.append(f"과장 표현 자동 약화: '{strong}' → '{soft}'")
+        if short and strong in short:
+            short = short.replace(strong, soft)
+
+    # final_short가 final_post 첫 문장과 동일한지 체크
+    first_sentence = post.split(".")[0].split("\n")[0].strip()
+    short_first = short.split(".")[0].split("\n")[0].strip() if short else ""
+    if first_sentence and short_first and first_sentence == short_first:
+        warnings.append("final_short 첫 문장이 final_post와 동일")
+
+    return post, short, warnings
+
+
 def _parse_final_post(raw: str) -> Optional[FinalPost]:
-    """AI 응답 JSON → FinalPost."""
+    """AI 응답 JSON → FinalPost. 검증 포함."""
     try:
         text = raw.strip()
         if "```" in text:
@@ -1665,6 +1793,12 @@ def _parse_final_post(raw: str) -> Optional[FinalPost]:
         short = str(data.get("final_short", ""))
         if not post:
             return None
+
+        # 검증 및 자동 보정
+        post, short, warnings = _validate_final_post(post, short)
+        for w in warnings:
+            logger.warning(f"[마감검증] {w}")
+
         return FinalPost(final_post=post, final_short=short)
     except Exception as e:
         logger.warning(f"FinalPost 파싱 오류: {e}")

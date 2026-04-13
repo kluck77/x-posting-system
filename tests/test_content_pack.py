@@ -12,6 +12,7 @@ from app.services.content_pack import (
     CandidateCard, FinalPost,
     _CANDIDATE_PROMPT_KO, _FINALIZE_PROMPT_KO,
     _parse_candidate_card, _parse_final_post,
+    _validate_final_post, _BANNED_ENDINGS, _TONE_SOFTENERS,
 )
 from app.models.content_request import ContentRequest
 
@@ -1529,13 +1530,13 @@ class TestFinalizePromptRules:
         """골든룰 1: 훅 1개 중심축."""
         p = _FINALIZE_PROMPT_KO
         assert "훅 1개 = 중심축 1개" in p
-        assert "다른 방향 금지" in p
+        assert "다른 방향" in p
 
     def test_first_sentence_meaning_first(self):
         """골든룰 2: 첫 문장은 핵심 의미부터."""
         p = _FINALIZE_PROMPT_KO
-        assert "핵심 의미부터 시작" in p
-        assert "사실 나열로 시작하지 마라" in p
+        assert "핵심 의미" in p
+        assert "사실 나열" in p
 
     def test_impact_path_max_2(self):
         """골든룰 3: 파급 경로 최대 2개."""
@@ -1552,17 +1553,17 @@ class TestFinalizePromptRules:
         assert "시사했다" in p
 
     def test_last_sentence_variable(self):
-        """골든룰 5: 마지막 문장은 '지금 봐야 할 변수'."""
+        """골든룰 5: 마지막 문장은 '지금 뭘 봐야 하는가'."""
         p = _FINALIZE_PROMPT_KO
-        assert "지금 봐야 할 변수" in p
+        assert "지금 뭘 봐야 하는가" in p
 
     def test_bad_endings_banned(self):
         """교훈형/당위형/뻔한 전망 마감 금지."""
         p = _FINALIZE_PROMPT_KO
         assert "영향을 주목해야 할 시점이다" in p  # 금지 예시
         assert "악영향이 예상된다" in p
-        assert "교훈형 금지" in p
-        assert "당위형 금지" in p
+        assert "교훈형" in p
+        assert "당위형" in p
 
     def test_good_ending_examples(self):
         """좋은 마감 예시가 포함."""
@@ -1573,14 +1574,14 @@ class TestFinalizePromptRules:
     def test_style_rules(self):
         """문체 규칙: 칼럼 금지, 문장 수 제한."""
         p = _FINALIZE_PROMPT_KO
-        assert "칼럼·해설문 문체 금지" in p
+        assert "칼럼" in p and "문체 금지" in p
         assert "2~4개로 구성" in p
         assert "5문장 이상이면 실패" in p
 
     def test_cautions_conflict_rule(self):
         """골든룰 6: cautions 충돌 금지."""
         p = _FINALIZE_PROMPT_KO
-        assert "cautions와 충돌하는 표현을 쓰지 마라" in p
+        assert "cautions" in p and "충돌" in p
 
     def test_only_two_output_fields(self):
         """출력 필드가 2개(final_post, final_short)만."""
@@ -1620,6 +1621,167 @@ class TestFinalizePromptRules:
         """같은 구조 반복 금지."""
         p = _FINALIZE_PROMPT_KO
         assert "구조 자체도 바꿔라" in p
+
+    def test_first_sentence_hook_copy_ban(self):
+        """첫 문장 훅 복붙 금지 규칙."""
+        p = _FINALIZE_PROMPT_KO
+        assert "훅을 그대로 복붙하지 마라" in p
+        assert "왜 중요한지" in p
+
+    def test_tone_temperature_rule(self):
+        """문장 온도 규칙: 과장 표현 약화."""
+        p = _FINALIZE_PROMPT_KO
+        assert "직격탄" in p
+        assert "불가피" in p
+        assert "과장 표현 기본 약화" in p
+
+    def test_paragraph_density_rule(self):
+        """문단 밀도: 변수 2개까지만."""
+        p = _FINALIZE_PROMPT_KO
+        assert "변수 2개까지만" in p
+
+    def test_short_version_independence(self):
+        """final_short 독립 규칙."""
+        p = _FINALIZE_PROMPT_KO
+        assert "압축본이 아니다" in p
+        assert "독립적으로 읽혀야 한다" in p
+        assert "다른 각도로 시작" in p
+
+    def test_self_check_section(self):
+        """셀프 체크 섹션 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "셀프 체크" in p
+        assert "과장 표현" in p
+
+    def test_political_conservative_rule(self):
+        """정치/외교/군사 보수적 규칙."""
+        p = _FINALIZE_PROMPT_KO
+        assert "정치/외교/군사 주제는 더 보수적" in p
+
+    def test_more_banned_endings(self):
+        """추가 금지 마감 패턴."""
+        p = _FINALIZE_PROMPT_KO
+        assert "향후 추이를 지켜볼 필요가 있다" in p
+        assert "시장에 미칠 여파가 클 것으로 보인다" in p
+        assert "기자 마감 투" in p
+
+    def test_final_short_examples(self):
+        """final_short 독립 예시 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "final_short 예시" in p
+
+
+class TestValidateFinalPost:
+    """_validate_final_post 검증 로직 테스트."""
+
+    def test_clean_post_no_warnings(self):
+        """깨끗한 게시글은 경고 없음."""
+        post = "관건은 이 관세가 반도체까지 확대되느냐다."
+        short = "반도체 관세 확대 여부가 변수다."
+        _, _, warnings = _validate_final_post(post, short)
+        assert len(warnings) == 0
+
+    def test_banned_ending_detected(self):
+        """금지 마감 패턴 감지."""
+        post = "이번 사안은 영향을 미칠 것으로 보인다. 향후 추이를 지켜볼 필요가 있다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전")
+        assert any("금지 마감 패턴" in w for w in warnings)
+
+    def test_banned_ending_with_period(self):
+        """마침표 포함 금지 패턴."""
+        post = "시장에 미칠 여파가 클 것으로 보인다."
+        _, _, warnings = _validate_final_post(post, "")
+        assert any("금지 마감 패턴" in w for w in warnings)
+
+    def test_tone_softener_auto_replace(self):
+        """과장 표현 자동 약화."""
+        post = "이번 조치는 수출 기업에 직격탄이다."
+        result_post, _, warnings = _validate_final_post(post, "")
+        assert "직격탄" not in result_post
+        assert "영향" in result_post
+        assert any("자동 약화" in w for w in warnings)
+
+    def test_multiple_softeners(self):
+        """여러 과장 표현 동시 약화."""
+        post = "급등이 불가피한 상황이다."
+        result_post, _, warnings = _validate_final_post(post, "")
+        assert "급등" not in result_post
+        assert "불가피" not in result_post
+        assert "상승" in result_post
+        assert "가능성" in result_post
+
+    def test_short_tone_softened(self):
+        """final_short에서도 과장 표현 약화."""
+        post = "정상 게시글."
+        short = "시장이 붕괴되었다."
+        _, result_short, _ = _validate_final_post(post, short)
+        assert "붕괴" not in result_short
+        assert "하락" in result_short
+
+    def test_same_first_sentence_warning(self):
+        """final_short 첫 문장이 final_post와 동일하면 경고."""
+        post = "관세 확대가 핵심이다. 시장은 예외 품목을 본다."
+        short = "관세 확대가 핵심이다."
+        _, _, warnings = _validate_final_post(post, short)
+        assert any("첫 문장이 final_post와 동일" in w for w in warnings)
+
+    def test_different_first_sentence_no_warning(self):
+        """첫 문장이 다르면 경고 없음."""
+        post = "관세 확대가 핵심이다. 시장은 예외 품목을 본다."
+        short = "예외 품목 리스트가 관건이다."
+        _, _, warnings = _validate_final_post(post, short)
+        assert not any("첫 문장이 final_post와 동일" in w for w in warnings)
+
+
+class TestBannedEndingsCompleteness:
+    """_BANNED_ENDINGS 리스트 완전성."""
+
+    def test_banned_list_not_empty(self):
+        assert len(_BANNED_ENDINGS) >= 10
+
+    def test_key_patterns_in_list(self):
+        patterns = ["주목해야", "지켜볼", "봐야 한다", "예상된다", "불가피"]
+        for pat in patterns:
+            assert any(pat in b for b in _BANNED_ENDINGS), f"'{pat}' 패턴 누락"
+
+
+class TestToneSoftenersCompleteness:
+    """_TONE_SOFTENERS 매��� 완전성."""
+
+    def test_softeners_not_empty(self):
+        assert len(_TONE_SOFTENERS) >= 5
+
+    def test_key_softeners(self):
+        assert "직격탄" in _TONE_SOFTENERS
+        assert "불가피" in _TONE_SOFTENERS
+        assert "급등" in _TONE_SOFTENERS
+        assert "붕괴" in _TONE_SOFTENERS
+        assert "토해냈다" in _TONE_SOFTENERS
+
+
+class TestParseFinalPostWithValidation:
+    """_parse_final_post에 검증이 통합되어 있는지 테스트."""
+
+    def test_tone_softened_in_parse(self):
+        """파싱 시 과장 표현이 자동 약화."""
+        import json
+        raw = json.dumps({"final_post": "직격탄을 맞았다.", "final_short": "급등세다."})
+        result = _parse_final_post(raw)
+        assert result is not None
+        assert "직격탄" not in result.final_post
+        assert "급등" not in result.final_short
+
+    def test_valid_post_parses_clean(self):
+        """정상 게시글은 그대로 파싱."""
+        import json
+        raw = json.dumps({
+            "final_post": "관건은 시행령이 나오느냐다.",
+            "final_short": "시행령 여부가 변수다."
+        })
+        result = _parse_final_post(raw)
+        assert result is not None
+        assert result.final_post == "관건은 시행령이 나오느냐다."
+        assert result.final_short == "시행령 여부가 변수다."
 
 
 class TestSendCandidateCardMessages:
