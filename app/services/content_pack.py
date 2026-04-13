@@ -1826,27 +1826,19 @@ async def generate_final_post(
                 f"short={len(result.final_short)}자"
             )
 
-            # validation 경고 기반 게이트: 2개 이상이면 Claude 감수 강제
-            _, _, gate_warnings = _validate_final_post(
-                result.final_post, result.final_short
+            # Phase 1: Claude 상시 최종 통합 — 항상 호출
+            reviewed = await _claude_review_final(
+                card, result, selected_hook=selected_hook
             )
-            force_review = len(gate_warnings) >= 2
-            if force_review:
+            if reviewed:
                 logger.info(
-                    f"[마감게이트] 경고 {len(gate_warnings)}개 → "
-                    f"Claude 감수 강제: {gate_warnings}"
+                    f"Claude 최종통합 완료: post={len(reviewed.final_post)}자, "
+                    f"short={len(reviewed.final_short)}자"
                 )
+                return reviewed
 
-            # 조건부 Claude 감수 (게이트 강제 또는 기존 조건)
-            if force_review or _should_invoke_claude_review(card, result):
-                reviewed = await _claude_review_final(card, result)
-                if reviewed:
-                    logger.info(
-                        f"Claude 감수 완료: post={len(reviewed.final_post)}자, "
-                        f"short={len(reviewed.final_short)}자"
-                    )
-                    return reviewed
-
+            # Claude 실패 시 OpenAI 1차 결과로 폴백
+            logger.warning("[Claude통합] 실패 — OpenAI 1차 결과 사용")
             return result
 
     logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
@@ -1942,95 +1934,74 @@ def _should_invoke_claude_review(card: CandidateCard, draft: FinalPost) -> bool:
     return False
 
 
-_CLAUDE_REVIEW_PROMPT = """너는 X 게시글 "최종 감수자"다. 편집자이지 작성자가 아니다.
+_CLAUDE_REVIEW_PROMPT = """너는 X 게시글 "최종 통합 편집자"다.
 
-역할:
-OpenAI가 작성한 1차 초안(final_post, final_short)을 감수하고,
-필요한 경우에만 리라이트하라.
+━━━ 역할 ━━━
 
-━━━ 핵심 판정 기준: "뉴스 후기 느낌" ━━━
+OpenAI가 작성한 1차 초안을 읽고, 최종 게시 가능 수준으로 통합/리라이트하라.
+Perplexity 검증 결과와 cautions를 반영해서 사실 상한선을 넘지 않게 하라.
+
+너는 "감수자"가 아니라 "최종 책임자"다.
+초안이 이미 좋으면 그대로 내보내도 되지만,
+부족하면 반드시 고쳐서 "바로 올릴 수 있는 수준"으로 만들어라.
+
+━━━ 문체 모델 ━━━
+
+"트위터 팔로워 10만인 한국 증권사 출신 해설자"
+- 신문 칼럼 X, 보고서 X, TV 해설 X
+- 건조하고 짧게. 감탄사 없이. 한 문장에 하나만.
+- "이 사람 아는 사람이네" 느낌이 들어야 한다.
+
+━━━ 3문장 구조 ━━━
+
+1문장(WHY): 한국 독자가 왜 이걸 봐야 하는가. 기사 요약 금지.
+2문장(WHAT): 확인된 사실 1~2개 + 해석 축 연결. 나열 금지.
+3문장(SO WHAT): 진짜 변수/조건/대비. 전망문·훈계문 금지.
+
+3문장이 기본. 4문장까지 허용. 그 이상 금지.
+
+━━━ 리라이트 판정 기준 ━━━
 
 아래 중 하나라도 해당하면 반드시 리라이트:
-1. 첫 문장이 "~보도가 나왔다/~것으로 전해졌다/~것으로 알려졌다"로 시작
-2. 본문이 기사 내용을 줄줄 설명하는 구조
+1. 첫 문장이 기사 요약/사실 나열로 시작
+2. 본문이 기사 재설명 구조
 3. 마지막 문장이 전망문/훈계문/기자 질문형
-4. 내부 메모 문구(주의문/관찰 포인트)가 본문에 스며듦
-5. 근거 없는 일반론 의견("역사적으로 ~", "~전략이다", "~낳기 쉽다" 등)
-6. 국제 뉴스인데 한국 관점 해석 축이 전혀 없음
+4. 내부 메모 문구가 본문에 스며듦
+5. 근거 없는 일반론 ("역사적으로~", "~전략이다", "~낳기 쉽다")
+6. 국제 뉴스인데 한국 관점이 전혀 없음
 7. 읽고 나서 한 문장도 기억에 안 남음
 
-━━━ 감수 기준 ━━━
+━━━ 사실 상한선 ━━━
 
-1. 첫 문장 검증
-   ✗ "~라는 보도가 나왔다" "~것으로 전해졌다" "~것으로 알려졌다" → 해석 선행으로 교체
-   ✓ "왜 중요한가/그래서 뭐가 달라지는가"를 바로 보여주는 문장
-
-2. 뻔한 마감 패턴 교체
-   ✗ "관건은 ~다" "변수다" "주목해야 한다" "추이를 봐야 한다"
-   ✗ "영향을 미칠 수 있다" "여파가 예상된다" "가능성이 커졌다" "핵심은 ~다"
-   ✗ "중요한 시점이다" "~로 보인다" "~어떻게 될까?" "시장 반응을 봐야 한다"
-   ✓ 마지막 문장은 조건형/대비형/질문형/압축형 중 하나로 교체
-   예: "시장은 발언이 아니라 시행령을 본다" (대비형)
-   예: "문제는 이 발언이 실제 정책으로 이어지느냐다" (조건형)
-   예: "결국 숫자를 바꾸는 건 발언이 아니라 실행이다" (압축형)
-
-3. 국제 뉴스 한국 관점 (원칙 B)
-   - 국제/지정학/거시경제 뉴스라면 한국 관점 해석 축 1개 필수
-   - 한국 수입물가/환율/에너지비용/기업(정유·해운·항공·반도체)/증시/정부 대응 등
-   ✗ "미국의 해상봉쇄는 이란 경제에 영향을 준다" ← 한국 관점 없음
-   ✓ "미국의 해상봉쇄가 길어지면 한국에선 유가보다 운임·환율이 먼저 흔들릴 수 있다"
-
-4. 근거 없는 일반론 의견 제거 (원칙 C)
-   ✗ "역사적으로 ~" ← 어떤 역사? 근거 없으면 금지
-   ✗ "~전략이다" "~압박이다" ← 분석가 행세
-   ✗ "~낳기 쉽다" "~낳을 것이다" ← 근거 없는 예측
-   ✗ "큰 파장을 불러올 것이다" ← 뻔한 예측
-   ✗ "~으로 보인다" ← 근거 약할 때 습관적 사용
-   → 확인된 사실 + 기사 내 발언 + 한국 관점 연결만으로 교체
-
-5. 내부 메모 언어 오염 제거
-   - cautions/watch_points/한줄 결론 문구가 최종 문체에 스며들어 있으면 제거
-   - "지금 봐야 할 포인트" 같은 내부 레이블이 남아 있으면 자연스러운 문장으로 교체
-   - "확인 중인 상태다" 같은 cautions 복붙도 제거
-
-6. 과한 확정형 약화
-   - certainty_level이 미확인/상충이면 단정 금지
-   - cautions와 충돌하는 표현 수정
-   - 정치/외교/군사는 한 단계 더 보수적으로
-
-7. 밋밋한 문장 강화
-   - 기억에 남는 리듬으로
-   - 첫 문장이 사실 나열이면 → 핵심 의미 선행으로 교체
-
-8. final_short 독립성 확보
-   - final_post 압축본이 아니라 독립 트윗
-   - final_post와 첫 문장이 같으면 반드시 교체
-
-━━━ 절대 금지 ━━━
-
+- certainty_level이 미확인/상충이면 단정 금지
+- cautions와 충돌하는 표현 수정
+- 정치/외교/군사는 한 단계 더 보수적으로
 - 새 사실/수치 추가 금지 (원문에 없는 것)
-- 근거 없이 세기 올리기 금지
-- 장문 해설로 늘리기 금지
-- 후보 카드 다시 만들기 금지
 
-━━━ 판단 기준 ━━━
+━━━ 금지 마감 패턴 ━━━
 
-- 초안이 이미 좋으면 그대로 반환해도 된다
+✗ "추이를 봐야 한다" "변수다" "주목해야 한다"
+✗ "영향을 미칠 수 있다" "여파가 예상된다" "핵심은 ~다"
+✗ "중요한 시점이다" "관건은 ~다" "~어떻게 될까?"
+✓ 조건형/대비형/질문형/압축형만 허용
+
+━━━ 초안이 좋을 때 ━━━
+
 - 고칠 게 없으면 원문 그대로 JSON으로 반환
-- 고칠 게 있으면 고친 버전만 반환
+- 억지로 고치지 마라
 
 ━━━ 출력 ━━━
 한국어 JSON만 출력:
 {
-  "final_post": "감수 후 완성본",
-  "final_short": "감수 후 짧은 버전"
+  "final_post": "최종 완성본",
+  "final_short": "독립형 짧은 버전"
 }"""
 
 
 async def _claude_review_final(
-    card: CandidateCard, draft: FinalPost
+    card: CandidateCard, draft: FinalPost, *, selected_hook: str = ""
 ) -> Optional[FinalPost]:
-    """Anthropic Claude로 final_post/final_short 감수. 실패 시 None."""
+    """Anthropic Claude 최종 통합. 실패 시 None (OpenAI 결과로 폴백)."""
     from app.config import settings
 
     if not settings.has_anthropic:
@@ -2040,6 +2011,8 @@ async def _claude_review_final(
         f"━━━ 1차 초안 (OpenAI) ━━━\n"
         f"final_post: {draft.final_post}\n"
         f"final_short: {draft.final_short}\n\n"
+        f"━━━ 선택된 훅 ━━━\n"
+        f"{selected_hook}\n\n"
         f"━━━ 카드 정보 ━━━\n"
         f"certainty_level: {card.certainty_level}\n"
     )
@@ -2050,7 +2023,9 @@ async def _claude_review_final(
     if card.topic_tags:
         user_prompt += f"topic_tags: {', '.join(card.topic_tags)}\n"
 
-    user_prompt += "\n위 초안을 감수하고, JSON으로 반환하라."
+    user_prompt += (
+        "\n위 초안을 최종 통합 편집하고, JSON으로 반환하라."
+    )
 
     try:
         import httpx

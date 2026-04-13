@@ -2039,9 +2039,11 @@ class TestClaudeReviewPromptRules:
         p = _CLAUDE_REVIEW_PROMPT
         assert "새 사실" in p and "금지" in p
 
-    def test_no_intensity_increase(self):
+    def test_fact_ceiling_rule(self):
+        """사실 상한선 규칙이 포함."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "세기 올리기 금지" in p
+        assert "사실 상한선" in p
+        assert "단정 금지" in p
 
     def test_weak_pattern_replacement(self):
         p = _CLAUDE_REVIEW_PROMPT
@@ -2062,7 +2064,7 @@ class TestClaudeReviewPromptRules:
     def test_passthrough_allowed(self):
         """초안이 좋으면 그대로 반환 가능."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "그대로 반환" in p
+        assert "고칠 게 없으면" in p
 
     def test_json_output(self):
         p = _CLAUDE_REVIEW_PROMPT
@@ -2196,11 +2198,11 @@ class TestClaudeReviewPromptUpdated:
         p = _CLAUDE_REVIEW_PROMPT
         assert "내부 메모" in p or "메모 언어" in p
 
-    def test_expanded_weak_patterns(self):
-        """확장된 뻔한 패턴이 포함."""
+    def test_banned_ending_patterns_in_prompt(self):
+        """금지 마감 패턴이 포함."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "가능성이 커졌다" in p
-        assert "핵심은" in p
+        assert "추이를 봐야 한다" in p
+        assert "관건은" in p
 
 
 class TestFactNarrationDetection:
@@ -2267,10 +2269,10 @@ class TestRoleLoyaltyInPrompt:
         assert "CRITICAL" in p
         assert "전체 재작성" in p
 
-    def test_claude_review_news_review_detection(self):
-        """Claude 감수 프롬프트에 뉴스 후기 판정 기준이 있음."""
+    def test_claude_review_rewrite_criteria(self):
+        """Claude 통합 프롬프트에 리라이트 판정 기준이 있음."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "뉴스 후기 느낌" in p
+        assert "리라이트 판정 기준" in p
         assert "반드시 리라이트" in p
 
     def test_ending_type_d_compression(self):
@@ -2493,12 +2495,12 @@ class TestOpinionPatterns:
 
 
 class TestClaudeReviewPrincipleSync:
-    """Claude 감수 프롬프트에 원칙 A/B/C가 동기화되었는지 검증."""
+    """Claude 최종 통합 프롬프트에 원칙 A/B/C가 동기화되었는지 검증."""
 
     def test_korea_angle_in_claude_prompt(self):
-        """Claude 감수 프롬프트에 한국 관점 규칙 존재."""
+        """Claude 통합 프롬프트에 한국 관점 규칙 존재."""
         assert "한국 관점" in _CLAUDE_REVIEW_PROMPT
-        assert "원칙 B" in _CLAUDE_REVIEW_PROMPT or "국제 뉴스 한국 관점" in _CLAUDE_REVIEW_PROMPT
+        assert "국제 뉴스" in _CLAUDE_REVIEW_PROMPT
 
     def test_opinion_ban_in_claude_prompt(self):
         """Claude 감수 프롬프트에 일반론 금지 규칙 존재."""
@@ -2604,3 +2606,51 @@ class TestValidationGate:
         _, _, warnings = _validate_final_post(post, "환율 1400원대, 변수는 시행령이다.")
         # 과장 표현도 없고 금지 마감도 없는 깨끗한 포스트
         assert len(warnings) == 0, f"경고 0개 예상, 실제: {warnings}"
+
+
+# ─── Phase 1: Claude 상시 최종 통합 테스트 ──────────────────────────────────────
+
+
+class TestClaudeAlwaysOnIntegrator:
+    """Phase 1: Claude가 조건부 감수자가 아니라 상시 최종 통합자인지 검증."""
+
+    def test_prompt_role_is_integrator(self):
+        """프롬프트 역할이 '최종 통합 편집자'."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "최종 통합 편집자" in p
+
+    def test_prompt_role_is_final_owner(self):
+        """'최종 책임자'로 명시."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "최종 책임자" in p
+
+    def test_prompt_not_just_reviewer(self):
+        """감수자가 아니라 최종 책임자라는 대비 존재."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert '"감수자"가 아니라' in p
+
+    def test_prompt_has_tone_model(self):
+        """문체 모델 (증권사 출신 해설자)이 Claude 프롬프트에도 존재."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "증권사" in p
+        assert "팔로워" in p
+
+    def test_prompt_has_three_sentence_structure(self):
+        """3문장 구조(WHY/WHAT/SO WHAT)가 Claude 프롬프트에 포함."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "WHY" in p
+        assert "WHAT" in p
+        assert "SO WHAT" in p
+
+    def test_prompt_passthrough_when_good(self):
+        """초안이 좋으면 그대로 반환 가능."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "고칠 게 없으면" in p
+        assert "그대로" in p
+
+    def test_claude_review_accepts_selected_hook(self):
+        """_claude_review_final이 selected_hook 키워드 인자를 받음."""
+        import inspect
+        from app.services.content_pack import _claude_review_final
+        sig = inspect.signature(_claude_review_final)
+        assert "selected_hook" in sig.parameters
