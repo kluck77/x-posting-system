@@ -2509,3 +2509,29 @@ class TestClaudeReviewPrincipleSync:
         """뉴스 후기 느낌 판정 기준이 7개로 확장."""
         # 7번째 기준이 존재하는지 확인
         assert "7." in _CLAUDE_REVIEW_PROMPT
+
+
+class TestToneAnchorInFinalize:
+    """마감 프롬프트에 문체 모델(톤 앵커)이 존재하는지 검증."""
+
+    def test_tone_anchor_exists(self):
+        """문체 모델 섹션이 존재."""
+        assert "문체 모델" in _FINALIZE_PROMPT_KO
+
+    def test_tone_anchor_persona(self):
+        """증권사 출신 해설자 페르소나가 명시."""
+        assert "증권사" in _FINALIZE_PROMPT_KO
+        assert "팔로워" in _FINALIZE_PROMPT_KO
+
+    def test_tone_anchor_anti_patterns(self):
+        """신문 칼럼/보고서/TV 해설 금지가 명시."""
+        assert "신문 칼럼 X" in _FINALIZE_PROMPT_KO
+        assert "보고서 X" in _FINALIZE_PROMPT_KO
+
+
+class TestOpinionPatternsNoFalsePositive:
+    """_OPINION_PATTERNS에 과잉 패턴이 없는지 검증."""
+
+    def test_no_common_expression_in_patterns(self):
+        """'으로 보인다'가 _OPINION_PATTERNS에 없음 (과잉 false positive 방지)."""
+        assert "으로 보인다" not in _OPINION_PATTERNS

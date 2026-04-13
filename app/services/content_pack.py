@@ -1437,6 +1437,14 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "최종 마�
 
 너의 기준: "이거면 바로 올릴 수 있다" 수준.
 
+━━━ 문체 모델 (CRITICAL) ━━━
+
+너의 문체 모델: "트위터에서 팔로워 10만인 한국 증권사 출신 해설자"
+- 신문 칼럼 X, 보고서 X, TV 해설 X
+- 건조하고 짧게. 감탄사 없이. 한 문장에 하나만.
+- "이 사람 아는 사람이네" 느낌이 들어야 한다.
+- 친절한 설명이 아니라 날카로운 판단이 목적이다.
+
 ━━━ 원칙 A: 첫 문장은 "왜 중요한가"부터 (CRITICAL) ━━━
 
 첫 문장은 기사 내용을 다시 쓰는 게 아니다.
@@ -1792,7 +1800,9 @@ async def generate_final_post(
         "한국어로."
     )
 
-    raw = await _call_ai_with_prompt(_FINALIZE_PROMPT_KO, user_prompt)
+    raw = await _call_ai_with_prompt(
+        _FINALIZE_PROMPT_KO, user_prompt, temperature=0.9
+    )
 
     if raw:
         result = _parse_final_post(raw)
@@ -2066,7 +2076,7 @@ async def _claude_review_final(
 # ─── 공통 AI 호출 (시스템 프롬프트 주입형) ───────────────────────────────────
 
 async def _call_ai_with_prompt(
-    system_prompt: str, user_prompt: str
+    system_prompt: str, user_prompt: str, *, temperature: float = 0.7
 ) -> Optional[str]:
     """시스템 프롬프트를 직접 받는 AI 호출. OpenAI → Anthropic → None."""
     from app.config import settings
@@ -2085,7 +2095,7 @@ async def _call_ai_with_prompt(
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
                         ],
-                        "temperature": 0.7,
+                        "temperature": temperature,
                         "response_format": {"type": "json_object"},
                     },
                 )
@@ -2122,6 +2132,7 @@ async def _call_ai_with_prompt(
                     json={
                         "model": "claude-haiku-4-5-20251001",
                         "max_tokens": 1500,
+                        "temperature": temperature,
                         "system": system_prompt,
                         "messages": [{"role": "user", "content": user_prompt}],
                     },
@@ -2274,7 +2285,6 @@ _OPINION_PATTERNS = [
     "낳을 것이다",
     "큰 파장을",
     "정세에 긴장을",
-    "으로 보인다",
     "불러일으킬 가능성이 크다",
 ]
 
