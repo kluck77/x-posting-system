@@ -1640,9 +1640,20 @@ async def generate_final_post(
         result = _parse_final_post(raw)
         if result:
             logger.info(
-                f"최종 마감 완료: post={len(result.final_post)}자, "
+                f"1차 마감 완료 (OpenAI): post={len(result.final_post)}자, "
                 f"short={len(result.final_short)}자"
             )
+
+            # 조건부 Claude 감수
+            if _should_invoke_claude_review(card, result):
+                reviewed = await _claude_review_final(card, result)
+                if reviewed:
+                    logger.info(
+                        f"Claude 감수 완료: post={len(reviewed.final_post)}자, "
+                        f"short={len(reviewed.final_short)}자"
+                    )
+                    return reviewed
+
             return result
 
     logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
@@ -1650,6 +1661,192 @@ async def generate_final_post(
         final_post=f"[마감 실패] {selected_hook}",
         final_short=f"[마감 실패] {selected_hook[:80]}",
     )
+
+
+# ─── 3차: Claude 감수 / 리라이트 ─────────────────────────────────────────────
+
+# Claude 호출 트리거 topic_tags
+_SENSITIVE_TOPICS = {"정치", "외교", "안보", "군사", "부동산", "정책", "규제", "국방", "북한"}
+
+# Claude 호출 트리거 표현 (final_post에 포함 시)
+_WEAK_PATTERNS = [
+    "관건은",
+    "추이를 봐야 한다",
+    "추이를 지켜봐야",
+    "영향이 커질 수 있다",
+    "변수다",
+    "중요한 시점이다",
+    "주목해야 한다",
+    "주목할 필요가",
+    "지켜볼 필요가",
+    "여파가 클 것으로",
+    "영향을 미칠 것으로",
+    "귀추가 주목",
+]
+
+
+def _should_invoke_claude_review(card: CandidateCard, draft: FinalPost) -> bool:
+    """Claude 감수를 호출할지 판단. True면 호출."""
+    from app.config import settings
+    if not settings.has_anthropic:
+        return False
+
+    reasons = []
+
+    # 1. 민감 토픽
+    if card.topic_tags:
+        overlap = _SENSITIVE_TOPICS & set(card.topic_tags)
+        if overlap:
+            reasons.append(f"민감토픽: {overlap}")
+
+    # 2. 미확인/상충
+    if card.certainty_level in ("미확인", "상충"):
+        reasons.append(f"certainty={card.certainty_level}")
+
+    # 3. cautions 존재
+    if card.cautions:
+        reasons.append(f"cautions {len(card.cautions)}개")
+
+    # 4. 뻔한 표현 감지
+    for pat in _WEAK_PATTERNS:
+        if pat in draft.final_post:
+            reasons.append(f"뻔한표현: '{pat}'")
+            break
+
+    # 5. final_short가 final_post 첫 문장과 동일 (독립성 부족)
+    first_sentence = draft.final_post.split(".")[0].split("\n")[0].strip()
+    short_first = draft.final_short.split(".")[0].split("\n")[0].strip() if draft.final_short else ""
+    if first_sentence and short_first and first_sentence == short_first:
+        reasons.append("short 독립성 부족")
+
+    if reasons:
+        logger.info(f"[Claude감수] 호출 결정: {', '.join(reasons)}")
+        return True
+
+    logger.info("[Claude감수] 조건 미충족 — 스킵")
+    return False
+
+
+_CLAUDE_REVIEW_PROMPT = """너는 X 게시글 "최종 감수자"다. 편집자이지 작성자가 아니다.
+
+역할:
+OpenAI가 작성한 1차 초안(final_post, final_short)을 감수하고,
+필요한 경우에만 리라이트하라.
+
+━━━ 감수 기준 ━━━
+
+1. 뉴스 요약 후기 느낌 제거
+   - "~한 것으로 알려졌다", "~라고 밝혔다" 반복 → 짧게 끊기
+   - 기사 제목 복붙 느낌 → 해석 선행
+
+2. 뻔한 마감 패턴 교체
+   ✗ "관건은 ~다" "변수다" "주목해야 한다" "추이를 봐야 한다"
+   ✓ 구체적 변수 1개를 직접 지목하는 문장으로 교체
+   예: "시장은 발언이 아니라 시행령을 본다"
+
+3. 과한 확정형 약화
+   - certainty_level이 미확인/상충이면 단정 금지
+   - cautions와 충돌하는 표현 수정
+   - 정치/외교/군사는 한 단계 더 보수적으로
+
+4. 밋밋한 문장 강화
+   - 기억에 남는 리듬으로
+   - 첫 문장이 사실 나열이면 → 핵심 의미 선행으로 교체
+
+5. final_short 독립성 확보
+   - final_post 압축본이 아니라 독립 트윗
+   - final_post와 첫 문장이 같으면 반드시 교체
+
+━━━ 절대 금지 ━━━
+
+- 새 사실/수치 추가 금지 (원문에 없는 것)
+- 근거 없이 세기 올리기 금지
+- 장문 해설로 늘리기 금지
+- 후보 카드 다시 만들기 금지
+
+━━━ 판단 기준 ━━━
+
+- 초안이 이미 좋으면 그대로 반환해도 된다
+- 고칠 게 없으면 원문 그대로 JSON으로 반환
+- 고칠 게 있으면 고친 버전만 반환
+
+━━━ 출력 ━━━
+한국어 JSON만 출력:
+{
+  "final_post": "감수 후 완성본",
+  "final_short": "감수 후 짧은 버전"
+}"""
+
+
+async def _claude_review_final(
+    card: CandidateCard, draft: FinalPost
+) -> Optional[FinalPost]:
+    """Anthropic Claude로 final_post/final_short 감수. 실패 시 None."""
+    from app.config import settings
+
+    if not settings.has_anthropic:
+        return None
+
+    user_prompt = (
+        f"━━━ 1차 초안 (OpenAI) ━━━\n"
+        f"final_post: {draft.final_post}\n"
+        f"final_short: {draft.final_short}\n\n"
+        f"━━━ 카드 정보 ━━━\n"
+        f"certainty_level: {card.certainty_level}\n"
+    )
+    if card.cautions:
+        user_prompt += "cautions:\n"
+        for c in card.cautions:
+            user_prompt += f"  - {c}\n"
+    if card.topic_tags:
+        user_prompt += f"topic_tags: {', '.join(card.topic_tags)}\n"
+
+    user_prompt += "\n위 초안을 감수하고, JSON으로 반환하라."
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": settings.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 500,
+                    "system": _CLAUDE_REVIEW_PROMPT,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            usage = data.get("usage", {})
+            logger.info(
+                f"[API-COST] anthropic claude-haiku-4-5 "
+                f"in={usage.get('input_tokens', '?')} "
+                f"out={usage.get('output_tokens', '?')} "
+                f"caller=ClaudeReview"
+            )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage("anthropic", "claude-haiku-4-5", "ClaudeReview",
+                             usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+            except Exception:
+                pass
+
+            raw = data["content"][0]["text"]
+            result = _parse_final_post(raw)
+            if result and result.final_post:
+                return result
+
+            logger.warning("[Claude감수] 파싱 실패 — 원본 유지")
+            return None
+
+    except Exception as e:
+        logger.warning(f"[Claude감수] 호출 실패: {e}")
+        return None
 
 
 # ─── 공통 AI 호출 (시스템 프롬프트 주입형) ───────────────────────────────────

@@ -4,6 +4,8 @@
 한국어 기본 / 영어 명시 시만 영어 규칙을 검증합니다.
 """
 
+import pytest
+
 from app.services.content_pack import (
     _get_system_prompt, _mock_pack, _is_short_input, _classify_topic,
     FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
@@ -15,6 +17,8 @@ from app.services.content_pack import (
     _validate_final_post, _BANNED_ENDINGS, _TONE_SOFTENERS,
     _decide_certainty_ceiling, _VERIFICATION_FAIL_KEYWORDS,
     _CERTAINTY_RANK,
+    _should_invoke_claude_review, _CLAUDE_REVIEW_PROMPT,
+    _SENSITIVE_TOPICS, _WEAK_PATTERNS,
 )
 from app.models.content_request import ContentRequest
 
@@ -1930,6 +1934,150 @@ class TestParseFinalPostWithValidation:
         assert result is not None
         assert result.final_post == "관건은 시행령이 나오느냐다."
         assert result.final_short == "시행령 여부가 변수다."
+
+
+class TestClaudeReviewCondition:
+    """_should_invoke_claude_review 조건 판단 테스트."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_has_anthropic(self, monkeypatch):
+        """테스트 환경에 API 키 없으므로 has_anthropic을 True로 mock."""
+        from app.config import settings
+        monkeypatch.setattr(type(settings), "has_anthropic", property(lambda self: True))
+
+    def _make_card(self, **kwargs):
+        defaults = dict(
+            key_facts=["팩트1"],
+            hook_candidates=["훅1"],
+            certainty_level="확정",
+            topic_tags=["경제"],
+            cautions=[],
+        )
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    def _make_draft(self, post="정상 게시글.", short="짧은 버전."):
+        return FinalPost(final_post=post, final_short=short)
+
+    def test_sensitive_topic_triggers(self):
+        """민감 토픽이면 Claude 호출."""
+        card = self._make_card(topic_tags=["정치", "경제"])
+        assert _should_invoke_claude_review(card, self._make_draft()) is True
+
+    def test_safe_topic_no_trigger(self):
+        """안전 토픽 + 정상 초안 → 스킵."""
+        card = self._make_card(topic_tags=["기술"], certainty_level="확정", cautions=[])
+        assert _should_invoke_claude_review(card, self._make_draft()) is False
+
+    def test_unconfirmed_triggers(self):
+        """미확인 certainty면 호출."""
+        card = self._make_card(certainty_level="미확인")
+        assert _should_invoke_claude_review(card, self._make_draft()) is True
+
+    def test_conflicting_triggers(self):
+        """상충 certainty면 호출."""
+        card = self._make_card(certainty_level="상충")
+        assert _should_invoke_claude_review(card, self._make_draft()) is True
+
+    def test_cautions_trigger(self):
+        """cautions 있으면 호출."""
+        card = self._make_card(cautions=["출처 미검증"])
+        assert _should_invoke_claude_review(card, self._make_draft()) is True
+
+    def test_weak_pattern_triggers(self):
+        """뻔한 표현이면 호출."""
+        card = self._make_card()
+        draft = self._make_draft(post="이번 사안의 추이를 봐야 한다.")
+        assert _should_invoke_claude_review(card, draft) is True
+
+    def test_multiple_weak_patterns(self):
+        """여러 뻔한 표현도 감지."""
+        for pat in ["관건은", "변수다", "주목해야 한다"]:
+            card = self._make_card()
+            draft = self._make_draft(post=f"이번 이슈에서 {pat}")
+            assert _should_invoke_claude_review(card, draft) is True, f"'{pat}' 미감지"
+
+    def test_short_independence_triggers(self):
+        """final_short 첫 문장이 final_post와 동일하면 호출."""
+        card = self._make_card()
+        draft = self._make_draft(
+            post="관세 확대가 핵심이다. 시장은 시행을 본다.",
+            short="관세 확대가 핵심이다.",
+        )
+        assert _should_invoke_claude_review(card, draft) is True
+
+    def test_all_sensitive_topics_covered(self):
+        """_SENSITIVE_TOPICS 전체 확인."""
+        for topic in _SENSITIVE_TOPICS:
+            card = self._make_card(topic_tags=[topic])
+            assert _should_invoke_claude_review(card, self._make_draft()) is True, \
+                f"토픽 '{topic}' 미감지"
+
+
+class TestClaudeReviewPromptRules:
+    """_CLAUDE_REVIEW_PROMPT 프롬프트 규칙 검증."""
+
+    def test_role_is_reviewer(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "감수자" in p
+        assert "편집자" in p
+
+    def test_no_new_facts_rule(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "새 사실" in p and "금지" in p
+
+    def test_no_intensity_increase(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "세기 올리기 금지" in p
+
+    def test_weak_pattern_replacement(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "관건은" in p
+        assert "변수다" in p
+        assert "주목해야 한다" in p
+
+    def test_cautions_respect(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "cautions" in p
+        assert "충돌" in p
+
+    def test_short_independence(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "독립" in p
+        assert "final_short" in p
+
+    def test_passthrough_allowed(self):
+        """초안이 좋으면 그대로 반환 가능."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "그대로 반환" in p
+
+    def test_json_output(self):
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "final_post" in p
+        assert "final_short" in p
+        assert "JSON" in p
+
+
+class TestWeakPatternsCompleteness:
+    """_WEAK_PATTERNS 리스트 완전성."""
+
+    def test_not_empty(self):
+        assert len(_WEAK_PATTERNS) >= 8
+
+    def test_key_patterns(self):
+        flat = " ".join(_WEAK_PATTERNS)
+        assert "관건" in flat
+        assert "변수" in flat
+        assert "주목" in flat
+        assert "추이" in flat
+
+
+class TestSensitiveTopicsCompleteness:
+    """_SENSITIVE_TOPICS 집합 완전성."""
+
+    def test_core_topics(self):
+        for t in ["정치", "외교", "안보", "군사", "부동산", "정책"]:
+            assert t in _SENSITIVE_TOPICS, f"'{t}' 누락"
 
 
 class TestSendCandidateCardMessages:
