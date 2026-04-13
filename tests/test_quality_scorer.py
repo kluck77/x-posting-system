@@ -267,6 +267,69 @@ class TestEconomicShockNotClickbait:
         assert r["scores"]["consistency"] <= 5
 
 
+class TestPoliticalMilitaryAnalysis:
+    """정치/외교/군사 분석 글이 올바르게 채점되는지."""
+
+    def test_military_analysis_expertise(self):
+        """군사/안보 분석 어휘(압박, 카드, 노림수)가 expertise를 올리는지."""
+        r = score_5criteria(
+            "주한미군 방위비 협상의 진짜 노림수",
+            "트럼프는 병력 숫자를 레버리지로 쓰며 비용 압박 카드를 꺼냈다.",
+        )
+        assert r["scores"]["expertise"] >= 15, (
+            f"정치 분석 어휘 있는데 expertise={r['scores']['expertise']}."
+        )
+
+    def test_diplomatic_strategy_terms(self):
+        """외교 전략 어휘(포석, 전략적, 양면)가 expertise를 올리는지."""
+        r = score_5criteria(
+            "트럼프의 동맹 비용 카드",
+            "이건 전략적 포석이다. 양면 압박으로 한국의 협상력을 제한한다.",
+        )
+        assert r["scores"]["expertise"] >= 15
+
+    def test_security_pillar_recognized(self):
+        """군사/안보 필러(동맹, 안보, 방위비, 주한미군)가 consistency 감점을 막는지."""
+        r = score_5criteria(
+            "주한미군 방위비 협상",
+            "동맹 안보 방위비 분담 협상이 난항이다.",
+        )
+        assert r["scores"]["consistency"] == 20, (
+            f"군사/안보 필러 있는데 consistency={r['scores']['consistency']}."
+        )
+
+    def test_geopolitical_marketability(self):
+        """봉쇄, 동맹, 안보가 marketability를 올리는지."""
+        r = score_5criteria(
+            "호르무즈 봉쇄 리스크",
+            "봉쇄 리스크가 한국 에너지 안보를 흔든다.",
+        )
+        assert r["scores"]["marketability"] >= 20
+
+    def test_political_analysis_end_to_end(self):
+        """정치/군사 분석글 전체 → pass 또는 warn."""
+        hook = "트럼프의 동맹 비용 카드 — 주한미군과 호르무즈를 동시에 쥐었다"
+        body = (
+            "이건 전략적 포석이다. 병력 수치를 레버리지로 쓰면서 에너지 안보를 "
+            "흔드는 양면 압박. 투자자는 환율과 에너지 수입 비용을 주시해야 한다."
+        )
+        r = score_5criteria(hook, body)
+        assert r["action"] in ("pass", "warn"), (
+            f"정치/군사 분석인데 action={r['action']}, total={r['total']}."
+        )
+        assert r["total"] >= 60
+
+    def test_weak_military_summary_still_lower(self):
+        """해석 없는 군사/안보 팩트 나열은 그래도 높지 않아야."""
+        r = score_5criteria(
+            "트럼프 주한미군 발언",
+            "주한미군 관련 발언이 나왔다. 끝.",
+        )
+        # 해석 없으므로 expertise 낮음, 하지만 필러는 인정
+        assert r["scores"]["consistency"] == 20
+        assert r["scores"]["expertise"] < 10
+
+
 class TestEnglishRegression:
     """영어 평가는 기존과 동일해야 한다. 패턴은 건드리지 않았고 OR 결합만 추가."""
 

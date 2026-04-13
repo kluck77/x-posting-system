@@ -696,3 +696,83 @@ class TestTopicModePrompt:
         source = inspect.getsource(generate_content_pack)
         assert "일반론" in source
         assert "상위 주제" in source
+
+
+class TestPoliticalMilitaryPromptRules:
+    """정치·외교·군사 주제 표현 강도 규칙이 프롬프트에 포함되어 있는지."""
+
+    def test_political_military_rule_exists(self):
+        """골든 룰 11에 정치·외교·군사 표현 강도 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "정치·외교·군사 주제 표현 강도 규칙" in prompt
+
+    def test_weakening_table_has_examples(self):
+        """고강도 → 약화 매핑 예시가 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "청구서를 내밀었다 → 비용 분담 압박을 시사했다" in prompt
+        assert "부풀렸다 → 실제보다 크게 언급했다" in prompt
+        assert "직격했다 → 강경한 입장을 밝혔다" in prompt
+        assert "봉쇄를 시행 → 봉쇄 리스크가 부상했다" in prompt
+
+    def test_source_verification_for_military(self):
+        """군사·봉쇄 관련 단정에 출처 확인 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "군사·봉쇄·시행·공식 발표 문장은 출처가 명확할 때만" in prompt
+
+    def test_combat_rhetoric_tone_down(self):
+        """전투적 수사 재서술 톤 다운 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "전투적 수사" in prompt
+        assert "톤을 낮춰라" in prompt
+
+    def test_density_separation_in_rule(self):
+        """갈등 요소 분리 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "갈등 요소" in prompt
+        assert "핵심축 1개를 고르고" in prompt
+
+    def test_qa_political_military_check(self):
+        """QA 체크리스트에 정치/군사 표현 강도 항목이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "정치·외교·군사 표현 강도" in prompt
+
+
+class TestPoliticalAssertionAudit:
+    """정치/군사 고강도 표현이 _audit_numeric_safety에서 감지되는지."""
+
+    def test_직격_flagged(self):
+        pack = ContentPack(
+            main_posts=["트럼프가 한국을 직격했다"],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_부풀렸_flagged(self):
+        pack = ContentPack(
+            main_posts=["병력 수치를 부풀렸다"],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_공식_시행_flagged(self):
+        pack = ContentPack(
+            main_posts=["봉쇄를 공식 시행했다"],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_weakened_expression_ok(self):
+        """약화된 표현은 경고 안 함."""
+        pack = ContentPack(
+            main_posts=["비용 분담 압박을 시사했다. 봉쇄 리스크가 부상했다."],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("단정 강도" in w for w in pack.style_warnings)
