@@ -472,7 +472,9 @@ async def _run_pipeline(
             draft.reply_to_tweet_id = reply_to_tweet_id
             orchestrator.db.commit()
 
-        card_sent = await orchestrator.send_for_approval(draft.id)
+        card_sent = await orchestrator.send_for_approval(
+            draft.id, chat_id=update.message.chat_id,
+        )
 
         mode_label = "📝 새 게시글" if post_mode == "tweet" else f"💬 댓글 (→{reply_to_tweet_id})"
         card_status = (
@@ -563,17 +565,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     orchestrator = Orchestrator()
     try:
-        result = await orchestrator.handle_approval(draft_id, action)
+        result = await orchestrator.handle_approval(
+            draft_id, action, chat_id=query.message.chat_id,
+        )
 
         if result.get("success"):
             if action == "approve" and result.get("hook"):
+                import html as _html
                 hook = result.get("hook", "")
                 body = result.get("body", "")
                 post_text = f"{hook}\n\n{body}" if body else hook
                 response_text = (
                     f"✅ <b>승인 완료</b>\n\n"
                     f"<b>📋 게시용 텍스트:</b>\n"
-                    f"<code>{post_text}</code>"
+                    f"<code>{_html.escape(post_text)}</code>"
                 )
             else:
                 response_text = f"✅ {result.get('message', '완료!')}"

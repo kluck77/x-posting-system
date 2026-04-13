@@ -604,7 +604,9 @@ class Orchestrator:
         )
         return draft
 
-    async def send_for_approval(self, draft_id: int) -> bool:
+    async def send_for_approval(
+        self, draft_id: int, chat_id: int | str | None = None,
+    ) -> bool:
         """초안을 텔레그램으로 보내서 승인을 요청합니다."""
         # 일일 텔레그램 전송 제한 확인
         can_send, send_msg = self.rate_limiter.can_send_telegram()
@@ -618,7 +620,7 @@ class Orchestrator:
             return False
 
         source_url = draft.source_item.url if draft.source_item else None
-        message_id = await send_approval_card(draft, source_url)
+        message_id = await send_approval_card(draft, source_url, chat_id=chat_id)
 
         if message_id:
             self.draft_service.set_telegram_message_id(draft_id, message_id)
@@ -630,7 +632,10 @@ class Orchestrator:
             logger.error(f"텔레그램 전송 실패: draft_id={draft_id}")
             return False
 
-    async def handle_approval(self, draft_id: int, action: str) -> dict:
+    async def handle_approval(
+        self, draft_id: int, action: str,
+        chat_id: int | str | None = None,
+    ) -> dict:
         """텔레그램 승인/거절 액션을 처리합니다."""
         logger.info(f"승인 처리: draft_id={draft_id}, action={action}")
 
@@ -648,7 +653,7 @@ class Orchestrator:
             return {"success": True, "message": "보류됨"}
         elif action == "regenerate":
             self.draft_service.update_status(draft_id, ApprovalStatus.REGENERATE)
-            return await self._handle_regenerate(draft)
+            return await self._handle_regenerate(draft, chat_id=chat_id)
         else:
             return {"success": False, "error": f"알 수 없는 액션: {action}"}
 
@@ -685,7 +690,9 @@ class Orchestrator:
             "body": body,
         }
 
-    async def _handle_regenerate(self, draft: Draft) -> dict:
+    async def _handle_regenerate(
+        self, draft: Draft, chat_id: int | str | None = None,
+    ) -> dict:
         """재생성 → 같은 소스로 다시 파이프라인 실행"""
         source = draft.source_item
         if not source:
@@ -698,7 +705,7 @@ class Orchestrator:
                 source_type=source.source_type, language=source.language,
             )
             new_draft = await self.ingest_and_generate(new_data)
-            await self.send_for_approval(new_draft.id)
+            await self.send_for_approval(new_draft.id, chat_id=chat_id)
             return {
                 "success": True,
                 "message": f"재생성 완료! 새 draft ID: {new_draft.id}",

@@ -16,6 +16,7 @@
 
 import json
 import logging
+import html as html_mod
 import httpx
 from zoneinfo import ZoneInfo
 from app.config import settings
@@ -155,15 +156,19 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         _hook, _body = draft.hook or "", draft.body or ""
 
-    # 텔레그램 MarkdownV2에서 특수문자 이스케이프
-    # 간단하게 HTML 모드를 사용합니다
+    # HTML 특수문자 이스케이프 (< > & 등이 있으면 Telegram 400 에러)
+    _hook = html_mod.escape(_hook)
+    _body = html_mod.escape(_body)
+
     card = (
         f"📨 <b>새 초안 검토 요청</b>\n"
         f"{'─' * 30}\n\n"
         f"🎯 <b>훅:</b>\n{_hook}\n\n"
     )
     if _body:
-        card += f"📝 <b>본문:</b>\n{_body}\n\n"
+        # 본문이 너무 길면 4096자 제한 초과 → 잘라내기
+        _body_display = _body[:2000] + "…" if len(_body) > 2000 else _body
+        card += f"📝 <b>본문:</b>\n{_body_display}\n\n"
     else:
         card += "📝 <b>본문:</b>\n⚠️ 본문 없음 — 재생성 필요\n\n"
 
@@ -183,14 +188,14 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
     except Exception:
         _risk_reason = draft.risk_reasoning or ""
     if _risk_reason:
-        card += f"📊 <b>위험 판단 근거:</b> {_risk_reason}\n"
+        card += f"📊 <b>위험 판단 근거:</b> {html_mod.escape(_risk_reason)}\n"
 
     try:
         _ai_rationale = sanitize_reasoning(draft.ai_rationale or "")
     except Exception:
         _ai_rationale = draft.ai_rationale or ""
     if _ai_rationale:
-        card += f"🤖 <b>AI 판단 근거:</b> {_ai_rationale}\n"
+        card += f"🤖 <b>AI 판단 근거:</b> {html_mod.escape(_ai_rationale)}\n"
 
     # topic tags (Layer 2, advisory)
     try:
@@ -318,13 +323,18 @@ def build_inline_keyboard(draft_id: int) -> dict:
     return keyboard
 
 
-async def send_approval_card(draft: Draft, source_url: str | None = None) -> int | None:
+async def send_approval_card(
+    draft: Draft,
+    source_url: str | None = None,
+    chat_id: int | str | None = None,
+) -> int | None:
     """
     텔레그램으로 승인 카드를 전송합니다.
 
     Args:
         draft: 검토할 초안
         source_url: 원본 소스 URL
+        chat_id: 전송 대상 chat_id (None이면 settings.telegram_chat_id 사용)
 
     Returns:
         전송된 메시지의 message_id, 실패 시 None
@@ -334,11 +344,12 @@ async def send_approval_card(draft: Draft, source_url: str | None = None) -> int
         logger.info(f"[MOCK 텔레그램] 승인 카드:\n{build_approval_card(draft, source_url)}")
         return None
 
+    target_chat = chat_id or settings.telegram_chat_id
     card_text = build_approval_card(draft, source_url)
     keyboard = build_inline_keyboard(draft.id)
 
     payload = {
-        "chat_id": settings.telegram_chat_id,
+        "chat_id": target_chat,
         "text": card_text,
         "parse_mode": "HTML",
         "reply_markup": json.dumps(keyboard),
