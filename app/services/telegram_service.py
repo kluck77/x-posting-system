@@ -616,6 +616,72 @@ def send_content_pack_messages(pack) -> list[dict]:
     return messages
 
 
+def send_candidate_card_messages(card) -> list[dict]:
+    """
+    CandidateCard를 텔레그램 전송용 메시지 목록으로 변환합니다.
+
+    Returns:
+        [{"text": str, "hook_index": int | None}, ...]
+        hook_index: None = 참조용(버튼 없음), 0~2 = 훅 후보(선택 버튼 있음)
+    """
+    messages: list[dict] = []
+
+    # ── 1. 개요 카드 ──
+    certainty_icon = {"확정": "✅", "미확인": "⚠️", "상충": "🔀"}.get(
+        card.certainty_level, "❓"
+    )
+    overview_lines = [
+        "📋 <b>후보 카드 생성 완료</b>\n",
+        f"{certainty_icon} <b>확정 수준:</b> {card.certainty_level}\n",
+    ]
+
+    if card.topic_tags:
+        tags = " ".join(f"#{t}" for t in card.topic_tags)
+        overview_lines.append(f"🏷 {tags}\n")
+
+    if card.risk_flags:
+        flags = "\n".join(f"  • {f}" for f in card.risk_flags)
+        overview_lines.append(f"⚠️ <b>위험 신호</b>\n{flags}\n")
+
+    messages.append({"text": "\n".join(overview_lines), "hook_index": None})
+
+    # ── 2. 핵심 팩트 ──
+    if card.key_facts:
+        facts_text = "📌 <b>핵심 팩트</b>\n\n"
+        for i, fact in enumerate(card.key_facts, 1):
+            facts_text += f"  {i}. {fact}\n"
+        messages.append({"text": facts_text.strip(), "hook_index": None})
+
+    # ── 3. 훅 후보 × 3 (선택 버튼 있음) ──
+    for i, hook in enumerate(card.hook_candidates[:3]):
+        label = ["A", "B", "C"][i]
+        text = f"🎯 <b>훅 후보 {label}</b>\n\n<code>{hook}</code>"
+        messages.append({"text": text, "hook_index": i})
+
+    # ── 4. 한줄 결론 ──
+    if card.one_liner:
+        liner_text = "💡 <b>한줄 결론</b>\n\n"
+        for j, ol in enumerate(card.one_liner, 1):
+            liner_text += f"  {j}. {ol}\n"
+        messages.append({"text": liner_text.strip(), "hook_index": None})
+
+    # ── 5. 주의문 ──
+    if card.cautions:
+        caution_text = "🚨 <b>주의문</b>\n\n"
+        for c in card.cautions:
+            caution_text += f"  • {c}\n"
+        messages.append({"text": caution_text.strip(), "hook_index": None})
+
+    # ── 6. 관찰 포인트 ──
+    if card.watch_points:
+        watch_text = "👀 <b>지금 봐야 할 포인트</b>\n\n"
+        for wp in card.watch_points:
+            watch_text += f"  • {wp}\n"
+        messages.append({"text": watch_text.strip(), "hook_index": None})
+
+    return messages
+
+
 def parse_callback_data(callback_data: str) -> tuple[str, int] | None:
     """
     텔레그램 인라인 버튼의 callback_data를 파싱합니다.

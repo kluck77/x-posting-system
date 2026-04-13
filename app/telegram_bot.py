@@ -580,6 +580,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_quick_callback(query, context)
         return
 
+    # --- 후보 카드 훅 선택 콜백 ---
+    if callback_data.startswith("hook_select:"):
+        await _handle_hook_select_callback(query, context)
+        return
+
     # --- 콘텐츠 팩 선택 콜백 ---
     if callback_data.startswith("pack_select:"):
         await _handle_pack_select_callback(query, context)
@@ -930,7 +935,7 @@ async def _handle_type_callback(query, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif action == "type_pack":
-        await _run_content_pack(
+        await _run_candidate_card(
             type("FakeUpdate", (), {"message": query.message})(),
             context,
             pending=pending,
@@ -1327,6 +1332,173 @@ async def _run_content_pack(
         context.user_data.pop("_generating", None)
 
 
+# =============================================================================
+# 후보 카드 파이프라인 (2단계 구조)
+# =============================================================================
+
+CANDIDATE_CARD_KEY = "candidate_card"
+CANDIDATE_SOURCE_KEY = "candidate_source"
+
+
+async def _run_candidate_card(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    pending: dict | None = None,
+    source_override: str | None = None,
+) -> None:
+    """후보 카드 생성 (1차 단계)."""
+    from app.models.content_request import ContentRequest
+    from app.services.content_pack import generate_candidate_card
+    from app.services.telegram_service import send_candidate_card_messages
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    _clear(context)
+
+    # 중복 실행 방지
+    if context.user_data.get("_generating"):
+        await update.message.reply_text("⏳ 이미 생성 중입니다. 완료될 때까지 기다려주세요.")
+        return
+    context.user_data["_generating"] = True
+
+    msg = await update.message.reply_text("📋 <b>후보 카드 생성 중...</b>", parse_mode="HTML")
+
+    try:
+        # 입력 정규화
+        source_text = ""
+        if source_override:
+            from app.services.content_fetcher import is_url
+            if is_url(source_override):
+                from app.services.content_fetcher import fetch_url_content
+                fetched = await fetch_url_content(source_override)
+                req = ContentRequest(
+                    source_url=source_override,
+                    source_type="news_link",
+                    raw_text=fetched.get("text", ""),
+                )
+                source_text = fetched.get("text", "")
+            else:
+                req = ContentRequest(source_type="raw_text", raw_text=source_override)
+                source_text = source_override
+        elif pending:
+            fetched_text = pending.get("text", "")
+            req = ContentRequest(
+                source_url=pending.get("url"),
+                source_type="news_link" if pending.get("url") else "raw_text",
+                raw_text=fetched_text,
+            )
+            source_text = fetched_text
+        else:
+            await msg.edit_text("⚠️ 소스 정보 없음. URL이나 텍스트를 보내주세요.")
+            return
+
+        if not req.has_content():
+            await msg.edit_text("⚠️ 콘텐츠 내용이 부족합니다.")
+            return
+
+        # 후보 카드 생성 (hard timeout)
+        card = await asyncio.wait_for(
+            generate_candidate_card(req),
+            timeout=_PACK_TIMEOUT,
+        )
+
+        # user_data에 카드 + 소스 저장
+        context.user_data[CANDIDATE_CARD_KEY] = card
+        context.user_data[CANDIDATE_SOURCE_KEY] = source_text[:3000]
+
+        await msg.delete()
+
+        # 메시지 전송
+        card_messages = send_candidate_card_messages(card)
+        for cm in card_messages:
+            text = cm["text"][:4096]
+            hook_index = cm.get("hook_index")
+
+            if hook_index is not None:
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "✏️ 이 훅으로 마감",
+                        callback_data=f"hook_select:{hook_index}",
+                    )
+                ]])
+                await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+            else:
+                await update.message.reply_text(text, parse_mode="HTML")
+
+    except asyncio.TimeoutError:
+        logger.error(f"CARD_TIMEOUT: 후보 카드 생성 {_PACK_TIMEOUT}초 초과")
+        await msg.edit_text(
+            f"⏱ <b>후보 카드 생성 시간 초과</b> ({_PACK_TIMEOUT}초)\n\n다시 시도해주세요.",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"후보 카드 생성 오류: {e}", exc_info=True)
+        await msg.edit_text(f"❌ 후보 카드 생성 실패: {_safe_error_msg(e)}")
+    finally:
+        context.user_data.pop("_generating", None)
+
+
+async def _handle_hook_select_callback(
+    query, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    hook_select:{index} 콜백 처리.
+    선택된 훅으로 최종 마감 (2차 단계).
+    """
+    from app.services.content_pack import generate_final_post
+
+    data = query.data  # hook_select:0
+    parts = data.split(":", 1)
+    if len(parts) != 2:
+        return
+
+    try:
+        hook_index = int(parts[1])
+    except ValueError:
+        return
+
+    card = context.user_data.get(CANDIDATE_CARD_KEY)
+    if not card:
+        await query.message.reply_text("⚠️ 후보 카드 세션 만료. /pack 으로 다시 시작해주세요.")
+        return
+
+    # 버튼 제거
+    await _safe_remove_markup(query)
+
+    msg = await query.message.reply_text("✏️ <b>최종 마감 중...</b>", parse_mode="HTML")
+
+    try:
+        source_text = context.user_data.get(CANDIDATE_SOURCE_KEY, "")
+        result = await asyncio.wait_for(
+            generate_final_post(card, hook_index, source_text),
+            timeout=60,
+        )
+
+        await msg.delete()
+
+        # 최종 결과 전송
+        selected_hook = card.hook_candidates[hook_index] if hook_index < len(card.hook_candidates) else "?"
+        result_text = (
+            f"✅ <b>최종 마감 완료</b>\n"
+            f"📌 훅: {selected_hook}\n"
+            f"{'─' * 28}\n\n"
+            f"📝 <b>게시글</b> ({len(result.final_post)}자)\n"
+            f"<code>{result.final_post}</code>\n\n"
+        )
+        if result.final_short:
+            result_text += (
+                f"⚡ <b>짧은 버전</b> ({len(result.final_short)}자)\n"
+                f"<code>{result.final_short}</code>"
+            )
+
+        await query.message.reply_text(result_text, parse_mode="HTML")
+
+    except asyncio.TimeoutError:
+        await msg.edit_text("⏱ <b>마감 시간 초과</b> (60초)\n\n다시 시도해주세요.", parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"최종 마감 오류: {e}", exc_info=True)
+        await msg.edit_text(f"❌ 마감 실패: {_safe_error_msg(e)}")
+
+
 async def _handle_pack_select_callback(
     query, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1418,18 +1590,37 @@ async def _handle_pack_select_callback(
 
 
 async def pack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/pack [url or text] — 콘텐츠 팩 직접 생성."""
+    """/pack [url or text] — 후보 카드 생성 (2단계 구조 1차)."""
+    args_text = " ".join(context.args).strip() if context.args else ""
+
+    if args_text:
+        await _run_candidate_card(update, context, source_override=args_text)
+    else:
+        await update.message.reply_text(
+            "📋 <b>후보 카드 생성</b>\n\n"
+            "사용법:\n"
+            "• <code>/pack https://뉴스URL</code>\n"
+            "• <code>/pack 한국은행 기준금리 2.75%로 동결. 수출 둔화 우려.</code>\n\n"
+            "훅 후보에서 1개를 선택하면 최종 게시글이 생성됩니다.\n\n"
+            "전체 팩(메인3+댓글3+인용2)이 필요하면: <code>/pack_full</code>",
+            parse_mode="HTML",
+        )
+
+
+async def pack_full_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/pack_full [url or text] — 기존 전체 콘텐츠 팩 생성."""
     args_text = " ".join(context.args).strip() if context.args else ""
 
     if args_text:
         await _run_content_pack(update, context, source_override=args_text)
     else:
         await update.message.reply_text(
-            "📦 <b>콘텐츠 팩 생성</b>\n\n"
+            "📦 <b>전체 콘텐츠 팩 생성</b>\n\n"
             "사용법:\n"
-            "• <code>/pack https://뉴스URL</code>\n"
-            "• <code>/pack 한국은행 기준금리 2.75%로 동결. 수출 둔화 우려.</code>\n\n"
-            "또는 URL이나 텍스트를 보내면 분석 카드에서 [📦 콘텐츠 팩] 버튼을 누르세요.",
+            "• <code>/pack_full https://뉴스URL</code>\n"
+            "• <code>/pack_full 텍스트 입력</code>\n\n"
+            "메인 3개 + 댓글 3개 + 인용 2개 + 짧은버전 1개를 한 번에 생성합니다.\n"
+            "안전한 주제(제도/구조/해설)에 적합합니다.",
             parse_mode="HTML",
         )
 
@@ -3842,6 +4033,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("draft", draft_command))
     app.add_handler(CommandHandler("thread", thread_command))
     app.add_handler(CommandHandler("pack", pack_command))
+    app.add_handler(CommandHandler("pack_full", pack_full_command))
     app.add_handler(CommandHandler("queue", queue_command))
     app.add_handler(CommandHandler("monitor", monitor_command))
     app.add_handler(CommandHandler("hunt", hunt_command))

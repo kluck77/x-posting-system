@@ -9,6 +9,9 @@ from app.services.content_pack import (
     FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
     _audit_numeric_safety,
     _STRONG_ASSERTION_RE, _CONCRETE_NUM_RE, _STOCK_NAME_RE, _PERCENT_RE,
+    CandidateCard, FinalPost,
+    _CANDIDATE_PROMPT_KO, _FINALIZE_PROMPT_KO,
+    _parse_candidate_card, _parse_final_post,
 )
 from app.models.content_request import ContentRequest
 
@@ -1307,3 +1310,364 @@ class TestImpactPathOverflow:
         assert len(path_warnings) == 1
         assert "포스트1" in path_warnings[0]
         assert "포스트2" not in path_warnings[0]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2단계 구조 테스트: 후보 카드 + 최종 마감
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCandidateCardDataclass:
+    """CandidateCard 데이터클래스 기본 동작."""
+
+    def test_default_values(self):
+        """기본 생성 시 빈 리스트 + 미확인."""
+        card = CandidateCard()
+        assert card.key_facts == []
+        assert card.hook_candidates == []
+        assert card.one_liner == []
+        assert card.certainty_level == "미확인"
+        assert card.source_url is None
+
+    def test_is_valid_with_data(self):
+        """key_facts + hook_candidates 있으면 유효."""
+        card = CandidateCard(
+            key_facts=["팩트1"],
+            hook_candidates=["훅1"],
+        )
+        assert card.is_valid() is True
+
+    def test_is_valid_no_facts(self):
+        """key_facts 없으면 무효."""
+        card = CandidateCard(hook_candidates=["훅1"])
+        assert card.is_valid() is False
+
+    def test_is_valid_no_hooks(self):
+        """hook_candidates 없으면 무효."""
+        card = CandidateCard(key_facts=["팩트1"])
+        assert card.is_valid() is False
+
+    def test_is_valid_empty(self):
+        """둘 다 없으면 무효."""
+        card = CandidateCard()
+        assert card.is_valid() is False
+
+
+class TestFinalPostDataclass:
+    """FinalPost 데이터클래스 기본 동작."""
+
+    def test_default_values(self):
+        card = FinalPost()
+        assert card.final_post == ""
+        assert card.final_short == ""
+
+    def test_with_values(self):
+        fp = FinalPost(final_post="게시글 본문", final_short="짧은 버전")
+        assert fp.final_post == "게시글 본문"
+        assert fp.final_short == "짧은 버전"
+
+
+class TestParseCandidateCard:
+    """_parse_candidate_card 파서 테스트."""
+
+    def test_valid_json(self):
+        """정상 JSON → CandidateCard."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1", "팩트2"],
+            "hook_candidates": ["훅A", "훅B", "훅C"],
+            "one_liner": ["결론1"],
+            "cautions": ["주의1"],
+            "watch_points": ["포인트1"],
+            "certainty_level": "확정",
+            "topic_tags": ["에너지"],
+            "risk_flags": [],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert card.key_facts == ["팩트1", "팩트2"]
+        assert len(card.hook_candidates) == 3
+        assert card.certainty_level == "확정"
+
+    def test_json_in_markdown_fence(self):
+        """```json ... ``` 형태도 파싱."""
+        raw = '```json\n{"key_facts": ["팩트"], "hook_candidates": ["훅"], "certainty_level": "미확인"}\n```'
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert card.key_facts == ["팩트"]
+
+    def test_missing_optional_fields(self):
+        """선택 필드 누락 → 빈 리스트 기본값."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["훅1"],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert card.one_liner == []
+        assert card.cautions == []
+        assert card.certainty_level == "미확인"
+
+    def test_invalid_json_returns_none(self):
+        """깨진 JSON → None."""
+        assert _parse_candidate_card("이것은 JSON이 아니다") is None
+
+    def test_empty_string_returns_none(self):
+        """빈 문자열 → None."""
+        assert _parse_candidate_card("") is None
+
+    def test_truncated_list(self):
+        """key_facts 6개 입력 → 5개로 절단."""
+        import json
+        raw = json.dumps({
+            "key_facts": ["f1", "f2", "f3", "f4", "f5", "f6"],
+            "hook_candidates": ["h1"],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert len(card.key_facts) == 5
+
+
+class TestParseFinalPost:
+    """_parse_final_post 파서 테스트."""
+
+    def test_valid_json(self):
+        """정상 JSON → FinalPost."""
+        import json
+        raw = json.dumps({
+            "final_post": "280자 이내 게시글 본문입니다.",
+            "final_short": "200자 이내 짧은 버전.",
+        })
+        result = _parse_final_post(raw)
+        assert result is not None
+        assert "280자" in result.final_post
+        assert "200자" in result.final_short
+
+    def test_json_in_markdown_fence(self):
+        """```json``` 감싸기 파싱."""
+        raw = '```json\n{"final_post": "본문", "final_short": "짧은"}\n```'
+        result = _parse_final_post(raw)
+        assert result is not None
+        assert result.final_post == "본문"
+
+    def test_empty_final_post_returns_none(self):
+        """final_post 빈 문자열 → None."""
+        import json
+        raw = json.dumps({"final_post": "", "final_short": "짧은"})
+        result = _parse_final_post(raw)
+        assert result is None
+
+    def test_missing_final_post_returns_none(self):
+        """final_post 없음 → None."""
+        import json
+        raw = json.dumps({"final_short": "짧은"})
+        result = _parse_final_post(raw)
+        assert result is None
+
+    def test_invalid_json_returns_none(self):
+        assert _parse_final_post("{broken") is None
+
+    def test_missing_short_ok(self):
+        """final_short 없어도 final_post만 있으면 OK."""
+        import json
+        raw = json.dumps({"final_post": "본문만"})
+        result = _parse_final_post(raw)
+        assert result is not None
+        assert result.final_post == "본문만"
+        assert result.final_short == ""
+
+
+class TestCandidatePromptRules:
+    """_CANDIDATE_PROMPT_KO 프롬프트 규칙 검증."""
+
+    def test_has_5_golden_rules(self):
+        """골든룰 5개 핵심 키워드가 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "소스에 없는 수치/사실을 생성하지 말 것" in p
+        assert "미확인·상충된 사안은 확정형으로 쓰지 말 것" in p
+        assert "발언·경고·시사는 실제 조치·시행과 분리" in p
+        assert "원문 밖 해석을 과도하게 확장하지 말 것" in p
+        assert "짧고 구조화된 재료 중심" in p
+
+    def test_has_5_qa_checks(self):
+        """QA 체크 5개가 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "숫자/사실이 소스에 있는가" in p
+        assert "미확인 사안을 확정처럼 쓰지 않았는가" in p
+        assert "발언과 조치를 혼동하지 않았는가" in p
+        assert "certainty_level이 내용과 일치하는가" in p
+        assert "훅 후보가 서로 다른 방향을 제시하는가" in p
+
+    def test_json_schema_has_all_fields(self):
+        """JSON 스키마에 8개 필드 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        for field in [
+            "key_facts", "hook_candidates", "one_liner",
+            "cautions", "watch_points", "certainty_level",
+            "topic_tags", "risk_flags",
+        ]:
+            assert field in p
+
+    def test_hook_direction_examples(self):
+        """훅 후보가 방향 제시형 예시를 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "호르무즈 리스크" in p
+        assert "방향 제시형" in p
+
+    def test_no_complete_sentence_instruction(self):
+        """완성 문장 금지 지시가 있다."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "완성 글을 쓰지 마라" in p
+        assert "완성 게시글 문체로 길게 쓰지 마라" in p
+
+
+class TestFinalizePromptRules:
+    """_FINALIZE_PROMPT_KO 프롬프트 규칙 검증."""
+
+    def test_has_6_golden_rules(self):
+        """골든룰 6개 핵심 키워드가 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "선택된 훅을 중심축으로 유지" in p
+        assert "certainty_level을 반영" in p
+        assert "파급 경로는 1~2개만" in p
+        assert "280자 이내" in p
+        assert "해석형 마감" in p
+        assert "cautions와 충돌하는 표현을 쓰지 마라" in p
+
+    def test_certainty_level_mapping(self):
+        """확정/미확인/상충별 표현 수준이 명시."""
+        p = _FINALIZE_PROMPT_KO
+        assert "확정 → 단정형 허용" in p
+        assert "미확인 → " in p
+        assert "상충 → " in p
+
+    def test_only_two_output_fields(self):
+        """출력 필드가 2개(final_post, final_short)만."""
+        p = _FINALIZE_PROMPT_KO
+        assert "final_post" in p
+        assert "final_short" in p
+        assert "아래 2개 필드만 생성하라" in p
+
+    def test_no_extra_directions(self):
+        """다른 방향으로 빠지지 말라는 지시."""
+        p = _FINALIZE_PROMPT_KO
+        assert "다른 방향으로 빠지지 마라" in p
+
+
+class TestSendCandidateCardMessages:
+    """send_candidate_card_messages() 출력 구조 검증."""
+
+    def _make_card(self):
+        return CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            hook_candidates=["훅A 방향", "훅B 방향", "훅C 방향"],
+            one_liner=["한줄 결론1", "한줄 결론2"],
+            cautions=["주의문1"],
+            watch_points=["포인트1", "포인트2"],
+            certainty_level="미확인",
+            topic_tags=["에너지", "유가"],
+            risk_flags=["테스트 리스크"],
+        )
+
+    def test_returns_list(self):
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        assert isinstance(msgs, list)
+        assert len(msgs) > 0
+
+    def test_overview_card_first(self):
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        first = msgs[0]
+        assert first["hook_index"] is None
+        assert "후보 카드 생성 완료" in first["text"]
+        assert "미확인" in first["text"]
+
+    def test_certainty_icons(self):
+        from app.services.telegram_service import send_candidate_card_messages
+        # 확정
+        card = self._make_card()
+        card.certainty_level = "확정"
+        msgs = send_candidate_card_messages(card)
+        assert "✅" in msgs[0]["text"]
+        # 상충
+        card.certainty_level = "상충"
+        msgs = send_candidate_card_messages(card)
+        assert "🔀" in msgs[0]["text"]
+
+    def test_hook_messages_have_indices(self):
+        """훅 후보 메시지에 hook_index 0,1,2가 할당."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        hook_msgs = [m for m in msgs if m["hook_index"] is not None]
+        assert len(hook_msgs) == 3
+        assert hook_msgs[0]["hook_index"] == 0
+        assert hook_msgs[1]["hook_index"] == 1
+        assert hook_msgs[2]["hook_index"] == 2
+
+    def test_hook_labels_abc(self):
+        """훅 후보에 A, B, C 라벨 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        hook_msgs = [m for m in msgs if m["hook_index"] is not None]
+        assert "훅 후보 A" in hook_msgs[0]["text"]
+        assert "훅 후보 B" in hook_msgs[1]["text"]
+        assert "훅 후보 C" in hook_msgs[2]["text"]
+
+    def test_key_facts_section(self):
+        """핵심 팩트 섹션이 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        facts_msg = [m for m in msgs if "핵심 팩트" in m["text"]]
+        assert len(facts_msg) == 1
+        assert "팩트1" in facts_msg[0]["text"]
+
+    def test_one_liner_section(self):
+        """한줄 결론 섹션이 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        liner_msg = [m for m in msgs if "한줄 결론" in m["text"]]
+        assert len(liner_msg) == 1
+
+    def test_cautions_section(self):
+        """주의문 섹션이 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        caution_msg = [m for m in msgs if "주의문" in m["text"]]
+        assert len(caution_msg) == 1
+
+    def test_watch_points_section(self):
+        """관찰 포인트 섹션이 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        watch_msg = [m for m in msgs if "지금 봐야 할 포인트" in m["text"]]
+        assert len(watch_msg) == 1
+
+    def test_tags_in_overview(self):
+        """태그가 개요에 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        assert "#에너지" in msgs[0]["text"]
+
+    def test_risk_flags_in_overview(self):
+        """위험 신호가 개요에 포함."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card())
+        assert "테스트 리스크" in msgs[0]["text"]
+
+    def test_empty_optional_sections(self):
+        """선택 섹션이 비어 있으면 해당 메시지 생략."""
+        from app.services.telegram_service import send_candidate_card_messages
+        card = CandidateCard(
+            key_facts=["팩트"],
+            hook_candidates=["훅"],
+            one_liner=[],
+            cautions=[],
+            watch_points=[],
+        )
+        msgs = send_candidate_card_messages(card)
+        texts_joined = " ".join(m["text"] for m in msgs)
+        assert "한줄 결론" not in texts_joined
+        assert "주의문" not in texts_joined
+        assert "지금 봐야 할 포인트" not in texts_joined

@@ -1224,3 +1224,350 @@ def _mock_pack(request: ContentRequest) -> ContentPack:
         source_url=request.source_url,
         source_type=request.source_type,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2단계 구조: 후보 카드 생성기 + 최종 마감기
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class CandidateCard:
+    """1차 — 게시글 소재 후보 카드."""
+    key_facts: list[str] = field(default_factory=list)          # 핵심 팩트 3개
+    hook_candidates: list[str] = field(default_factory=list)    # 훅 후보 3개 (방향 제시형)
+    one_liner: list[str] = field(default_factory=list)          # 한줄 결론 2개
+    cautions: list[str] = field(default_factory=list)           # 주의문 2개
+    watch_points: list[str] = field(default_factory=list)       # 관찰 포인트 2~3개
+    certainty_level: str = "미확인"                              # 확정/미확인/상충
+    topic_tags: list[str] = field(default_factory=list)
+    risk_flags: list[str] = field(default_factory=list)
+    # 메타
+    source_url: Optional[str] = None
+    source_type: str = "news_link"
+    fact_sheet_summary: str = ""
+
+    def is_valid(self) -> bool:
+        return bool(self.key_facts and self.hook_candidates)
+
+
+@dataclass
+class FinalPost:
+    """2차 — 최종 마감 결과."""
+    final_post: str = ""       # 280자 이내 완성본
+    final_short: str = ""      # 200자 이내 짧은 버전
+
+
+# ─── 1차: 후보 카드 시스템 프롬프트 ──────────────────────────────────────────
+
+_CANDIDATE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정을 위한 "소재 후보 카드 생성기"다.
+
+역할:
+완성 글을 쓰지 마라. 입력 텍스트/링크/주제를 바탕으로
+게시글 후보 재료만 구조화해서 정리하라.
+이 단계의 목적은 "좋은 소재 선택"이지 "완성 문장 생성"이 아니다.
+
+골든룰:
+1. 소스에 없는 수치/사실을 생성하지 말 것.
+2. 미확인·상충된 사안은 확정형으로 쓰지 말 것.
+3. 발언·경고·시사는 실제 조치·시행과 분리해서 적을 것.
+4. 원문 밖 해석을 과도하게 확장하지 말 것.
+5. 후보 카드는 짧고 구조화된 재료 중심으로 작성할 것.
+
+QA 체크:
+1. 숫자/사실이 소스에 있는가?
+2. 미확인 사안을 확정처럼 쓰지 않았는가?
+3. 발언과 조치를 혼동하지 않았는가?
+4. certainty_level이 내용과 일치하는가?
+5. 훅 후보가 서로 다른 방향을 제시하는가?
+
+출력 규칙:
+- 한국어 JSON만 출력하라.
+- 완성 게시글 문체로 길게 쓰지 마라.
+- 후보 재료만 간결하게 정리할 것.
+- hook_candidates는 완성 문장이 아니라 "이 각도로 쓸 수 있다"는 방향 제시형 1줄.
+  예: "호르무즈 리스크 → 한국 에너지 수입 비용 경로"
+  예: "공매도 재개 → 외국인 신뢰와 MSCI 변수"
+
+JSON 스키마:
+{
+  "key_facts": ["팩트1", "팩트2", "팩트3"],
+  "hook_candidates": ["방향1", "방향2", "방향3"],
+  "one_liner": ["한줄1", "한줄2"],
+  "cautions": ["주의1", "주의2"],
+  "watch_points": ["포인트1", "포인트2", "포인트3"],
+  "certainty_level": "확정|미확인|상충",
+  "topic_tags": ["태그1", "태그2"],
+  "risk_flags": ["리스크1"]
+}"""
+
+
+# ─── 2차: 최종 마감 시스템 프롬프트 ──────────────────────────────────────────
+
+_FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "최종 마감 담당"이다.
+
+역할:
+사용자가 선택한 훅 방향과 팩트 카드를 바탕으로
+X(트위터)용 최종 게시글 1개만 짧게 마감하라.
+
+골든룰:
+1. 선택된 훅을 중심축으로 유지하라. 다른 방향으로 빠지지 마라.
+2. certainty_level을 반영하라:
+   - 확정 → 단정형 허용
+   - 미확인 → "~가능성/~조짐/~로 해석될 수 있다" 수준
+   - 상충 → "~엇갈리고 있다/~상반된 시각" 수준
+3. 파급 경로는 1~2개만 남겨라. 물가/환율/항공/해운 등을 한꺼번에 넣지 마라.
+4. X 글자 수 제한: final_post 280자 이내, final_short 200자 이내.
+5. 기사 요약이 아니라 해석형 마감을 유지하라. "그래서 뭐?"에 답하라.
+6. cautions와 충돌하는 표현을 쓰지 마라.
+   예: caution이 "미확인"인데 본문이 확정형이면 실패.
+
+출력 규칙:
+- 한국어 JSON만 출력하라.
+- 아래 2개 필드만 생성하라. 다른 필드를 추가하지 마라.
+
+JSON 스키마:
+{
+  "final_post": "선택된 훅 기반 280자 이내 완성본",
+  "final_short": "200자 이내 짧은 버전"
+}"""
+
+
+# ─── 1차: 후보 카드 생성 ─────────────────────────────────────────────────────
+
+async def generate_candidate_card(request: ContentRequest) -> CandidateCard:
+    """
+    ContentRequest → CandidateCard (1차 후보 카드).
+
+    흐름:
+      1. 규칙 기반 팩트 시트 추출
+      2. 짧은 프롬프트 + AI 호출
+      3. 파싱 → CandidateCard
+    """
+    source_text = request.to_source_text()
+    title = request.to_title()
+
+    raw_input = source_text or title
+    fact_sheet = extract_fact_sheet(raw_input)
+
+    # 프롬프트 구성
+    user_prompt = f"Source type: {request.source_type}\n"
+    if request.source_url:
+        user_prompt += f"URL: {request.source_url}\n"
+
+    # 팩트 시트 삽입
+    user_prompt += "\n=== 팩트 시트 ===\n"
+    user_prompt += f"주제: {fact_sheet.topic}\n"
+    if fact_sheet.entities:
+        user_prompt += f"주체/대상: {', '.join(fact_sheet.entities)}\n"
+    if fact_sheet.figures:
+        user_prompt += f"수치: {', '.join(fact_sheet.figures)}\n"
+        user_prompt += f"⚠️ 위 수치만 사용 가능. 목록에 없는 수치 생성 금지.\n"
+    else:
+        user_prompt += "⚠️ 소스에 구체 수치 없음. 수치 생성 금지.\n"
+    if fact_sheet.timeframe:
+        user_prompt += f"기간: {fact_sheet.timeframe}\n"
+    if fact_sheet.key_facts:
+        user_prompt += "핵심 사실:\n"
+        for i, kf in enumerate(fact_sheet.key_facts, 1):
+            user_prompt += f"  {i}. {kf}\n"
+    user_prompt += "===\n"
+
+    user_prompt += f"\nContent:\n{raw_input[:3000]}\n\n"
+    user_prompt += "후보 카드 JSON을 생성하라. 모든 텍스트는 한국어로."
+
+    # AI 호출 (기존 _call_ai 재활용하되 프롬프트만 변경)
+    raw = await _call_ai_with_prompt(_CANDIDATE_PROMPT_KO, user_prompt)
+
+    if raw:
+        card = _parse_candidate_card(raw)
+        if card and card.is_valid():
+            card.source_url = request.source_url
+            card.source_type = request.source_type
+            card.fact_sheet_summary = (
+                f"topic={fact_sheet.topic}, score={fact_sheet.data_density_score}"
+            )
+            logger.info(
+                f"후보 카드 생성 완료: facts={len(card.key_facts)}, "
+                f"hooks={len(card.hook_candidates)}, "
+                f"certainty={card.certainty_level}"
+            )
+            return card
+
+    logger.warning("후보 카드 AI 응답 파싱 실패 — Mock 카드 반환")
+    return CandidateCard(
+        key_facts=[f"[Mock] {title[:60]}"],
+        hook_candidates=["[Mock] 방향 제시 불가 — AI 응답 실패"],
+        one_liner=["[Mock] 한줄 결론 불가"],
+        cautions=["Mock 모드 — 실제 분석 불가"],
+        watch_points=["Mock 모드"],
+        certainty_level="미확인",
+        topic_tags=[fact_sheet.topic or "미분류"],
+        risk_flags=["Mock 모드 — 실제 위험 분석 불가"],
+        source_url=request.source_url,
+        source_type=request.source_type,
+    )
+
+
+# ─── 2차: 최종 마감 ─────────────────────────────────────────────────────────
+
+async def generate_final_post(
+    card: CandidateCard,
+    hook_index: int,
+    source_text: str = "",
+) -> FinalPost:
+    """
+    CandidateCard + 선택된 훅 → FinalPost (2차 마감).
+    """
+    if hook_index < 0 or hook_index >= len(card.hook_candidates):
+        hook_index = 0
+    selected_hook = card.hook_candidates[hook_index]
+
+    user_prompt = (
+        f"선택된 훅: {selected_hook}\n\n"
+        f"certainty_level: {card.certainty_level}\n\n"
+        f"핵심 팩트:\n"
+    )
+    for i, fact in enumerate(card.key_facts, 1):
+        user_prompt += f"  {i}. {fact}\n"
+
+    if card.cautions:
+        user_prompt += "\n주의문:\n"
+        for c in card.cautions:
+            user_prompt += f"  - {c}\n"
+
+    if card.watch_points:
+        user_prompt += "\n관찰 포인트:\n"
+        for wp in card.watch_points:
+            user_prompt += f"  - {wp}\n"
+
+    if source_text:
+        user_prompt += f"\n원문 참고:\n{source_text[:1500]}\n"
+
+    user_prompt += (
+        "\n위 훅 방향과 팩트를 기반으로 최종 게시글 JSON을 생성하라. "
+        "한국어로."
+    )
+
+    raw = await _call_ai_with_prompt(_FINALIZE_PROMPT_KO, user_prompt)
+
+    if raw:
+        result = _parse_final_post(raw)
+        if result:
+            logger.info(
+                f"최종 마감 완료: post={len(result.final_post)}자, "
+                f"short={len(result.final_short)}자"
+            )
+            return result
+
+    logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
+    return FinalPost(
+        final_post=f"[마감 실패] {selected_hook}",
+        final_short=f"[마감 실패] {selected_hook[:80]}",
+    )
+
+
+# ─── 공통 AI 호출 (시스템 프롬프트 주입형) ───────────────────────────────────
+
+async def _call_ai_with_prompt(
+    system_prompt: str, user_prompt: str
+) -> Optional[str]:
+    """시스템 프롬프트를 직접 받는 AI 호출. OpenAI → Anthropic → None."""
+    from app.config import settings
+
+    # OpenAI
+    if settings.openai_api_key:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                    json={
+                        "model": "gpt-4o-mini",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": 0.7,
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+                r.raise_for_status()
+                data = r.json()
+                return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.warning(f"OpenAI 후보카드/마감 호출 실패: {e}")
+
+    # Anthropic
+    if settings.anthropic_api_key:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5-20251001",
+                        "max_tokens": 1500,
+                        "system": system_prompt,
+                        "messages": [{"role": "user", "content": user_prompt}],
+                    },
+                )
+                r.raise_for_status()
+                data = r.json()
+                return data["content"][0]["text"]
+        except Exception as e:
+            logger.warning(f"Anthropic 후보카드/마감 호출 실패: {e}")
+
+    return None
+
+
+# ─── 파서 ────────────────────────────────────────────────────────────────────
+
+def _parse_candidate_card(raw: str) -> Optional[CandidateCard]:
+    """AI 응답 JSON → CandidateCard."""
+    try:
+        text = raw.strip()
+        if "```" in text:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end > start:
+                text = text[start:end]
+        data = json.loads(text)
+        return CandidateCard(
+            key_facts=_ensure_list(data.get("key_facts"), 5),
+            hook_candidates=_ensure_list(data.get("hook_candidates"), 5),
+            one_liner=_ensure_list(data.get("one_liner"), 3),
+            cautions=_ensure_list(data.get("cautions"), 3),
+            watch_points=_ensure_list(data.get("watch_points"), 5),
+            certainty_level=str(data.get("certainty_level", "미확인")),
+            topic_tags=_ensure_list(data.get("topic_tags"), None),
+            risk_flags=_ensure_list(data.get("risk_flags"), None),
+        )
+    except Exception as e:
+        logger.warning(f"CandidateCard 파싱 오류: {e}")
+        return None
+
+
+def _parse_final_post(raw: str) -> Optional[FinalPost]:
+    """AI 응답 JSON → FinalPost."""
+    try:
+        text = raw.strip()
+        if "```" in text:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end > start:
+                text = text[start:end]
+        data = json.loads(text)
+        post = str(data.get("final_post", ""))
+        short = str(data.get("final_short", ""))
+        if not post:
+            return None
+        return FinalPost(final_post=post, final_short=short)
+    except Exception as e:
+        logger.warning(f"FinalPost 파싱 오류: {e}")
+        return None
