@@ -314,6 +314,19 @@ _SYSTEM_PROMPT_KO = """당신은 한국어 X 계정(@cheesesvav)의 시니어 �
      ~을 시행했다 → ~시행 가능성이 커졌다
      불가피하다 → 커질 수 있다 / 압력이 높아지고 있다
      직격탄이 된다 → 압박이 커질 수 있다
+     결렬됐다 → 난항을 겪고 있다 / 합의에 이르지 못했다
+     닫혀 있다/막힌 채 → 차단 리스크가 지속되고 있다
+     빈손 → 뚜렷한 성과 없이 마무리된 것으로 전해졌다
+   ■ 교차필드 정합성 (CRITICAL):
+     risk_flags에 "미확인/상충/확인 필요"를 쓰면서
+     main_posts/훅에 확정형("결렬됐다", "닫혀 있다", "빈손")을 쓰면 자기모순이다.
+     risk_flags와 본문의 확정 수준은 반드시 일치해야 한다.
+     ❌ main_posts: "협상 결렬, 빈손" + risk_flags: "결렬 여부 상충, 미확인"
+     ✅ main_posts: "협상 난항, 합의 불투명" + risk_flags: "결렬 여부 상충, 추가 확인 필요"
+   ■ 훅에서 미확인 사안을 다룰 때:
+     ❌ "21시간 협상, 빈손. 호르무즈는 닫혀 있다."
+     ✅ "21시간 협상에도 합의 불투명 — 시장이 보는 건 호르무즈 리스크 지속 여부다"
+     ✅ "호르무즈 리스크가 풀리지 않았다 — 협상 결과가 엇갈리는 지금, 시장 변수는 유가다"
 
 시리즈 라벨 (자연스러울 때만, 한국어로):
 - short_version → "한줄:" 접두어 사용 가능 (영어 라벨 금지)
@@ -333,7 +346,14 @@ STEP 1 — 입력 데이터 점검:
 - 지역/대상: (예: 서울 강남, 한국은행, 삼성전자)
 - 기간/비교 시점: (예: 전월 대비, 2024년 3분기)
 - 수치/변화폭: (예: +3.2%, 1,400원, 12만 건)
+- ★ 사실 확정 수준: 아래 중 하나를 반드시 판정하라
+  ① 확정 — 복수 출처에서 일치하는 사실
+  ② 미확인 — 일부 보도만 있거나, 공식 확인 없음
+  ③ 상충 — 보도마다 내용이 다름 (예: 결렬 vs 합의)
 → 2개 미만이면 글 전체에서 강한 단정을 쓰지 마라 (골든룰 8번).
+→ 사실 확정 수준이 ②미확인 또는 ③상충이면: 본문 전체에서 확정형 표현 절대 금지 (골든룰 12번).
+  이 경우 훅/본문/댓글/인용 모두 "~가능성/~조짐/~긴장 고조" 수준으로만 써라.
+  risk_flags에 "미확인"이라고 쓰면서 본문에 확정형을 쓰는 건 자기모순이다.
 
 STEP 2 — 핵심축 3개 선택:
 이 주제를 바라보는 서로 다른 렌즈 3개를 먼저 골라라.
@@ -570,7 +590,8 @@ JSON 출력 전에 아래 12개를 내부적으로 점검하라. 3개 이상 실
 □ 12. 포스트당 축 단일? — 한 포스트에 축이 2개 이상 섞여 있으면 분리하라
 □ 13. 댓글·인용 수치 보수성? — reply/quote에 소스에 없는 수치를 넣지 않았는가
 □ 14. 정치·외교·군사 표현 강도? — 직격/부풀렸다/공식 시행/봉쇄 시행 등 고강도 표현에 원문 직접 근거가 있는가? 없으면 약화
-□ 15. 확정+단서 자기모순? — "~을 선언했다 ... 미확인 상태"처럼 확정형 먼저+단서 나중 구조가 있는가? 있으면 확정형을 가능성으로 낮추거나 단서를 앞으로"""
+□ 15. 확정+단서 자기모순? — "~을 선언했다 ... 미확인 상태"처럼 확정형 먼저+단서 나중 구조가 있는가? 있으면 확정형을 가능성으로 낮추거나 단서를 앞으로
+□ 16. 교차필드 정합성? — risk_flags에 "미확인/상충/확인 필요"를 썼으면 main_posts/훅도 확정형이 아닌 가능성/조짐 수준인가?"""
 
 _SYSTEM_PROMPT_EN = """You are a senior content strategist for an English-language X account (@cheesesvav) that explains Korean affairs to international readers.
 
@@ -852,6 +873,16 @@ _CONFIRM_THEN_HEDGE_RE = re.compile(
     r"(미확인|확인.{0,3}필요|확인되지|불확실|변수가.남|미지수)",
 )
 
+# 교차필드 모순 탐지: risk_flags 내 불확실성 신호
+_RISK_UNCERTAINTY_RE = re.compile(
+    r"미확인|상충|확인.{0,3}필요|불확실|추가.보도|일부.보도|미지수|확인되지"
+)
+
+# 본문 확정형 표현 (risk_flags에 불확실성이 있을 때만 문제)
+_CONFIRMED_LANGUAGE_RE = re.compile(
+    r"결렬됐|닫혀 있|막힌 채|봉쇄됐|선언했다|시행했다|확정됐|전면.봉쇄|빈손"
+)
+
 
 def _audit_numeric_safety(
     pack: "ContentPack",
@@ -905,13 +936,28 @@ def _audit_numeric_safety(
             f"뒷받침 데이터 확인 필요."
         )
 
-    # 3. "확정형 + 단서" 안티패턴 탐지
+    # 3. "확정형 + 단서" 안티패턴 탐지 (같은 텍스트 내)
     hedge_matches = _CONFIRM_THEN_HEDGE_RE.findall(full_text)
     if hedge_matches:
         pack.style_warnings.append(
             "🚨 확정+단서 자기모순: 미확인 사안을 확정형으로 쓴 뒤 단서로 수습하는 "
             "구조 감지. 확정형을 가능성/조짐 수준으로 낮추거나, 단서를 앞으로 옮겨야 함."
         )
+
+    # 4. 교차필드 모순: risk_flags가 "미확인/상충"인데 본문이 확정형
+    risk_text = "\n".join(pack.risk_flags) if pack.risk_flags else ""
+    if _RISK_UNCERTAINTY_RE.search(risk_text):
+        main_and_short = "\n".join(
+            pack.main_posts + [pack.short_version]
+        )
+        confirmed = _CONFIRMED_LANGUAGE_RE.findall(main_and_short)
+        if confirmed:
+            unique_c = list(dict.fromkeys(confirmed))[:3]
+            pack.style_warnings.append(
+                f"🚨 교차필드 모순: risk_flags에 미확인/상충 표시인데 "
+                f"본문에 확정형 표현 — {'·'.join(unique_c)}. "
+                f"본문의 확정형을 가능성/조짐 수준으로 낮춰야 함."
+            )
 
 
 async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:

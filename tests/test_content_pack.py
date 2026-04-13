@@ -890,3 +890,118 @@ class TestUnverifiedFactPromptRules:
     def test_qa_15_exists(self):
         prompt = _get_system_prompt("ko")
         assert "확정+단서 자기모순" in prompt
+
+
+class TestCrossFieldContradiction:
+    """교차필드 모순 탐지: risk_flags 미확인 + 본문 확정형."""
+
+    def test_결렬_with_상충_risk(self):
+        """main_posts에 '결렬됐' + risk_flags에 '상충' → 교차필드 모순."""
+        pack = ContentPack(
+            main_posts=["첫 담판이 결렬됐다. 에너지 리스크 직격."],
+            short_version="빈손 — 호르무즈 막힌 채",
+            reply_drafts=[], quote_post_drafts=[],
+            risk_flags=["결렬 여부 상충, 조건부 합의 보도도 있음"],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("교차필드 모순" in w for w in pack.style_warnings)
+
+    def test_닫혀있다_with_미확인_risk(self):
+        """'닫혀 있다' + '미확인' → 교차필드 모순."""
+        pack = ContentPack(
+            main_posts=["호르무즈는 여전히 닫혀 있다."],
+            short_version="",
+            reply_drafts=[], quote_post_drafts=[],
+            risk_flags=["봉쇄 이행 여부 미확인, 추가 보도 확인 필요"],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("교차필드 모순" in w for w in pack.style_warnings)
+
+    def test_빈손_with_불확실_risk(self):
+        """'빈손' + '불확실' → 교차필드 모순."""
+        pack = ContentPack(
+            main_posts=["21시간 협상, 빈손."],
+            short_version="",
+            reply_drafts=[], quote_post_drafts=[],
+            risk_flags=["협상 결과 불확실"],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("교차필드 모순" in w for w in pack.style_warnings)
+
+    def test_safe_phrasing_with_uncertain_risk(self):
+        """가능성 수준 표현 + 미확인 risk_flags → 경고 없음."""
+        pack = ContentPack(
+            main_posts=["협상 난항, 합의 불투명. 시장이 보는 건 유가다."],
+            short_version="호르무즈 리스크가 풀리지 않았다",
+            reply_drafts=[], quote_post_drafts=[],
+            risk_flags=["결렬 여부 상충, 추가 보도 확인 필요"],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("교차필드 모순" in w for w in pack.style_warnings)
+
+    def test_no_uncertainty_in_risk_flags_ok(self):
+        """risk_flags에 불확실성 없으면 확정형 OK (교차필드 경고 안 함)."""
+        pack = ContentPack(
+            main_posts=["협상이 결렬됐다. 공식 발표가 나왔다."],
+            short_version="",
+            reply_drafts=[], quote_post_drafts=[],
+            risk_flags=["정치적 민감 — 게시 전 타이밍 확인"],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("교차필드 모순" in w for w in pack.style_warnings)
+
+    def test_empty_risk_flags_ok(self):
+        """risk_flags 비어있으면 교차필드 체크 안 함."""
+        pack = ContentPack(
+            main_posts=["협상이 결렬됐다."],
+            short_version="",
+            reply_drafts=[], quote_post_drafts=[],
+            risk_flags=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("교차필드 모순" in w for w in pack.style_warnings)
+
+
+class TestCrossFieldPromptRules:
+    """교차필드 정합성 규칙이 프롬프트에 포함되어 있는지."""
+
+    def test_step1_certainty_assessment(self):
+        """STEP 1에 '사실 확정 수준' 판정 단계가 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "사실 확정 수준" in prompt
+        assert "확정" in prompt and "미확인" in prompt and "상충" in prompt
+
+    def test_cross_field_consistency_rule(self):
+        """골든룰 12에 교차필드 정합성 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "교차필드 정합성" in prompt
+        assert "risk_flags와 본문의 확정 수준은 반드시 일치" in prompt
+
+    def test_bad_good_examples(self):
+        """교차필드 나쁜 예 / 좋은 예가 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "협상 결렬, 빈손" in prompt  # 나쁜 예
+        assert "협상 난항, 합의 불투명" in prompt  # 좋은 예
+
+    def test_hook_unverified_examples(self):
+        """훅에서 미확인 사안 처리 예시가 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "합의 불투명" in prompt
+
+    def test_weakening_결렬_닫혀_빈손(self):
+        """결렬/닫혀 있다/빈손 약화 매핑이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "결렬됐다 → 난항을 겪고 있다" in prompt
+        assert "닫혀 있다/막힌 채 → 차단 리스크가 지속되고 있다" in prompt
+        assert "빈손 → 뚜렷한 성과 없이 마무리된 것으로 전해졌다" in prompt
+
+    def test_qa_16_exists(self):
+        """QA 체크리스트 16번 교차필드 정합성 항목이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "교차필드 정합성" in prompt
