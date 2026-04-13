@@ -234,14 +234,36 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"breaking classify 실패 (fail-open, 파이프라인 계속): {e}")
 
+        # ── Lane A~C early return ────────────────────────────────────
+        # BREAKING_NOW / CANDIDATE 분류된 기사는 알림·적재만 완료하고
+        # AI 파이프라인(Step 2~6)에 진입하지 않는다.
+        # → AI 비용 절감 + Draft 과다 생성 방지
+        _br = getattr(source_item, "breaking_result", None)
+        if _br is not None and _br.classification in ("BREAKING_NOW", "CANDIDATE"):
+            logger.info(
+                f"[Lane early-return] {_br.classification} 분류 완료 — "
+                f"AI 파이프라인 건너뜀 (알림/적재만 수행)"
+            )
+            # 알림 전용 Draft 생성 (AI 미호출, 최소 기록용)
+            draft = self.draft_service.create_draft(
+                source_item=source_item,
+                hook=f"[{_br.classification}] {data.title[:80]}",
+                body=f"[{_br.classification}] 알림/적재 완료 — AI 미호출",
+                category=classify_category(data.title, data.source_text),
+                risk_level=RiskLevel.MEDIUM,
+                risk_reasoning=f"Lane {_br.classification}: AI 파이프라인 미진입",
+            )
+            logger.info(
+                f"=== Lane early-return 완료: draft_id={draft.id}, "
+                f"classification={_br.classification} ==="
+            )
+            return draft
 
         # Step 1.7: KO-only routing — 한국어 전용 도메인 로그만 남기고
         # AI 파이프라인(Step 2~6)은 정상 진행한다.
-        # (이전: placeholder 텍스트로 Draft 생성 후 조기 리턴 → 내부 문구 유출 문제)
         _KO_ONLY_DOMAINS = {"금융", "투자", "크립토", "주식"}
         _KO_ONLY_CLASSES = {"BREAKING_NOW", "CANDIDATE"}
         try:
-            _br = getattr(source_item, "breaking_result", None)
             if (_br is not None
                     and _br.classification in _KO_ONLY_CLASSES
                     and _br.topic_domain in _KO_ONLY_DOMAINS):

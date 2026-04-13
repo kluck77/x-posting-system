@@ -3,10 +3,10 @@
 ========================
 비용 안전을 위해 하루에 생성/전송/게시할 수 있는 횟수를 제한합니다.
 
-기본 제한값:
-- AI 초안 생성: 하루 5회
-- 텔레그램 승인 카드: 하루 5회
-- X 게시: 하루 3회
+기본 제한값 (config.py 기준):
+- AI 초안 생성: 하루 5회 (max_drafts_per_day)
+- 텔레그램 승인 카드: 하루 5회 (max_telegram_per_day)
+- X 게시: 하루 10회 (max_posts_per_day)
 
 레인별 제한 (Lane-based):
 - Lane A (BREAKING_NOW): 무제한 — Step 1.7 이전 리턴, AI 파이프라인 미진입
@@ -26,14 +26,14 @@ from app.models.content import Draft, SourceItem, PostLog, ApprovalStatus
 
 logger = logging.getLogger(__name__)
 
-# 기본 일일 제한값 (기존 호환)
-DEFAULT_MAX_DRAFTS_PER_DAY = 50
-DEFAULT_MAX_TELEGRAM_PER_DAY = 50
-DEFAULT_MAX_POSTS_PER_DAY = 30
+# 기본 일일 제한값 — config.py 값과 일치시킬 것
+DEFAULT_MAX_DRAFTS_PER_DAY = 5
+DEFAULT_MAX_TELEGRAM_PER_DAY = 5
+DEFAULT_MAX_POSTS_PER_DAY = 10
 
 # 레인별 AI 파이프라인 제한값
-DEFAULT_MAX_AI_DRAFTS_PER_DAY = 50   # AI 파이프라인 총 제한 (Steps 2-6)
-DEFAULT_MANUAL_RESERVED = 5           # 수동 입력 보장 슬롯
+DEFAULT_MAX_AI_DRAFTS_PER_DAY = 5    # AI 파이프라인 총 제한 (Steps 2-6)
+DEFAULT_MANUAL_RESERVED = 2           # 수동 입력 보장 슬롯
 
 # KST timezone — 운영자 기준 '오늘' 달력일
 KST = timezone(timedelta(hours=9))
@@ -50,17 +50,27 @@ class RateLimiter:
     def __init__(
         self,
         db: Session,
-        max_drafts: int = DEFAULT_MAX_DRAFTS_PER_DAY,
-        max_telegram: int = DEFAULT_MAX_TELEGRAM_PER_DAY,
-        max_posts: int = DEFAULT_MAX_POSTS_PER_DAY,
-        max_ai_drafts: int = DEFAULT_MAX_AI_DRAFTS_PER_DAY,
+        max_drafts: int | None = None,
+        max_telegram: int | None = None,
+        max_posts: int | None = None,
+        max_ai_drafts: int | None = None,
         manual_reserved: int = DEFAULT_MANUAL_RESERVED,
     ):
         self.db = db
-        self.max_drafts = max_drafts
-        self.max_telegram = max_telegram
-        self.max_posts = max_posts
-        self.max_ai_drafts = max_ai_drafts
+        # config 값 우선, 명시적 override 차순, DEFAULT 최종 fallback
+        try:
+            from app.config import settings as _s
+            _cfg_drafts = _s.max_drafts_per_day
+            _cfg_telegram = _s.max_telegram_per_day
+            _cfg_posts = _s.max_posts_per_day
+        except Exception:
+            _cfg_drafts = DEFAULT_MAX_DRAFTS_PER_DAY
+            _cfg_telegram = DEFAULT_MAX_TELEGRAM_PER_DAY
+            _cfg_posts = DEFAULT_MAX_POSTS_PER_DAY
+        self.max_drafts = max_drafts if max_drafts is not None else _cfg_drafts
+        self.max_telegram = max_telegram if max_telegram is not None else _cfg_telegram
+        self.max_posts = max_posts if max_posts is not None else _cfg_posts
+        self.max_ai_drafts = max_ai_drafts if max_ai_drafts is not None else self.max_drafts
         self.manual_reserved = manual_reserved
 
     def _today_start(self) -> datetime:

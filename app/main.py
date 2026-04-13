@@ -19,6 +19,8 @@ _KST = timezone(timedelta(hours=9))
 _TOP5_HOUR = 5   # 05:00 KST
 _TOP5_MINUTE = 0
 _MONITOR_INTERVAL = 60  # 뉴스 모니터 폴링 간격 (초)
+_CLEANUP_HOUR = 4  # 04:00 KST — Draft 자동 정리
+_CLEANUP_MINUTE = 0
 
 
 async def _top5_scheduler_loop() -> None:
@@ -60,6 +62,39 @@ async def _news_monitor_loop() -> None:
         except Exception as e:
             logger.warning(f"[news-monitor] 사이클 실패 (fail-open): {e}")
         await asyncio.sleep(_MONITOR_INTERVAL)
+
+
+async def _draft_cleanup_loop() -> None:
+    """매일 04:00 KST에 오래된 Draft를 정리하는 백그라운드 루프.
+
+    정책: PENDING 7일, REJECTED 30일, FAILED 30일 경과 시 삭제.
+    """
+    while True:
+        now = datetime.now(tz=_KST)
+        target = now.replace(
+            hour=_CLEANUP_HOUR, minute=_CLEANUP_MINUTE,
+            second=0, microsecond=0,
+        )
+        if target <= now:
+            target += timedelta(days=1)
+        wait_seconds = (target - now).total_seconds()
+        logger.info(
+            f"[draft-cleanup] 다음 실행: {target.isoformat()} "
+            f"(대기 {wait_seconds:.0f}초)"
+        )
+        await asyncio.sleep(wait_seconds)
+        try:
+            from app.db import SessionLocal
+            from app.services.draft_service import DraftService
+            db = SessionLocal()
+            try:
+                svc = DraftService(db)
+                result = svc.cleanup_stale_drafts()
+                logger.info(f"[draft-cleanup] 결과: {result}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"[draft-cleanup] 실행 실패 (fail-open): {e}")
 
 
 def run_fastapi_server():
@@ -107,6 +142,10 @@ async def run_all():
     # 뉴스 모니터 (1분 간격, 서버 전용 news_monitor.py 의존)
     asyncio.create_task(_news_monitor_loop())
     logger.info("[news-monitor] 1분 간격 폴링 등록")
+
+    # Draft 자동 정리 (04:00 KST)
+    asyncio.create_task(_draft_cleanup_loop())
+    logger.info("[draft-cleanup] 04:00 KST 자동 정리 등록")
 
     # 텔레그램 봇 실행
     if settings.has_telegram_config:
