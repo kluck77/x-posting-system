@@ -1101,6 +1101,13 @@ async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:
                 )
                 r.raise_for_status()
                 data = r.json()
+                usage = data.get("usage", {})
+                logger.info(
+                    f"[API-COST] openai gpt-4o-mini "
+                    f"in={usage.get('prompt_tokens', '?')} "
+                    f"out={usage.get('completion_tokens', '?')} "
+                    f"caller=ContentPack"
+                )
                 return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenAI 콘텐츠 팩 호출 실패: {e}")
@@ -1125,6 +1132,13 @@ async def _call_ai(user_prompt: str, language: str = "ko") -> Optional[str]:
                 )
                 r.raise_for_status()
                 data = r.json()
+                usage = data.get("usage", {})
+                logger.info(
+                    f"[API-COST] anthropic claude-haiku-4-5 "
+                    f"in={usage.get('input_tokens', '?')} "
+                    f"out={usage.get('output_tokens', '?')} "
+                    f"caller=ContentPack"
+                )
                 return data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"Anthropic 콘텐츠 팩 호출 실패: {e}")
@@ -1541,6 +1555,13 @@ async def _call_ai_with_prompt(
                 )
                 r.raise_for_status()
                 data = r.json()
+                usage = data.get("usage", {})
+                logger.info(
+                    f"[API-COST] openai gpt-4o-mini "
+                    f"in={usage.get('prompt_tokens', '?')} "
+                    f"out={usage.get('completion_tokens', '?')} "
+                    f"caller=CandidateCard/Finalize"
+                )
                 return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenAI 후보카드/마감 호출 실패: {e}")
@@ -1565,6 +1586,13 @@ async def _call_ai_with_prompt(
                 )
                 r.raise_for_status()
                 data = r.json()
+                usage = data.get("usage", {})
+                logger.info(
+                    f"[API-COST] anthropic claude-haiku-4-5 "
+                    f"in={usage.get('input_tokens', '?')} "
+                    f"out={usage.get('output_tokens', '?')} "
+                    f"caller=CandidateCard/Finalize"
+                )
                 return data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"Anthropic 후보카드/마감 호출 실패: {e}")

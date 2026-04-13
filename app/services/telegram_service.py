@@ -377,6 +377,14 @@ async def send_approval_card(
         return None
 
 
+def _is_korean(text: str) -> bool:
+    """텍스트가 한국어인지 간단 판별 (한글 비율 30% 이상)."""
+    if not text:
+        return False
+    korean_chars = sum(1 for c in text if '\uac00' <= c <= '\ud7a3')
+    return korean_chars / max(len(text), 1) > 0.3
+
+
 async def _translate_to_korean(text: str) -> str | None:
     """
     Gemini Flash로 영문 텍스트를 한국어로 번역합니다. (Layer 2 — 실패 시 None)
@@ -400,6 +408,13 @@ async def _translate_to_korean(text: str) -> str | None:
             )
             r.raise_for_status()
             data = r.json()
+            usage_meta = data.get("usageMetadata", {})
+            logger.info(
+                f"[API-COST] gemini gemini-2.5-flash "
+                f"in={usage_meta.get('promptTokenCount', '?')} "
+                f"out={usage_meta.get('candidatesTokenCount', '?')} "
+                f"caller=Translate"
+            )
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as e:
         safe_msg = str(e)
@@ -418,8 +433,12 @@ async def send_publish_confirmation(draft: Draft) -> None:
         return
 
     # 본문(hook + body)을 한국어로 번역 (Layer 2, 실패해도 진행)
+    # 이미 한국어인 경우 Gemini 번역 호출 스킵 (비용 절감)
     original_text = f"{draft.hook}\n\n{draft.body}"
-    ko_translation = await _translate_to_korean(original_text)
+    if _is_korean(original_text):
+        ko_translation = None
+    else:
+        ko_translation = await _translate_to_korean(original_text)
 
     text = (
         f"✅ <b>X 게시 완료</b>\n\n"

@@ -384,18 +384,11 @@ class Orchestrator:
         if criteria_result["action"] == "reject":
             logger.warning(
                 "5-Criteria REJECT — 초안이 품질 기준 미달. "
-                "재생성 시도 (최대 1회)."
+                "Reviewer 단계(Step 5.5)에서 regenerate 판단에 위임."
             )
-            try:
-                draft_result = await self.ai.draft_writer.generate_draft(
-                    title=data.title,
-                    source_text=data.source_text + "\n\nIMPROVEMENT REQUIRED: " + " | ".join(criteria_result["flags"]),
-                    language=data.language or settings.default_language,
-                    source_type=data.source_type,
-                    criteria_context=draft_criteria_ctx,
-                )
-            except Exception as e:
-                logger.warning(f"재생성 실패, 원본 사용: {e}")
+            # NOTE: 이전에는 여기서 DraftWriter를 추가 호출했으나,
+            # Step 5.5 Reviewer regenerate 루프와 이중 재생성이 되어 비용 낭비.
+            # Reviewer가 regenerate 판단을 내리면 그때 재생성한다.
 
         # Layer 2: research + factcheck 신호로 Reviewer 컨텍스트 빌드 (실패 시 "" — Layer 1 보호)
         try:
@@ -435,7 +428,8 @@ class Orchestrator:
             )
 
         # Step 5.5: Reviewer regenerate 권고 처리 (루프 + 안전장치)
-        MAX_REGEN_ATTEMPTS = 2
+        # 비용 보호: 1회 재생성으로 통과 못 하면 수동 검토로 넘김
+        MAX_REGEN_ATTEMPTS = 1
         regen_attempts = 0
 
         while review.recommended_action == "regenerate" and regen_attempts < MAX_REGEN_ATTEMPTS:

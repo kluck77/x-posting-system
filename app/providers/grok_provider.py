@@ -110,7 +110,15 @@ class GrokTrendHunter(BaseTrendHunter):
                     },
                 )
                 resp.raise_for_status()
-                raw_text = resp.json()["choices"][0]["message"]["content"]
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] grok {GROK_MODEL} "
+                    f"in={usage.get('prompt_tokens', '?')} "
+                    f"out={usage.get('completion_tokens', '?')} "
+                    f"caller=TrendHunter"
+                )
+                raw_text = resp_data["choices"][0]["message"]["content"]
 
                 # Grok may return markdown-wrapped JSON, strip it
                 text = raw_text.strip()

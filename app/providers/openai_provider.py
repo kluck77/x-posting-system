@@ -128,7 +128,15 @@ class OpenAIDraftWriter(BaseDraftWriter):
                     },
                 )
                 resp.raise_for_status()
-                data = json.loads(resp.json()["choices"][0]["message"]["content"])
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] openai {OPENAI_MODEL} "
+                    f"in={usage.get('prompt_tokens', '?')} "
+                    f"out={usage.get('completion_tokens', '?')} "
+                    f"caller=DraftWriter"
+                )
+                data = json.loads(resp_data["choices"][0]["message"]["content"])
 
             logger.info("[OpenAI DraftWriter] 초안 생성 성공")
             return DraftResult(

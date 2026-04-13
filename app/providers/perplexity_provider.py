@@ -108,7 +108,15 @@ class PerplexityFactChecker(BaseFactChecker):
                     },
                 )
                 resp.raise_for_status()
-                raw_text = resp.json()["choices"][0]["message"]["content"]
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] perplexity {PERPLEXITY_MODEL} "
+                    f"in={usage.get('prompt_tokens', '?')} "
+                    f"out={usage.get('completion_tokens', '?')} "
+                    f"caller=FactChecker"
+                )
+                raw_text = resp_data["choices"][0]["message"]["content"]
 
                 # Handle potential markdown-wrapped JSON
                 text = raw_text.strip()

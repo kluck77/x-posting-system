@@ -160,7 +160,15 @@ async def _call_ai(system_prompt: str, user_prompt: str) -> str | None:
                     },
                 )
                 resp.raise_for_status()
-                return resp.json()["content"][0]["text"]
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] anthropic claude-haiku-4-5 "
+                    f"in={usage.get('input_tokens', '?')} "
+                    f"out={usage.get('output_tokens', '?')} "
+                    f"caller=MorningDigest"
+                )
+                return resp_data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"Claude 다이제스트 호출 오류: {e}")
 
@@ -184,7 +192,15 @@ async def _call_ai(system_prompt: str, user_prompt: str) -> str | None:
                     },
                 )
                 resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"]
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] openai gpt-4o-mini "
+                    f"in={usage.get('prompt_tokens', '?')} "
+                    f"out={usage.get('completion_tokens', '?')} "
+                    f"caller=MorningDigest"
+                )
+                return resp_data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"OpenAI 다이제스트 호출 오류: {e}")
 

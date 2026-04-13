@@ -112,7 +112,15 @@ class GeminiResearcher(BaseResearcher):
                     },
                 )
                 resp.raise_for_status()
-                raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                resp_data = resp.json()
+                usage_meta = resp_data.get("usageMetadata", {})
+                logger.info(
+                    f"[API-COST] gemini {GEMINI_MODEL} "
+                    f"in={usage_meta.get('promptTokenCount', '?')} "
+                    f"out={usage_meta.get('candidatesTokenCount', '?')} "
+                    f"caller=Researcher"
+                )
+                raw_text = resp_data["candidates"][0]["content"]["parts"][0]["text"]
                 data = json.loads(raw_text)
 
             gaps = data.get("interpretation_gaps", [])

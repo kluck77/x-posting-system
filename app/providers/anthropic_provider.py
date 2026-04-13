@@ -176,7 +176,15 @@ class AnthropicDraftWriter(BaseDraftWriter):
                 },
             )
             resp.raise_for_status()
-            return resp.json()["content"][0]["text"]
+            resp_data = resp.json()
+            usage = resp_data.get("usage", {})
+            logger.info(
+                f"[API-COST] anthropic {CLAUDE_MODEL} "
+                f"in={usage.get('input_tokens', '?')} "
+                f"out={usage.get('output_tokens', '?')} "
+                f"caller=DraftWriter"
+            )
+            return resp_data["content"][0]["text"]
 
 
 class AnthropicReviewer(BaseReviewer):
@@ -228,7 +236,15 @@ class AnthropicReviewer(BaseReviewer):
                     },
                 )
                 resp.raise_for_status()
-                content = resp.json()["content"][0]["text"]
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] anthropic {CLAUDE_MODEL} "
+                    f"in={usage.get('input_tokens', '?')} "
+                    f"out={usage.get('output_tokens', '?')} "
+                    f"caller=Reviewer"
+                )
+                content = resp_data["content"][0]["text"]
                 try:
                     data = json.loads(content)
                 except json.JSONDecodeError:

@@ -230,7 +230,15 @@ X 알고리즘: 답글 = 좋아요 × 27배, 재게시 = 좋아요 × 2배
                     },
                 )
                 r.raise_for_status()
-                return r.json()["content"][0]["text"].strip()
+                resp_data = r.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] anthropic claude-haiku-4-5 "
+                    f"in={usage.get('input_tokens', '?')} "
+                    f"out={usage.get('output_tokens', '?')} "
+                    f"caller=WeeklyReport"
+                )
+                return resp_data["content"][0]["text"].strip()
         except Exception as e:
             logger.warning(f"AI 분석 실패: {e}")
             return self._fallback_analysis(metrics)

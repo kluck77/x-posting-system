@@ -296,7 +296,15 @@ async def generate_rereply_draft(reply: IncomingReply) -> str:
                 },
             )
             r.raise_for_status()
-            return r.json()["content"][0]["text"].strip()
+            resp_data = r.json()
+            usage = resp_data.get("usage", {})
+            logger.info(
+                f"[API-COST] anthropic claude-haiku-4-5 "
+                f"in={usage.get('input_tokens', '?')} "
+                f"out={usage.get('output_tokens', '?')} "
+                f"caller=ReplyMonitor"
+            )
+            return resp_data["content"][0]["text"].strip()
     except Exception as e:
         logger.warning(f"재답글 초안 생성 실패: {e}")
         return f"맞아요, 저도 같은 경험을 했습니다. 구체적으로 어떤 상황이었나요? 제 해결책을 공유해드릴게요."

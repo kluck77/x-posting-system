@@ -106,7 +106,15 @@ async def extract_from_image(image_bytes: bytes, mime_type: str = "image/jpeg") 
                 },
             )
             resp.raise_for_status()
-            raw = resp.json()["content"][0]["text"]
+            resp_data = resp.json()
+            usage = resp_data.get("usage", {})
+            logger.info(
+                f"[API-COST] anthropic {VISION_MODEL} "
+                f"in={usage.get('input_tokens', '?')} "
+                f"out={usage.get('output_tokens', '?')} "
+                f"caller=Vision"
+            )
+            raw = resp_data["content"][0]["text"]
 
         # 제목 추출 시도
         title = "이미지 분석 결과"
