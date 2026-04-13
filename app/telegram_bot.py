@@ -504,6 +504,7 @@ async def _run_pipeline(
 
         card_sent = await orchestrator.send_for_approval(
             draft.id, chat_id=update.message.chat_id,
+            skip_telegram_limit=True,  # 수동 /post는 텔레그램 제한 우회
         )
 
         mode_label = "📝 새 게시글" if post_mode == "tweet" else f"💬 댓글 (→{reply_to_tweet_id})"

@@ -628,13 +628,15 @@ class Orchestrator:
 
     async def send_for_approval(
         self, draft_id: int, chat_id: int | str | None = None,
+        skip_telegram_limit: bool = False,
     ) -> bool:
         """초안을 텔레그램으로 보내서 승인을 요청합니다."""
-        # 일일 텔레그램 전송 제한 확인
-        can_send, send_msg = self.rate_limiter.can_send_telegram()
-        if not can_send:
-            logger.warning(f"텔레그램 전송 제한: {send_msg}")
-            return False
+        # 일일 텔레그램 전송 제한 확인 (수동 입력 시 skip 가능)
+        if not skip_telegram_limit:
+            can_send, send_msg = self.rate_limiter.can_send_telegram()
+            if not can_send:
+                logger.warning(f"텔레그램 전송 제한: {send_msg}")
+                return False
 
         draft = self.draft_service.get_by_id(draft_id)
         if not draft:
