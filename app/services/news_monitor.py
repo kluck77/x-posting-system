@@ -342,52 +342,52 @@ async def run_monitor_cycle() -> int:
             # 교차 확인 클러스터 업데이트 (기존 유지)
             ready_key = _ingest_article(article)
 
-            # [NEW] 개별 기사를 full_pipeline 으로 전달 (BREAKING/CANDIDATE 만)
-            try:
-                from app.services.breaking_classifier import classify_article
-                _br = classify_article(
-                    title=article.title,
-                    body=article.summary or "",
-                    url=article.url,
-                )
-                if _br.classification == "BREAKING_NOW":
-                    # URL 사전 중복 체크 (DB) — Orchestrator 생성 전에 걸러냄
-                    from app.db import SessionLocal
-                    from app.models.content import SourceItem
-                    _pre_db = SessionLocal()
-                    try:
-                        _url_exists = _pre_db.query(SourceItem.id).filter(
-                            SourceItem.url == article.url.strip()
-                        ).first() is not None
-                    finally:
-                        _pre_db.close()
-                    if _url_exists:
-                        _db_dup_count += 1
-                        continue
-
-                    _pipeline_count += 1
-                    from app.models.content import SourceItemCreate
-                    from app.orchestrator import Orchestrator
-                    from app.services.text_cleaner import clean_article_text
-                    _raw_text = article.summary or article.title
-                    _payload = SourceItemCreate(
-                        title=article.title,
-                        source_text=clean_article_text(_raw_text),
-                        url=article.url,
-                        source_type="naver_auto",
-                        language="ko",
-                    )
-                    _orch = Orchestrator()
-                    try:
-                        _result = await _orch.full_pipeline(_payload)
-                        logger.info(
-                            f"[Monitor→Pipeline] {article.title[:40]}: "
-                            f"{_br.classification}/{_br.topic_domain}"
-                        )
-                    finally:
-                        _orch.close()
-            except Exception as _e:
-                logger.debug(f"[Monitor→Pipeline] fail-open: {_e}")
+            # [DISABLED] 자동 파이프라인 — 비용 폭증 방지 (나중에 재설정)
+            # try:
+            #     from app.services.breaking_classifier import classify_article
+            #     _br = classify_article(
+            #         title=article.title,
+            #         body=article.summary or "",
+            #         url=article.url,
+            #     )
+            #     if _br.classification == "BREAKING_NOW":
+            #         # URL 사전 중복 체크 (DB) — Orchestrator 생성 전에 걸러냄
+            #         from app.db import SessionLocal
+            #         from app.models.content import SourceItem
+            #         _pre_db = SessionLocal()
+            #         try:
+            #             _url_exists = _pre_db.query(SourceItem.id).filter(
+            #                 SourceItem.url == article.url.strip()
+            #             ).first() is not None
+            #         finally:
+            #             _pre_db.close()
+            #         if _url_exists:
+            #             _db_dup_count += 1
+            #             continue
+            #
+            #         _pipeline_count += 1
+            #         from app.models.content import SourceItemCreate
+            #         from app.orchestrator import Orchestrator
+            #         from app.services.text_cleaner import clean_article_text
+            #         _raw_text = article.summary or article.title
+            #         _payload = SourceItemCreate(
+            #             title=article.title,
+            #             source_text=clean_article_text(_raw_text),
+            #             url=article.url,
+            #             source_type="naver_auto",
+            #             language="ko",
+            #         )
+            #         _orch = Orchestrator()
+            #         try:
+            #             _result = await _orch.full_pipeline(_payload)
+            #             logger.info(
+            #                 f"[Monitor→Pipeline] {article.title[:40]}: "
+            #                 f"{_br.classification}/{_br.topic_domain}"
+            #             )
+            #         finally:
+            #             _orch.close()
+            # except Exception as _e:
+            #     logger.debug(f"[Monitor→Pipeline] fail-open: {_e}")
 
             # [DISABLED] old direct telegram alert — full_pipeline 이 대체
             # if not sleeping and ready_key:
