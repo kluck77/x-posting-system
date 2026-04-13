@@ -1737,11 +1737,11 @@ class TestFinalizePromptRules:
         assert "시장은 말보다 규칙 변화를 먼저 본다" in p
 
     def test_style_rules(self):
-        """문체 규칙: 칼럼 금지, 문장 수 제한."""
+        """문체 규칙: 칼럼 금지, 3문장 구조."""
         p = _FINALIZE_PROMPT_KO
         assert "칼럼" in p and "문체 금지" in p
-        assert "2~4개로 구성" in p
-        assert "5문장 이상이면 실패" in p
+        assert "3문장이 기본" in p
+        assert "4문장까지 허용" in p
 
     def test_cautions_conflict_rule(self):
         """골든룰 6: cautions 충돌 금지."""
@@ -2535,3 +2535,72 @@ class TestOpinionPatternsNoFalsePositive:
     def test_no_common_expression_in_patterns(self):
         """'으로 보인다'가 _OPINION_PATTERNS에 없음 (과잉 false positive 방지)."""
         assert "으로 보인다" not in _OPINION_PATTERNS
+
+
+# ─── 병목 재설계 테스트 ──────────────────────────────────────────────────────
+
+
+class TestHookSelfTest:
+    """후보 카드 프롬프트에 훅 자가 테스트 기준이 있는지 검증."""
+
+    def test_self_test_exists(self):
+        """훅 자가 테스트 섹션이 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "훅 자가 테스트" in p
+
+    def test_self_test_criteria(self):
+        """3가지 테스트 기준이 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "기사 제목과 구별" in p
+        assert "완성 문장" in p
+
+
+class TestFinalPostThreeSlotStructure:
+    """마감 프롬프트에 3문장 구조(WHY/WHAT/SO WHAT)가 있는지 검증."""
+
+    def test_three_slots_exist(self):
+        """WHY/WHAT/SO WHAT 슬롯이 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "WHY" in p
+        assert "WHAT" in p
+        assert "SO WHAT" in p
+
+    def test_three_sentence_default(self):
+        """3문장 기본, 4문장 허용 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "3문장이 기본" in p
+        assert "4문장까지 허용" in p
+
+    def test_no_room_for_summary(self):
+        """기사 재설명 문장이 끼어들 자리 없다는 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "기사 내용을 다시 설명하는 문장" in p
+
+
+class TestValidationGate:
+    """validation 경고가 Claude 감수 트리거로 연결되는지 검증."""
+
+    def test_single_warning_no_force(self):
+        """경고 1개는 강제 트리거 미발동."""
+        # 금지 마감 패턴 1개만 걸리는 케이스
+        post = "정상적인 첫 문장이다.\n해석 축 연결.\n추이를 봐야 한다."
+        _, _, warnings = _validate_final_post(post, "독립 짧은 버전")
+        # 금지 마감 1개만 걸림 — 강제 아님
+        ban_warns = [w for w in warnings if "금지 마감" in w]
+        assert len(ban_warns) >= 1
+        # 총 경고 1개면 force=False
+        # (다른 경고 안 걸리는 깨끗한 입력)
+
+    def test_multiple_warnings_force(self):
+        """경고 2개 이상이면 강제 트리거."""
+        # 첫 문장 사실나열 + 금지 마감 + 뻔한 표현 → 3개
+        post = "라는 보도가 나왔다. 시장 반응을 봐야 한다."
+        _, _, warnings = _validate_final_post(post, "독립 짧은 버전")
+        assert len(warnings) >= 2, f"경고 2개 이상 예상, 실제: {warnings}"
+
+    def test_clean_post_no_warnings(self):
+        """깨끗한 포스트는 경고 0개."""
+        post = "이 뉴스에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행령 여부다."
+        _, _, warnings = _validate_final_post(post, "환율 1400원대, 변수는 시행령이다.")
+        # 과장 표현도 없고 금지 마감도 없는 깨끗한 포스트
+        assert len(warnings) == 0, f"경고 0개 예상, 실제: {warnings}"

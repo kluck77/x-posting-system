@@ -1380,6 +1380,12 @@ X에서 첫 줄로 바로 올려도 어색하지 않을 "해석 문장"이다.
 ■ 3개 훅은 반드시 서로 다른 해석 축이어야 한다. 같은 논지를 말만 바꿔 반복하면 실패.
 ■ 훅 후보에 "?"로 끝나는 기자 질문형이 2개 이상이면 무조건 재작성.
 
+■ 훅 자가 테스트 (출력 전 반드시 확인):
+  각 훅을 X에 첫 줄로 바로 올렸을 때:
+  1. 기사 제목과 구별이 안 되면 → 실패. 재작성.
+  2. "이 사람 뭔가 아네"라는 느낌이 안 들면 → 실패. 해석을 넣어라.
+  3. 주어+서술어가 없는 명사구/제목형이면 → 실패. 완성 문장으로.
+
 ■ 국제/지정학/거시경제 뉴스 특별 규칙 (CRITICAL):
   국제 뉴스, 외교, 군사, 에너지, 원자재, 글로벌 금리 등의 주제일 때:
   - 훅 후보 3개 중 최소 1개는 반드시 "한국 관점 해석 축"을 포함해야 한다.
@@ -1556,11 +1562,19 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "최종 마�
 - 정치/외교/군사 주제는 한 단계 더 보수적으로.
 - "~할 수밖에 없다", "~불가피하다", "~충격" 등은 certainty_level 확정일 때만 허용.
 
+━━━ final_post 구조 (이 순서를 따라라) ━━━
+
+1문장(WHY): 한국 독자가 왜 이걸 봐야 하는가. 기사 요약 금지.
+2문장(WHAT): 확인된 사실 1~2개 + 해석 축 연결. 나열 금지.
+3문장(SO WHAT): 진짜 변수/조건/대비. 전망문·훈계문 금지.
+
+3문장이 기본. 4문장까지 허용하되 그 이상은 금지.
+"기사 내용을 다시 설명하는 문장"이 끼어들 자리는 없다.
+
 ━━━ 문체 규칙 ━━━
 
 - 칼럼·해설문·보고서 문체 금지. 트윗처럼 짧고 끊어라.
 - "~에 영향을 미칠 것으로 보인다", "~점에서 주목된다" 같은 보고서 문장 금지.
-- 문장은 2~4개로 구성. 5문장 이상이면 실패.
 - 한 문단에 변수 2개까지만. 물가/금리/항공/해운/정치/환율을 한꺼번에 넣지 마라.
 
 ━━━ 분량 가이드 ━━━
@@ -1812,8 +1826,19 @@ async def generate_final_post(
                 f"short={len(result.final_short)}자"
             )
 
-            # 조건부 Claude 감수
-            if _should_invoke_claude_review(card, result):
+            # validation 경고 기반 게이트: 2개 이상이면 Claude 감수 강제
+            _, _, gate_warnings = _validate_final_post(
+                result.final_post, result.final_short
+            )
+            force_review = len(gate_warnings) >= 2
+            if force_review:
+                logger.info(
+                    f"[마감게이트] 경고 {len(gate_warnings)}개 → "
+                    f"Claude 감수 강제: {gate_warnings}"
+                )
+
+            # 조건부 Claude 감수 (게이트 강제 또는 기존 조건)
+            if force_review or _should_invoke_claude_review(card, result):
                 reviewed = await _claude_review_final(card, result)
                 if reviewed:
                     logger.info(
