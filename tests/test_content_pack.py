@@ -20,6 +20,7 @@ from app.services.content_pack import (
     _should_invoke_claude_review, _CLAUDE_REVIEW_PROMPT,
     _SENSITIVE_TOPICS, _WEAK_PATTERNS,
     _FACT_NARRATION_STARTS,
+    _OPINION_PATTERNS,
 )
 from app.models.content_request import ContentRequest
 
@@ -2394,3 +2395,117 @@ class TestSendCandidateCardMessages:
         assert "한줄 결론" not in texts_joined
         assert "주의문" not in texts_joined
         assert "지금 봐야 할 포인트" not in texts_joined
+
+
+# ─── 국제 뉴스 한국 관점 강화 테스트 ─────────────────────────────────────────
+
+
+class TestKoreaAngleCandidatePrompt:
+    """후보 카드 프롬프트에 한국 관점 훅 규칙이 있는지 검증."""
+
+    def test_korea_angle_rule_exists(self):
+        """한국 관점 해석 축 규칙이 후보 카드 프롬프트에 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "한국 관점" in p
+        assert "해석 축" in p
+
+    def test_general_opinion_ban_in_candidate(self):
+        """일반론 금지 규칙이 후보 카드 프롬프트에 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "일반론 금지" in p
+        assert "역사적으로" in p
+
+    def test_international_news_rule(self):
+        """국제/지정학/거시경제 뉴스 특별 규칙이 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "국제" in p or "지정학" in p or "거시경제" in p
+
+
+class TestFinalizePromptPrincipleABC:
+    """마감 프롬프트에 원칙 A/B/C가 있는지 검증."""
+
+    def test_principle_a_why_it_matters(self):
+        """원칙 A: 첫 문장 'why this matters' 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "원칙 A" in p
+        assert "왜 중요한가" in p
+
+    def test_principle_b_korea_angle(self):
+        """원칙 B: 한국 관점 해석 축 필수 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "원칙 B" in p
+        assert "한국 관점" in p
+
+    def test_principle_c_no_general_opinion(self):
+        """원칙 C: 일반론 의견 금지 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "원칙 C" in p
+        assert "일반론" in p
+
+    def test_bad_good_examples_exist(self):
+        """원칙 B에 나쁨/좋음 예시가 있는지 검증."""
+        p = _FINALIZE_PROMPT_KO
+        # 원칙 B 관련 나쁨/좋음
+        assert "한국 관점 없음" in p
+
+
+class TestOpinionPatterns:
+    """일반론 의견 패턴 상수 및 검증 통합 테스트."""
+
+    def test_opinion_patterns_exist(self):
+        """_OPINION_PATTERNS 상수가 존재하고 비어있지 않음."""
+        assert len(_OPINION_PATTERNS) > 0
+
+    def test_key_patterns_included(self):
+        """핵심 일반론 패턴이 포함."""
+        assert "역사적으로" in _OPINION_PATTERNS
+        assert "전략이다" in _OPINION_PATTERNS
+        assert "낳기 쉽다" in _OPINION_PATTERNS
+        assert "큰 파장을" in _OPINION_PATTERNS
+
+    def test_validate_detects_opinion_pattern(self):
+        """_validate_final_post가 일반론 의견 패턴을 감지."""
+        post = "역사적으로 이런 상황에서는 항상 위기가 반복되었다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전")
+        opinion_warns = [w for w in warnings if "일반론 의견" in w]
+        assert len(opinion_warns) >= 1
+
+    def test_validate_no_false_positive(self):
+        """일반론 패턴이 없는 정상 문장은 경고 없음."""
+        post = "한국 환율이 1400원을 넘기면 수입 물가 부담이 커진다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전")
+        opinion_warns = [w for w in warnings if "일반론 의견" in w]
+        assert len(opinion_warns) == 0
+
+    def test_claude_trigger_on_opinion(self, monkeypatch):
+        """일반론 의견 패턴이 있으면 Claude 감수 트리거."""
+        from app.config import settings
+        monkeypatch.setattr(type(settings), "has_anthropic", property(lambda self: True))
+        card = CandidateCard(
+            key_facts=["팩트"], hook_candidates=["훅"],
+            one_liner=["한줄"], cautions=[], watch_points=[],
+        )
+        draft = FinalPost(
+            final_post="역사적으로 이런 상황은 항상 반복되어 왔다.",
+            final_short="짧은 버전",
+        )
+        assert _should_invoke_claude_review(card, draft) is True
+
+
+class TestClaudeReviewPrincipleSync:
+    """Claude 감수 프롬프트에 원칙 A/B/C가 동기화되었는지 검증."""
+
+    def test_korea_angle_in_claude_prompt(self):
+        """Claude 감수 프롬프트에 한국 관점 규칙 존재."""
+        assert "한국 관점" in _CLAUDE_REVIEW_PROMPT
+        assert "원칙 B" in _CLAUDE_REVIEW_PROMPT or "국제 뉴스 한국 관점" in _CLAUDE_REVIEW_PROMPT
+
+    def test_opinion_ban_in_claude_prompt(self):
+        """Claude 감수 프롬프트에 일반론 금지 규칙 존재."""
+        assert "일반론" in _CLAUDE_REVIEW_PROMPT
+        assert "역사적으로" in _CLAUDE_REVIEW_PROMPT
+
+    def test_seven_criteria_in_claude_prompt(self):
+        """뉴스 후기 느낌 판정 기준이 7개로 확장."""
+        # 7번째 기준이 존재하는지 확인
+        assert "7." in _CLAUDE_REVIEW_PROMPT
