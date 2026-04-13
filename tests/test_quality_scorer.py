@@ -224,6 +224,49 @@ class TestKoreanEndToEnd:
         assert r["action"] == "reject"
 
 
+class TestEconomicShockNotClickbait:
+    """경제 분석 용어 '충격'이 클릭베이트로 오판되지 않아야 한다."""
+
+    def test_oil_shock_analytical_passes(self):
+        """시차 구조/충격/전이/완충 등 경제 분석 용어는 클릭베이트가 아님."""
+        hook = "유가 충격, 한국 경제에 미치는 파급 경로"
+        body = (
+            "국제 유가 급등의 충격은 단계적으로 전이된다. "
+            "즉각 충격은 정유사 마진에 반영되지만, 소비자 물가로의 "
+            "전이에는 2~3개월의 시차 구조가 존재한다. "
+            "정유사 재고와 비축유가 완충 요인으로 작용하며, "
+            "투자자는 향후 수입물가 지표와 정유사 재고 변동을 "
+            "모니터링해야 한다."
+        )
+        r = score_5criteria(hook, body)
+        # "충격"은 경제 분석 표준 용어 → 클릭베이트 아님
+        assert r["scores"]["consistency"] >= 15, (
+            f"경제 분석글인데 consistency={r['scores']['consistency']}. "
+            f"'충격'이 클릭베이트로 오탐."
+        )
+        assert r["action"] in ("pass", "warn"), (
+            f"분석적 유가 충격 글인데 action={r['action']}, "
+            f"total={r['total']}, scores={r['scores']}"
+        )
+
+    def test_demand_shock_analytical(self):
+        """수요 충격/공급 충격도 경제 분석 용어."""
+        r = score_5criteria(
+            "글로벌 수요 충격과 한국 수출 전망",
+            "외부 충격이 수출에 미치는 영향은 구조적이다. "
+            "투자자는 수출 지표를 주시해야 한다.",
+        )
+        assert r["scores"]["consistency"] >= 15
+
+    def test_actual_clickbait_still_caught(self):
+        """진짜 클릭베이트(스캔들/루머/대박)는 여전히 잡혀야."""
+        r = score_5criteria(
+            "대박! 재벌 스캔들",
+            "난리난 열애 루머 실화냐? 소름 돋는 가십.",
+        )
+        assert r["scores"]["consistency"] <= 5
+
+
 class TestEnglishRegression:
     """영어 평가는 기존과 동일해야 한다. 패턴은 건드리지 않았고 OR 결합만 추가."""
 
