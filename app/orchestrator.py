@@ -278,12 +278,16 @@ class Orchestrator:
             logger.warning(f"[1.7] KO routing check failed (fail-open): {e}")
 
         # Step 2 rate check: AI 파이프라인 진입 제한 (비용 보호)
-        # - source_type 으로 자동수집/수동입력 레인 분리
-        can_ai, ai_msg = self.rate_limiter.can_run_ai_pipeline(
-            source_type=data.source_type,
-        )
-        if not can_ai:
-            raise RuntimeError(f"일일 제한 초과: {ai_msg}")
+        # - 수동 입력(manual)은 제한 우회 — 운영자 직접 요청
+        # - 자동수집만 레인별 제한 적용
+        if data.source_type != "manual":
+            can_ai, ai_msg = self.rate_limiter.can_run_ai_pipeline(
+                source_type=data.source_type,
+            )
+            if not can_ai:
+                raise RuntimeError(f"일일 제한 초과: {ai_msg}")
+        else:
+            logger.info("[2/6] 수동 입력 — AI rate limit 우회")
 
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")

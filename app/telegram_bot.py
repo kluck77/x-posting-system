@@ -994,6 +994,59 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def reset_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/reset_limit — 오늘 생성된 Draft 카운트를 초기화 (오래된 PENDING 삭제)."""
+    try:
+        from app.db import SessionLocal
+        from app.services.draft_service import DraftService
+        from app.services.rate_limiter import RateLimiter
+        from app.models.content import Draft, ApprovalStatus
+        from datetime import datetime, timezone
+
+        db = SessionLocal()
+        try:
+            limiter = RateLimiter(db)
+            before_count = limiter.get_today_draft_count()
+            before_ai = limiter.get_today_ai_draft_count()
+            before_tg = limiter.get_today_telegram_count()
+
+            # 오늘 생성된 PENDING 초안 중 AI 미호출(placeholder) 건 삭제
+            start = limiter._today_start()
+            deleted = (
+                db.query(Draft)
+                .filter(
+                    Draft.created_at >= start,
+                    Draft.approval_status == ApprovalStatus.PENDING,
+                    Draft.body.like("[%] 알림/적재 완료%"),
+                )
+                .delete(synchronize_session="fetch")
+            )
+            db.commit()
+
+            after_count = limiter.get_today_draft_count()
+            after_ai = limiter.get_today_ai_draft_count()
+            after_tg = limiter.get_today_telegram_count()
+
+            await update.message.reply_text(
+                f"✅ <b>Rate Limit 초기화 완료</b>\n\n"
+                f"<b>Before:</b>\n"
+                f"  초안: {before_count}/{limiter.max_drafts}\n"
+                f"  AI: {before_ai}/{limiter.max_ai_drafts}\n"
+                f"  텔레그램: {before_tg}/{limiter.max_telegram}\n\n"
+                f"<b>After:</b>\n"
+                f"  초안: {after_count}/{limiter.max_drafts}\n"
+                f"  AI: {after_ai}/{limiter.max_ai_drafts}\n"
+                f"  텔레그램: {after_tg}/{limiter.max_telegram}\n\n"
+                f"🗑 Placeholder 삭제: {deleted}건",
+                parse_mode="HTML",
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"reset_limit 실패: {e}")
+        await update.message.reply_text(f"❌ 초기화 실패: {e}")
+
+
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/cancel — 현재 상태 초기화"""
     state = _get_state(context)
@@ -4027,6 +4080,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("menu", menu_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
+    app.add_handler(CommandHandler("reset_limit", reset_limit_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("recover", recover_command))
     app.add_handler(CommandHandler("pending", pending_command))
