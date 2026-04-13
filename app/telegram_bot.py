@@ -87,6 +87,7 @@ def _get_pending(context: ContextTypes.DEFAULT_TYPE) -> dict | None:
 def _clear(context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop(STATE_KEY, None)
     context.user_data.pop(PENDING_KEY, None)
+    context.user_data.pop("_generating", None)
 
 
 def _safe_error_msg(e: Exception) -> str:
@@ -143,76 +144,90 @@ async def _run_analysis_and_show_card(
     # 분석 중 메시지
     status_msg = await update.message.reply_text("🔬 팩트 조사 중...")
 
-    # Gemini & Perplexity 병렬 실행
-    orchestrator = Orchestrator()
     try:
-        research_task = orchestrator.ai.researcher.research(
-            query=title, context=text[:1000]
+        # Gemini & Perplexity 병렬 실행 (전체 timeout 적용)
+        orchestrator = Orchestrator()
+        try:
+            research_task = orchestrator.ai.researcher.research(
+                query=title, context=text[:1000]
+            )
+            factcheck_task = orchestrator.ai.fact_checker.check_facts(
+                claim=text[:1000], context=title
+            )
+            research, factcheck = await asyncio.wait_for(
+                asyncio.gather(
+                    research_task, factcheck_task, return_exceptions=True
+                ),
+                timeout=_ANALYSIS_TIMEOUT,
+            )
+        finally:
+            orchestrator.close()
+
+        # 결과 정리
+        research_summary = ""
+        if not isinstance(research, Exception):
+            facts = research.key_facts[:3]
+            research_summary = research.summary[:300]
+            if facts:
+                research_summary += "\n• " + "\n• ".join(facts)
+
+        factcheck_summary = ""
+        if not isinstance(factcheck, Exception):
+            status = "✅ 검증됨" if factcheck.verified else "⚠️ 미검증"
+            confidence = factcheck.confidence
+            factcheck_summary = f"{status} (신뢰도: {confidence})"
+            if factcheck.corrections:
+                factcheck_summary += "\n수정사항: " + "; ".join(factcheck.corrections[:2])
+
+        # 상태 저장
+        _set_pending(context, {
+            "title": title,
+            "text": text,
+            "url": source_url,
+            "source_type": source_type,
+            "content_type": content_type,
+            "research_summary": research_summary,
+            "factcheck_summary": factcheck_summary,
+            "msg_id": msg_id,
+        })
+        _set_state(context, STATE_AWAITING_TYPE)
+
+        # 분석 카드 전송
+        card_text = (
+            f"🔍 <b>분석 완료</b>\n"
+            f"{'─' * 28}\n\n"
+            f"📰 <b>{title[:150]}</b>\n\n"
+            f"📋 유형: {content_type}\n"
         )
-        factcheck_task = orchestrator.ai.fact_checker.check_facts(
-            claim=text[:1000], context=title
+        if research_summary:
+            card_text += f"\n🔬 <b>핵심 내용:</b>\n{research_summary[:350]}\n"
+        if factcheck_summary:
+            card_text += f"\n{factcheck_summary}\n"
+        card_text += f"\n{'─' * 28}\n<b>어떻게 사용할까요?</b>"
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📝 새 게시글", callback_data=f"type_tweet:{msg_id}"),
+                InlineKeyboardButton("💬 댓글로", callback_data=f"type_reply:{msg_id}"),
+            ],
+            [
+                InlineKeyboardButton("📦 콘텐츠 팩", callback_data=f"type_pack:{msg_id}"),
+                InlineKeyboardButton("❌ 취소", callback_data=f"type_cancel:{msg_id}"),
+            ],
+        ])
+
+        await status_msg.delete()
+        await update.message.reply_text(card_text, parse_mode="HTML", reply_markup=keyboard)
+
+    except asyncio.TimeoutError:
+        logger.error(f"ANALYSIS_TIMEOUT: 분석 {_ANALYSIS_TIMEOUT}초 초과")
+        await status_msg.edit_text(
+            f"⏱ <b>분석 시간 초과</b> ({_ANALYSIS_TIMEOUT}초)\n\n다시 시도해주세요.",
+            parse_mode="HTML",
         )
-        research, factcheck = await asyncio.gather(
-            research_task, factcheck_task, return_exceptions=True
-        )
-    finally:
-        orchestrator.close()
-
-    # 결과 정리
-    research_summary = ""
-    if not isinstance(research, Exception):
-        facts = research.key_facts[:3]
-        research_summary = research.summary[:300]
-        if facts:
-            research_summary += "\n• " + "\n• ".join(facts)
-
-    factcheck_summary = ""
-    if not isinstance(factcheck, Exception):
-        status = "✅ 검증됨" if factcheck.verified else "⚠️ 미검증"
-        confidence = factcheck.confidence
-        factcheck_summary = f"{status} (신뢰도: {confidence})"
-        if factcheck.corrections:
-            factcheck_summary += "\n수정사항: " + "; ".join(factcheck.corrections[:2])
-
-    # 상태 저장
-    _set_pending(context, {
-        "title": title,
-        "text": text,
-        "url": source_url,
-        "source_type": source_type,
-        "content_type": content_type,
-        "research_summary": research_summary,
-        "factcheck_summary": factcheck_summary,
-        "msg_id": msg_id,
-    })
-    _set_state(context, STATE_AWAITING_TYPE)
-
-    # 분석 카드 전송
-    card_text = (
-        f"🔍 <b>분석 완료</b>\n"
-        f"{'─' * 28}\n\n"
-        f"📰 <b>{title[:150]}</b>\n\n"
-        f"📋 유형: {content_type}\n"
-    )
-    if research_summary:
-        card_text += f"\n🔬 <b>핵심 내용:</b>\n{research_summary[:350]}\n"
-    if factcheck_summary:
-        card_text += f"\n{factcheck_summary}\n"
-    card_text += f"\n{'─' * 28}\n<b>어떻게 사용할까요?</b>"
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📝 새 게시글", callback_data=f"type_tweet:{msg_id}"),
-            InlineKeyboardButton("💬 댓글로", callback_data=f"type_reply:{msg_id}"),
-        ],
-        [
-            InlineKeyboardButton("📦 콘텐츠 팩", callback_data=f"type_pack:{msg_id}"),
-            InlineKeyboardButton("❌ 취소", callback_data=f"type_cancel:{msg_id}"),
-        ],
-    ])
-
-    await status_msg.delete()
-    await update.message.reply_text(card_text, parse_mode="HTML", reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"분석 카드 생성 오류: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 분석 실패: {_safe_error_msg(e)}")
 
 
 # =============================================================================
@@ -443,6 +458,11 @@ async def _handle_reply_target_url(
 # AI 파이프라인 실행 공통 함수
 # =============================================================================
 
+_PIPELINE_TIMEOUT = 180   # 초안 생성 전체 hard timeout (초)
+_PACK_TIMEOUT = 120       # 콘텐츠 팩 전체 hard timeout (초)
+_ANALYSIS_TIMEOUT = 90    # 분석 카드 전체 hard timeout (초)
+
+
 async def _run_pipeline(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -452,7 +472,14 @@ async def _run_pipeline(
 ):
     """
     pending 데이터를 이용해 AI 파이프라인을 실행하고 승인 카드를 전송합니다.
+    전체 작업에 hard timeout을 걸어 무한 대기를 방지합니다.
     """
+    # 중복 실행 방지
+    if context.user_data.get("_generating"):
+        await update.message.reply_text("⏳ 이미 생성 중입니다. 완료될 때까지 기다려주세요.")
+        return
+    context.user_data["_generating"] = True
+
     from app.models.content import SourceItemCreate
 
     source_data = SourceItemCreate(
@@ -465,7 +492,10 @@ async def _run_pipeline(
 
     orchestrator = Orchestrator()
     try:
-        draft = await orchestrator.ingest_and_generate(source_data)
+        draft = await asyncio.wait_for(
+            orchestrator.ingest_and_generate(source_data),
+            timeout=_PIPELINE_TIMEOUT,
+        )
 
         # 댓글 모드: reply_to_tweet_id 저장
         if post_mode == "reply" and reply_to_tweet_id:
@@ -489,9 +519,16 @@ async def _run_pipeline(
             f"{card_status}",
             parse_mode="HTML",
         )
+    except asyncio.TimeoutError:
+        logger.error(f"PIPELINE_TIMEOUT: 초안 생성 {_PIPELINE_TIMEOUT}초 초과")
+        await update.message.reply_text(
+            f"⏱ <b>초안 생성 시간 초과</b> ({_PIPELINE_TIMEOUT}초)\n\n"
+            "서버 응답이 느립니다. 다시 시도해주세요.",
+            parse_mode="HTML",
+        )
     except Exception as e:
         logger.error(f"파이프라인 오류: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ 오류: {str(e)[:300]}")
+        await update.message.reply_text(f"❌ 오류: {_safe_error_msg(e)}")
     finally:
         orchestrator.close()
         _clear(context)
@@ -1190,6 +1227,13 @@ async def _run_content_pack(
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     _clear(context)
+
+    # 중복 실행 방지
+    if context.user_data.get("_generating"):
+        await update.message.reply_text("⏳ 이미 생성 중입니다. 완료될 때까지 기다려주세요.")
+        return
+    context.user_data["_generating"] = True
+
     msg = await update.message.reply_text("📦 <b>콘텐츠 팩 생성 중...</b>", parse_mode="HTML")
 
     try:
@@ -1229,8 +1273,11 @@ async def _run_content_pack(
             await msg.edit_text("⚠️ 콘텐츠 내용이 부족합니다. 텍스트나 URL을 함께 보내주세요.")
             return
 
-        # 팩 생성
-        pack = await generate_content_pack(req)
+        # 팩 생성 (hard timeout)
+        pack = await asyncio.wait_for(
+            generate_content_pack(req),
+            timeout=_PACK_TIMEOUT,
+        )
 
         # 반복 경고 주입
         try:
@@ -1267,9 +1314,17 @@ async def _run_content_pack(
             else:
                 await update.message.reply_text(text, parse_mode="HTML")
 
+    except asyncio.TimeoutError:
+        logger.error(f"PACK_TIMEOUT: 콘텐츠 팩 생성 {_PACK_TIMEOUT}초 초과")
+        await msg.edit_text(
+            f"⏱ <b>콘텐츠 팩 생성 시간 초과</b> ({_PACK_TIMEOUT}초)\n\n다시 시도해주세요.",
+            parse_mode="HTML",
+        )
     except Exception as e:
         logger.error(f"콘텐츠 팩 생성 오류: {e}", exc_info=True)
         await msg.edit_text(f"❌ 콘텐츠 팩 생성 실패: {_safe_error_msg(e)}")
+    finally:
+        context.user_data.pop("_generating", None)
 
 
 async def _handle_pack_select_callback(
