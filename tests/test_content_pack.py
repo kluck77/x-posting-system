@@ -1188,3 +1188,122 @@ class TestMarketDensityAudit:
         density_warnings = [w for w in pack.style_warnings if "밀도 초과" in w]
         assert len(density_warnings) == 1
         assert "숫자" in density_warnings[0]
+
+
+# ─── 발언 해석 강도 규칙 테스트 ─────────────────────────────────────────────
+
+
+class TestSpeechInterpretationPromptRules:
+    """골든룰 14 발언 해석 강도 규칙이 프롬프트에 반영됐는지 확인."""
+
+    def test_golden_rule_14_exists(self):
+        """골든룰 14가 프롬프트에 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "발언 해석 강도 규칙" in prompt
+
+    def test_speech_vs_action_separation(self):
+        """발언과 조치 분리 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "발언과 조치는 반드시 분리" in prompt
+
+    def test_intent_judgment_weakening(self):
+        """발언 의도 확정 판정 약화 매핑이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "~의 신호다 → ~신호로 읽힐 수 있다" in prompt
+        assert "맞장구치는 형국 → 비슷한 기조로 해석될 수 있다" in prompt
+
+    def test_market_impact_weakening(self):
+        """시장 영향 확정 금지 매핑이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "불가피하다 → 부담이 먼저 나타날 수 있다" in prompt
+
+    def test_impact_path_density_rule(self):
+        """파급 경로 3개 이상 나열 금지 규칙이 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "파급 경로를 3개 이상 나열" in prompt
+
+    def test_bad_good_examples(self):
+        """발언 vs 조치 나쁜/좋은 예시가 있다."""
+        prompt = _get_system_prompt("ko")
+        assert "봉쇄를 시사하며 공급을 제한하고 있다" in prompt  # 나쁜 예
+        assert "봉쇄 가능성을 언급했다" in prompt  # 좋은 예
+
+    def test_qa_18_exists(self):
+        """QA 체크리스트 18번 발언 해석 강도 항목이 존재한다."""
+        prompt = _get_system_prompt("ko")
+        assert "발언 해석 강도" in prompt
+
+
+class TestSpeechAssertionRegex:
+    """_STRONG_ASSERTION_RE에 발언 해석 표현이 추가됐는지 확인."""
+
+    def test_맞장구_detected(self):
+        assert _STRONG_ASSERTION_RE.search("트럼프의 경고는 이에 맞장구치는 형국")
+
+    def test_기존_직격탄_still_works(self):
+        assert _STRONG_ASSERTION_RE.search("유가 상승이 직격탄이 됐다")
+
+    def test_기존_불가피_still_works(self):
+        assert _STRONG_ASSERTION_RE.search("비용 구조 변화도 불가피하다")
+
+    def test_safe_text_no_match(self):
+        """안전한 해석 표현은 매치하지 않는다."""
+        assert not _STRONG_ASSERTION_RE.search(
+            "공급 불안 신호로 받아들여질 수 있다"
+        )
+
+
+class TestImpactPathOverflow:
+    """_audit_numeric_safety check 6 — 파급 경로 과밀 경고 테스트."""
+
+    def _make_pack(self, main_posts):
+        return ContentPack(
+            main_posts=main_posts,
+            short_version="테스트",
+            reply_drafts=[],
+            quote_post_drafts=[],
+            thread_option=None,
+            risk_flags=[],
+            topic_tags=["에너지"],
+            why_it_matters="테스트",
+            style_warnings=[],
+        )
+
+    def _make_fs(self):
+        return FactSheet(figures=[])
+
+    def test_3_keywords_triggers_warning(self):
+        """파급 경로 키워드 3개 → 경고 발생."""
+        post = "유가 상승은 물가 압력으로 이어지고, 한은의 금리 판단에도 영향을 줄 수 있다."
+        pack = self._make_pack([post])
+        _audit_numeric_safety(pack, self._make_fs())
+        path_warnings = [w for w in pack.style_warnings if "파급 경로 과밀" in w]
+        assert len(path_warnings) == 1
+
+    def test_2_keywords_no_warning(self):
+        """파급 경로 키워드 2개 이하 → 경고 없음."""
+        post = "유가 상승이 물가에 영향을 줄 수 있다."
+        pack = self._make_pack([post])
+        _audit_numeric_safety(pack, self._make_fs())
+        path_warnings = [w for w in pack.style_warnings if "파급 경로 과밀" in w]
+        assert len(path_warnings) == 0
+
+    def test_5_keywords_strong(self):
+        """파급 경로 키워드 5개 → 경고에 키워드 나열."""
+        post = "물가, 한은 금리, 환율 압력, 항공 비용, 해운 운임까지 전방위 영향."
+        pack = self._make_pack([post])
+        _audit_numeric_safety(pack, self._make_fs())
+        path_warnings = [w for w in pack.style_warnings if "파급 경로 과밀" in w]
+        assert len(path_warnings) == 1
+        assert "포스트1" in path_warnings[0]
+
+    def test_multiple_posts_independent(self):
+        """각 포스트 독립 검사 — 포스트1만 과밀."""
+        post1 = "물가, 한은 금리, 환율 모두 흔들린다."
+        post2 = "유가가 관건이다."
+        pack = self._make_pack([post1, post2])
+        _audit_numeric_safety(pack, self._make_fs())
+        path_warnings = [w for w in pack.style_warnings if "파급 경로 과밀" in w]
+        assert len(path_warnings) == 1
+        assert "포스트1" in path_warnings[0]
+        assert "포스트2" not in path_warnings[0]
