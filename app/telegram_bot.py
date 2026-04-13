@@ -1002,13 +1002,11 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def reset_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/reset_limit — 오늘 생성된 Draft 카운트를 초기화 (오래된 PENDING 삭제)."""
+    """/reset_limit — 오늘 카운트 초기화: PENDING/REJECTED/FAILED 삭제."""
     try:
         from app.db import SessionLocal
-        from app.services.draft_service import DraftService
         from app.services.rate_limiter import RateLimiter
         from app.models.content import Draft, ApprovalStatus
-        from datetime import datetime, timezone
 
         db = SessionLocal()
         try:
@@ -1017,14 +1015,14 @@ async def reset_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             before_ai = limiter.get_today_ai_draft_count()
             before_tg = limiter.get_today_telegram_count()
 
-            # 오늘 생성된 PENDING 초안 중 AI 미호출(placeholder) 건 삭제
+            # APPROVED / PUBLISHED 만 보존, 나머지 전체 삭제
+            _keep = {ApprovalStatus.APPROVED, ApprovalStatus.PUBLISHED}
             start = limiter._today_start()
             deleted = (
                 db.query(Draft)
                 .filter(
                     Draft.created_at >= start,
-                    Draft.approval_status == ApprovalStatus.PENDING,
-                    Draft.body.like("[%] 알림/적재 완료%"),
+                    ~Draft.approval_status.in_(_keep),
                 )
                 .delete(synchronize_session="fetch")
             )
@@ -1044,7 +1042,7 @@ async def reset_limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 f"  초안: {after_count}/{limiter.max_drafts}\n"
                 f"  AI: {after_ai}/{limiter.max_ai_drafts}\n"
                 f"  텔레그램: {after_tg}/{limiter.max_telegram}\n\n"
-                f"🗑 Placeholder 삭제: {deleted}건",
+                f"🗑 삭제: {deleted}건 (APPROVED/PUBLISHED 보존)",
                 parse_mode="HTML",
             )
         finally:
