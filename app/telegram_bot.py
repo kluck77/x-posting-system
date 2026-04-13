@@ -35,6 +35,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ["📝 초안", "📦 콘텐츠 팩", "📈 트렌드"],
         ["📊 현황", "📋 대기 큐", "🧵 스레드"],
         ["📰 다이제스트", "📊 주간", "💡 도움말"],
+        ["🔄 한도 초기화"],
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -51,6 +52,7 @@ _KEYBOARD_DISPATCH: dict[str, str] = {
     "📰 다이제스트": "digest",
     "📊 주간":       "report",
     "💡 도움말":     "start",
+    "🔄 한도 초기화": "reset_limit",
 }
 
 # 사용자 상태 키
@@ -335,6 +337,7 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "digest": digest_command,
             "report": report_command,
             "start": start_command,
+            "reset_limit": reset_limit_command,
         }
         handler = handler_map.get(cmd_name)
         if handler:
@@ -676,6 +679,8 @@ async def _handle_quick_callback(query, context: ContextTypes.DEFAULT_TYPE):
         await monitor_command(u, context)
     elif action == "quick_recover":
         await recover_command(u, context)
+    elif action == "quick_reset_limit":
+        await reset_limit_command(u, context)
 
 
 async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):
@@ -962,7 +967,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/queue — 게시 큐\n"
         "/status — 시스템 상태\n"
         "/pending — 대기 초안\n"
-        "/monitor — 멘션 모니터\n\n"
+        "/monitor — 멘션 모니터\n"
+        "/reset_limit — 일일 한도 초기화\n\n"
         "<b>── 분석 ──</b>\n"
         "/digest — 모닝 다이제스트\n"
         "/report — 주간 리포트\n"
@@ -986,6 +992,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📊 오늘 현황",    callback_data="quick_status")],
         [InlineKeyboardButton("👀 모니터 확인",  callback_data="quick_monitor")],
         [InlineKeyboardButton("🛟 복구 점검",    callback_data="quick_recover")],
+        [InlineKeyboardButton("🔄 한도 초기화",  callback_data="quick_reset_limit")],
     ])
     await update.message.reply_text(
         "⚡ <b>오퍼레이터 메뉴</b>\n무엇을 할까요?",
