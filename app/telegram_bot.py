@@ -562,6 +562,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     action, draft_id = parsed
     await _safe_remove_markup(query)
+    await query.answer()  # 콜백 로딩 표시 해제
 
     orchestrator = Orchestrator()
     try:
@@ -570,22 +571,29 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if result.get("success"):
-            if action == "approve" and result.get("hook"):
+            if action == "approve":
                 import html as _html
-                hook = result.get("hook", "")
-                body = result.get("body", "")
-                post_text = f"{hook}\n\n{body}" if body else hook
-                response_text = (
-                    f"✅ <b>승인 완료</b>\n\n"
-                    f"<b>📋 게시용 텍스트:</b>\n"
-                    f"<code>{_html.escape(post_text)}</code>"
-                )
+                hook = result.get("hook", "") or ""
+                body = result.get("body", "") or ""
+                post_text = f"{hook}\n\n{body}".strip() if (hook or body) else ""
+                if post_text:
+                    response_text = (
+                        f"✅ <b>승인 완료</b>\n\n"
+                        f"<b>📋 게시용 텍스트:</b>\n"
+                        f"<code>{_html.escape(post_text)}</code>"
+                    )
+                else:
+                    response_text = f"✅ {result.get('message', '승인 완료')}"
             else:
                 response_text = f"✅ {result.get('message', '완료!')}"
         else:
             response_text = f"⚠️ {result.get('error', '오류 발생')}"
 
-        await query.message.reply_text(response_text, parse_mode="HTML")
+        try:
+            await query.message.reply_text(response_text, parse_mode="HTML")
+        except Exception:
+            # HTML 파싱 실패 시 일반 텍스트로 재시도
+            await query.message.reply_text(response_text.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", ""))
 
     except Exception as e:
         logger.error(f"콜백 처리 오류: {e}", exc_info=True)
