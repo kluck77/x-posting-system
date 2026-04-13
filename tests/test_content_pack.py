@@ -776,3 +776,117 @@ class TestPoliticalAssertionAudit:
         sheet = FactSheet(figures=[])
         _audit_numeric_safety(pack, sheet)
         assert not any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_선언했_flagged(self):
+        pack = ContentPack(
+            main_posts=["트럼프가 봉쇄를 선언했다"],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_불가피_flagged(self):
+        pack = ContentPack(
+            main_posts=["유가 급등은 불가피하다"],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+    def test_직격탄_flagged(self):
+        pack = ContentPack(
+            main_posts=["한국 에너지 안보에 직격탄이 된다"],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("단정 강도" in w for w in pack.style_warnings)
+
+
+class TestConfirmThenHedgeDetection:
+    """확정형+단서 자기모순 안티패턴 탐지 테스트."""
+
+    def test_선언_then_미확인(self):
+        """'선언했다 ... 미확인' 패턴 감지."""
+        pack = ContentPack(
+            main_posts=["봉쇄를 선언했다. 실제 이행 여부는 미확인 상태다."],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("확정+단서 자기모순" in w for w in pack.style_warnings)
+
+    def test_시행_then_확인필요(self):
+        """'시행했다 ... 확인 필요' 패턴 감지."""
+        pack = ContentPack(
+            main_posts=["봉쇄를 시행했다. 다만 확인이 필요하다."],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("확정+단서 자기모순" in w for w in pack.style_warnings)
+
+    def test_불가피_then_변수(self):
+        """'불가피하다 ... 변수가 남' 패턴 감지."""
+        pack = ContentPack(
+            main_posts=["유가 급등은 불가피하다. 다만 변수가 남아있다."],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("확정+단서 자기모순" in w for w in pack.style_warnings)
+
+    def test_safe_phrasing_no_warning(self):
+        """올바른 표현 — 가능성 수준 + 단서 → 경고 없음."""
+        pack = ContentPack(
+            main_posts=["봉쇄 가능성이 부상했다. 실제 시행 여부는 미지수지만 시장은 반응한다."],
+            short_version="", reply_drafts=[], quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert not any("확정+단서 자기모순" in w for w in pack.style_warnings)
+
+    def test_확정형_in_reply_caught(self):
+        """댓글에서도 확정+단서 패턴 감지."""
+        pack = ContentPack(
+            main_posts=["분석글"],
+            short_version="",
+            reply_drafts=["봉쇄를 선언했다. 확인은 필요하다."],
+            quote_post_drafts=[],
+        )
+        sheet = FactSheet(figures=[])
+        _audit_numeric_safety(pack, sheet)
+        assert any("확정+단서 자기모순" in w for w in pack.style_warnings)
+
+
+class TestUnverifiedFactPromptRules:
+    """미확인 사안 확정형 금지 규칙이 프롬프트에 포함되어 있는지."""
+
+    def test_rule_12_exists(self):
+        prompt = _get_system_prompt("ko")
+        assert "미확인 사안 확정형 금지" in prompt
+
+    def test_confirm_then_hedge_banned(self):
+        prompt = _get_system_prompt("ko")
+        assert "확정형으로 먼저 쓰고, 뒤에서 단서로 수습하는 구조" in prompt
+
+    def test_correct_order_specified(self):
+        prompt = _get_system_prompt("ko")
+        assert "가능성/긴장 고조/강경 발언" in prompt
+        assert "확인 필요/이행 여부 미지수" in prompt
+
+    def test_weakening_examples_for_unverified(self):
+        prompt = _get_system_prompt("ko")
+        assert "~을 선언했다 → ~가능성을 시사했다" in prompt
+        assert "불가피하다 → 커질 수 있다" in prompt
+        assert "직격탄이 된다 → 압박이 커질 수 있다" in prompt
+
+    def test_core_principle(self):
+        prompt = _get_system_prompt("ko")
+        assert "미확인 사실 자체는 확정형으로 쓰지 않는다" in prompt
+
+    def test_qa_15_exists(self):
+        prompt = _get_system_prompt("ko")
+        assert "확정+단서 자기모순" in prompt
