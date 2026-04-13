@@ -1525,34 +1525,101 @@ class TestCandidatePromptRules:
 class TestFinalizePromptRules:
     """_FINALIZE_PROMPT_KO 프롬프트 규칙 검증."""
 
-    def test_has_6_golden_rules(self):
-        """골든룰 6개 핵심 키워드가 포함."""
+    def test_hook_single_axis(self):
+        """골든룰 1: 훅 1개 중심축."""
         p = _FINALIZE_PROMPT_KO
-        assert "선택된 훅을 중심축으로 유지" in p
-        assert "certainty_level을 반영" in p
-        assert "파급 경로는 1~2개만" in p
-        assert "280자 이내" in p
-        assert "해석형 마감" in p
-        assert "cautions와 충돌하는 표현을 쓰지 마라" in p
+        assert "훅 1개 = 중심축 1개" in p
+        assert "다른 방향 금지" in p
 
-    def test_certainty_level_mapping(self):
-        """확정/미확인/상충별 표현 수준이 명시."""
+    def test_first_sentence_meaning_first(self):
+        """골든룰 2: 첫 문장은 핵심 의미부터."""
+        p = _FINALIZE_PROMPT_KO
+        assert "핵심 의미부터 시작" in p
+        assert "사실 나열로 시작하지 마라" in p
+
+    def test_impact_path_max_2(self):
+        """골든룰 3: 파급 경로 최대 2개."""
+        p = _FINALIZE_PROMPT_KO
+        assert "파급 경로는 최대 2개" in p
+        assert "3개 이상 나열하면 실패" in p
+
+    def test_certainty_level_downgrade(self):
+        """골든룰 4: 미확인/정치 해석 한 단계 낮춤."""
         p = _FINALIZE_PROMPT_KO
         assert "확정 → 단정형 허용" in p
-        assert "미확인 → " in p
-        assert "상충 → " in p
+        assert "미확인 →" in p
+        assert "상충 →" in p
+        assert "시사했다" in p
+
+    def test_last_sentence_variable(self):
+        """골든룰 5: 마지막 문장은 '지금 봐야 할 변수'."""
+        p = _FINALIZE_PROMPT_KO
+        assert "지금 봐야 할 변수" in p
+
+    def test_bad_endings_banned(self):
+        """교훈형/당위형/뻔한 전망 마감 금지."""
+        p = _FINALIZE_PROMPT_KO
+        assert "영향을 주목해야 할 시점이다" in p  # 금지 예시
+        assert "악영향이 예상된다" in p
+        assert "교훈형 금지" in p
+        assert "당위형 금지" in p
+
+    def test_good_ending_examples(self):
+        """좋은 마감 예시가 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "관건은 이 논쟁이 실제 규제로 이어지느냐다" in p
+        assert "시장은 발언보다 시행 여부를 먼저 본다" in p
+
+    def test_style_rules(self):
+        """문체 규칙: 칼럼 금지, 문장 수 제한."""
+        p = _FINALIZE_PROMPT_KO
+        assert "칼럼·해설문 문체 금지" in p
+        assert "2~4개로 구성" in p
+        assert "5문장 이상이면 실패" in p
+
+    def test_cautions_conflict_rule(self):
+        """골든룰 6: cautions 충돌 금지."""
+        p = _FINALIZE_PROMPT_KO
+        assert "cautions와 충돌하는 표현을 쓰지 마라" in p
 
     def test_only_two_output_fields(self):
         """출력 필드가 2개(final_post, final_short)만."""
         p = _FINALIZE_PROMPT_KO
         assert "final_post" in p
         assert "final_short" in p
-        assert "아래 2개 필드만 생성하라" in p
+        assert "2개 필드만 생성하라" in p
 
-    def test_no_extra_directions(self):
-        """다른 방향으로 빠지지 말라는 지시."""
+    def test_has_good_examples(self):
+        """좋은 마감 예시 3개 포함."""
         p = _FINALIZE_PROMPT_KO
-        assert "다른 방향으로 빠지지 마라" in p
+        assert "반도체 관세" in p  # 예시 A
+        assert "서울 아파트 거래" in p  # 예시 B
+        assert "한은 총재 발언" in p  # 예시 C
+
+    def test_diversity_rule_exists(self):
+        """다양성 규칙 섹션이 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "다양성 규칙" in p
+
+    def test_diversity_start_patterns(self):
+        """시작 패턴 다양화: 질문형, 단정형, 수치형, 대비형."""
+        p = _FINALIZE_PROMPT_KO
+        assert "질문형" in p
+        assert "단정형" in p
+        assert "수치" in p
+        assert "대비형" in p
+
+    def test_diversity_ending_patterns(self):
+        """마무리 다양화: 변수 지목, 조건 제시, 역질문."""
+        p = _FINALIZE_PROMPT_KO
+        assert "변수 지목" in p
+        assert "조건 제시" in p
+        assert "역질문" in p or "전환" in p
+
+    def test_diversity_no_repeat_structure(self):
+        """같은 구조 반복 금지."""
+        p = _FINALIZE_PROMPT_KO
+        assert "구조 자체도 바꿔라" in p
 
 
 class TestSendCandidateCardMessages:
