@@ -32,7 +32,7 @@ DEFAULT_MAX_TELEGRAM_PER_DAY = 5
 DEFAULT_MAX_POSTS_PER_DAY = 3
 
 # 레인별 AI 파이프라인 제한값
-DEFAULT_MAX_AI_DRAFTS_PER_DAY = 20   # AI 파이프라인 총 제한 (Steps 2-6)
+DEFAULT_MAX_AI_DRAFTS_PER_DAY = 50   # AI 파이프라인 총 제한 (Steps 2-6)
 DEFAULT_MANUAL_RESERVED = 5           # 수동 입력 보장 슬롯
 
 # KST timezone — 운영자 기준 '오늘' 달력일
