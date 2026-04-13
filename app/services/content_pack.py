@@ -2164,7 +2164,7 @@ async def _gemini_opinion_card(
             "https://generativelanguage.googleapis.com/v1beta"
             "/models/gemini-2.5-flash:generateContent"
         )
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
                 url,
                 params={"key": settings.gemini_api_key},
