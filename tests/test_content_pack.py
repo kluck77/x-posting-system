@@ -1516,11 +1516,15 @@ class TestCandidatePromptRules:
         ]:
             assert field in p
 
-    def test_hook_direction_examples(self):
-        """훅 후보가 방향 제시형 예시를 포함."""
+    def test_hook_sentence_form_rules(self):
+        """훅 후보가 문장형 강제 규칙을 포함."""
         p = _CANDIDATE_PROMPT_KO
-        assert "호르무즈 리스크" in p
-        assert "방향 제시형" in p
+        assert "hook_candidates 규칙" in p
+        assert "문장형" in p
+        # 금지: 화살표 나열형
+        assert "→" in p and "금지" in p
+        # 필수: 좋은 예시가 문장형
+        assert "오세훈" in p or "호르무즈 봉쇄" in p
 
     def test_no_complete_sentence_instruction(self):
         """완성 문장 금지 지시가 있다."""
@@ -1704,24 +1708,28 @@ class TestFinalizePromptRules:
         assert "상충 →" in p
         assert "시사했다" in p
 
-    def test_last_sentence_variable(self):
-        """골든룰 5: 마지막 문장은 '지금 뭘 봐야 하는가'."""
+    def test_last_sentence_type_enforcement(self):
+        """골든룰 5: 마지막 문장은 조건형/대비형/질문형 중 하나."""
         p = _FINALIZE_PROMPT_KO
-        assert "지금 뭘 봐야 하는가" in p
+        assert "조건형" in p
+        assert "대비형" in p
+        assert "질문형" in p
 
     def test_bad_endings_banned(self):
-        """교훈형/당위형/뻔한 전망 마감 금지."""
+        """전망문/훈계문/뻔한 마감 금지."""
         p = _FINALIZE_PROMPT_KO
         assert "영향을 주목해야 할 시점이다" in p  # 금지 예시
         assert "악영향이 예상된다" in p
         assert "교훈형" in p
-        assert "당위형" in p
+        assert "훈계형" in p
 
     def test_good_ending_examples(self):
-        """좋은 마감 예시가 포함."""
+        """좋은 마감 예시가 포함 (조건형/대비형/질문형)."""
         p = _FINALIZE_PROMPT_KO
-        assert "관건은 이 논쟁이 실제 규제로 이어지느냐다" in p
-        assert "시장은 발언보다 시행 여부를 먼저 본다" in p
+        # 조건형 예시
+        assert "문제는 이 발언이 실제 정책으로 이어지느냐다" in p
+        # 대비형 예시
+        assert "시장은 말보다 규칙 변화를 먼저 본다" in p
 
     def test_style_rules(self):
         """문체 규칙: 칼럼 금지, 문장 수 제한."""
@@ -1763,11 +1771,11 @@ class TestFinalizePromptRules:
         assert "대비형" in p
 
     def test_diversity_ending_patterns(self):
-        """마무리 다양화: 변수 지목, 조건 제시, 역질문."""
+        """마무리 다양화: 조건형, 대비형, 질문형."""
         p = _FINALIZE_PROMPT_KO
-        assert "변수 지목" in p
-        assert "조건 제시" in p
-        assert "역질문" in p or "전환" in p
+        assert "조건형" in p
+        assert "대비형" in p
+        assert "질문형" in p
 
     def test_diversity_no_repeat_structure(self):
         """같은 구조 반복 금지."""
@@ -1813,9 +1821,9 @@ class TestFinalizePromptRules:
     def test_more_banned_endings(self):
         """추가 금지 마감 패턴."""
         p = _FINALIZE_PROMPT_KO
-        assert "향후 추이를 지켜볼 필요가 있다" in p
+        assert "추이를 봐야 한다" in p
         assert "시장에 미칠 여파가 클 것으로 보인다" in p
-        assert "기자 마감 투" in p
+        assert "보고서 투" in p
 
     def test_final_short_examples(self):
         """final_short 독립 예시 포함."""
@@ -1992,7 +2000,7 @@ class TestClaudeReviewCondition:
 
     def test_multiple_weak_patterns(self):
         """여러 뻔한 표현도 감지."""
-        for pat in ["관건은", "변수다", "주목해야 한다"]:
+        for pat in ["핵심은", "변수다", "주목해야 한다"]:
             card = self._make_card()
             draft = self._make_draft(post=f"이번 이슈에서 {pat}")
             assert _should_invoke_claude_review(card, draft) is True, f"'{pat}' 미감지"
@@ -2066,10 +2074,11 @@ class TestWeakPatternsCompleteness:
 
     def test_key_patterns(self):
         flat = " ".join(_WEAK_PATTERNS)
-        assert "관건" in flat
         assert "변수" in flat
         assert "주목" in flat
         assert "추이" in flat
+        assert "핵심은" in flat
+        assert "로 보인다" in flat
 
 
 class TestSensitiveTopicsCompleteness:
@@ -2078,6 +2087,114 @@ class TestSensitiveTopicsCompleteness:
     def test_core_topics(self):
         for t in ["정치", "외교", "안보", "군사", "부동산", "정책"]:
             assert t in _SENSITIVE_TOPICS, f"'{t}' 누락"
+
+
+class TestExpandedBannedEndings:
+    """확장된 _BANNED_ENDINGS 검증."""
+
+    def test_new_patterns_exist(self):
+        """추가된 뻔한 전망문 패턴이 포함."""
+        for pat in ["추이를 봐야 한다", "영향을 미칠 수 있다",
+                     "중요한 시점이다", "여파가 예상된다", "가능성이 커졌다"]:
+            assert pat in _BANNED_ENDINGS, f"'{pat}' 누락"
+
+    def test_validate_catches_new_banned(self):
+        """새로 추가된 금지 패턴이 _validate_final_post에서 감지."""
+        post = "이번 사안의 추이를 봐야 한다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("금지 마감 패턴" in w for w in warnings)
+
+    def test_validate_catches_possibility_grew(self):
+        post = "이번 조치로 인해 가능성이 커졌다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("금지 마감 패턴" in w for w in warnings)
+
+
+class TestWeakPatternValidation:
+    """_validate_final_post에서 뻔한 표현 감지."""
+
+    def test_weak_pattern_warning(self):
+        """본문 내 뻔한 표현이 경고로 기록."""
+        post = "시장에 영향을 미칠 수 있다는 관측이 나온다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("뻔한 표현 감지" in w for w in warnings)
+
+    def test_clean_post_no_weak_warning(self):
+        """깨끗한 글에서는 뻔한 표현 경고 없음."""
+        post = "시장은 발언이 아니라 시행령을 본다."
+        _, _, warnings = _validate_final_post(post, "독립 버전.")
+        assert not any("뻔한 표현 감지" in w for w in warnings)
+
+
+class TestFinalizePromptEndingRules:
+    """_FINALIZE_PROMPT_KO 마지막 문장 유형 강제 규칙 검증."""
+
+    def test_three_ending_types(self):
+        """조건형/대비형/질문형 3가지 유형이 명시."""
+        p = _FINALIZE_PROMPT_KO
+        assert "조건형" in p
+        assert "대비형" in p
+        assert "질문형" in p
+
+    def test_banned_ending_examples_in_prompt(self):
+        """금지 마감 예시가 프롬프트에 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "추이를 봐야 한다" in p
+        assert "영향을 미칠 수 있다" in p
+        assert "가능성이 커졌다" in p
+
+    def test_memo_contamination_rule(self):
+        """내부 메모 오염 금지 규칙이 프롬프트에 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "내부 메모 언어 오염 금지" in p
+        assert "복붙하지 마라" in p
+
+    def test_selfcheck_updated(self):
+        """셀프 체크에 새 항목 포함."""
+        p = _FINALIZE_PROMPT_KO
+        assert "조건형/대비형/질문형" in p
+        assert "뻔한 마감" in p
+
+
+class TestCandidatePromptHookSentenceForm:
+    """_CANDIDATE_PROMPT_KO 훅 후보 문장형 규칙 검증."""
+
+    def test_arrow_notation_banned(self):
+        """화살표(→) 나열 금지가 명시."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "명사형 제목" in p and "금지" in p
+
+    def test_good_hook_examples(self):
+        """좋은 훅 예시가 문장형."""
+        p = _CANDIDATE_PROMPT_KO
+        # 완성된 문장형 예시가 있어야 함
+        assert "오세훈" in p or "서울시장 선거" in p
+        assert "호르무즈 봉쇄 리스크" in p
+
+    def test_bad_hook_examples(self):
+        """나쁜 훅 예시가 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "부동산 지옥 예고" in p
+
+
+class TestClaudeReviewPromptUpdated:
+    """Claude 감수 프롬프트 업데이트 검증."""
+
+    def test_ending_type_guidance(self):
+        """마지막 문장 유형 가이드가 포함."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "조건형" in p or "대비형" in p
+
+    def test_memo_contamination_removal(self):
+        """내부 메모 오염 제거 규칙이 포함."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "내부 메모" in p or "메모 언어" in p
+
+    def test_expanded_weak_patterns(self):
+        """확장된 뻔한 패턴이 포함."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "가능성이 커졌다" in p
+        assert "핵심은" in p
 
 
 class TestSendCandidateCardMessages:
