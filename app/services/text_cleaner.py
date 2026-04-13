@@ -13,6 +13,7 @@ import re
 
 # 단순 치환 대상 (substring → 빈 문자열)
 _JUNK_SUBSTRINGS: list[str] = [
+    # Naver 뉴스
     "본문 바로가기",
     "기사 바로가기",
     "메인 메뉴로 바로가기",
@@ -23,6 +24,14 @@ _JUNK_SUBSTRINGS: list[str] = [
     "이 기사를 추천합니다",
     "좋아요 , , , , ,",
     "이동 통신망을 이용하여",
+    # 앱/랜딩 페이지 UI
+    "메뉴 바로 가기",
+    "메뉴 바로가기",
+    "앱을 통해 만나보세요",
+    "앱에서 보기",
+    "앱에서 만나보세요",
+    "앱 다운로드",
+    "앱으로 보기",
 ]
 
 # 줄 단위 제거 대상 (줄 전체가 이 패턴이면 삭제)
@@ -55,6 +64,29 @@ _JUNK_LINE_RES: list[re.Pattern] = [
     re.compile(r"^\s*기사\s*제공\s*:?\s*"),
     # 추천 반응 행 (좋아요 0 슬퍼요 0 ...)
     re.compile(r"^\s*(좋아요|슬퍼요|화나요|후속기사)\s*\d*\s*$"),
+    # 앱/웹 공통 UI 단독 행
+    re.compile(r"^\s*로그인\s*$"),
+    re.compile(r"^\s*회원가입\s*$"),
+    re.compile(r"^\s*프리미엄\s*$"),
+    re.compile(r"^\s*멤버십\s*$"),
+    re.compile(r"^\s*방송\s*멤버십\s*$"),
+    re.compile(r"^\s*보관함\s*$"),
+    re.compile(r"^\s*테마\s*모드\s*$"),
+    re.compile(r"^\s*설정\s*$"),
+    re.compile(r"^\s*검색\s*$"),
+    re.compile(r"^\s*마이페이지\s*$"),
+    re.compile(r"^\s*알림\s*$"),
+    re.compile(r"^\s*공유하기\s*$"),
+    re.compile(r"^\s*댓글\s*\d*\s*$"),
+    re.compile(r"^\s*목록\s*$"),
+    re.compile(r"^\s*관련\s*(기사|뉴스|글)\s*$"),
+    re.compile(r"^\s*광고\s*$"),
+    re.compile(r"^\s*AD\s*$", re.IGNORECASE),
+    re.compile(r"^\s*LIVE\s*$", re.IGNORECASE),
+    re.compile(r"^\s*HOME\s*$", re.IGNORECASE),
+    # App Store / Play 스토어
+    re.compile(r"^\s*(App Store|Google Play|Play 스토어)", re.IGNORECASE),
+    re.compile(r"^\s*다운로드\s*$"),
 ]
 
 _MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
@@ -88,6 +120,52 @@ def clean_article_text(text: str) -> str:
     text = _MULTI_SPACE_RE.sub(" ", text)
 
     return text.strip()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# A-2. 콘텐츠 밀도 체크 — 기사형 vs 앱/랜딩 페이지 판별
+# ─────────────────────────────────────────────────────────────────────
+
+# 기사가 아닌 페이지에서 자주 등장하는 UI/메뉴 키워드
+_NON_ARTICLE_SIGNALS: list[str] = [
+    "로그인", "회원가입", "앱 다운로드", "앱에서 보기", "앱으로 보기",
+    "프리미엄", "멤버십", "마이페이지", "고객센터", "이용약관",
+    "개인정보", "보관함", "구독", "무료체험", "App Store", "Google Play",
+    "테마 모드", "다크 모드", "알림 설정", "방송 멤버십",
+]
+
+# 최소 기사 문장 길이 (정제 후)
+_MIN_ARTICLE_CHARS = 150
+_MIN_ARTICLE_SENTENCES = 2
+
+
+def is_article_like(text: str) -> bool:
+    """정제된 텍스트가 기사 본문으로 충분한 밀도를 가지는지 판별한다.
+
+    Returns:
+        True  → 기사형 본문 (게시글 생성 가능)
+        False → 앱/랜딩/허브 페이지 (생성 차단 권장)
+    """
+    if not text:
+        return False
+
+    cleaned = clean_article_text(text)
+    if len(cleaned) < _MIN_ARTICLE_CHARS:
+        return False
+
+    # 문장 수 체크 (마침표/물음표/느낌표 기준)
+    sentences = re.split(r"[.?!。]\s+", cleaned)
+    meaningful = [s for s in sentences if len(s.strip()) > 10]
+    if len(meaningful) < _MIN_ARTICLE_SENTENCES:
+        return False
+
+    # UI 신호 밀도 — 비기사 키워드가 전체 텍스트 대비 많으면 기사 아님
+    signal_count = sum(1 for kw in _NON_ARTICLE_SIGNALS if kw in text)
+    # 원본 text 기준 (정제 전) — UI 키워드 3개 이상이면 의심
+    if signal_count >= 3 and len(cleaned) < 500:
+        return False
+
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────────

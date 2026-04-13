@@ -262,14 +262,16 @@ async def fetch_url_content(url: str) -> dict:
     """
     URL에서 기사 제목과 본문 텍스트를 가져옵니다.
     3단계 fallback 전략으로 404/403 자동 우회.
+    수집 후 UI 잡문 정제 + 기사 밀도 체크까지 수행.
 
     Returns:
         {
             "title": str,
-            "text": str,
+            "text": str,           # 정제된 텍스트
             "url": str,
             "source": "direct"|"jina"|"google_cache"|"failed",
             "error": str | None,
+            "low_quality": bool,   # True → 앱/랜딩/허브 페이지 (기사 아님)
         }
     """
     logger.info(f"URL 수집 시작: {url[:80]}")
@@ -277,19 +279,19 @@ async def fetch_url_content(url: str) -> dict:
     # 전략 1: 직접 요청
     result = await _fetch_direct(url)
     if result:
-        return result
+        return _postprocess(result)
 
     # 전략 2: Jina AI Reader
     logger.info(f"Jina AI Reader로 재시도: {url[:60]}")
     result = await _fetch_jina(url)
     if result:
-        return result
+        return _postprocess(result)
 
     # 전략 3: Google Cache
     logger.info(f"Google Cache로 재시도: {url[:60]}")
     result = await _fetch_google_cache(url)
     if result:
-        return result
+        return _postprocess(result)
 
     # 모두 실패
     logger.warning(f"URL 수집 전략 모두 실패: {url[:80]}")
@@ -299,4 +301,24 @@ async def fetch_url_content(url: str) -> dict:
         "url": url,
         "source": "failed",
         "error": "모든 수집 전략 실패 (직접 접근 / Jina / Google Cache). 기사 텍스트를 직접 붙여넣어 주세요.",
+        "low_quality": False,
     }
+
+
+def _postprocess(result: dict) -> dict:
+    """수집 결과에 UI 잡문 정제 + 기사 밀도 체크를 적용한다."""
+    try:
+        from app.services.text_cleaner import clean_article_text, is_article_like
+        raw_text = result.get("text", "")
+        cleaned = clean_article_text(raw_text)
+        result["text"] = cleaned
+        result["low_quality"] = not is_article_like(raw_text)
+        if result["low_quality"]:
+            logger.info(
+                f"[밀도 체크 ✗] 기사형 아님: '{result.get('title', '')[:50]}' "
+                f"(정제 후 {len(cleaned)}자)"
+            )
+    except Exception as e:
+        logger.debug(f"postprocess fail-open: {e}")
+        result["low_quality"] = False
+    return result

@@ -273,6 +273,21 @@ async def url_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    # 밀도 체크 — 앱/랜딩/허브 페이지는 게시글 생성 차단
+    if result.get("low_quality"):
+        await status_msg.edit_text(
+            "⚠️ <b>원문 링크가 아닌 것 같습니다</b>\n\n"
+            f"📄 <b>{result['title'][:120]}</b>\n\n"
+            "이 URL은 뉴스 기사가 아니라\n"
+            "앱 랜딩 / 콘텐츠 허브 / 메뉴 페이지로 판단됩니다.\n"
+            "(본문 밀도가 낮고 UI 요소가 많음)\n\n"
+            "📋 <b>해결 방법:</b>\n"
+            "① 기사 원문 URL을 직접 보내주세요\n"
+            "② 또는 기사 본문 텍스트를 복사해서 붙여넣어 주세요",
+            parse_mode="HTML",
+        )
+        return
+
     if source_label and source_label != "직접 수집":
         await status_msg.edit_text(f"🔍 기사 분석 중... ({source_label}로 수집)")
 
