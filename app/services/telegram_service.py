@@ -705,12 +705,21 @@ def send_candidate_card_messages(card) -> list[dict]:
                 if any(p in combined for p in _spec_patterns):
                     spec_badge = "\n⚠️ <i>추정 해석 주의 (미검증 기사)</i>"
 
+            # 판단 좌표 + 판별 신호 (있을 때만 표시)
+            coord_line = ""
+            signal_line = ""
+            if getattr(tc, "judgment_coord", ""):
+                coord_line = f"\n🧭 <b>판단 좌표:</b> {tc.judgment_coord}"
+            if getattr(tc, "verification_signal", ""):
+                signal_line = f"\n🔍 <b>판별 신호:</b> {tc.verification_signal}"
+
             text = (
                 f"🎯 <b>{slot_name}</b>\n\n"
                 f"<b>해석:</b> {tc.thesis}\n"
                 f"<b>긴장점:</b> {tc.why_not_summary}\n"
                 f"<b>독자 영향:</b> {tc.reader_stake}\n"
                 f"<b>첫 문장 초안:</b> <code>{tc.opener}</code>"
+                f"{coord_line}{signal_line}"
                 f"{spec_badge}"
             )
             messages.append({"text": text, "hook_index": i})

@@ -1705,11 +1705,12 @@ class TestFinalizePromptRules:
         assert "슬롯 조립 담당" in p
 
     def test_three_sentence_structure(self):
-        """문장 조립 구조: 변화/팩트/검증."""
+        """문장 조립 구조: 변화/팩트/판단좌표/판별신호."""
         p = _FINALIZE_PROMPT_KO
         assert "변화 또는 긴장점" in p
         assert "팩트 근거" in p
-        assert "외부 검증 신호" in p
+        assert "판단 좌표" in p
+        assert "판별 신호" in p
 
     def test_banned_endings_in_prompt(self):
         """금지 마감 패턴 포함."""
@@ -2083,7 +2084,7 @@ class TestFinalizePromptEndingRules:
         """셀프 체크 섹션."""
         p = _FINALIZE_PROMPT_KO
         assert "셀프 체크" in p
-        assert "외부 검증 신호" in p
+        assert "판별 신호" in p
 
 
 class TestGeminiThesisPromptRules:
@@ -2564,7 +2565,8 @@ class TestClaudeAlwaysOnIntegrator:
         p = _CLAUDE_REVIEW_PROMPT
         assert "변화 또는 긴장점" in p
         assert "팩트 근거" in p
-        assert "외부 검증 신호" in p
+        assert "판단 좌표" in p
+        assert "판별 신호" in p
 
     def test_prompt_passthrough_when_good(self):
         """초안이 좋으면 그대로 반환 가능."""
@@ -3037,14 +3039,17 @@ class TestGrokEvalCard:
         assert "복붙" in card.problem
 
     def test_valid_fail_tags_constant(self):
-        """_GROK_VALID_FAIL_TAGS에 11개 태그 존재."""
-        assert len(_GROK_VALID_FAIL_TAGS) == 11
+        """_GROK_VALID_FAIL_TAGS에 17개 태그 존재 (영어 11 + 한국어 6)."""
+        assert len(_GROK_VALID_FAIL_TAGS) == 17
         expected = {
             "SAME_THESIS", "PRESS_RELEASE_TONE", "POLICY_MEMO_TONE",
             "COLUMN_ENDING", "NO_READER_STAKE", "GENERIC_SKEPTICISM",
             "HEADLINE_RESTATEMENT",
             "SPECULATIVE_MOTIVE", "DEAD_ENDING",
             "LOW_CONFIDENCE_OVERREACH", "ABSTRACT_WRAPUP",
+            # 한국어 fail_tags
+            "기사재서술", "평균문", "판단좌표없음",
+            "죽은마감", "저신뢰과해석", "슬롯기능중복",
         }
         assert _GROK_VALID_FAIL_TAGS == expected
 
@@ -3626,9 +3631,9 @@ class TestExternalVerificationSignalRule:
         """마감 프롬프트에 IMPLEMENTATION_CHECK가 있음."""
         assert "IMPLEMENTATION_CHECK" in _FINALIZE_PROMPT_KO
 
-    def test_claude_has_external_signal_rule(self):
-        """Claude 프롬프트에 외부 검증 신호 규칙이 있음."""
-        assert "외부 검증 신호" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_has_verification_signal_rule(self):
+        """Claude 프롬프트에 판별 신호 규칙이 있음."""
+        assert "판별 신호" in _CLAUDE_REVIEW_PROMPT
 
     def test_finalize_bans_dead_ending_explicitly(self):
         """마감 프롬프트에 '봐야 한다'만 말하면 실패 규칙."""
@@ -3689,3 +3694,65 @@ class TestNewBannedEndingsFromScreenshot:
     def test_core_is_banned(self):
         """'핵심이다' 패턴 금지."""
         assert "핵심이다" in _BANNED_ENDINGS
+
+
+class TestJudgmentCoordAndVerificationSignal:
+    """판단 좌표(judgment_coord) + 판별 신호(verification_signal) 필드 검증."""
+
+    def test_thesis_card_has_judgment_coord_field(self):
+        """ThesisCard에 judgment_coord 필드 존재."""
+        tc = ThesisCard()
+        assert hasattr(tc, "judgment_coord")
+        assert tc.judgment_coord == ""
+
+    def test_thesis_card_has_verification_signal_field(self):
+        """ThesisCard에 verification_signal 필드 존재."""
+        tc = ThesisCard()
+        assert hasattr(tc, "verification_signal")
+        assert tc.verification_signal == ""
+
+    def test_thesis_card_stores_values(self):
+        """ThesisCard에 판단 좌표/판별 신호 값 저장."""
+        tc = ThesisCard(
+            thesis="테스트",
+            judgment_coord="배제 범위가 직급인지 직무인지가 핵심",
+            verification_signal="다음 주 인사발령에서 확인 가능",
+        )
+        assert tc.judgment_coord == "배제 범위가 직급인지 직무인지가 핵심"
+        assert tc.verification_signal == "다음 주 인사발령에서 확인 가능"
+
+    def test_gemini_prompt_has_judgment_coord(self):
+        """Gemini 프롬프트에 판단 좌표 규칙 존재."""
+        assert "judgment_coord" in _GEMINI_THESIS_PROMPT
+        assert "판단 좌표" in _GEMINI_THESIS_PROMPT
+
+    def test_gemini_prompt_has_verification_signal(self):
+        """Gemini 프롬프트에 판별 신호 규칙 존재."""
+        assert "verification_signal" in _GEMINI_THESIS_PROMPT
+        assert "판별 신호" in _GEMINI_THESIS_PROMPT
+
+    def test_finalize_prompt_has_judgment_coord(self):
+        """마감 프롬프트에 판단 좌표 조립 구조 존재."""
+        assert "판단 좌표" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_prompt_has_verification_signal(self):
+        """마감 프롬프트에 판별 신호 조립 구조 존재."""
+        assert "판별 신호" in _FINALIZE_PROMPT_KO
+
+    def test_claude_prompt_has_judgment_coord(self):
+        """Claude 프롬프트에 판단 좌표 교정 규칙 존재."""
+        assert "판단 좌표" in _CLAUDE_REVIEW_PROMPT
+
+    def test_grok_prompt_has_korean_fail_tags(self):
+        """Grok 프롬프트에 한국어 fail_tags 존재."""
+        assert "기사재서술" in _GROK_EVAL_PROMPT
+        assert "평균문" in _GROK_EVAL_PROMPT
+        assert "판단좌표없음" in _GROK_EVAL_PROMPT
+        assert "죽은마감" in _GROK_EVAL_PROMPT
+        assert "저신뢰과해석" in _GROK_EVAL_PROMPT
+        assert "슬롯기능중복" in _GROK_EVAL_PROMPT
+
+    def test_korean_fail_tags_in_valid_set(self):
+        """한국어 fail_tags가 유효 목록에 포함."""
+        korean_tags = {"기사재서술", "평균문", "판단좌표없음", "죽은마감", "저신뢰과해석", "슬롯기능중복"}
+        assert korean_tags.issubset(_GROK_VALID_FAIL_TAGS)
