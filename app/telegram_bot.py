@@ -640,6 +640,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_thesis_select_callback(query, context)
         return
 
+    # --- 슬롯 상세보기 콜백 ---
+    if callback_data.startswith("slot_detail:"):
+        await _handle_slot_detail_callback(query, context)
+        return
+
     # --- 콘텐츠 팩 선택 콜백 ---
     if callback_data.startswith("pack_select:"):
         await _handle_pack_select_callback(query, context)
@@ -1555,13 +1560,15 @@ async def _run_candidate_card(
             thesis_index = cm.get("hook_index")
 
             if thesis_index is not None:
-                _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
-                slot_name = _slot_names[thesis_index] if thesis_index < 3 else f"슬롯 {thesis_index + 1}"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
-                        f"✏️ {slot_name} → 마감",
+                        "✏️ 선택",
                         callback_data=f"thesis_select:{thesis_index}",
-                    )
+                    ),
+                    InlineKeyboardButton(
+                        "📖 자세히",
+                        callback_data=f"slot_detail:{thesis_index}",
+                    ),
                 ]])
                 await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
             else:
@@ -1578,6 +1585,32 @@ async def _run_candidate_card(
         await msg.edit_text(f"❌ 후보 카드 생성 실패: {_safe_error_msg(e)}")
     finally:
         context.user_data.pop("_generating", None)
+
+
+async def _handle_slot_detail_callback(
+    query, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """slot_detail:{index} 콜백 — 슬롯 상세 정보 표시."""
+    from app.services.telegram_service import format_slot_detail
+
+    data = query.data  # slot_detail:0
+    parts = data.split(":", 1)
+    if len(parts) != 2:
+        return
+
+    try:
+        slot_index = int(parts[1])
+    except ValueError:
+        return
+
+    card = context.user_data.get(CANDIDATE_CARD_KEY)
+    if not card:
+        await query.answer("세션 만료", show_alert=True)
+        return
+
+    detail_text = format_slot_detail(card, slot_index)
+    await query.message.reply_text(detail_text, parse_mode="HTML")
+    await query.answer()
 
 
 async def _handle_thesis_select_callback(
@@ -1650,20 +1683,16 @@ async def _handle_thesis_select_callback(
         clear_progress_callback()
         await msg.delete()
 
-        # ── 최종 결과: 선택된 논지 컨텍스트 + 완성본 ──
+        # ── 최종 결과: 압축형 ──
         if selected_thesis:
-            thesis_block = (
-                f"🎯 <b>선택된 {thesis_label_short}</b>\n"
-                f"<b>해석 축:</b> {selected_thesis.thesis}\n"
-                f"<b>독자 이해관계:</b> {selected_thesis.reader_stake}\n"
-            )
+            thesis_line = f"🎯 {thesis_label_short}: {selected_thesis.thesis[:80]}"
         else:
             selected_hook = card.hook_candidates[thesis_index] if thesis_index < len(card.hook_candidates) else "?"
-            thesis_block = f"📌 <b>훅:</b> {selected_hook}\n"
+            thesis_line = f"📌 {selected_hook[:80]}"
 
         result_text = (
             f"✅ <b>최종 마감 완료</b>\n\n"
-            f"{thesis_block}"
+            f"{thesis_line}\n"
             f"{'─' * 28}\n\n"
             f"📝 <b>게시글</b> ({len(result.final_post)}자)\n"
             f"<code>{result.final_post}</code>\n\n"

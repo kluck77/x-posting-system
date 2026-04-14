@@ -660,33 +660,23 @@ def send_candidate_card_messages(card) -> list[dict]:
     """
     messages: list[dict] = []
 
-    # ── 1. 개요 카드 ──
+    # ── 1. 개요 카드 (압축형) ──
     certainty_icon = {"확정": "✅", "미확인": "⚠️", "상충": "🔀"}.get(
         card.certainty_level, "❓"
     )
-    overview_lines = [
-        "📋 <b>후보 카드 생성 완료</b>\n",
-        f"{certainty_icon} <b>확정 수준:</b> {card.certainty_level}\n",
-    ]
+    overview_parts = [f"📋 <b>후보 카드</b>  {certainty_icon} {card.certainty_level}"]
 
     if card.topic_tags:
         tags = " ".join(f"#{t}" for t in card.topic_tags)
-        overview_lines.append(f"🏷 {tags}\n")
+        overview_parts.append(f"🏷 {tags}")
 
     if card.risk_flags:
-        flags = "\n".join(f"  • {f}" for f in card.risk_flags)
-        overview_lines.append(f"⚠️ <b>위험 신호</b>\n{flags}\n")
+        flags = " / ".join(card.risk_flags)
+        overview_parts.append(f"⚠️ {flags}")
 
-    messages.append({"text": "\n".join(overview_lines), "hook_index": None})
+    messages.append({"text": "\n".join(overview_parts), "hook_index": None})
 
-    # ── 2. 핵심 팩트 ──
-    if card.key_facts:
-        facts_text = "📌 <b>핵심 팩트</b>\n\n"
-        for i, fact in enumerate(card.key_facts, 1):
-            facts_text += f"  {i}. {fact}\n"
-        messages.append({"text": facts_text.strip(), "hook_index": None})
-
-    # ── 3. 해석 슬롯 × 3 (선택 버튼 있음) ──
+    # ── 2. 해석 슬롯 × 3 (압축형 — 선택 버튼 있음) ──
     _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
     _is_low_confidence = card.certainty_level in ("미확인", "상충")
 
@@ -703,55 +693,59 @@ def send_candidate_card_messages(card) -> list[dict]:
                 ]
                 combined = f"{tc.thesis} {tc.opener}"
                 if any(p in combined for p in _spec_patterns):
-                    spec_badge = "\n⚠️ <i>추정 해석 주의 (미검증 기사)</i>"
+                    spec_badge = "\n⚠️ <i>추정 해석 주의</i>"
 
-            # 판단 좌표 + 판별 신호 (있을 때만 표시)
-            coord_line = ""
-            signal_line = ""
+            # 압축형: 슬롯명 + 해석 + 판단좌표 + 판별신호 (4줄)
+            lines = [f"🎯 <b>{slot_name}</b>"]
+            lines.append(f"  {tc.thesis}")
             if getattr(tc, "judgment_coord", ""):
-                coord_line = f"\n🧭 <b>판단 좌표:</b> {tc.judgment_coord}"
+                lines.append(f"🧭 {tc.judgment_coord}")
             if getattr(tc, "verification_signal", ""):
-                signal_line = f"\n🔍 <b>판별 신호:</b> {tc.verification_signal}"
+                lines.append(f"🔍 {tc.verification_signal}")
+            if spec_badge:
+                lines.append(spec_badge)
 
-            text = (
-                f"🎯 <b>{slot_name}</b>\n\n"
-                f"<b>해석:</b> {tc.thesis}\n"
-                f"<b>긴장점:</b> {tc.why_not_summary}\n"
-                f"<b>독자 영향:</b> {tc.reader_stake}\n"
-                f"<b>첫 문장 초안:</b> <code>{tc.opener}</code>"
-                f"{coord_line}{signal_line}"
-                f"{spec_badge}"
-            )
+            text = "\n".join(lines)
             messages.append({"text": text, "hook_index": i})
     else:
         # 하위호환: thesis_cards 없으면 기존 hook_candidates 사용
         for i, hook in enumerate(card.hook_candidates[:3]):
             slot_name = _slot_names[i] if i < 3 else f"슬롯 {i + 1}"
-            text = f"🎯 <b>{slot_name}</b>\n\n<code>{hook}</code>"
+            text = f"🎯 <b>{slot_name}</b>\n  {hook}"
             messages.append({"text": text, "hook_index": i})
 
-    # ── 4. 한줄 결론 ──
-    if card.one_liner:
-        liner_text = "💡 <b>한줄 결론</b>\n\n"
-        for j, ol in enumerate(card.one_liner, 1):
-            liner_text += f"  {j}. {ol}\n"
-        messages.append({"text": liner_text.strip(), "hook_index": None})
-
-    # ── 5. 주의문 ──
-    if card.cautions:
-        caution_text = "🚨 <b>주의문</b>\n\n"
-        for c in card.cautions:
-            caution_text += f"  • {c}\n"
-        messages.append({"text": caution_text.strip(), "hook_index": None})
-
-    # ── 6. 관찰 포인트 ──
-    if card.watch_points:
-        watch_text = "👀 <b>지금 봐야 할 포인트</b>\n\n"
-        for wp in card.watch_points:
-            watch_text += f"  • {wp}\n"
-        messages.append({"text": watch_text.strip(), "hook_index": None})
-
     return messages
+
+
+def format_slot_detail(card, slot_index: int) -> str:
+    """슬롯 상세 정보를 포맷합니다. '자세히' 버튼 콜백용."""
+    _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
+    if slot_index >= len(card.thesis_cards):
+        return "⚠️ 슬롯 정보 없음"
+
+    tc = card.thesis_cards[slot_index]
+    slot_name = _slot_names[slot_index] if slot_index < 3 else f"슬롯 {slot_index + 1}"
+
+    lines = [f"📖 <b>{slot_name} — 상세</b>\n"]
+    lines.append(f"<b>해석:</b> {tc.thesis}")
+    if tc.why_not_summary:
+        lines.append(f"<b>긴장점:</b> {tc.why_not_summary}")
+    if tc.reader_stake:
+        lines.append(f"<b>독자 영향:</b> {tc.reader_stake}")
+    if tc.opener:
+        lines.append(f"<b>첫 문장 초안:</b> <code>{tc.opener}</code>")
+    if getattr(tc, "judgment_coord", ""):
+        lines.append(f"🧭 <b>판단 좌표:</b> {tc.judgment_coord}")
+    if getattr(tc, "verification_signal", ""):
+        lines.append(f"🔍 <b>판별 신호:</b> {tc.verification_signal}")
+
+    # 팩트 참고
+    if card.key_facts:
+        lines.append("\n📌 <b>핵심 팩트</b>")
+        for j, fact in enumerate(card.key_facts[:3], 1):
+            lines.append(f"  {j}. {fact}")
+
+    return "\n".join(lines)
 
 
 def parse_callback_data(callback_data: str) -> tuple[str, int] | None:

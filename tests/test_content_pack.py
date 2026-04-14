@@ -2241,7 +2241,7 @@ class TestSendCandidateCardMessages:
         msgs = send_candidate_card_messages(self._make_card())
         first = msgs[0]
         assert first["hook_index"] is None
-        assert "후보 카드 생성 완료" in first["text"]
+        assert "후보 카드" in first["text"]
         assert "미확인" in first["text"]
 
     def test_certainty_icons(self):
@@ -2275,34 +2275,40 @@ class TestSendCandidateCardMessages:
         assert "왜 뉴스 이상이냐" in hook_msgs[1]["text"]
         assert "다음 판가름" in hook_msgs[2]["text"]
 
-    def test_key_facts_section(self):
-        """핵심 팩트 섹션이 포함."""
+    def test_compact_card_no_facts_in_main(self):
+        """압축형: 기본 카드에 핵심 팩트/한줄 결론/주의문/관찰 포인트 미포함."""
         from app.services.telegram_service import send_candidate_card_messages
         msgs = send_candidate_card_messages(self._make_card())
-        facts_msg = [m for m in msgs if "핵심 팩트" in m["text"]]
-        assert len(facts_msg) == 1
-        assert "팩트1" in facts_msg[0]["text"]
+        all_text = " ".join(m["text"] for m in msgs)
+        assert "핵심 팩트" not in all_text
+        assert "한줄 결론" not in all_text
+        assert "주의문" not in all_text
+        assert "지금 봐야 할 포인트" not in all_text
 
-    def test_one_liner_section(self):
-        """한줄 결론 섹션이 포함."""
+    def test_compact_card_count(self):
+        """압축형: 개요 1개 + 슬롯 3개 = 4개 메시지."""
         from app.services.telegram_service import send_candidate_card_messages
         msgs = send_candidate_card_messages(self._make_card())
-        liner_msg = [m for m in msgs if "한줄 결론" in m["text"]]
-        assert len(liner_msg) == 1
+        assert len(msgs) == 4  # 개요 + 슬롯 3개
 
-    def test_cautions_section(self):
-        """주의문 섹션이 포함."""
-        from app.services.telegram_service import send_candidate_card_messages
-        msgs = send_candidate_card_messages(self._make_card())
-        caution_msg = [m for m in msgs if "주의문" in m["text"]]
-        assert len(caution_msg) == 1
-
-    def test_watch_points_section(self):
-        """관찰 포인트 섹션이 포함."""
-        from app.services.telegram_service import send_candidate_card_messages
-        msgs = send_candidate_card_messages(self._make_card())
-        watch_msg = [m for m in msgs if "지금 봐야 할 포인트" in m["text"]]
-        assert len(watch_msg) == 1
+    def test_slot_detail_has_full_info(self):
+        """상세보기에 긴장점/독자영향/초안 포함."""
+        from app.services.telegram_service import format_slot_detail
+        card = self._make_card()
+        card.thesis_cards = [ThesisCard(
+            thesis="테스트 해석",
+            why_not_summary="테스트 긴장점",
+            reader_stake="테스트 독자 영향",
+            opener="테스트 초안",
+            judgment_coord="테스트 좌표",
+            verification_signal="테스트 신호",
+        )]
+        detail = format_slot_detail(card, 0)
+        assert "테스트 긴장점" in detail
+        assert "테스트 독자 영향" in detail
+        assert "테스트 초안" in detail
+        assert "테스트 좌표" in detail
+        assert "테스트 신호" in detail
 
     def test_tags_in_overview(self):
         """태그가 개요에 포함."""
