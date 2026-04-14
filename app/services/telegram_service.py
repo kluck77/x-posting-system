@@ -394,7 +394,7 @@ async def _translate_to_korean(text: str) -> str | None:
     try:
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-2.0-flash-lite:generateContent?key={settings.gemini_api_key}"
+            f"gemini-1.5-flash:generateContent?key={settings.gemini_api_key}"
         )
         prompt = (
             "Translate the following English X/Twitter post into natural, concise Korean. "
@@ -417,7 +417,7 @@ async def _translate_to_korean(text: str) -> str | None:
             data = r.json()
             usage_meta = data.get("usageMetadata", {})
             logger.info(
-                f"[API-COST] gemini gemini-2.0-flash-lite "
+                f"[API-COST] gemini gemini-1.5-flash "
                 f"in={usage_meta.get('promptTokenCount', '?')} "
                 f"out={usage_meta.get('candidatesTokenCount', '?')} "
                 f"think={usage_meta.get('thoughtsTokenCount', 0)} "
@@ -425,7 +425,7 @@ async def _translate_to_korean(text: str) -> str | None:
             )
             try:
                 from app.services.api_cost_tracker import record_usage
-                record_usage("gemini", "gemini-2.0-flash-lite", "Translate",
+                record_usage("gemini", "gemini-1.5-flash", "Translate",
                              usage_meta.get("promptTokenCount", 0),
                              usage_meta.get("candidatesTokenCount", 0))
             except Exception:
