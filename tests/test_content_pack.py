@@ -2898,3 +2898,123 @@ class TestAntiReportToneInFinalize:
         """'한 문장으로 좁혀라' 규칙 존재."""
         p = _FINALIZE_PROMPT_KO
         assert "한 문장으로 좁혀라" in p
+
+
+class TestColumnStructureBan:
+    """칼럼/사설 구조 금지 규칙 검증."""
+
+    # ── _FINALIZE_PROMPT_KO 검증 ──
+
+    def test_finalize_has_column_ban_section(self):
+        """마감 프롬프트에 칼럼/사설 구조 금지 섹션이 존재."""
+        assert "칼럼/사설 구조 금지" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_bans_moonjeneun(self):
+        """'문제는 ~것이다' 금지 패턴이 마감 프롬프트에 존재."""
+        assert "문제는 ~것이다" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_bans_haeksimida(self):
+        """'핵심이다' 금지 패턴이 마감 프롬프트에 존재."""
+        assert "핵심이다" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_bans_bonjileun(self):
+        """'본질은 ~' 금지 패턴이 마감 프롬프트에 존재."""
+        assert "본질은 ~" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_has_alternative_example(self):
+        """조건형/대비형 대안 예시가 존재."""
+        assert "갈림길은 시행 시점이다" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_selfcheck_has_column_ban(self):
+        """셀프 체크 항목에 칼럼/사설 구조 체크가 존재."""
+        assert "칼럼/사설 구조가 없는가" in _FINALIZE_PROMPT_KO
+
+    # ── _CLAUDE_REVIEW_PROMPT 검증 ──
+
+    def test_claude_has_column_ban_section(self):
+        """Claude 프롬프트에 칼럼/사설 구조 금지 섹션이 존재."""
+        assert "칼럼/사설 구조 금지" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_bans_moonjeneun(self):
+        """Claude 프롬프트에 '문제는 ~것이다' 금지."""
+        assert "문제는 ~것이다" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_bans_haeksimida(self):
+        """Claude 프롬프트에 '핵심이다' 금지."""
+        assert "핵심이다" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_rewrite_criterion_column(self):
+        """Claude 리라이트 판정 기준에 칼럼 구조 조건이 포함."""
+        assert "칼럼/사설 구조" in _CLAUDE_REVIEW_PROMPT
+
+    # ── _WEAK_PATTERNS 검증 ──
+
+    def test_weak_patterns_has_moonjeneun(self):
+        """'문제는'이 _WEAK_PATTERNS에 포함."""
+        assert "문제는" in _WEAK_PATTERNS
+
+    def test_validate_catches_moonjeneun(self):
+        """'문제는' 패턴이 validation에서 감지."""
+        post = "문제는 기업들의 대응 속도가 느리다는 것이다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("뻔한 표현" in w for w in warnings)
+
+
+class TestAntiContradictionRule:
+    """반증 금지 규칙 검증."""
+
+    # ── _FINALIZE_PROMPT_KO 검증 ──
+
+    def test_finalize_has_anti_contradiction_section(self):
+        """마감 프롬프트에 반증 금지 섹션이 존재."""
+        assert "반증 금지" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_has_contradiction_example(self):
+        """'준비가 안 돼 있다' 반증 예시가 존재."""
+        assert "준비 안 됐다" in _FINALIZE_PROMPT_KO or "준비가 안 돼 있다" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_has_factual_acknowledgment_rule(self):
+        """사실 인정 후 좁히기 규칙이 존재."""
+        assert "사실을 인정한 뒤 좁혀라" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_selfcheck_has_contradiction(self):
+        """셀프 체크 항목에 반증 체크가 존재."""
+        assert "모순되는 단정" in _FINALIZE_PROMPT_KO
+
+    # ── _CLAUDE_REVIEW_PROMPT 검증 ──
+
+    def test_claude_has_anti_contradiction_section(self):
+        """Claude 프롬프트에 반증 금지 섹션이 존재."""
+        assert "반증 금지" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_rewrite_criterion_contradiction(self):
+        """Claude 리라이트 판정 기준에 반증 조건이 포함."""
+        assert "모순되는 단정" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_has_speed_alternative(self):
+        """Claude 프롬프트에 속도 관건 대안이 존재."""
+        assert "속도가 관건" in _CLAUDE_REVIEW_PROMPT
+
+
+class TestColumnAndContradictionSync:
+    """_FINALIZE_PROMPT_KO와 _CLAUDE_REVIEW_PROMPT 간 규칙 동기화 검증."""
+
+    def test_both_ban_moonjeneun_pattern(self):
+        """양쪽 모두 '문제는 ~것이다' 금지."""
+        assert "문제는 ~것이다" in _FINALIZE_PROMPT_KO
+        assert "문제는 ~것이다" in _CLAUDE_REVIEW_PROMPT
+
+    def test_both_ban_haeksimida(self):
+        """양쪽 모두 '핵심이다' 금지."""
+        assert "핵심이다" in _FINALIZE_PROMPT_KO
+        assert "핵심이다" in _CLAUDE_REVIEW_PROMPT
+
+    def test_both_have_anti_contradiction(self):
+        """양쪽 모두 반증 금지 규칙 보유."""
+        assert "반증 금지" in _FINALIZE_PROMPT_KO
+        assert "반증 금지" in _CLAUDE_REVIEW_PROMPT
+
+    def test_both_have_column_ban(self):
+        """양쪽 모두 칼럼/사설 구조 금지 섹션 보유."""
+        assert "칼럼/사설 구조 금지" in _FINALIZE_PROMPT_KO
+        assert "칼럼/사설 구조 금지" in _CLAUDE_REVIEW_PROMPT
