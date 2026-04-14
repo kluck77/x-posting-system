@@ -108,7 +108,6 @@ class GeminiResearcher(BaseResearcher):
                         "generationConfig": {
                             "temperature": 0.4,
                         },
-                        "thinkingConfig": {"thinkingBudget": 1024},
                     },
                 )
                 if resp.status_code >= 400:

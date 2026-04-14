@@ -1704,7 +1704,6 @@ async def _gemini_generate_thesis_cards(
                     "generationConfig": {
                         "temperature": 0.9,
                     },
-                    "thinkingConfig": {"thinkingBudget": 1024},
                 },
             )
             if r.status_code >= 400:
@@ -2814,7 +2813,6 @@ async def _gemini_opinion_card(
                     "generationConfig": {
                         "temperature": 0.8,
                     },
-                    "thinkingConfig": {"thinkingBudget": 1024},
                 },
             )
             if r.status_code >= 400:
