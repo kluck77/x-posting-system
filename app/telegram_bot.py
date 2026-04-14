@@ -635,9 +635,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_quick_callback(query, context)
         return
 
-    # --- 후보 카드 훅 선택 콜백 ---
-    if callback_data.startswith("hook_select:"):
-        await _handle_hook_select_callback(query, context)
+    # --- 후보 카드 논지 선택 콜백 ---
+    if callback_data.startswith("thesis_select:") or callback_data.startswith("hook_select:"):
+        await _handle_thesis_select_callback(query, context)
         return
 
     # --- 콘텐츠 팩 선택 콜백 ---
@@ -1552,13 +1552,14 @@ async def _run_candidate_card(
         card_messages = send_candidate_card_messages(card)
         for cm in card_messages:
             text = cm["text"][:4096]
-            hook_index = cm.get("hook_index")
+            thesis_index = cm.get("hook_index")
 
-            if hook_index is not None:
+            if thesis_index is not None:
+                label = ["A", "B", "C"][thesis_index] if thesis_index < 3 else str(thesis_index)
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
-                        "✏️ 이 논지로 마감",
-                        callback_data=f"hook_select:{hook_index}",
+                        f"✏️ 논지 {label} 로 마감",
+                        callback_data=f"thesis_select:{thesis_index}",
                     )
                 ]])
                 await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -1578,24 +1579,24 @@ async def _run_candidate_card(
         context.user_data.pop("_generating", None)
 
 
-async def _handle_hook_select_callback(
+async def _handle_thesis_select_callback(
     query, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """
-    hook_select:{index} 콜백 처리.
-    선택된 훅으로 최종 마감 (2차 단계).
+    thesis_select:{index} (또는 하위호환 hook_select:{index}) 콜백 처리.
+    선택된 논지로 최종 마감 (2차 단계).
     """
     from app.services.content_pack import (
         generate_final_post, set_progress_callback, clear_progress_callback,
     )
 
-    data = query.data  # hook_select:0
+    data = query.data  # thesis_select:0 or hook_select:0
     parts = data.split(":", 1)
     if len(parts) != 2:
         return
 
     try:
-        hook_index = int(parts[1])
+        thesis_index = int(parts[1])
     except ValueError:
         return
 
@@ -1604,16 +1605,30 @@ async def _handle_hook_select_callback(
         await query.message.reply_text("⚠️ 후보 카드 세션 만료. /pack 으로 다시 시작해주세요.")
         return
 
+    # 선택된 논지 카드 정보 추출
+    selected_thesis = None
+    thesis_label_short = ""
+    if thesis_index < len(card.thesis_cards):
+        selected_thesis = card.thesis_cards[thesis_index]
+        label = ["A", "B", "C"][thesis_index] if thesis_index < 3 else str(thesis_index)
+        thesis_label_short = f"논지 {label}"
+    else:
+        thesis_label_short = f"훅 {thesis_index + 1}"
+
     # 버튼 제거
     await _safe_remove_markup(query)
 
-    msg = await query.message.reply_text("✏️ <b>최종 마감 중...</b>", parse_mode="HTML")
+    # 진행 메시지: 어떤 논지를 선택했는지 명시
+    progress_text = f"✏️ <b>{thesis_label_short} 마감 중...</b>"
+    if selected_thesis:
+        progress_text += f"\n🎯 {selected_thesis.thesis[:60]}"
+    msg = await query.message.reply_text(progress_text, parse_mode="HTML")
 
     # 단계별 진행 표시 콜백
     _stage_labels = {
-        "openai": "✍️ OpenAI 초안 작성 중...",
-        "grok": "🔍 Grok X 감각 심사 중...",
-        "claude": "🧠 Claude 최종 편집 중...",
+        "openai": f"✍️ OpenAI 초안 작성 중... ({thesis_label_short})",
+        "grok": f"🔍 Grok X 감각 심사 중... ({thesis_label_short})",
+        "claude": f"🧠 Claude 최종 편집 중... ({thesis_label_short})",
     }
 
     async def _on_progress(stage: str):
@@ -1628,25 +1643,27 @@ async def _handle_hook_select_callback(
     try:
         source_text = context.user_data.get(CANDIDATE_SOURCE_KEY, "")
         result = await asyncio.wait_for(
-            generate_final_post(card, hook_index, source_text),
+            generate_final_post(card, thesis_index, source_text),
             timeout=60,
         )
 
         clear_progress_callback()
         await msg.delete()
 
-        # 최종 결과 전송
-        selected_hook = card.hook_candidates[hook_index] if hook_index < len(card.hook_candidates) else "?"
-        # thesis card가 있으면 논지 정보 표시
-        thesis_label = ""
-        if hook_index < len(card.thesis_cards):
-            tc = card.thesis_cards[hook_index]
-            thesis_label = f"📌 논지: {tc.thesis}\n"
+        # ── 최종 결과: 선택된 논지 컨텍스트 + 완성본 ──
+        if selected_thesis:
+            thesis_block = (
+                f"🎯 <b>선택된 {thesis_label_short}</b>\n"
+                f"<b>해석 축:</b> {selected_thesis.thesis}\n"
+                f"<b>독자 이해관계:</b> {selected_thesis.reader_stake}\n"
+            )
         else:
-            thesis_label = f"📌 훅: {selected_hook}\n"
+            selected_hook = card.hook_candidates[thesis_index] if thesis_index < len(card.hook_candidates) else "?"
+            thesis_block = f"📌 <b>훅:</b> {selected_hook}\n"
+
         result_text = (
-            f"✅ <b>최종 마감 완료</b>\n"
-            f"{thesis_label}"
+            f"✅ <b>최종 마감 완료</b>\n\n"
+            f"{thesis_block}"
             f"{'─' * 28}\n\n"
             f"📝 <b>게시글</b> ({len(result.final_post)}자)\n"
             f"<code>{result.final_post}</code>\n\n"
