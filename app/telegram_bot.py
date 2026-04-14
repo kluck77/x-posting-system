@@ -24,7 +24,7 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters,
 )
 from app.config import settings
-from app.services.telegram_service import parse_callback_data, send_analysis_card
+from app.services.telegram_service import parse_callback_data, send_analysis_card, trim_display
 import re
 
 from app.orchestrator import Orchestrator
@@ -1684,11 +1684,12 @@ async def _handle_thesis_select_callback(
         await msg.delete()
 
         # ── 최종 결과: 압축형 ──
+        # 선택된 슬롯 설명은 50자 안쪽 우선 — 의미 보존형 압축
         if selected_thesis:
-            thesis_text = selected_thesis.thesis[:80]
+            thesis_text = trim_display(selected_thesis.thesis, 50)
         else:
             thesis_text = (
-                card.hook_candidates[thesis_index][:80]
+                trim_display(card.hook_candidates[thesis_index], 50)
                 if thesis_index < len(card.hook_candidates)
                 else "?"
             )
@@ -1716,6 +1717,8 @@ async def _handle_thesis_select_callback(
                 "BRIEFING_SMELL": "브리핑체 잔존",
                 "OPINION_LEAK": "일반론 의견",
                 "COMPLEX_SENTENCE": "문장 복잡",
+                "STRUCTURE_COLUMN": "사설체 3단 구조",
+                "LOW_CONFIDENCE_OVERREACH": "저신뢰 과해석",
             }
             fail_labels = [_tag_labels.get(t, t) for t in result.gate_fails]
             result_text += (

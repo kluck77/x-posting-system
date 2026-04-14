@@ -75,6 +75,32 @@ _BIZ_TAG_KO = {
 }
 
 
+def trim_display(text: str, limit: int) -> str:
+    """
+    표시용 문장 자르기 — 의미 보존형.
+
+    한 문장 단위로 자르되 limit 초과 시 잘라낸다.
+    종결점(다. / 됨. / 임. / 음. / ". ")을 우선, 없으면 공백 단위로 자른다.
+    자른 흔적이 남을 때는 '…' 를 붙인다.
+
+    telegram_bot.py / telegram_service.py 양쪽에서 재사용하기 위한 모듈 레벨 유틸.
+    """
+    if not text:
+        return text
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    for end in ("다.", "됨.", "임.", "음.", ". "):
+        idx = cut.rfind(end)
+        if idx > limit // 2:
+            return cut[: idx + len(end)]
+    sp = cut.rfind(" ")
+    if sp > limit // 2:
+        return cut[:sp].rstrip() + "…"
+    return cut.rstrip() + "…"
+
+
 def _recommended_action(
     draft: Draft,
     quality_action: str | None = None,
@@ -681,20 +707,8 @@ def send_candidate_card_messages(card) -> list[dict]:
     _is_low_confidence = card.certainty_level in ("미확인", "상충")
 
     def _trim(text: str, limit: int) -> str:
-        """기본 카드용 문장 자르기. 한 문장 단위로 자르되 limit 초과 시 잘라냄."""
-        if not text or len(text) <= limit:
-            return text
-        # 마침표/다/됨 등 문장 종결 기준으로 자르기
-        cut = text[:limit]
-        for end in ("다.", "됨.", "임.", "음.", ". "):
-            idx = cut.rfind(end)
-            if idx > limit // 2:
-                return cut[: idx + len(end)]
-        # 종결점 못 찾으면 공백 단위
-        sp = cut.rfind(" ")
-        if sp > limit // 2:
-            return cut[:sp]
-        return cut
+        """기본 카드용 문장 자르기 — 모듈 레벨 trim_display 델리게이트."""
+        return trim_display(text, limit)
 
     if card.thesis_cards:
         for i, tc in enumerate(card.thesis_cards[:3]):

@@ -3914,3 +3914,82 @@ class TestJudgmentCoordAndVerificationSignal:
         """한국어 fail_tags가 유효 목록에 포함."""
         korean_tags = {"기사재서술", "평균문", "판단좌표없음", "죽은마감", "저신뢰과해석", "슬롯기능중복"}
         assert korean_tags.issubset(_GROK_VALID_FAIL_TAGS)
+
+
+class TestNewBannedDeliveryPatterns:
+    """사용자 지정 신규 금지 패턴 — '감 잡힘' 표현 / 추정 마감."""
+
+    def test_yeoji_dr러나다_banned(self):
+        """'여지가 드러났다' 패턴이 금지 마감/약한 패턴에 포함."""
+        assert "여지가 드러났다" in _BANNED_ENDINGS
+        assert "여지가 드러났다" in _WEAK_PATTERNS
+
+    def test_yeoji_yeol리다_banned(self):
+        """'여지가 열렸다' 패턴이 금지 마감/약한 패턴에 포함."""
+        assert "여지가 열렸다" in _BANNED_ENDINGS
+        assert "여지가 열렸다" in _WEAK_PATTERNS
+
+    def test_egeuchil_gananeungseong_banned(self):
+        """'에 그칠 가능성이 있다' 패턴이 금지 마감/약한 패턴에 포함."""
+        assert "에 그칠 가능성이 있다" in _BANNED_ENDINGS
+        assert "에 그칠 가능성이 있다" in _WEAK_PATTERNS
+
+    def test_validate_detects_yeoji_banned(self):
+        """'여지가 드러났다' 로 끝나면 DEAD_ENDING 게이트 발동."""
+        post = (
+            "미국이 보상안을 꺼냈다.\n"
+            "실제로 진짜 협상인지는 사찰 수용 여부가 답을 준다.\n"
+            "협상 재개 여지가 드러났다."
+        )
+        short = "짧은 버전."
+        _, _, warnings, gate_fails = _validate_final_post(post, short)
+        assert any("금지 마감" in w or "죽은 마감" in w for w in warnings)
+        assert "DEAD_ENDING" in gate_fails
+
+    def test_finalize_prompt_has_4_function_mapping(self):
+        """마감 프롬프트에 '변화/의미/판별 기준/실패 시 해석' 기능 매핑 존재."""
+        assert "변화" in _FINALIZE_PROMPT_KO
+        assert "판별 기준" in _FINALIZE_PROMPT_KO
+        assert "실패 시 해석" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_prompt_has_delivery_short_example(self):
+        """final_short 규칙에 사용자 지정 전달문 예시 존재."""
+        assert "미국이 처음 보상안을 꺼냈다" in _FINALIZE_PROMPT_KO
+        assert "광통신 수혜주는 갈린다" in _FINALIZE_PROMPT_KO
+
+
+class TestTrimDisplay:
+    """trim_display — 표시용 의미 보존형 자르기."""
+
+    def test_short_text_unchanged(self):
+        from app.services.telegram_service import trim_display
+        assert trim_display("짧은 문장", 50) == "짧은 문장"
+
+    def test_empty_text(self):
+        from app.services.telegram_service import trim_display
+        assert trim_display("", 50) == ""
+        assert trim_display(None, 50) is None  # type: ignore[arg-type]
+
+    def test_cuts_at_sentence_boundary(self):
+        from app.services.telegram_service import trim_display
+        # 첫 문장 종결점이 limit//2 지점을 넘어야 선택됨 (한글 1자 기준)
+        text = "이번 조치는 실제 발표로 이어졌다. 시행 여부는 다음 달 공개된다."
+        result = trim_display(text, 30)
+        # '다.' 경계에서 끊기는 게 맞다
+        assert result.endswith("다.")
+        assert len(result) <= 30
+
+    def test_long_text_truncated_with_ellipsis(self):
+        from app.services.telegram_service import trim_display
+        text = "매우긴문장이며마침표도없고공백도없어서종결점을찾을수없다한번에박혀"
+        result = trim_display(text, 15)
+        assert len(result) <= 16  # include trailing '…' if appended
+        # 이 경우 공백·종결점 없어서 그냥 잘릴 수 있음
+        assert result.startswith("매우긴문장이며마침표")
+
+    def test_cuts_at_space_with_ellipsis(self):
+        from app.services.telegram_service import trim_display
+        text = "한국은 오늘 아침 발표를 냈고 미국은 저녁까지 대응을 보류했다"
+        result = trim_display(text, 20)
+        assert len(result) <= 21  # 공백 + '…'
+        assert result.endswith("…") or len(result) <= 20
