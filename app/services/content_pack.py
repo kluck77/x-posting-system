@@ -1860,12 +1860,10 @@ async def generate_candidate_card(
                 card.hook_candidates = [tc.opener for tc in thesis_cards if tc.opener]
             else:
                 # Gemini 실패 → key_facts로 fallback 슬롯 생성
-                _slot_labels = ["[무엇이 바뀌나]", "[왜 뉴스 이상이냐]", "[다음 판가름]"]
                 fallback_cards = []
                 for i, kf in enumerate(card.key_facts[:3]):
-                    label = _slot_labels[i] if i < 3 else ""
                     fallback_cards.append(ThesisCard(
-                        thesis=f"{label} [Gemini실패] {kf[:70]}",
+                        thesis=f"[Gemini실패] {kf[:70]}",
                         why_not_summary="Gemini 생성 실패 — 팩트 기반 폴백",
                         reader_stake="자동 생성 실패 — 수동 확인 필요",
                         opener=kf[:100],
