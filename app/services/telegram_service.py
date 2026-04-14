@@ -686,23 +686,39 @@ def send_candidate_card_messages(card) -> list[dict]:
             facts_text += f"  {i}. {fact}\n"
         messages.append({"text": facts_text.strip(), "hook_index": None})
 
-    # ── 3. 논지 카드 × 3 (선택 버튼 있음) ──
+    # ── 3. 해석 슬롯 × 3 (선택 버튼 있음) ──
+    _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
+    _is_low_confidence = card.certainty_level in ("미확인", "상충")
+
     if card.thesis_cards:
         for i, tc in enumerate(card.thesis_cards[:3]):
-            label = ["A", "B", "C"][i]
+            slot_name = _slot_names[i] if i < 3 else f"슬롯 {i + 1}"
+            # 추정 해석 경고 배지
+            spec_badge = ""
+            if _is_low_confidence:
+                _spec_patterns = [
+                    "정치적 계산", "선거용", "선거를 앞둔", "숨은 의도",
+                    "본심", "노림수", "계산에서 비롯", "계산으로 보인다",
+                    "압박용", "포석", "승부수",
+                ]
+                combined = f"{tc.thesis} {tc.opener}"
+                if any(p in combined for p in _spec_patterns):
+                    spec_badge = "\n⚠️ <i>추정 해석 주의 (미검증 기사)</i>"
+
             text = (
-                f"🎯 <b>논지 {label}</b>\n\n"
-                f"<b>해석 축:</b> {tc.thesis}\n"
-                f"<b>왜 재정리 아닌가:</b> {tc.why_not_summary}\n"
-                f"<b>독자 이해관계:</b> {tc.reader_stake}\n"
+                f"🎯 <b>{slot_name}</b>\n\n"
+                f"<b>해석:</b> {tc.thesis}\n"
+                f"<b>긴장점:</b> {tc.why_not_summary}\n"
+                f"<b>독자 영향:</b> {tc.reader_stake}\n"
                 f"<b>첫 문장 초안:</b> <code>{tc.opener}</code>"
+                f"{spec_badge}"
             )
             messages.append({"text": text, "hook_index": i})
     else:
         # 하위호환: thesis_cards 없으면 기존 hook_candidates 사용
         for i, hook in enumerate(card.hook_candidates[:3]):
-            label = ["A", "B", "C"][i]
-            text = f"🎯 <b>훅 후보 {label}</b>\n\n<code>{hook}</code>"
+            slot_name = _slot_names[i] if i < 3 else f"슬롯 {i + 1}"
+            text = f"🎯 <b>{slot_name}</b>\n\n<code>{hook}</code>"
             messages.append({"text": text, "hook_index": i})
 
     # ── 4. 한줄 결론 ──

@@ -26,6 +26,9 @@ from app.services.content_pack import (
     _GEMINI_OPINION_PROMPT, GeminiOpinionCard,
     _should_invoke_extended_review, _EXTENDED_REVIEW_TOPICS,
     _GEMINI_THESIS_PROMPT,
+    # Low confidence 추정 감점
+    _SPECULATIVE_MOTIVE_PATTERNS, _has_speculative_motive,
+    _reorder_slots_for_low_confidence,
     # Phase 3: Grok X 감각 심사 (구조화 버전)
     _GROK_EVAL_PROMPT, GrokEvalCard, _GROK_VALID_FAIL_TAGS,
     _noop_async, _log_draft_comparison,
@@ -1702,11 +1705,11 @@ class TestFinalizePromptRules:
         assert "슬롯 조립 담당" in p
 
     def test_three_sentence_structure(self):
-        """3문장 조립 구조: 변화/팩트/검증."""
+        """문장 조립 구조: 변화/팩트/검증."""
         p = _FINALIZE_PROMPT_KO
-        assert "변화/갈등/차이" in p
-        assert "팩트 근거" in p or "팩트 1개" in p
-        assert "검증 포인트" in p
+        assert "변화 또는 긴장점" in p
+        assert "팩트 근거" in p
+        assert "외부 검증 신호" in p
 
     def test_banned_endings_in_prompt(self):
         """금지 마감 패턴 포함."""
@@ -2080,7 +2083,7 @@ class TestFinalizePromptEndingRules:
         """셀프 체크 섹션."""
         p = _FINALIZE_PROMPT_KO
         assert "셀프 체크" in p
-        assert "조건형/대비형/질문형" in p
+        assert "외부 검증 신호" in p
 
 
 class TestGeminiThesisPromptRules:
@@ -2262,14 +2265,14 @@ class TestSendCandidateCardMessages:
         assert hook_msgs[1]["hook_index"] == 1
         assert hook_msgs[2]["hook_index"] == 2
 
-    def test_hook_labels_abc(self):
-        """훅 후보에 A, B, C 라벨 포함."""
+    def test_hook_labels_slot_names(self):
+        """슬롯 이름이 표시."""
         from app.services.telegram_service import send_candidate_card_messages
         msgs = send_candidate_card_messages(self._make_card())
         hook_msgs = [m for m in msgs if m["hook_index"] is not None]
-        assert "훅 후보 A" in hook_msgs[0]["text"]
-        assert "훅 후보 B" in hook_msgs[1]["text"]
-        assert "훅 후보 C" in hook_msgs[2]["text"]
+        assert "무엇이 바뀌나" in hook_msgs[0]["text"]
+        assert "왜 뉴스 이상이냐" in hook_msgs[1]["text"]
+        assert "다음 판가름" in hook_msgs[2]["text"]
 
     def test_key_facts_section(self):
         """핵심 팩트 섹션이 포함."""
@@ -2488,11 +2491,10 @@ class TestFinalPostThreeSlotStructure:
         assert "문장 2" in p
         assert "문장 3" in p
 
-    def test_three_sentence_default(self):
-        """3문장 기본, 4문장 허용 규칙 존재."""
+    def test_sentence_count_rule(self):
+        """2~4문장 규칙 존재."""
         p = _FINALIZE_PROMPT_KO
-        assert "3문장이 기본" in p
-        assert "4문장까지 허용" in p
+        assert "2~4문장" in p
 
     def test_no_room_for_summary(self):
         """기사 재설명 문장이 끼어들 자리 없다는 규칙 존재."""
@@ -2557,12 +2559,12 @@ class TestClaudeAlwaysOnIntegrator:
         assert "증권사" in p
         assert "팔로워" in p
 
-    def test_prompt_has_three_sentence_structure(self):
-        """3문장 구조(WHY/WHAT/SO WHAT)가 Claude 프롬프트에 포함."""
+    def test_prompt_has_sentence_structure(self):
+        """문장 구조가 Claude 프롬프트에 포함."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "WHY" in p
-        assert "WHAT" in p
-        assert "SO WHAT" in p
+        assert "변화 또는 긴장점" in p
+        assert "팩트 근거" in p
+        assert "외부 검증 신호" in p
 
     def test_prompt_passthrough_when_good(self):
         """초안이 좋으면 그대로 반환 가능."""
@@ -2806,7 +2808,7 @@ class TestAntiReportToneInFinalize:
     def test_narrow_down_rule(self):
         """간결한 조립 구조 규칙 존재."""
         p = _FINALIZE_PROMPT_KO
-        assert "2~3문장이 기본" in p
+        assert "2~4문장" in p
 
 
 class TestColumnStructureBan:
@@ -3035,12 +3037,14 @@ class TestGrokEvalCard:
         assert "복붙" in card.problem
 
     def test_valid_fail_tags_constant(self):
-        """_GROK_VALID_FAIL_TAGS에 7개 태그 존재."""
-        assert len(_GROK_VALID_FAIL_TAGS) == 7
+        """_GROK_VALID_FAIL_TAGS에 11개 태그 존재."""
+        assert len(_GROK_VALID_FAIL_TAGS) == 11
         expected = {
             "SAME_THESIS", "PRESS_RELEASE_TONE", "POLICY_MEMO_TONE",
             "COLUMN_ENDING", "NO_READER_STAKE", "GENERIC_SKEPTICISM",
             "HEADLINE_RESTATEMENT",
+            "SPECULATIVE_MOTIVE", "DEAD_ENDING",
+            "LOW_CONFIDENCE_OVERREACH", "ABSTRACT_WRAPUP",
         }
         assert _GROK_VALID_FAIL_TAGS == expected
 
@@ -3537,3 +3541,151 @@ class TestRunAllValidations:
             grok_eval=gk,
         )
         assert len(warnings) >= 3
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Low confidence 추정성 감점 테스트
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSpeculativeMotiveDetection:
+    """_has_speculative_motive() 추정성 동기 탐지 검증."""
+
+    def test_detects_political_calculation(self):
+        """정치적 계산 탐지."""
+        assert _has_speculative_motive("중간선거를 앞둔 정치적 계산에서 비롯")
+
+    def test_detects_hidden_intention(self):
+        """숨은 의도 탐지."""
+        assert _has_speculative_motive("숨은 의도가 깔려 있다")
+
+    def test_detects_electoral_motive(self):
+        """선거용 판단 탐지."""
+        assert _has_speculative_motive("선거를 앞둔 승부수")
+
+    def test_clean_text_no_detection(self):
+        """추정 없는 깨끗한 텍스트."""
+        assert not _has_speculative_motive("WTI가 배럴당 105달러까지 올랐다")
+
+    def test_patterns_not_empty(self):
+        """패턴 리스트가 비어있지 않음."""
+        assert len(_SPECULATIVE_MOTIVE_PATTERNS) >= 10
+
+
+class TestSlotReorderForLowConfidence:
+    """_reorder_slots_for_low_confidence() 슬롯 재정렬 검증."""
+
+    def _make_card(self, certainty="미확인"):
+        return CandidateCard(
+            key_facts=["팩트1"],
+            hook_candidates=["A", "B", "C"],
+            one_liner=[],
+            cautions=[],
+            watch_points=[],
+            certainty_level=certainty,
+            thesis_cards=[
+                ThesisCard(thesis="WTI가 올랐다", opener="A", why_not_summary="", reader_stake=""),
+                ThesisCard(thesis="정치적 계산에서 비롯된 것", opener="B", why_not_summary="", reader_stake=""),
+                ThesisCard(thesis="후속 시행령 여부가 분기점", opener="C", why_not_summary="", reader_stake=""),
+            ],
+        )
+
+    def test_reorder_pushes_speculative_back(self):
+        """추정성 슬롯이 뒤로 이동."""
+        card = self._make_card(certainty="미확인")
+        _reorder_slots_for_low_confidence(card)
+        # 정치적 계산 슬롯이 마지막으로
+        assert "정치적 계산" in card.thesis_cards[-1].thesis
+
+    def test_no_reorder_for_high_confidence(self):
+        """확정 confidence에서는 재정렬 안 함."""
+        card = self._make_card(certainty="확정")
+        original_order = [tc.thesis for tc in card.thesis_cards]
+        _reorder_slots_for_low_confidence(card)
+        assert [tc.thesis for tc in card.thesis_cards] == original_order
+
+    def test_hook_candidates_synced(self):
+        """재정렬 후 hook_candidates도 동기화."""
+        card = self._make_card(certainty="미확인")
+        _reorder_slots_for_low_confidence(card)
+        assert card.hook_candidates == [tc.opener for tc in card.thesis_cards]
+
+
+class TestExternalVerificationSignalRule:
+    """외부 검증 신호 규칙이 프롬프트에 있는지 검증."""
+
+    def test_finalize_has_signal_check(self):
+        """마감 프롬프트에 SIGNAL_CHECK가 있음."""
+        assert "SIGNAL_CHECK" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_has_threshold_check(self):
+        """마감 프롬프트에 THRESHOLD_CHECK가 있음."""
+        assert "THRESHOLD_CHECK" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_has_implementation_check(self):
+        """마감 프롬프트에 IMPLEMENTATION_CHECK가 있음."""
+        assert "IMPLEMENTATION_CHECK" in _FINALIZE_PROMPT_KO
+
+    def test_claude_has_external_signal_rule(self):
+        """Claude 프롬프트에 외부 검증 신호 규칙이 있음."""
+        assert "외부 검증 신호" in _CLAUDE_REVIEW_PROMPT
+
+    def test_finalize_bans_dead_ending_explicitly(self):
+        """마감 프롬프트에 '봐야 한다'만 말하면 실패 규칙."""
+        assert "봐야 한다" in _FINALIZE_PROMPT_KO
+        assert "실패" in _FINALIZE_PROMPT_KO
+
+
+class TestNewGrokFailTags:
+    """새로 추가된 Grok fail_tags 검증."""
+
+    def test_speculative_motive_in_prompt(self):
+        """SPECULATIVE_MOTIVE가 Grok 프롬프트에 존재."""
+        assert "SPECULATIVE_MOTIVE" in _GROK_EVAL_PROMPT
+
+    def test_dead_ending_in_prompt(self):
+        """DEAD_ENDING이 Grok 프롬프트에 존재."""
+        assert "DEAD_ENDING" in _GROK_EVAL_PROMPT
+
+    def test_low_confidence_overreach_in_prompt(self):
+        """LOW_CONFIDENCE_OVERREACH가 Grok 프롬프트에 존재."""
+        assert "LOW_CONFIDENCE_OVERREACH" in _GROK_EVAL_PROMPT
+
+    def test_abstract_wrapup_in_prompt(self):
+        """ABSTRACT_WRAPUP이 Grok 프롬프트에 존재."""
+        assert "ABSTRACT_WRAPUP" in _GROK_EVAL_PROMPT
+
+    def test_dead_ending_in_claude_fail_tags(self):
+        """DEAD_ENDING이 Claude 프롬프트 fail_tags 활용에 존재."""
+        assert "DEAD_ENDING" in _CLAUDE_REVIEW_PROMPT
+
+
+class TestLowConfidenceGuardInPrompts:
+    """Low confidence 추정 제한이 프롬프트에 있는지 검증."""
+
+    def test_finalize_has_low_confidence_section(self):
+        """마감 프롬프트에 Low confidence 추정 제한 섹션 존재."""
+        assert "Low confidence" in _FINALIZE_PROMPT_KO
+        assert "동기 추정" in _FINALIZE_PROMPT_KO
+
+    def test_claude_has_low_confidence_rule(self):
+        """Claude 보정 기준에 low confidence 추정 과열 항목 존재."""
+        assert "Low confidence 추정 과열" in _CLAUDE_REVIEW_PROMPT
+
+
+class TestNewBannedEndingsFromScreenshot:
+    """스크린샷 실패 케이스에서 추가된 금지 마감 패턴."""
+
+    def test_maintenance_duration_banned(self):
+        """'오래 유지되는지가 관건' 패턴 금지."""
+        post = "이 조치가 정말 실행되는지, 얼마나 오래 유지되는지가 관건이다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("금지 마감" in w for w in warnings)
+
+    def test_really_executed_banned(self):
+        """'정말 실행되는지' 패턴 금지."""
+        assert "정말 실행되는지" in _BANNED_ENDINGS
+
+    def test_core_is_banned(self):
+        """'핵심이다' 패턴 금지."""
+        assert "핵심이다" in _BANNED_ENDINGS
