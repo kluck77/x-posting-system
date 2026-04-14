@@ -711,15 +711,16 @@ def send_candidate_card_messages(card) -> list[dict]:
                 if any(p in combined for p in _spec_patterns):
                     spec_badge = "\n⚠️ <i>추정 해석 주의</i>"
 
-            # 압축형: 제목 → 빈 줄 → 해석 → 빈 줄 → 좌표 → 빈 줄 → 신호
+            # 압축형 (비교용 한 줄 카드): 제목 → 빈 줄 → 해석 → 빈 줄 → 좌표 → 빈 줄 → 신호
+            # 각 항목 45~70자 — 길면 '자세히 보기'로 넘김
             lines = [f"🎯 <b>{slot_name}</b>", ""]
-            lines.append(f"해석: {_trim(tc.thesis, 80)}")
+            lines.append(f"해석: {_trim(tc.thesis, 70)}")
             if getattr(tc, "judgment_coord", ""):
                 lines.append("")
-                lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 60)}")
+                lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 55)}")
             if getattr(tc, "verification_signal", ""):
                 lines.append("")
-                lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 60)}")
+                lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 55)}")
             if spec_badge:
                 lines.append(spec_badge)
 

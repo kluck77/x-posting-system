@@ -3166,7 +3166,7 @@ async def _claude_review_final(
             ),
             "LOW_CONFIDENCE_OVERREACH": (
                 "🚨 저신뢰(미확인/상충) 기사인데 본문에 "
-                "'정치적 계산/숨은 의도/노림수/본심'류 동기 추정이 2개 이상 남아 있다. "
+                "'정치적 계산/숨은 의도/노림수/본심'류 동기 추정이 남아 있다. "
                 "동기 추정 문장을 확인 신호 중심으로 교체하라. "
                 "꼭 필요하면 '~라는 해석이 나온다' 수준으로 1단계 낮춰라. "
                 "사실과 검증 포인트를 앞세워라."
@@ -3778,6 +3778,20 @@ def _validate_final_post(
         elif sent_len > 60:
             warnings.append(f"첫 문장 길이 경고 ({sent_len}자) — 40자 이내 권장")
 
+    # 첫 문장 접속 구조 게이트 — 배경 설명/종속절 시작 차단
+    # 접속 표현 2개+ 또는 (쉼표 2개+ AND 접속 1개+) → 첫 문장이 사실+해석+전망 혼합 신호
+    if first_line and "WEAK_OPENER" not in gate_fails:
+        first_sent = first_line.split(".")[0] if "." in first_line else first_line
+        _first_connectors = ["면서", "인데", "하고 ", "하며", "지만", "반면", "가운데", "에도 불구"]
+        first_connector_hits = sum(1 for c in _first_connectors if c in first_sent)
+        first_comma = first_sent.count(",")
+        if first_connector_hits >= 2 or (first_comma >= 2 and first_connector_hits >= 1):
+            warnings.append(
+                f"첫 문장 접속 구조 과다 (접속={first_connector_hits}, 쉼표={first_comma}) "
+                "— 배경 설명/종속절 시작"
+            )
+            gate_fails.append("WEAK_OPENER")
+
     # 문장 구조 복잡도 감지 — 리뷰체의 원인
     _connectors = ["면서 ", "인데 ", "하고 ", "하며 ", "지만 ", "반면 "]
     sentences = [s.strip() for s in post.replace("\n", " ").split(".") if s.strip()]
@@ -3842,12 +3856,13 @@ def _validate_final_post(
         gate_fails.append("STRUCTURE_COLUMN")
 
     # 저신뢰 과해석 본문 침투 → LOW_CONFIDENCE_OVERREACH 게이트
+    # 저신뢰 기사는 1개 등장만으로도 게이트 (사용자 지시: 강한 제한)
     if certainty_level in ("미확인", "상충"):
         post_lower = post.lower()
         motive_hits = [
             p for p in _SPECULATIVE_MOTIVE_PATTERNS if p.lower() in post_lower
         ]
-        if len(motive_hits) >= 2:
+        if len(motive_hits) >= 1:
             warnings.append(
                 f"저신뢰 과해석 본문 침투 ({len(motive_hits)}개): {motive_hits[:3]}"
             )

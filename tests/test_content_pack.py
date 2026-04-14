@@ -2197,6 +2197,34 @@ class TestFirstSentenceLengthGate:
         assert any("길이 경고" in w for w in warnings)
 
 
+class TestFirstSentenceConnectorGate:
+    """첫 문장 접속 구조 과다 게이트 (배경/종속절 시작 차단)."""
+
+    def test_two_connectors_gated(self):
+        """첫 문장에 접속 표현이 2개 이상이면 WEAK_OPENER 게이트."""
+        post = "미국이 봉쇄를 선언하면서 이란은 반발하는 가운데 시장이 흔들렸다. 금요일이 분기점이다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" in gate_fails
+
+    def test_commas_plus_connector_gated(self):
+        """첫 문장 쉼표 2개 이상 + 접속 1개 → 게이트."""
+        post = "미국이 봉쇄를 선언하면서, 이란은 신중, 시장은 흔들렸다. 금요일이 분기점."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" in gate_fails
+
+    def test_clean_opener_passes(self):
+        """접속 구조 없는 직선 첫 문장은 통과."""
+        post = "지금 포인트는 재회담 성사 여부다. 금요일까지 답이 나온다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" not in gate_fails
+
+    def test_single_connector_passes(self):
+        """접속 1개, 쉼표 1개 이하는 통과."""
+        post = "재협상이 이뤄지면서 채널이 살아났다. 금요일 결론이 난다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" not in gate_fails
+
+
 class TestComplexSentenceGate:
     """문장 구조 복잡도 게이트 테스트."""
 
@@ -2267,13 +2295,13 @@ class TestLowConfidenceOverreachGate:
         )
         assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
 
-    def test_low_confidence_single_motive_no_gate(self):
-        """저신뢰라도 동기 추정이 1개면 게이트 없음 (기준 2개 이상)."""
+    def test_low_confidence_single_motive_gated(self):
+        """저신뢰면 동기 추정 1개만 등장해도 게이트 (강한 제한)."""
         post = "이번 조치는 정치적 계산에서 나왔다. 금요일 시행령이 관전 포인트."
         _, _, _, gate_fails = _validate_final_post(
             post, "짧은 버전.", certainty_level="상충"
         )
-        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
 
     def test_no_certainty_no_gate(self):
         """certainty_level 미지정이면 게이트 비활성화."""
