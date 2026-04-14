@@ -2057,6 +2057,64 @@ async def _notify_progress(stage: str) -> None:
 
 # ─── 2차: 최종 마감 ─────────────────────────────────────────────────────────
 
+# 강한 실패 태그 — 자동 재생성 1회 대상
+# 아래 4개만 재생성 트리거. 나머지(BRIEFING_SMELL / COMPLEX_SENTENCE /
+# OPINION_LEAK)는 경고로만 유지.
+_STRONG_FAIL_TAGS = frozenset({
+    "WEAK_OPENER",
+    "DEAD_ENDING",
+    "STRUCTURE_COLUMN",
+    "LOW_CONFIDENCE_OVERREACH",
+})
+
+
+def _has_strong_fail(tags: Optional[list]) -> bool:
+    if not tags:
+        return False
+    return any(t in _STRONG_FAIL_TAGS for t in tags)
+
+
+def _count_strong_fails(tags: Optional[list]) -> int:
+    if not tags:
+        return 0
+    return sum(1 for t in tags if t in _STRONG_FAIL_TAGS)
+
+
+def _build_retry_instruction(gate_fails: list) -> str:
+    """남은 강한 실패 태그별 재생성 지시문. 논지 유지 + 표현 직선화."""
+    hints = []
+    if "WEAK_OPENER" in gate_fails:
+        hints.append(
+            "첫 문장: 45자 이내 핵심 명제부터 박아라. 배경 설명/접속 "
+            "구조/'~이후'·'~보도한' 시작 금지."
+        )
+    if "DEAD_ENDING" in gate_fails:
+        hints.append(
+            "마지막 문장: '관건이다/변수다/여지가 드러났다/에 그칠 "
+            "가능성이 있다' 금지. '~이 나오면/안 나오면'으로 구체 검증 "
+            "신호로 끝내라."
+        )
+    if "STRUCTURE_COLUMN" in gate_fails:
+        hints.append(
+            "구조: 요약→의견→관건 3단 사설체 금지. 변화 / 의미 / 판별 "
+            "기준 / 실패 시 해석 4문장으로 다시 조립."
+        )
+    if "LOW_CONFIDENCE_OVERREACH" in gate_fails:
+        hints.append(
+            "저신뢰 기사: 정치적 계산/숨은 의도/노림수/본심 등 동기 "
+            "추정 전부 제거. 확인 가능한 신호 중심으로만 써라."
+        )
+    if not hints:
+        return ""
+    return (
+        "\n\n━━━ 재생성 지시 (1회) ━━━\n"
+        "직전 초안이 아래 태그로 실패했다. "
+        "선택된 해석 슬롯/판단 좌표/판별 신호는 그대로 유지하라. "
+        "새 논지 추가 금지. 표현만 더 직선적으로 다시 조립하라.\n"
+        + "\n".join(f"  - {h}" for h in hints)
+    )
+
+
 async def generate_final_post(
     card: CandidateCard,
     hook_index: int,
@@ -2142,78 +2200,104 @@ async def generate_final_post(
         "한국어로."
     )
 
-    await _notify_progress("openai")
-    raw = await _call_ai_with_prompt(
-        _FINALIZE_PROMPT_KO, user_prompt, temperature=0.9
-    )
+    # ─ 내부 1 사이클: OpenAI 조립 → Grok 평가 → Claude 보정 ─
+    # 강한 실패 재생성용으로 같은 흐름을 최대 2회 돌릴 수 있도록 추출.
+    async def _run_cycle(extra_instruction: str = ""):
+        """user_prompt + (옵션) 재생성 지시로 한 사이클 실행. (final, grok) 반환."""
+        full_prompt = user_prompt + extra_instruction
+        await _notify_progress("openai")
+        _raw = await _call_ai_with_prompt(
+            _FINALIZE_PROMPT_KO, full_prompt, temperature=0.9
+        )
+        if not _raw:
+            return None, None
+        _result = _parse_final_post(_raw, certainty_level=card.certainty_level)
+        if not _result:
+            return None, None
 
-    if raw:
-        result = _parse_final_post(raw, certainty_level=card.certainty_level)
-        if result:
+        await _notify_progress("grok")
+        _grok = await _grok_eval(_result, card, selected_hook=selected_hook)
+        if isinstance(_grok, Exception):
+            logger.warning(f"[Grok평가] 실행 오류: {_grok}")
+            _grok = None
+
+        _log_draft_comparison(_result, _grok, None)
+
+        _gate_1st = _result.gate_fails
+        if _gate_1st:
+            logger.warning(
+                f"[품질게이트] 초안 실패: {_gate_1st} → Claude 보정 강제"
+            )
+
+        await _notify_progress("claude")
+        _reviewed = await _claude_review_final(
+            card, _result,
+            selected_hook=selected_hook,
+            gemini_opinion=None,
+            grok_eval=_grok,
+            gate_fails=_gate_1st,
+        )
+        _final = _reviewed if _reviewed else _result
+        return _final, _grok
+
+    # ── 1차 실행 ──
+    final, grok_result = await _run_cycle()
+
+    if final is None:
+        logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
+        return FinalPost(
+            final_post=f"[마감 실패] {selected_hook}",
+            final_short=f"[마감 실패] {selected_hook[:80]}",
+        )
+
+    # ── 강한 실패 잔존 시 자동 재생성 1회 ──
+    if _has_strong_fail(final.gate_fails):
+        logger.warning(
+            f"[품질게이트] Claude 보정 후 강한 실패 잔존: {final.gate_fails} "
+            "→ 자동 재생성 1회 시도"
+        )
+        retry_extra = _build_retry_instruction(final.gate_fails)
+        retried, retried_grok = await _run_cycle(retry_extra)
+
+        if retried is not None:
+            before = _count_strong_fails(final.gate_fails)
+            after = _count_strong_fails(retried.gate_fails)
             logger.info(
-                f"1차 마감 완료 (OpenAI): post={len(result.final_post)}자, "
-                f"short={len(result.final_short)}자"
+                f"[재생성] 강한 실패 개수: {before} → {after} "
+                f"(1차: {final.gate_fails}, 재생성: {retried.gate_fails})"
+            )
+            # 재생성이 같거나 나으면 채택 (동률은 최신 버전 우선 — 표현 직선화 효과)
+            if after <= before:
+                final = retried
+                grok_result = retried_grok
+        else:
+            logger.warning("[재생성] AI 응답 실패 — 1차 결과 유지")
+
+        # 재생성 후에도 강한 실패가 남아 있으면 수동 확인 경고 강화
+        if _has_strong_fail(final.gate_fails):
+            if "RETRY_EXHAUSTED" not in final.gate_fails:
+                final.gate_fails.append("RETRY_EXHAUSTED")
+            logger.warning(
+                f"[품질게이트] 재생성 후에도 강한 실패 잔존: {final.gate_fails} "
+                "— 텔레그램에 '게시 전 수동 확인 필수' 경고 전달"
             )
 
-            # Phase 2: Grok X 감각 심사 (Gemini는 thesis 단계에서 이미 사용 → 여기선 생략)
-            await _notify_progress("grok")
-            grok_result = await _grok_eval(result, card, selected_hook=selected_hook)
-            if isinstance(grok_result, Exception):
-                logger.warning(f"[Grok평가] 실행 오류: {grok_result}")
-                grok_result = None
-
-            # 비교 로깅
-            _log_draft_comparison(result, grok_result, None)
-
-            # ── 게이트 체크: 1차 초안 품질 ──
-            gate_fails_1st = result.gate_fails
-            if gate_fails_1st:
-                logger.warning(
-                    f"[품질게이트] 1차 초안 실패: {gate_fails_1st} → Claude 보정 강제"
-                )
-
-            # Phase 3: Claude 사실/톤 보정 — 항상 호출
-            # 게이트 실패 시 실패 태그를 Claude에 전달하여 보정 강도 강화
-            await _notify_progress("claude")
-            reviewed = await _claude_review_final(
-                card, result,
-                selected_hook=selected_hook,
-                gemini_opinion=None,
-                grok_eval=grok_result,
-                gate_fails=gate_fails_1st,
-            )
-            final = reviewed if reviewed else result
-            if reviewed:
-                logger.info(
-                    f"Claude 최종통합 완료: post={len(reviewed.final_post)}자, "
-                    f"short={len(reviewed.final_short)}자"
-                )
-            else:
-                logger.warning("[Claude통합] 실패 — OpenAI 1차 결과 사용")
-
-            # ── 게이트 체크: Claude 보정 후 ──
-            if final.gate_fails:
-                logger.warning(
-                    f"[품질게이트] Claude 보정 후에도 실패 잔존: {final.gate_fails}"
-                )
-
-            # 7대 검증 규칙 실행
-            v_warnings = _run_all_validations(
-                final.final_post,
-                card=card,
-                selected_thesis=selected_thesis,
-                grok_eval=grok_result,
-            )
-            for vw in v_warnings:
-                logger.warning(f"[7대검증] {vw}")
-
-            return final
-
-    logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
-    return FinalPost(
-        final_post=f"[마감 실패] {selected_hook}",
-        final_short=f"[마감 실패] {selected_hook[:80]}",
+    logger.info(
+        f"최종 마감 완료: post={len(final.final_post)}자, "
+        f"short={len(final.final_short)}자, gate_fails={final.gate_fails}"
     )
+
+    # 7대 검증 규칙 실행
+    v_warnings = _run_all_validations(
+        final.final_post,
+        card=card,
+        selected_thesis=selected_thesis,
+        grok_eval=grok_result,
+    )
+    for vw in v_warnings:
+        logger.warning(f"[7대검증] {vw}")
+
+    return final
 
 
 # ─── 3차: Claude 감수 / 리라이트 ─────────────────────────────────────────────

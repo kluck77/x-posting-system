@@ -4069,3 +4069,269 @@ class TestFirstSentenceHardGate:
         """final_short 금지어 명시."""
         # "중요하다 / 관건이다 / 변수다" 명시
         assert "중요하다" in _FINALIZE_PROMPT_KO and "관건이다" in _FINALIZE_PROMPT_KO
+
+
+class TestStrongFailHelpers:
+    """강한 실패 태그 판정 헬퍼."""
+
+    def test_strong_fail_tags_content(self):
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert _STRONG_FAIL_TAGS == frozenset({
+            "WEAK_OPENER", "DEAD_ENDING",
+            "STRUCTURE_COLUMN", "LOW_CONFIDENCE_OVERREACH",
+        })
+
+    def test_has_strong_fail_true(self):
+        from app.services.content_pack import _has_strong_fail
+        assert _has_strong_fail(["WEAK_OPENER"]) is True
+        assert _has_strong_fail(["BRIEFING_SMELL", "DEAD_ENDING"]) is True
+
+    def test_has_strong_fail_false_on_soft_only(self):
+        from app.services.content_pack import _has_strong_fail
+        # 소프트 태그만 있으면 재생성 대상 아님
+        assert _has_strong_fail(["BRIEFING_SMELL"]) is False
+        assert _has_strong_fail(["COMPLEX_SENTENCE", "OPINION_LEAK"]) is False
+        assert _has_strong_fail([]) is False
+        assert _has_strong_fail(None) is False
+
+    def test_count_strong_fails(self):
+        from app.services.content_pack import _count_strong_fails
+        assert _count_strong_fails(["WEAK_OPENER", "DEAD_ENDING"]) == 2
+        assert _count_strong_fails(["WEAK_OPENER", "BRIEFING_SMELL"]) == 1
+        assert _count_strong_fails([]) == 0
+
+    def test_build_retry_instruction_weak_opener(self):
+        from app.services.content_pack import _build_retry_instruction
+        msg = _build_retry_instruction(["WEAK_OPENER"])
+        assert "재생성 지시" in msg
+        assert "45자 이내" in msg
+        assert "배경 설명" in msg
+
+    def test_build_retry_instruction_all_four(self):
+        from app.services.content_pack import _build_retry_instruction
+        msg = _build_retry_instruction([
+            "WEAK_OPENER", "DEAD_ENDING",
+            "STRUCTURE_COLUMN", "LOW_CONFIDENCE_OVERREACH",
+        ])
+        assert "45자 이내" in msg
+        assert "관건이다" in msg
+        assert "요약→의견→관건" in msg
+        assert "동기 추정" in msg
+
+    def test_build_retry_instruction_empty_on_soft_only(self):
+        from app.services.content_pack import _build_retry_instruction
+        # 소프트 태그만 있으면 빈 문자열 (재생성 지시 없음)
+        assert _build_retry_instruction(["BRIEFING_SMELL"]) == ""
+        assert _build_retry_instruction([]) == ""
+
+    def test_build_retry_instruction_preserves_논지(self):
+        """재생성 지시문에 논지 유지 조항 명시."""
+        from app.services.content_pack import _build_retry_instruction
+        msg = _build_retry_instruction(["WEAK_OPENER"])
+        assert "판단 좌표" in msg
+        assert "판별 신호" in msg
+        assert "새 논지 추가 금지" in msg
+
+
+class TestGenerateFinalPostRetry:
+    """generate_final_post 자동 재생성 1회 시나리오 — 4개 강한 실패 태그.
+
+    전략: _call_ai_with_prompt / _grok_eval / _claude_review_final 를
+    monkeypatch 하여 1차 실패 / 2차 (성공|실패) 시나리오를 시뮬레이션.
+    """
+
+    @pytest.fixture
+    def card(self):
+        from app.services.content_pack import CandidateCard, ThesisCard
+        return CandidateCard(
+            key_facts=["팩트1", "팩트2"],
+            hook_candidates=["훅1"],
+            thesis_cards=[
+                ThesisCard(
+                    thesis="해석 슬롯 논지",
+                    why_not_summary="긴장점",
+                    reader_stake="독자 영향",
+                    opener="초안 첫 문장",
+                    judgment_coord="판단 기준",
+                    verification_signal="확인 신호",
+                )
+            ],
+            certainty_level="확정",
+        )
+
+    def _setup_mocks(self, monkeypatch, raw_sequence):
+        """_call_ai_with_prompt 를 raw_sequence 순서대로 반환하도록 패치.
+        _grok_eval 은 None, _claude_review_final 은 입력 그대로 반환."""
+        from app.services import content_pack as cp
+
+        calls = {"count": 0}
+
+        async def fake_ai(system, user, *, temperature=0.7):
+            idx = calls["count"]
+            calls["count"] += 1
+            return raw_sequence[idx] if idx < len(raw_sequence) else None
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(card, draft, **kw):
+            # Claude 보정 생략 — draft 그대로 (재파싱으로 gate_fails 유지)
+            return None
+
+        monkeypatch.setattr(cp, "_call_ai_with_prompt", fake_ai)
+        monkeypatch.setattr(cp, "_grok_eval", fake_grok)
+        monkeypatch.setattr(cp, "_claude_review_final", fake_claude)
+        return calls
+
+    @pytest.mark.asyncio
+    async def test_weak_opener_retry_succeeds(self, monkeypatch, card):
+        """WEAK_OPENER (60자 초과 첫 문장) → 재생성에서 압축되면 통과."""
+        from app.services.content_pack import generate_final_post
+
+        bad = json.dumps({
+            "final_post": "미국 행정부의 대이란 협상 기조가 과거의 강경 일변도에서 조건부 접근 방식으로 전환되는 조짐이 드러나고 있다.\n근거 한 줄.\n사찰 수용이 답이다.",
+            "final_short": "짧은 버전.",
+        })
+        good = json.dumps({
+            "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 답이다.",
+            "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
+        })
+        calls = self._setup_mocks(monkeypatch, [bad, good])
+
+        result = await generate_final_post(card, 0, "")
+
+        assert calls["count"] == 2, "1차 + 재생성 1회 = 총 2회 호출"
+        assert "WEAK_OPENER" not in result.gate_fails
+        assert "RETRY_EXHAUSTED" not in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_dead_ending_retry_still_fails_marks_exhausted(
+        self, monkeypatch, card
+    ):
+        """DEAD_ENDING → 재생성 후에도 실패 → RETRY_EXHAUSTED 마커."""
+        from app.services.content_pack import generate_final_post
+
+        bad1 = json.dumps({
+            "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n이것이 관건이다.",
+            "final_short": "짧은 버전.",
+        })
+        bad2 = json.dumps({
+            "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n결국 이것이 변수다.",
+            "final_short": "짧은 버전.",
+        })
+        calls = self._setup_mocks(monkeypatch, [bad1, bad2])
+
+        result = await generate_final_post(card, 0, "")
+
+        assert calls["count"] == 2
+        assert "DEAD_ENDING" in result.gate_fails
+        assert "RETRY_EXHAUSTED" in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_structure_column_retry_succeeds(self, monkeypatch, card):
+        """STRUCTURE_COLUMN (요약→의견→관건) → 재생성에서 구조 변경 성공."""
+        from app.services.content_pack import (
+            generate_final_post,
+            _SUMMARY_OPINION_CRUX_PATTERNS,
+        )
+
+        starter = _SUMMARY_OPINION_CRUX_PATTERNS["summary_starters"][0]
+        crux = _SUMMARY_OPINION_CRUX_PATTERNS["crux_endings"][0]
+        bad = json.dumps({
+            "final_post": f"{starter} 이번 조치는 중요한 의미를 담고 있다.\n결국 {crux}",
+            "final_short": "짧은 버전.",
+        })
+        good = json.dumps({
+            "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 나오면 확정.",
+            "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
+        })
+        calls = self._setup_mocks(monkeypatch, [bad, good])
+
+        result = await generate_final_post(card, 0, "")
+
+        assert calls["count"] == 2
+        assert "STRUCTURE_COLUMN" not in result.gate_fails
+        assert "RETRY_EXHAUSTED" not in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_overreach_retry_succeeds(
+        self, monkeypatch, card
+    ):
+        """LOW_CONFIDENCE_OVERREACH → 재생성에서 동기 추정 제거 성공."""
+        from app.services.content_pack import CandidateCard, ThesisCard, generate_final_post
+
+        low_card = CandidateCard(
+            key_facts=["팩트1"],
+            hook_candidates=["훅1"],
+            thesis_cards=[ThesisCard(thesis="t", opener="o")],
+            certainty_level="미확인",
+        )
+
+        bad = json.dumps({
+            "final_post": "지금 핵심은 보상안이다.\n정치적 계산이 깔린 것으로 보인다.\n사찰 수용이 나오면 확정.",
+            "final_short": "짧은 버전.",
+        })
+        good = json.dumps({
+            "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 나오면 확정.",
+            "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
+        })
+        calls = self._setup_mocks(monkeypatch, [bad, good])
+
+        result = await generate_final_post(low_card, 0, "")
+
+        assert calls["count"] == 2
+        assert "LOW_CONFIDENCE_OVERREACH" not in result.gate_fails
+        assert "RETRY_EXHAUSTED" not in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_soft_fail_only_no_retry(self, monkeypatch, card):
+        """소프트 실패만 있으면 재생성하지 않고 1회로 종료."""
+        from app.services.content_pack import generate_final_post
+
+        # BRIEFING_SMELL만 걸리도록 _WEAK_PATTERNS 2개 이상 삽입
+        only_soft = json.dumps({
+            "final_post": "지금 핵심은 재회담이다.\n추이를 봐야 한다. 영향을 미칠 수 있다.\n사찰 수용이 나오면 확정.",
+            "final_short": "짧은 버전.",
+        })
+        calls = self._setup_mocks(monkeypatch, [only_soft])
+
+        result = await generate_final_post(card, 0, "")
+
+        # 재생성 트리거 안 됨 — 총 1회 호출
+        assert calls["count"] == 1
+        assert "RETRY_EXHAUSTED" not in result.gate_fails
+        # BRIEFING_SMELL 은 그대로 유지 (경고만)
+        assert "BRIEFING_SMELL" in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_retry_never_loops_twice(self, monkeypatch, card):
+        """재생성은 최대 1회 — 두 번 연속 강한 실패여도 3회째 호출 없음."""
+        from app.services.content_pack import generate_final_post
+
+        bad1 = json.dumps({
+            "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n이것이 관건이다.",
+            "final_short": "짧은 버전.",
+        })
+        bad2 = json.dumps({
+            "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n결국 변수다.",
+            "final_short": "짧은 버전.",
+        })
+        calls = self._setup_mocks(monkeypatch, [bad1, bad2, "SHOULD_NOT_USE"])
+
+        result = await generate_final_post(card, 0, "")
+
+        assert calls["count"] == 2, "무한 루프 금지 — 정확히 2회"
+        assert "RETRY_EXHAUSTED" in result.gate_fails
+
+
+class TestTelegramRetryExhaustedLabel:
+    """telegram_bot._tag_labels 에 RETRY_EXHAUSTED 라벨 존재."""
+
+    def test_tag_labels_contains_retry_exhausted(self):
+        # 소스 파일에 라벨 정의 존재 여부를 문자열로 확인 (텔레그램 import 회피)
+        from pathlib import Path
+        src = Path(__file__).resolve().parent.parent / "app" / "telegram_bot.py"
+        text = src.read_text(encoding="utf-8")
+        assert '"RETRY_EXHAUSTED"' in text
+        assert "재생성 1회 실패" in text
+        assert "게시 전 수동 확인 필수" in text

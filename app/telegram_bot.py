@@ -1728,13 +1728,25 @@ async def _handle_thesis_select_callback(
                 "COMPLEX_SENTENCE": "문장 복잡",
                 "STRUCTURE_COLUMN": "사설체 3단 구조",
                 "LOW_CONFIDENCE_OVERREACH": "저신뢰 과해석",
+                "RETRY_EXHAUSTED": "재생성 1회 실패",
             }
-            fail_labels = [_tag_labels.get(t, t) for t in result.gate_fails]
-            result_text += (
-                f"\n\n{'─' * 24}\n"
-                f"⚠️ <b>품질 경고:</b> {' / '.join(fail_labels)}\n"
-                f"<i>자동 보정 시도됨 — 게시 전 확인 권장</i>"
-            )
+            # RETRY_EXHAUSTED 가 있으면 "게시 전 수동 확인 필수" 경고 강화
+            _retry_exhausted = "RETRY_EXHAUSTED" in result.gate_fails
+            _display_tags = [t for t in result.gate_fails if t != "RETRY_EXHAUSTED"]
+            fail_labels = [_tag_labels.get(t, t) for t in _display_tags]
+            if _retry_exhausted:
+                result_text += (
+                    f"\n\n{'─' * 24}\n"
+                    f"🚨 <b>게시 전 수동 확인 필수</b>\n"
+                    f"<b>강한 실패 잔존:</b> {' / '.join(fail_labels)}\n"
+                    f"<i>자동 보정 + 재생성 1회 시도했으나 품질 기준 미통과.</i>"
+                )
+            else:
+                result_text += (
+                    f"\n\n{'─' * 24}\n"
+                    f"⚠️ <b>품질 경고:</b> {' / '.join(fail_labels)}\n"
+                    f"<i>자동 보정 시도됨 — 게시 전 확인 권장</i>"
+                )
 
         await query.message.reply_text(result_text, parse_mode="HTML")
 
