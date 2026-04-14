@@ -413,7 +413,7 @@ async def _translate_to_korean(text: str) -> str | None:
                 if settings.gemini_api_key:
                     body = body.replace(settings.gemini_api_key, "***")
                 logger.error(f"[GeminiTranslate] API {r.status_code}: {body[:500]}")
-            r.raise_for_status()
+                raise RuntimeError(f"[GeminiTranslate] API {r.status_code}")
             data = r.json()
             usage_meta = data.get("usageMetadata", {})
             logger.info(

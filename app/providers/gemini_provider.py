@@ -115,7 +115,7 @@ class GeminiResearcher(BaseResearcher):
                     if settings.gemini_api_key:
                         body = body.replace(settings.gemini_api_key, "***")
                     logger.error(f"[Gemini Researcher] API {resp.status_code}: {body[:500]}")
-                resp.raise_for_status()
+                    raise RuntimeError(f"[Gemini Researcher] API {resp.status_code}")
                 resp_data = resp.json()
                 usage_meta = resp_data.get("usageMetadata", {})
                 logger.info(

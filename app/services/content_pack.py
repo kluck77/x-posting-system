@@ -1712,7 +1712,7 @@ async def _gemini_generate_thesis_cards(
                 if settings.gemini_api_key:
                     body = body.replace(settings.gemini_api_key, "***")
                 logger.error(f"[GeminiThesis] API {r.status_code}: {body[:500]}")
-            r.raise_for_status()
+                raise RuntimeError(f"[GeminiThesis] API {r.status_code}")
             data = r.json()
             usage = data.get("usageMetadata", {})
             logger.info(
