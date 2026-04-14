@@ -1704,8 +1704,8 @@ async def _gemini_generate_thesis_cards(
                     "generationConfig": {
                         "temperature": 0.9,
                         "responseMimeType": "application/json",
-                        "thinkingConfig": {"thinkingBudget": 0},
                     },
+                    "thinkingConfig": {"thinkingBudget": 0},
                 },
             )
             r.raise_for_status()
@@ -2801,8 +2801,8 @@ async def _gemini_opinion_card(
                     "generationConfig": {
                         "temperature": 0.8,
                         "responseMimeType": "application/json",
-                        "thinkingConfig": {"thinkingBudget": 0},
                     },
+                    "thinkingConfig": {"thinkingBudget": 0},
                 },
             )
             r.raise_for_status()

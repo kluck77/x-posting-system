@@ -108,8 +108,8 @@ class GeminiResearcher(BaseResearcher):
                         "generationConfig": {
                             "temperature": 0.4,
                             "responseMimeType": "application/json",
-                            "thinkingConfig": {"thinkingBudget": 0},
                         },
+                        "thinkingConfig": {"thinkingBudget": 0},
                     },
                 )
                 resp.raise_for_status()
