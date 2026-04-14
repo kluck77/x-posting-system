@@ -1836,6 +1836,34 @@ def _log_draft_comparison(
     )
 
 
+# ─── 진행 상태 콜백 ─────────────────────────────────────────────────────────
+
+# 모듈 레벨 콜백: generate_final_post 내부에서 단계 전환 시 호출
+# telegram_bot.py에서 설정 → 메시지 edit으로 진행 표시
+_progress_callback: Optional[object] = None  # async callable(str) or None
+
+
+def set_progress_callback(cb) -> None:
+    """진행 상태 콜백 등록. cb는 async def cb(stage: str) 형태."""
+    global _progress_callback
+    _progress_callback = cb
+
+
+def clear_progress_callback() -> None:
+    """진행 상태 콜백 해제."""
+    global _progress_callback
+    _progress_callback = None
+
+
+async def _notify_progress(stage: str) -> None:
+    """등록된 콜백이 있으면 호출."""
+    if _progress_callback:
+        try:
+            await _progress_callback(stage)
+        except Exception:
+            pass
+
+
 # ─── 2차: 최종 마감 ─────────────────────────────────────────────────────────
 
 async def generate_final_post(
@@ -1898,6 +1926,7 @@ async def generate_final_post(
         "한국어로."
     )
 
+    await _notify_progress("openai")
     raw = await _call_ai_with_prompt(
         _FINALIZE_PROMPT_KO, user_prompt, temperature=0.9
     )
@@ -1914,6 +1943,7 @@ async def generate_final_post(
             # Gemini 조건부 판정은 OpenAI 초안 기준
             should_gemini = _should_invoke_extended_review(card, result)
 
+            await _notify_progress("grok_gemini")
             grok_result, gemini_opinion = await asyncio.gather(
                 _grok_eval(result, card, selected_hook=selected_hook),
                 _gemini_opinion_card(
@@ -1934,6 +1964,7 @@ async def generate_final_post(
             _log_draft_comparison(result, grok_result, gemini_opinion)
 
             # Phase 1: Claude 상시 최종 통합 — 항상 호출
+            await _notify_progress("claude")
             reviewed = await _claude_review_final(
                 card, result,
                 selected_hook=selected_hook,

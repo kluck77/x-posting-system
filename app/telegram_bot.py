@@ -185,7 +185,9 @@ async def _run_analysis_and_show_card(
     msg_id = str(update.message.message_id)
 
     # 분석 중 메시지
-    status_msg = await update.message.reply_text("🔬 팩트 조사 중...")
+    status_msg = await update.message.reply_text(
+        "🔬 Gemini 리서치 + Perplexity 팩트체크 중..."
+    )
 
     try:
         # Gemini & Perplexity 병렬 실행 (전체 timeout 적용)
@@ -1583,7 +1585,9 @@ async def _handle_hook_select_callback(
     hook_select:{index} 콜백 처리.
     선택된 훅으로 최종 마감 (2차 단계).
     """
-    from app.services.content_pack import generate_final_post
+    from app.services.content_pack import (
+        generate_final_post, set_progress_callback, clear_progress_callback,
+    )
 
     data = query.data  # hook_select:0
     parts = data.split(":", 1)
@@ -1605,6 +1609,22 @@ async def _handle_hook_select_callback(
 
     msg = await query.message.reply_text("✏️ <b>최종 마감 중...</b>", parse_mode="HTML")
 
+    # 단계별 진행 표시 콜백
+    _stage_labels = {
+        "openai": "✍️ OpenAI 초안 작성 중...",
+        "grok_gemini": "🔍 Grok 평가 + Gemini 의견 수집 중...",
+        "claude": "🧠 Claude 최종 편집 중...",
+    }
+
+    async def _on_progress(stage: str):
+        label = _stage_labels.get(stage, f"⏳ {stage}...")
+        try:
+            await msg.edit_text(label, parse_mode="HTML")
+        except Exception:
+            pass
+
+    set_progress_callback(_on_progress)
+
     try:
         source_text = context.user_data.get(CANDIDATE_SOURCE_KEY, "")
         result = await asyncio.wait_for(
@@ -1612,6 +1632,7 @@ async def _handle_hook_select_callback(
             timeout=60,
         )
 
+        clear_progress_callback()
         await msg.delete()
 
         # 최종 결과 전송
@@ -1632,8 +1653,10 @@ async def _handle_hook_select_callback(
         await query.message.reply_text(result_text, parse_mode="HTML")
 
     except asyncio.TimeoutError:
+        clear_progress_callback()
         await msg.edit_text("⏱ <b>마감 시간 초과</b> (60초)\n\n다시 시도해주세요.", parse_mode="HTML")
     except Exception as e:
+        clear_progress_callback()
         logger.error(f"최종 마감 오류: {e}", exc_info=True)
         await msg.edit_text(f"❌ 마감 실패: {_safe_error_msg(e)}")
 
