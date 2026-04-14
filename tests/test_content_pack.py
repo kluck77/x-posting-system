@@ -4,6 +4,7 @@
 한국어 기본 / 영어 명시 시만 영어 규칙을 검증합니다.
 """
 
+import json
 import pytest
 
 from app.services.content_pack import (
@@ -11,7 +12,7 @@ from app.services.content_pack import (
     FactSheet, ContentPack, extract_fact_sheet, check_density, TOPIC_MIN_FIELDS,
     _audit_numeric_safety,
     _STRONG_ASSERTION_RE, _CONCRETE_NUM_RE, _STOCK_NAME_RE, _PERCENT_RE,
-    CandidateCard, FinalPost,
+    CandidateCard, FinalPost, ThesisCard,
     _CANDIDATE_PROMPT_KO, _FINALIZE_PROMPT_KO,
     _parse_candidate_card, _parse_final_post,
     _validate_final_post, _BANNED_ENDINGS, _TONE_SOFTENERS,
@@ -1525,16 +1526,13 @@ class TestCandidatePromptRules:
             assert field in p
 
     def test_hook_sentence_form_rules(self):
-        """훅 후보가 해석 문장 강제 규칙을 포함."""
+        """thesis_cards 규칙이 해석 문장 강제 규칙을 포함."""
         p = _CANDIDATE_PROMPT_KO
-        assert "hook_candidates 규칙" in p
-        assert "해석 문장" in p
+        assert "thesis_cards 규칙" in p
         # 금지: 기자 질문형
         assert "기자 질문형" in p
         assert "무엇일까" in p
         assert "어떻게 될까" in p
-        # 좋은 예시
-        assert "호르무즈 봉쇄" in p or "항로 리스크" in p
 
     def test_no_complete_sentence_instruction(self):
         """완성 문장 금지 지시가 있다."""
@@ -1693,9 +1691,9 @@ class TestFinalizePromptRules:
     """_FINALIZE_PROMPT_KO 프롬프트 규칙 검증."""
 
     def test_hook_single_axis(self):
-        """골든룰 1: 훅 1개 중심축."""
+        """골든룰 1: 논지 1개 중심축."""
         p = _FINALIZE_PROMPT_KO
-        assert "훅 1개 = 중심축 1개" in p
+        assert "논지(thesis) 1개 = 중심축 1개" in p
         assert "다른 방향" in p
 
     def test_first_sentence_meaning_first(self):
@@ -2038,8 +2036,8 @@ class TestClaudeReviewPromptRules:
 
     def test_role_is_reviewer(self):
         p = _CLAUDE_REVIEW_PROMPT
-        assert "감수자" in p
-        assert "편집자" in p
+        assert "보정자" in p
+        assert "논지" in p
 
     def test_no_new_facts_rule(self):
         p = _CLAUDE_REVIEW_PROMPT
@@ -2169,26 +2167,40 @@ class TestFinalizePromptEndingRules:
         assert "뻔한 마감" in p
 
 
-class TestCandidatePromptHookSentenceForm:
-    """_CANDIDATE_PROMPT_KO 훅 후보 문장형 규칙 검증."""
+class TestCandidatePromptThesisCardRules:
+    """_CANDIDATE_PROMPT_KO thesis_cards 규칙 검증."""
 
     def test_arrow_notation_banned(self):
-        """화살표(→) 나열 금지가 명시."""
+        """명사형 제목/화살표 나열 금지가 명시."""
         p = _CANDIDATE_PROMPT_KO
         assert "명사형 제목" in p and "금지" in p
 
-    def test_good_hook_examples(self):
-        """좋은 훅 예시가 해석 문장형."""
+    def test_thesis_card_fields(self):
+        """thesis_card 필드(thesis, why_not_summary, reader_stake, opener) 정의."""
         p = _CANDIDATE_PROMPT_KO
-        # 나쁜→좋은 변환 예시가 있어야 함
-        assert "정부가 이걸 어디까지 알고 있었는가" in p
-        assert "항로 리스크" in p
+        assert "thesis:" in p
+        assert "why_not_summary:" in p
+        assert "reader_stake:" in p
+        assert "opener:" in p
 
-    def test_bad_hook_examples(self):
-        """나쁜 훅 예시 (기자 질문형) 포함."""
+    def test_good_thesis_examples(self):
+        """좋은 논지 예시가 서로 다른 축."""
         p = _CANDIDATE_PROMPT_KO
-        assert "정부의 공식 입장은 무엇일까" in p
-        assert "어떻게 될까" in p
+        assert "복사 직원까지 배제하면" in p
+        assert "다주택자 배제가 부동산 정책" in p
+
+    def test_bad_thesis_examples(self):
+        """나쁜 논지 예시 (같은 축 반복)."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "의지를 보여준다" in p
+        assert "의도가 드러난다" in p
+
+    def test_dead_patterns_banned(self):
+        """dead pattern 금지 목록."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "하려는 시도다" in p
+        assert "로 해석된다" in p
+        assert "가 관건이다" in p
 
 
 class TestClaudeReviewPromptUpdated:
@@ -2199,10 +2211,11 @@ class TestClaudeReviewPromptUpdated:
         p = _CLAUDE_REVIEW_PROMPT
         assert "조건형" in p or "대비형" in p
 
-    def test_memo_contamination_removal(self):
-        """내부 메모 오염 제거 규칙이 포함."""
+    def test_role_is_corrector_not_editor(self):
+        """Claude 역할이 보정자(사실/톤)로 축소."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "내부 메모" in p or "메모 언어" in p
+        assert "보정자" in p
+        assert "논지(thesis)를 바꾸거나" in p or "논지를 건드리지 마라" in p
 
     def test_banned_ending_patterns_in_prompt(self):
         """금지 마감 패턴이 포함."""
@@ -2270,16 +2283,16 @@ class TestRoleLoyaltyInPrompt:
         assert "뉴스 후기" in p
 
     def test_candidate_hook_critical(self):
-        """후보 카드 훅 규칙이 CRITICAL 레벨."""
+        """후보 카드 thesis_cards 규칙이 CRITICAL 레벨."""
         p = _CANDIDATE_PROMPT_KO
         assert "CRITICAL" in p
-        assert "전체 재작성" in p
+        assert "전체 실패" in p
 
-    def test_claude_review_rewrite_criteria(self):
-        """Claude 통합 프롬프트에 리라이트 판정 기준이 있음."""
+    def test_claude_review_correction_criteria(self):
+        """Claude 보정 프롬프트에 보정 판정 기준이 있음."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "리라이트 판정 기준" in p
-        assert "반드시 리라이트" in p
+        assert "보정 판정 기준" in p
+        assert "최소 보정" in p
 
     def test_ending_type_d_compression(self):
         """D. 압축형 결론 유형이 프롬프트에 포함."""
@@ -2501,22 +2514,20 @@ class TestOpinionPatterns:
 
 
 class TestClaudeReviewPrincipleSync:
-    """Claude 최종 통합 프롬프트에 원칙 A/B/C가 동기화되었는지 검증."""
+    """Claude 보정자 프롬프트에 핵심 보정 규칙이 동기화되었는지 검증."""
 
-    def test_korea_angle_in_claude_prompt(self):
-        """Claude 통합 프롬프트에 한국 관점 규칙 존재."""
-        assert "한국 관점" in _CLAUDE_REVIEW_PROMPT
-        assert "국제 뉴스" in _CLAUDE_REVIEW_PROMPT
+    def test_thesis_preservation_in_claude_prompt(self):
+        """Claude 보정 프롬프트에 논지 보존 규칙 존재."""
+        assert "논지" in _CLAUDE_REVIEW_PROMPT
+        assert "건드리지 마라" in _CLAUDE_REVIEW_PROMPT
 
-    def test_opinion_ban_in_claude_prompt(self):
-        """Claude 감수 프롬프트에 일반론 금지 규칙 존재."""
-        assert "일반론" in _CLAUDE_REVIEW_PROMPT
-        assert "역사적으로" in _CLAUDE_REVIEW_PROMPT
+    def test_fact_correction_in_claude_prompt(self):
+        """Claude 보정 프롬프트에 사실 보정 규칙 존재."""
+        assert "사실 보정" in _CLAUDE_REVIEW_PROMPT or "cautions" in _CLAUDE_REVIEW_PROMPT
 
-    def test_seven_criteria_in_claude_prompt(self):
-        """뉴스 후기 느낌 판정 기준이 7개로 확장."""
-        # 7번째 기준이 존재하는지 확인
-        assert "7." in _CLAUDE_REVIEW_PROMPT
+    def test_correction_criteria_count(self):
+        """보정 판정 기준이 6개."""
+        assert "6." in _CLAUDE_REVIEW_PROMPT
 
 
 class TestToneAnchorInFinalize:
@@ -2548,19 +2559,19 @@ class TestOpinionPatternsNoFalsePositive:
 # ─── 병목 재설계 테스트 ──────────────────────────────────────────────────────
 
 
-class TestHookSelfTest:
-    """후보 카드 프롬프트에 훅 자가 테스트 기준이 있는지 검증."""
+class TestThesisCardQualityRules:
+    """후보 카드 프롬프트에 thesis card 품질 규칙이 있는지 검증."""
 
-    def test_self_test_exists(self):
-        """훅 자가 테스트 섹션이 존재."""
+    def test_reader_stake_quality_rule(self):
+        """reader_stake 품질 규칙 존재."""
         p = _CANDIDATE_PROMPT_KO
-        assert "훅 자가 테스트" in p
+        assert "reader_stake 품질 규칙" in p
 
-    def test_self_test_criteria(self):
-        """3가지 테스트 기준이 포함."""
+    def test_thesis_divergence_rule(self):
+        """논지 분기 규칙(같은 축 반복 금지) 존재."""
         p = _CANDIDATE_PROMPT_KO
-        assert "기사 제목과 구별" in p
-        assert "완성 문장" in p
+        assert "논지 분기 규칙" in p
+        assert "같은 축 반복" in p or "전체 실패" in p
 
 
 class TestFinalPostThreeSlotStructure:
@@ -2618,22 +2629,23 @@ class TestValidationGate:
 
 
 class TestClaudeAlwaysOnIntegrator:
-    """Phase 1: Claude가 조건부 감수자가 아니라 상시 최종 통합자인지 검증."""
+    """Phase 1: Claude가 사실/톤 보정자로 역할 축소되었는지 검증."""
 
-    def test_prompt_role_is_integrator(self):
-        """프롬프트 역할이 '최종 통합 편집자'."""
+    def test_prompt_role_is_corrector(self):
+        """프롬프트 역할이 '사실/톤 보정자'."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "최종 통합 편집자" in p
+        assert "사실/톤 보정자" in p
 
-    def test_prompt_role_is_final_owner(self):
-        """'최종 책임자'로 명시."""
+    def test_prompt_role_is_not_final_owner(self):
+        """'보정자'로 명시, '최종 책임자'가 아님."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "최종 책임자" in p
+        assert "보정자" in p
+        assert '"최종 책임자"가 아니라' in p
 
-    def test_prompt_not_just_reviewer(self):
-        """감수자가 아니라 최종 책임자라는 대비 존재."""
+    def test_prompt_thesis_preservation(self):
+        """논지를 바꾸지 말라는 규칙 존재."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert '"감수자"가 아니라' in p
+        assert "논지(thesis)를 바꾸거나" in p or "논지를 건드리지 마라" in p
 
     def test_prompt_has_tone_model(self):
         """문체 모델 (증권사 출신 해설자)이 Claude 프롬프트에도 존재."""
@@ -2819,13 +2831,13 @@ class TestShouldInvokeExtendedReview:
 # ─── 훅 각도 분리 + 약한 패턴 보강 테스트 ──────────────────────────────────────
 
 
-class TestHookAngleSeparation:
-    """후보 카드 프롬프트에 훅 각도 분리 규칙이 있는지 검증."""
+class TestThesisAngleSeparation:
+    """후보 카드 프롬프트에 논지 분기(각도 분리) 규칙이 있는지 검증."""
 
     def test_angle_separation_rule_exists(self):
-        """각도 분리 CRITICAL 규칙이 존재."""
+        """논지 분기 CRITICAL 규칙이 존재."""
         p = _CANDIDATE_PROMPT_KO
-        assert "훅 각도 분리" in p
+        assert "논지 분기 규칙" in p
         assert "CRITICAL" in p
 
     def test_axis_examples_exist(self):
@@ -2838,15 +2850,15 @@ class TestHookAngleSeparation:
         assert "정책/구조 축" in p
 
     def test_bad_example_exists(self):
-        """나쁜 훅 예시(같은 축 반복)가 포함."""
+        """나쁜 논지 예시(같은 축 반복)가 포함."""
         p = _CANDIDATE_PROMPT_KO
-        assert "시급하다" in p
-        assert "우려가 커지고 있다" in p
+        assert "의지를 보여준다" in p
+        assert "의도가 분명히 드러난다" in p
 
     def test_good_example_exists(self):
-        """좋은 훅 예시(다른 축)가 포함."""
+        """좋은 논지 예시(다른 축)가 포함."""
         p = _CANDIDATE_PROMPT_KO
-        assert "TSMC" in p
+        assert "복사 직원까지 배제" in p
 
     def test_thesis_repeat_banned(self):
         """기사 thesis 어미 반복 금지 규칙 존재."""
@@ -3134,38 +3146,39 @@ class TestClaudeGrokEvalRules:
         assert "Grok 평가 활용 규칙" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_headline_clone_rule(self):
-        """headline_clone=true 시 첫 문장 재작성 지시."""
+        """headline_clone=true 시 첫 문장 표현 다듬기 지시."""
         assert "headline_clone=true" in _CLAUDE_REVIEW_PROMPT
-        assert "첫 문장을 다시 써라" in _CLAUDE_REVIEW_PROMPT
+        assert "첫 문장 표현만 다듬어라" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_too_safe_rule(self):
-        """too_safe=true 시 평균문 회피 지시."""
+        """too_safe=true 시 종결형 교체 지시."""
         assert "too_safe=true" in _CLAUDE_REVIEW_PROMPT
-        assert "평균문" in _CLAUDE_REVIEW_PROMPT
+        assert "종결형" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_new_angle_rule(self):
-        """new_angle_missing=true 시 해석 좁히기 지시."""
+        """new_angle_missing=true 시 참고만(새 각도 추가 금지)."""
         assert "new_angle_missing=true" in _CLAUDE_REVIEW_PROMPT
+        assert "참고만" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_low_score_rule(self):
-        """x_hook_score 1~2 시 첫 문장 강화 지시."""
+        """x_hook_score 1~2 시 첫 문장 표현력만 높이기."""
         assert "x_hook_score 1~2" in _CLAUDE_REVIEW_PROMPT or "1~2" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_high_score_rule(self):
-        """x_hook_score 4~5 시 첫 문장 유지 지시."""
+        """x_hook_score 4~5 시 첫 문장 유지."""
         assert "x_hook_score 4~5" in _CLAUDE_REVIEW_PROMPT or "4~5" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_no_copy_grok(self):
-        """Grok 문장 그대로 베끼기 금지."""
-        assert "베끼지 마라" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_no_thesis_change_from_grok(self):
+        """Grok 평가로 논지 변경 금지."""
+        assert "논지 변경" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_no_eval_no_change(self):
-        """평가 없을 때 기존 동작 유지."""
-        assert "없으면 기존과 동일" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_no_eval_correction_only(self):
+        """평가 없을 때 사실/톤 보정만."""
+        assert "사실/톤 보정만" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_no_new_facts_from_grok(self):
-        """Grok 평가와 무관하게 새 사실 추가 금지."""
-        assert "원문에 없는 건" in _CLAUDE_REVIEW_PROMPT
+        """새 사실 추가 금지."""
+        assert "새 사실 추가 금지" in _CLAUDE_REVIEW_PROMPT
 
 
 class TestNoopAsync:
@@ -3212,10 +3225,14 @@ class TestGrokPromptSync:
         assert "문제는 ~것이다" in _FINALIZE_PROMPT_KO
         assert "문제는 ~것이다" in _CLAUDE_REVIEW_PROMPT
 
-    def test_openai_and_claude_ban_unsupported(self):
-        """OpenAI/Claude 프롬프트 모두 근거 없는 일반론 금지."""
+    def test_openai_bans_unsupported_opinion(self):
+        """OpenAI 프롬프트에 근거 없는 일반론 금지."""
         assert "근거 없는 일반론" in _FINALIZE_PROMPT_KO
-        assert "근거 없는 일반론" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_bans_thesis_change(self):
+        """Claude 보정 프롬프트에 논지 변경 금지."""
+        assert "논지" in _CLAUDE_REVIEW_PROMPT
+        assert "건드리지 마라" in _CLAUDE_REVIEW_PROMPT
 
     def test_grok_eval_detects_safe_patterns(self):
         """Grok 평가 프롬프트가 평균문/안전문 감지 기준을 가짐."""
@@ -3236,5 +3253,204 @@ class TestWeakPatternNewAdditions:
 
     def test_weak_patterns_total_count(self):
         """_WEAK_PATTERNS 총 개수가 예상 범위."""
-        # 기존 ~22개 + 2개 = ~24개
-        assert len(_WEAK_PATTERNS) >= 24
+        # 기존 ~24개 + 7개 thesis dead patterns = ~31개
+        assert len(_WEAK_PATTERNS) >= 31
+
+
+# ─── thesis card 구조 변경 테스트 ────────────────────────────────────────────
+
+
+class TestThesisCardDataclass:
+    """ThesisCard dataclass 검증."""
+
+    def test_thesis_card_fields(self):
+        """ThesisCard 필드가 모두 존재."""
+        tc = ThesisCard(
+            thesis="비용 축",
+            why_not_summary="가격 영향 분석이지 요약 아님",
+            reader_stake="전세 만기 때 영향받을 수 있다",
+            opener="대출 문턱이 올라간 거다.",
+        )
+        assert tc.thesis == "비용 축"
+        assert tc.why_not_summary
+        assert tc.reader_stake
+        assert tc.opener
+
+    def test_thesis_card_defaults(self):
+        """ThesisCard 기본값은 모두 빈 문자열."""
+        tc = ThesisCard()
+        assert tc.thesis == ""
+        assert tc.why_not_summary == ""
+        assert tc.reader_stake == ""
+        assert tc.opener == ""
+
+
+class TestCandidateCardThesisIntegration:
+    """CandidateCard에 thesis_cards 통합 검증."""
+
+    def test_is_valid_with_thesis_cards(self):
+        """thesis_cards가 있으면 hook_candidates 없어도 유효."""
+        card = CandidateCard(
+            key_facts=["팩트1"],
+            thesis_cards=[ThesisCard(thesis="논지1", opener="첫 문장")],
+        )
+        assert card.is_valid()
+
+    def test_is_valid_with_hooks_only(self):
+        """하위호환: hook_candidates만 있어도 유효."""
+        card = CandidateCard(
+            key_facts=["팩트1"],
+            hook_candidates=["훅1"],
+        )
+        assert card.is_valid()
+
+    def test_invalid_without_both(self):
+        """thesis_cards와 hook_candidates 둘 다 없으면 무효."""
+        card = CandidateCard(key_facts=["팩트1"])
+        assert not card.is_valid()
+
+
+class TestParseThesisCards:
+    """_parse_candidate_card의 thesis_cards 파싱 검증."""
+
+    def test_parse_thesis_cards_from_json(self):
+        """thesis_cards JSON이 ThesisCard 객체로 파싱."""
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "thesis_cards": [
+                {
+                    "thesis": "비용 축",
+                    "why_not_summary": "가격 분석이지 요약 아님",
+                    "reader_stake": "전기료 올라감",
+                    "opener": "에너지 비용이 먼저 움직인다."
+                },
+                {
+                    "thesis": "비교 축",
+                    "why_not_summary": "한국만 취약한 이유 분석",
+                    "reader_stake": "수출 기업 마진 줄어든다",
+                    "opener": "한국만 유독 타격이 큰 이유가 있다."
+                },
+            ],
+            "one_liner": ["결론"],
+            "cautions": ["주의"],
+            "watch_points": [],
+            "certainty_level": "확정",
+            "topic_tags": ["경제"],
+            "risk_flags": [],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert len(card.thesis_cards) == 2
+        assert card.thesis_cards[0].thesis == "비용 축"
+        assert card.thesis_cards[1].reader_stake == "수출 기업 마진 줄어든다"
+
+    def test_hook_candidates_backfill_from_openers(self):
+        """thesis_cards가 있고 hook_candidates가 없으면 opener로 채움."""
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "thesis_cards": [
+                {"thesis": "논지A", "why_not_summary": "x", "reader_stake": "y", "opener": "첫문장A"},
+                {"thesis": "논지B", "why_not_summary": "x", "reader_stake": "y", "opener": "첫문장B"},
+            ],
+            "one_liner": [],
+            "cautions": [],
+            "watch_points": [],
+            "certainty_level": "미확인",
+            "topic_tags": [],
+            "risk_flags": [],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert len(card.hook_candidates) == 2
+        assert card.hook_candidates[0] == "첫문장A"
+        assert card.hook_candidates[1] == "첫문장B"
+
+    def test_hook_candidates_preserved_when_both(self):
+        """hook_candidates와 thesis_cards 둘 다 있으면 hook_candidates 유지."""
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "hook_candidates": ["기존훅1", "기존훅2"],
+            "thesis_cards": [
+                {"thesis": "논지A", "opener": "첫문장A"},
+            ],
+            "one_liner": [],
+            "cautions": [],
+            "watch_points": [],
+            "certainty_level": "확정",
+            "topic_tags": [],
+            "risk_flags": [],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert card.hook_candidates == ["기존훅1", "기존훅2"]
+
+    def test_thesis_cards_max_3(self):
+        """thesis_cards는 최대 3개까지만 파싱."""
+        raw = json.dumps({
+            "key_facts": ["팩트1"],
+            "thesis_cards": [
+                {"thesis": f"논지{i}", "opener": f"첫문장{i}"}
+                for i in range(5)
+            ],
+            "one_liner": [],
+            "cautions": [],
+            "watch_points": [],
+            "certainty_level": "확정",
+            "topic_tags": [],
+            "risk_flags": [],
+        })
+        card = _parse_candidate_card(raw)
+        assert card is not None
+        assert len(card.thesis_cards) == 3
+
+
+class TestWeakPatternDeadPatterns:
+    """thesis card dead pattern이 _WEAK_PATTERNS에 추가되었는지 검증."""
+
+    def test_dead_patterns_in_weak_patterns(self):
+        """thesis card dead pattern 7개가 모두 포함."""
+        dead = [
+            "하려는 시도다", "의지를 보여준다", "로 해석된다",
+            "의도가 드러난다", "가 관건이다", "에 달려 있다", "가 결정된다",
+        ]
+        for pat in dead:
+            assert pat in _WEAK_PATTERNS, f"dead pattern '{pat}' 누락"
+
+
+class TestFinalizePromptThesisReference:
+    """_FINALIZE_PROMPT_KO에 thesis 참조가 올바른지 검증."""
+
+    def test_thesis_axis_rule(self):
+        """골든룰에 '논지(thesis)' 참조."""
+        p = _FINALIZE_PROMPT_KO
+        assert "논지(thesis)" in p
+
+    def test_reader_stake_reference(self):
+        """reader_stake를 첫 문장에서 보여주라는 지시."""
+        p = _FINALIZE_PROMPT_KO
+        assert "reader_stake" in p
+
+    def test_why_not_summary_reference(self):
+        """why_not_summary를 지침으로 삼으라는 지시."""
+        p = _FINALIZE_PROMPT_KO
+        assert "why_not_summary" in p
+
+
+class TestClaudePromptCorrectorRole:
+    """Claude 보정자 역할 축소 검증."""
+
+    def test_not_rewriter(self):
+        """'더 좋은 글' 리라이트 금지."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "리라이트" in p
+
+    def test_two_roles_only(self):
+        """역할이 사실 보정 + 톤 보정 2가지로 제한."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "사실 보정" in p
+        assert "톤 보정" in p
+
+    def test_thesis_change_forbidden(self):
+        """논지 변경 금지가 명시."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "논지(thesis)를 바꾸거나" in p

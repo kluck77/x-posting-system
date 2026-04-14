@@ -686,11 +686,24 @@ def send_candidate_card_messages(card) -> list[dict]:
             facts_text += f"  {i}. {fact}\n"
         messages.append({"text": facts_text.strip(), "hook_index": None})
 
-    # ── 3. 훅 후보 × 3 (선택 버튼 있음) ──
-    for i, hook in enumerate(card.hook_candidates[:3]):
-        label = ["A", "B", "C"][i]
-        text = f"🎯 <b>훅 후보 {label}</b>\n\n<code>{hook}</code>"
-        messages.append({"text": text, "hook_index": i})
+    # ── 3. 논지 카드 × 3 (선택 버튼 있음) ──
+    if card.thesis_cards:
+        for i, tc in enumerate(card.thesis_cards[:3]):
+            label = ["A", "B", "C"][i]
+            text = (
+                f"🎯 <b>논지 {label}</b>\n\n"
+                f"<b>해석 축:</b> {tc.thesis}\n"
+                f"<b>왜 재정리 아닌가:</b> {tc.why_not_summary}\n"
+                f"<b>독자 이해관계:</b> {tc.reader_stake}\n"
+                f"<b>첫 문장 초안:</b> <code>{tc.opener}</code>"
+            )
+            messages.append({"text": text, "hook_index": i})
+    else:
+        # 하위호환: thesis_cards 없으면 기존 hook_candidates 사용
+        for i, hook in enumerate(card.hook_candidates[:3]):
+            label = ["A", "B", "C"][i]
+            text = f"🎯 <b>훅 후보 {label}</b>\n\n<code>{hook}</code>"
+            messages.append({"text": text, "hook_index": i})
 
     # ── 4. 한줄 결론 ──
     if card.one_liner:

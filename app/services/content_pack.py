@@ -1259,10 +1259,20 @@ def _mock_pack(request: ContentRequest) -> ContentPack:
 
 
 @dataclass
+class ThesisCard:
+    """논지 카드 — 서로 다른 해석 축 1개."""
+    thesis: str = ""              # 해석 축 한 줄
+    why_not_summary: str = ""     # 왜 기사 재진술이 아닌지
+    reader_stake: str = ""        # 독자가 왜 지금 봐야 하는지
+    opener: str = ""              # 이 논지에 맞는 첫 문장 초안
+
+
+@dataclass
 class CandidateCard:
     """1차 — 게시글 소재 후보 카드."""
     key_facts: list[str] = field(default_factory=list)          # 핵심 팩트 3개
-    hook_candidates: list[str] = field(default_factory=list)    # 훅 후보 3개 (방향 제시형)
+    hook_candidates: list[str] = field(default_factory=list)    # 훅 후보 3개 (하위호환)
+    thesis_cards: list[ThesisCard] = field(default_factory=list)  # 논지 카드 3개
     one_liner: list[str] = field(default_factory=list)          # 한줄 결론 2개
     cautions: list[str] = field(default_factory=list)           # 주의문 2개
     watch_points: list[str] = field(default_factory=list)       # 관찰 포인트 2~3개
@@ -1275,7 +1285,7 @@ class CandidateCard:
     fact_sheet_summary: str = ""
 
     def is_valid(self) -> bool:
-        return bool(self.key_facts and self.hook_candidates)
+        return bool(self.key_facts and (self.thesis_cards or self.hook_candidates))
 
 
 @dataclass
@@ -1341,47 +1351,22 @@ QA 체크:
 - 완성 게시글 문체로 길게 쓰지 마라.
 - 후보 재료만 간결하게 정리할 것.
 
-━━━ hook_candidates 규칙 (CRITICAL — 위반 시 전체 실패) ━━━
+━━━ thesis_cards 규칙 (CRITICAL — 위반 시 전체 실패) ━━━
 
 ■ 핵심 원칙:
-hook_candidates는 "기사 제목 변주"가 아니다.
-X에서 첫 줄로 바로 올려도 어색하지 않을 "해석 문장"이다.
-기사 요약이 아니라 "그래서 왜 중요한데?"에 답하는 문장이다.
+thesis_cards는 "기사 제목 변주"가 아니다.
+같은 기사를 서로 다른 해석 축으로 읽는 "논지 카드" 3개다.
+A/B/C는 "같은 뜻의 다른 문장"이 아니라 "서로 다른 논지"여야 한다.
 
-■ 금지 패턴 (이 중 하나라도 해당하면 전체 재작성):
-  ✗ 기자 질문형: "~은 무엇일까?" "~어떻게 될까?" "~향후 결과는?"
-  ✗ 명사형 제목: "한국 선박 호르무즈 통과, 정부 입장"
-  ✗ 화살표 나열: "A → B에 미치는 영향"
-  ✗ 소제목형: "청와대, 구체적 내용 확인 중 — 향후 결과는?"
-  ✗ 기사 제목 + 물음표: "한국 선박의 호르무즈 해협 통과, 정부의 공식 입장은?"
-  ✗ 내부 메모 톤: "핵심 쟁점 분석", "주요 변수 정리"
+■ 각 thesis_card 필드:
+  - thesis: 이 기사를 어떤 해석 축으로 볼 것인지 한 줄 논지
+  - why_not_summary: 이 논지가 왜 기사 재진술이 아닌지 한 줄
+  - reader_stake: 독자가 왜 이걸 지금 중요하게 봐야 하는지 한 줄
+  - opener: 이 논지에 맞는 첫 문장 초안 1개
 
-■ 필수 형태:
-  훅 = "해석이 담긴 완성 문장". 읽었을 때 "이 사람 이거 좀 아는 것 같은데"라고 느껴야 한다.
-  짧되, 기사 제목과 구별되어야 한다.
-  1~2문장. 주어+서술어가 있는 문장이어야 한다.
-
-■ 나쁜 훅 → 좋은 훅 변환 예시:
-
-  나쁨: "한국 실소유 선박의 호르무즈 해협 통과, 정부의 공식 입장은 무엇일까?"
-  좋음: "지금 더 중요한 건 선박 통과 자체보다, 정부가 이걸 어디까지 알고 있었는가다"
-
-  나쁨: "호르무즈 해협을 지나가는 한국 선박, 이란과의 관계는 어떻게 될까?"
-  좋음: "외교 뉴스처럼 보이지만 실제 변수는 청와대 설명보다 항로 리스크다"
-
-  나쁨: "청와대, 한국 선박 호르무즈 통과 관련 확인 중 — 향후 결과는?"
-  좋음: "이 사건이 커지면 한-이란 관계보다 먼저 흔들리는 건 해운 보험료다"
-
-  나쁨: "반도체 수출 사상 최고, 그 배경과 전망은?"
-  좋음: "반도체 수출 사상 최고인데 고용은 줄었다 — '고용 없는 호황'이 시작됐다"
-
-  나쁨: "금리 동결 결정, 시장 반응은?"
-  좋음: "한은이 동결한 이유보다, 시장이 이미 인하에 베팅 시작한 게 더 중요하다"
-
-■ 3개 훅은 반드시 서로 다른 해석 축이어야 한다. 같은 논지를 말만 바꿔 반복하면 실패.
-
-■ 훅 각도 분리 (CRITICAL — 같은 축 반복 시 전체 실패):
-  3개 중 최소 2개는 서로 다른 축이어야 한다.
+■ 논지 분기 규칙 (CRITICAL — 같은 축 반복 시 전체 실패):
+  3개 카드의 thesis가 의미상 같으면 실패.
+  3개 중 최소 2개는 서로 다른 해석 축이어야 한다.
   허용 축 예시:
   - 비용/가격 축: 이 문제가 가격·원가·마진에 어떤 의미인가
   - 비교/대비 축: 한국만 더 취약한가, 다른 국가·기업과 뭐가 다른가
@@ -1393,47 +1378,51 @@ X에서 첫 줄로 바로 올려도 어색하지 않을 "해석 문장"이다.
   ✗ 기사 thesis를 어미만 바꿔 3번 반복 → 실패
 
   나쁨 (3개 같은 축):
-    A: "K반도체 산업의 중동 의존도를 줄이는 것이 시급하다"
-    B: "공급망 차질의 우려가 커지고 있다"
-    C: "경제적 리스크가 커질 수 있다"
-    → 3개 다 "의존도→리스크" 경고문. 실패.
+    A thesis: "부동산 정책의 투명성을 높이기 위한 강력한 의지를 보여준다"
+    B thesis: "이해충돌 문제를 최소화하기 위한 초강수로 해석된다"
+    C thesis: "이해충돌을 차단하려는 의도가 분명히 드러난다"
+    → 3개 다 "의지/의도" 논지. 실패.
 
   좋음 (3개 다른 축):
-    A(비용): "브롬 가격이 2배 되면 반도체 원가에서 먼저 흔들리는 건 식각 공정이다"
-    B(대비): "TSMC는 이 리스크가 없다. 삼성만 있다. 차이는 조달 구조다"
-    C(시간): "재고 3개월치라는데, 진짜 변수는 3개월 뒤 대체 조달이 되느냐다"
+    A(직접 변화): "복사 직원까지 배제하면 실무 공백이 생긴다. 누가 채우나"
+    B(구조): "다주택자 배제가 부동산 정책 자체의 방향을 바꿀 수 있다"
+    C(검증): "이 조치를 실제로 이행할 인력/시스템이 있는가가 관건이다"
 
-■ 훅 후보에 "?"로 끝나는 기자 질문형이 2개 이상이면 무조건 재작성.
+■ reader_stake 품질 규칙:
+  reader_stake가 아래 수준이면 불합격:
+  ✗ "중요하다" "주목해야 한다" "관심이 필요하다"
+  ✓ 구체적이어야 함: "내 전세 만기 때 영향받을 수 있다" "수출 기업 마진이 줄어든다"
 
-■ 훅 자가 테스트 (출력 전 반드시 확인):
-  각 훅을 X에 첫 줄로 바로 올렸을 때:
-  1. 기사 제목과 구별이 안 되면 → 실패. 재작성.
-  2. "이 사람 뭔가 아네"라는 느낌이 안 들면 → 실패. 해석을 넣어라.
-  3. 주어+서술어가 없는 명사구/제목형이면 → 실패. 완성 문장으로.
+■ opener 규칙:
+  opener = 이 논지에 맞는 "해석이 담긴 완성 문장".
+  기사 제목 재진술 금지. 기자 질문형 금지.
+  읽었을 때 "이 사람 뭔가 아네"라는 느낌이 들어야 한다.
 
-■ 국제/지정학/거시경제 뉴스 특별 규칙 (CRITICAL):
-  국제 뉴스, 외교, 군사, 에너지, 원자재, 글로벌 금리 등의 주제일 때:
-  - 훅 후보 3개 중 최소 1개는 반드시 "한국 관점 해석 축"을 포함해야 한다.
-  - 한국 관점 = 한국 수입물가/환율/에너지비용/기업/정유/해운/항공/증시/정부 대응 등
-  - 국제 뉴스 자체 설명에만 머무르면 팔로우 가치가 없다.
+■ 금지 패턴:
+  ✗ "~하려는 시도다" "~의지를 보여준다" "~로 해석된다" "~의도가 드러난다"
+  ✗ "~가 관건이다" "~에 달려 있다" "~가 결정된다"
+  ✗ 기자 질문형: "~은 무엇일까?" "~어떻게 될까?"
+  ✗ 명사형 제목, 화살표 나열, 내부 메모 톤
 
-  나쁨: "미국의 해상봉쇄가 이란 경제에 영향을 준다" ← 한국 관점 없음
-  좋음: "미국의 해상봉쇄가 길어지면 한국에선 유가보다 운임·환율이 먼저 흔들릴 수 있다"
-
-  나쁨: "트럼프가 이란 합의를 원한다고 말했다" ← 기사 재진술
-  좋음: "이 뉴스가 한국에서 먼저 건드리는 건 외교가 아니라 에너지 비용이다"
-
-  나쁨: "이란의 반응은?" ← 기자 질문형
-  좋음: "봉쇄 뉴스처럼 보여도 한국이 먼저 보게 될 건 환율과 운임이다"
+■ 국제/지정학/거시경제 뉴스 특별 규칙:
+  국제 뉴스일 때 최소 1개 카드는 한국 관점 해석 축 포함 필수.
+  한국 관점 = 한국 수입물가/환율/기업/증시/가계비용/정부대응 등.
 
 ■ 근거 없는 일반론 금지:
-  - "역사적으로 ~" "~전략이다" "~낳기 쉽다" "큰 파장을 낳을 것이다" 같은 칼럼체 금지
+  - "역사적으로 ~" "~전략이다" "~낳기 쉽다" 같은 칼럼체 금지
   - key_facts, cautions, watch_points 모두 확인된 사실/기사 내 발언만으로 작성
 
 JSON 스키마:
 {
   "key_facts": ["팩트1", "팩트2", "팩트3"],
-  "hook_candidates": ["방향1", "방향2", "방향3"],
+  "thesis_cards": [
+    {
+      "thesis": "해석 축 한 줄",
+      "why_not_summary": "왜 기사 재진술이 아닌지",
+      "reader_stake": "독자가 왜 지금 봐야 하는지",
+      "opener": "이 논지에 맞는 첫 문장"
+    }
+  ],
   "one_liner": ["한줄1", "한줄2"],
   "cautions": ["주의1", "주의2"],
   "watch_points": ["포인트1", "포인트2", "포인트3"],
@@ -1452,11 +1441,12 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "최종 마�
 너는 "안전한 설명문"에 충성하지 말고, "기억에 남는 해석 1개"에 충성한다.
 
 해야 할 일:
-1. 선택된 훅 하나만 살린다
-2. 첫 문장에서 "왜 중요한가"를 바로 보여준다 — 사실 나열로 시작하면 실패
-3. 본문은 해석 축 1개 + 보조 연결 1개만 쓴다
-4. 마지막은 조건형/대비형/질문형/압축형 중 하나로 끝낸다
-5. 읽고 나서 한 문장이 기억에 남아야 한다
+1. 선택된 논지(thesis)의 해석 축만 살린다 — 다른 축으로 새지 마라
+2. reader_stake를 첫 문장에서 바로 보여준다 — 사실 나열로 시작하면 실패
+3. why_not_summary를 지침으로 삼아 "기사 재정리"가 아님을 증명한다
+4. 본문은 해석 축 1개 + 보조 연결 1개만 쓴다
+5. 마지막은 조건형/대비형/질문형/압축형 중 하나로 끝낸다
+6. 읽고 나서 한 문장이 기억에 남아야 한다
 
 절대 하면 안 되는 일:
 - 기사 내용을 다시 줄줄 요약하기 (뉴스 후기 느낌의 원흉)
@@ -1523,7 +1513,7 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "최종 마�
 
 ━━━ 골든룰 (위반 시 전체 실패) ━━━
 
-1. 훅 1개 = 중심축 1개. 다른 방향으로 새지 마라.
+1. 논지(thesis) 1개 = 중심축 1개. 다른 방향으로 새지 마라.
 2. 첫 문장: 기사 사실 요약으로 시작하면 실패. "왜 중요한가/그래서 뭐가 달라지는가"를 바로 보여줘라.
    ✗ "~라는 보도가 나왔다." ← 기자 리포트
    ✗ "~것으로 전해졌다." ← 뉴스 요약
@@ -1878,9 +1868,22 @@ async def generate_final_post(
         hook_index = 0
     selected_hook = card.hook_candidates[hook_index]
 
-    user_prompt = (
-        f"━━━ 입력 ━━━\n"
-        f"선택된 훅: {selected_hook}\n"
+    # thesis card context 추출 (있으면 사용, 없으면 hook만)
+    selected_thesis: Optional[ThesisCard] = None
+    if hook_index < len(card.thesis_cards):
+        selected_thesis = card.thesis_cards[hook_index]
+
+    user_prompt = "━━━ 입력 ━━━\n"
+    if selected_thesis:
+        user_prompt += (
+            f"선택된 논지(thesis): {selected_thesis.thesis}\n"
+            f"왜 기사 재정리가 아닌가(why_not_summary): {selected_thesis.why_not_summary}\n"
+            f"독자 이해관계(reader_stake): {selected_thesis.reader_stake}\n"
+            f"첫 문장 초안(opener): {selected_thesis.opener}\n"
+        )
+    else:
+        user_prompt += f"선택된 훅: {selected_hook}\n"
+    user_prompt += (
         f"certainty_level: {card.certainty_level}\n\n"
         f"핵심 팩트:\n"
     )
@@ -1915,16 +1918,32 @@ async def generate_final_post(
     if source_text:
         user_prompt += f"\n원문 참고:\n{source_text[:1500]}\n"
 
-    user_prompt += (
-        "\n━━━ 지시 ━━━\n"
-        "위 훅 방향과 팩트만으로 최종 게시글 JSON을 생성하라.\n"
-        "- final_post: 짧고 밀도 있게, 군더더기 없이\n"
-        "- final_short: final_post보다 짧게, 다른 각도로 시작\n"
-        "- 통제 조건(cautions)과 충돌 금지\n"
-        "- 통제 조건/관찰 포인트의 문구를 본문에 직접 복붙하지 마라. 내부 메모 언어가 최종 문체를 오염시키면 실패.\n"
-        "- 마지막 문장: 조건형/대비형/질문형 중 하나. 전망문/훈계문/안전문/요약문 금지.\n"
-        "한국어로."
-    )
+    if selected_thesis:
+        user_prompt += (
+            "\n━━━ 지시 ━━━\n"
+            "위 논지(thesis)의 해석 축과 팩트만으로 최종 게시글 JSON을 생성하라.\n"
+            "- thesis의 방향만 쓴다. 다른 축으로 새지 마라.\n"
+            "- reader_stake를 첫 문장에서 바로 보여줘라.\n"
+            "- why_not_summary를 지침으로 삼아 기사 재정리가 아님을 증명하라.\n"
+            "- opener는 참고만. 그대로 복붙하지 마라. 더 날카롭게 다듬어라.\n"
+            "- final_post: 짧고 밀도 있게, 군더더기 없이\n"
+            "- final_short: final_post보다 짧게, 다른 각도로 시작\n"
+            "- 통제 조건(cautions)과 충돌 금지\n"
+            "- 통제 조건/관찰 포인트의 문구를 본문에 직접 복붙하지 마라.\n"
+            "- 마지막 문장: 조건형/대비형/질문형 중 하나. 전망문/훈계문/안전문/요약문 금지.\n"
+            "한국어로."
+        )
+    else:
+        user_prompt += (
+            "\n━━━ 지시 ━━━\n"
+            "위 훅 방향과 팩트만으로 최종 게시글 JSON을 생성하라.\n"
+            "- final_post: 짧고 밀도 있게, 군더더기 없이\n"
+            "- final_short: final_post보다 짧게, 다른 각도로 시작\n"
+            "- 통제 조건(cautions)과 충돌 금지\n"
+            "- 통제 조건/관찰 포인트의 문구를 본문에 직접 복붙하지 마라.\n"
+            "- 마지막 문장: 조건형/대비형/질문형 중 하나. 전망문/훈계문/안전문/요약문 금지.\n"
+            "한국어로."
+        )
 
     await _notify_progress("openai")
     raw = await _call_ai_with_prompt(
@@ -2029,6 +2048,14 @@ _WEAK_PATTERNS = [
     # 약한 일반화
     "피할 수 없다",
     "일으킬 수 있다",
+    # thesis card dead patterns — 요약→의견→관건 구조
+    "하려는 시도다",
+    "의지를 보여준다",
+    "로 해석된다",
+    "의도가 드러난다",
+    "가 관건이다",
+    "에 달려 있다",
+    "가 결정된다",
 ]
 
 
@@ -2087,32 +2114,37 @@ def _should_invoke_claude_review(card: CandidateCard, draft: FinalPost) -> bool:
     return False
 
 
-_CLAUDE_REVIEW_PROMPT = """너는 X 게시글 "최종 통합 편집자"다.
+_CLAUDE_REVIEW_PROMPT = """너는 X 게시글 "사실/톤 보정자"다.
 
-━━━ 역할 ━━━
+━━━ 역할 (CRITICAL) ━━━
 
-OpenAI 초안 1개가 제공된다.
-Grok X 감각 평가가 함께 올 수 있다.
-너는 최종 게시 가능 수준으로 리라이트하라.
-Perplexity 검증 결과와 cautions를 반영해서 사실 상한선을 넘지 않게 하라.
+너는 "최종 책임자"가 아니라 "보정자"다.
+OpenAI가 선택된 논지(thesis)로 쓴 초안이 제공된다.
+너의 역할은 딱 2가지:
+1. 사실 보정: cautions 위반, certainty_level 초과, 기사 사실과 모순되는 표현 수정
+2. 톤 보정: 보고서체/칼럼체/전망문/훈계문 → 트윗체로 교정
 
-너는 "감수자"가 아니라 "최종 책임자"다.
-초안이 이미 좋으면 그대로 내보내도 되지만,
-부족하면 반드시 고쳐서 "바로 올릴 수 있는 수준"으로 만들어라.
+절대 하면 안 되는 일:
+- 논지(thesis)를 바꾸거나 새 해석 축을 추가하는 것
+- 초안의 방향성을 뒤집는 것
+- "더 좋은 글"을 쓰려고 리라이트하는 것
+- 새 사실/수치 추가 (원문에 없는 것)
 
-━━━ Grok 평가 활용 규칙 (CRITICAL — 평가가 있을 때) ━━━
+초안이 이미 괜찮으면 그대로 JSON으로 반환하라.
+고칠 게 있으면 최소한으로 고쳐라. 논지를 건드리지 마라.
 
-Grok 평가는 "X에서 이 글이 왜 안 먹히는지"에 대한 참고 판정이다.
+━━━ Grok 평가 활용 규칙 (평가가 있을 때) ━━━
 
-1. headline_clone=true → 첫 문장을 다시 써라. 기사 제목과 구조·표현이 달라야 한다.
-2. too_safe=true → 평균문 종결형("중요하다" "리스크다" "우려다")을 피하고
-   더 구체적 진입점(숫자, 고유명사, 조건)으로 고쳐라.
-3. new_angle_missing=true → 기사 정리 대신 "왜 지금 중요한가"를 더 좁혀라.
-4. x_hook_score 1~2 → 첫 문장 힘을 높여라. 팩트나 대비로 시작.
-5. x_hook_score 4~5 → 첫 문장은 유지. 나머지만 다듬어라.
-6. fix_direction은 방향 참고만. Grok의 문장을 그대로 베끼지 마라.
-7. Grok 평가가 없으면 기존과 동일하게 처리.
-8. 새 사실 추가 금지. Grok이 뭐라 하든 원문에 없는 건 못 넣는다.
+Grok 평가는 톤 보정 참고 자료다. 논지 변경 근거가 아니다.
+
+1. headline_clone=true → 첫 문장 표현만 다듬어라. 논지는 유지.
+2. too_safe=true → 종결형("중요하다" "리스크다")만 구체적 표현으로 교체.
+3. new_angle_missing=true → 참고만. 새 각도를 추가하지 마라.
+4. x_hook_score 1~2 → 첫 문장 표현력만 높여라. 방향은 유지.
+5. x_hook_score 4~5 → 첫 문장 유지. 톤/사실만 다듬어라.
+6. fix_direction은 톤 보정 참고만. 논지 변경에 쓰지 마라.
+7. Grok 평가가 없으면 사실/톤 보정만 하라.
+8. 새 사실 추가 금지.
 
 ━━━ 문체 모델 ━━━
 
@@ -2129,18 +2161,17 @@ Grok 평가는 "X에서 이 글이 왜 안 먹히는지"에 대한 참고 판정
 
 3문장이 기본. 4문장까지 허용. 그 이상 금지.
 
-━━━ 리라이트 판정 기준 ━━━
+━━━ 보정 판정 기준 (이것만 고쳐라) ━━━
 
-아래 중 하나라도 해당하면 반드시 리라이트:
-1. 첫 문장이 기사 요약/사실 나열로 시작
-2. 본문이 기사 재설명 구조
-3. 마지막 문장이 전망문/훈계문/기자 질문형
-4. 내부 메모 문구가 본문에 스며듦
-5. 근거 없는 일반론 ("역사적으로~", "~전략이다", "~낳기 쉽다")
-6. 국제 뉴스인데 한국 관점이 전혀 없음
-7. 읽고 나서 한 문장도 기억에 안 남음
-8. "문제는 ~것이다" "핵심이다" 같은 칼럼/사설 구조 사용
-9. 기사 사실과 모순되는 단정 (기사에 대응책 언급됐는데 "준비 안 됐다" 등)
+아래 중 하나라도 해당하면 해당 부분만 최소 보정:
+1. cautions와 충돌하는 표현 → 약화/삭제
+2. certainty_level 초과 단정 → 톤 낮춤
+3. 기사 사실과 모순되는 단정 → 사실 인정 후 좁히기
+4. 보고서체/칼럼체 종결 → 트윗체로 교정
+5. 금지 마감 패턴 → 조건형/대비형/질문형/압축형으로 교체
+6. "문제는 ~것이다" "핵심이다" 칼럼/사설 구조 → 조건형/대비형으로 변환
+
+논지(thesis) 방향, 해석 축, 첫 문장의 의미는 건드리지 마라.
 
 ━━━ 사실 상한선 ━━━
 
@@ -2595,9 +2626,35 @@ async def _claude_review_final(
             f"fix_direction: {grok_eval.fix_direction}\n\n"
         )
 
+    # thesis context가 있으면 논지 정보 전달
+    selected_thesis: Optional[ThesisCard] = None
+    if card.thesis_cards:
+        # selected_hook에서 매칭되는 thesis card 찾기
+        for tc in card.thesis_cards:
+            if tc.opener == selected_hook:
+                selected_thesis = tc
+                break
+        if not selected_thesis and card.thesis_cards:
+            # hook_index로 fallback
+            hook_idx = card.hook_candidates.index(selected_hook) if selected_hook in card.hook_candidates else 0
+            if hook_idx < len(card.thesis_cards):
+                selected_thesis = card.thesis_cards[hook_idx]
+
+    if selected_thesis:
+        user_prompt += (
+            f"━━━ 선택된 논지 (이 방향을 건드리지 마라) ━━━\n"
+            f"thesis: {selected_thesis.thesis}\n"
+            f"why_not_summary: {selected_thesis.why_not_summary}\n"
+            f"reader_stake: {selected_thesis.reader_stake}\n"
+            f"opener: {selected_thesis.opener}\n\n"
+        )
+    else:
+        user_prompt += (
+            f"━━━ 선택된 훅 ━━━\n"
+            f"{selected_hook}\n\n"
+        )
+
     user_prompt += (
-        f"━━━ 선택된 훅 ━━━\n"
-        f"{selected_hook}\n\n"
         f"━━━ 카드 정보 ━━━\n"
         f"certainty_level: {card.certainty_level}\n"
     )
@@ -2629,7 +2686,7 @@ async def _claude_review_final(
         )
 
     user_prompt += (
-        "\n위 초안을 최종 통합 편집하고, JSON으로 반환하라."
+        "\n위 초안의 사실/톤만 보정하고, JSON으로 반환하라. 논지를 바꾸지 마라."
     )
 
     try:
@@ -2833,9 +2890,28 @@ def _parse_candidate_card(
             )
             ai_certainty = certainty_ceiling
 
+        # thesis_cards 파싱 → ThesisCard 객체 리스트
+        raw_thesis = data.get("thesis_cards", [])
+        thesis_cards: list[ThesisCard] = []
+        if isinstance(raw_thesis, list):
+            for tc in raw_thesis[:3]:
+                if isinstance(tc, dict):
+                    thesis_cards.append(ThesisCard(
+                        thesis=str(tc.get("thesis", "")),
+                        why_not_summary=str(tc.get("why_not_summary", "")),
+                        reader_stake=str(tc.get("reader_stake", "")),
+                        opener=str(tc.get("opener", "")),
+                    ))
+
+        # hook_candidates 하위호환: thesis_cards가 있으면 opener로 채움
+        raw_hooks = _ensure_list(data.get("hook_candidates"), 5)
+        if thesis_cards and not raw_hooks:
+            raw_hooks = [tc.opener for tc in thesis_cards if tc.opener]
+
         return CandidateCard(
             key_facts=_ensure_list(data.get("key_facts"), 5),
-            hook_candidates=_ensure_list(data.get("hook_candidates"), 5),
+            hook_candidates=raw_hooks,
+            thesis_cards=thesis_cards,
             one_liner=_ensure_list(data.get("one_liner"), 3),
             cautions=_ensure_list(data.get("cautions"), 3),
             watch_points=_ensure_list(data.get("watch_points"), 5),

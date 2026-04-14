@@ -1637,9 +1637,16 @@ async def _handle_hook_select_callback(
 
         # 최종 결과 전송
         selected_hook = card.hook_candidates[hook_index] if hook_index < len(card.hook_candidates) else "?"
+        # thesis card가 있으면 논지 정보 표시
+        thesis_label = ""
+        if hook_index < len(card.thesis_cards):
+            tc = card.thesis_cards[hook_index]
+            thesis_label = f"📌 논지: {tc.thesis}\n"
+        else:
+            thesis_label = f"📌 훅: {selected_hook}\n"
         result_text = (
             f"✅ <b>최종 마감 완료</b>\n"
-            f"📌 훅: {selected_hook}\n"
+            f"{thesis_label}"
             f"{'─' * 28}\n\n"
             f"📝 <b>게시글</b> ({len(result.final_post)}자)\n"
             f"<code>{result.final_post}</code>\n\n"
