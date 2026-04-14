@@ -1324,7 +1324,7 @@ _CANDIDATE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정을 위한 "소
 
 2. 검증 결과의 주제/엔티티를 벗어나는 확장 금지:
    - 원문에 없는 새 시장축(부동산/환율/주식시장/피해액 등)을 임의 추가하지 마라.
-   - topic_tags, hook_candidates, key_facts는 소스 원문의 주제 범위 안에서만 생성.
+   - topic_tags, key_facts는 소스 원문의 주제 범위 안에서만 생성. thesis_cards는 생성하지 마라.
    - "소스에 없지만 관련될 수 있는" 해설을 만들지 마라.
 
 3. certainty_level 상한:
@@ -1632,7 +1632,7 @@ final_short 예시 C (독립 버전):
 - 아래 2개 필드만 생성하라.
 
 {
-  "final_post": "훅 기반 완성본",
+  "final_post": "논지 기반 완성본",
   "final_short": "독립형 짧은 버전"
 }"""
 
@@ -1680,6 +1680,26 @@ _GEMINI_THESIS_PROMPT = """너는 "논지 분기기"다.
   B(구조): "다주택자 배제가 부동산 정책 자체의 방향을 바꿀 수 있다"
   C(검증): "후속 지침이 나오기 전까지는 선언에 그칠 수 있다"
 
+━━━ 추상/명분형 논지 금지 (CRITICAL) ━━━
+
+아래 단어가 thesis에 들어가면 자동 불합격:
+투명성, 공정성, 의지, 전환점, 시금석, 분수령, 리트머스,
+신호탄, 촉매, 기폭제, 변곡점, 이정표, 교두보
+
+아래 종결 패턴이 thesis/opener에 들어가면 자동 불합격:
+"중요하다", "이어질 수 있을지", "실행될지", "변수다",
+"관건이다", "보여준다", "해석된다", "드러난다", "전환점이 될",
+"주목된다", "파장이 예상된다", "확인이 필요하다",
+"실효성이 결정된다", "주목해야 한다"
+
+→ 이런 표현은 정책 메모/칼럼 투. X 게시글에 쓰면 아무도 안 읽는다.
+→ 논지는 "~하면 ~이 생긴다" "~인데 ~를 모른다" "~가 빠졌다" 식의
+  구체적 인과/결핍/맹점 문장이어야 한다.
+
+자가진단: thesis를 읽고 "그래서 뭐?"라고 물었을 때 답이 안 나오면 추상적인 것이다.
+"투명성을 높이기 위한 의지" → "그래서 뭐?" → 답 없음 → 불합격
+"실무 배제하면 공백이 생긴다" → "그래서 뭐?" → "일 처리 지연" → 합격
+
 ━━━ reader_stake 품질 규칙 ━━━
 
 ✗ "중요하다" "주목해야 한다" "관심이 필요하다" → 불합격
@@ -1696,6 +1716,7 @@ opener = "해석이 담긴 완성 문장". 기사 제목 재진술 금지. 기�
 ✗ "~가 관건이다" "~에 달려 있다" "~가 결정된다"
 ✗ "~은 무엇일까?" "~어떻게 될까?"
 ✗ "~영향은 확인이 필요하다" "~시장 반응을 주목해야 한다"
+✗ "~파장이 예상된다" "~확인이 필요하다" "~실효성이 결정된다"
 ✗ 명사형 제목, 화살표 나열
 
 ━━━ 국제 뉴스 특별 규칙 ━━━
@@ -1898,9 +1919,22 @@ async def generate_candidate_card(
                 card.thesis_cards = thesis_cards
                 # hook_candidates를 opener에서 채움 (하위호환)
                 card.hook_candidates = [tc.opener for tc in thesis_cards if tc.opener]
-            elif not card.hook_candidates:
-                # Gemini 실패 + hook도 없으면 기본 hook 생성
-                card.hook_candidates = [f"[Gemini실패] {card.key_facts[0][:60]}"]
+            else:
+                # Gemini 실패 → key_facts로 fallback ThesisCard 생성
+                # thesis_cards가 항상 존재해야 텔레그램 '논지 A' 포맷 표시됨
+                fallback_cards = []
+                for i, kf in enumerate(card.key_facts[:3]):
+                    fallback_cards.append(ThesisCard(
+                        thesis=f"[Gemini실패] {kf[:80]}",
+                        why_not_summary="Gemini 생성 실패 — 팩트 기반 폴백",
+                        reader_stake="자동 생성 실패 — 수동 확인 필요",
+                        opener=kf[:100],
+                    ))
+                if fallback_cards:
+                    card.thesis_cards = fallback_cards
+                    card.hook_candidates = [tc.opener for tc in fallback_cards if tc.opener]
+                else:
+                    card.hook_candidates = [f"[Gemini실패] {card.key_facts[0][:60]}"]
 
             logger.info(
                 f"후보 카드 생성 완료: facts={len(card.key_facts)}, "
@@ -2178,6 +2212,16 @@ _WEAK_PATTERNS = [
     "가 관건이다",
     "에 달려 있다",
     "가 결정된다",
+    # 추가 dead patterns — 스크린샷 분석
+    "확인이 필요하다",
+    "이어질 수 있을지",
+    "실효성이 결정된다",
+    "파장이 예상된다",
+    "주목해야 할 대목이다",
+    "실행될지",
+    "전환점이 될",
+    "보여준다",
+    "드러난다",
 ]
 
 
@@ -2307,13 +2351,22 @@ Grok 평가는 톤 보정 참고 자료다. 논지 변경 근거가 아니다.
 - 정치/외교/군사는 한 단계 더 보수적으로
 - 새 사실/수치 추가 금지 (원문에 없는 것)
 
-━━━ 금지 마감 패턴 ━━━
+━━━ 금지 마감 패턴 (CRITICAL — 이것만은 반드시 잡아라) ━━━
 
-✗ "추이를 봐야 한다" "변수다" "주목해야 한다"
+아래 패턴이 마지막 문장에 있으면 반드시 조건형/대비형/질문형/압축형으로 교체:
+✗ "추이를 봐야 한다" "변수다" "주목해야 한다" "중요하다"
 ✗ "영향을 미칠 수 있다" "여파가 예상된다" "핵심은 ~다"
 ✗ "중요한 시점이다" "관건은 ~다" "~어떻게 될까?"
 ✗ "핵심이다" "시급하다" "문제는 ~것이다"
+✗ "확인이 필요하다" "이어질 수 있을지" "실효성이 결정된다"
+✗ "파장이 예상된다" "실행될지" "보여준다" "해석된다" "드러난다"
+✗ "전환점이 될" "주목된다" "주목해야 할 대목이다"
 ✓ 조건형/대비형/질문형/압축형만 허용
+
+교체 예시:
+  "파장이 예상된다" → "관세 부과 시점이 다음 분기 실적을 가른다"
+  "변수다" → "연준이 6월에 금리를 올리면 판이 바뀐다"
+  "확인이 필요하다" → "실제 시행령이 나와야 윤곽이 잡힌다"
 
 ━━━ 칼럼/사설 구조 금지 ━━━
 
@@ -3057,9 +3110,10 @@ def _parse_candidate_card(
                         opener=str(tc.get("opener", "")),
                     ))
 
-        # hook_candidates 하위호환: thesis_cards가 있으면 opener로 채움
-        raw_hooks = _ensure_list(data.get("hook_candidates"), 5)
-        if thesis_cards and not raw_hooks:
+        # hook_candidates: OpenAI가 생성해도 무시 — Gemini thesis_cards에서만 채움
+        # (OpenAI hook_candidates가 있으면 Gemini 실패 시 thesis_cards 폴백 안 됨)
+        raw_hooks: list[str] = []
+        if thesis_cards:
             raw_hooks = [tc.opener for tc in thesis_cards if tc.opener]
 
         return CandidateCard(
@@ -3109,6 +3163,22 @@ _BANNED_ENDINGS = [
     "어떻게 될까",
     "향후 결과는",
     "정부의 공식 입장은",
+    # 추가 dead endings — 스크린샷 분석
+    "변수다",
+    "중요하다",
+    "확인이 필요하다",
+    "확인 필요",
+    "이어질 수 있을지",
+    "실효성이 결정된다",
+    "관건이다",
+    "파장이 예상된다",
+    "주목해야 할 대목이다",
+    "실행될지",
+    "보여준다",
+    "해석된다",
+    "드러난다",
+    "전환점이 될",
+    "주목된다",
 ]
 
 # 근거 없는 일반론 의견 패턴 (칼럼체/보고서체 — 원칙 C)

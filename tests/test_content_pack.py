@@ -1393,7 +1393,7 @@ class TestParseCandidateCard:
     """_parse_candidate_card 파서 테스트."""
 
     def test_valid_json(self):
-        """정상 JSON → CandidateCard."""
+        """정상 JSON → CandidateCard. hook_candidates는 thesis_cards에서만 채워짐."""
         import json
         raw = json.dumps({
             "key_facts": ["팩트1", "팩트2"],
@@ -1408,7 +1408,8 @@ class TestParseCandidateCard:
         card = _parse_candidate_card(raw)
         assert card is not None
         assert card.key_facts == ["팩트1", "팩트2"]
-        assert len(card.hook_candidates) == 3
+        # OpenAI hook_candidates는 무시됨 (Gemini thesis_cards에서만 채움)
+        assert len(card.hook_candidates) == 0
         assert card.certainty_level == "확정"
 
     def test_json_in_markdown_fence(self):
@@ -1522,14 +1523,16 @@ class TestCandidatePromptRules:
         assert "훅 후보가 서로 다른 방향을 제시하는가" in p
 
     def test_json_schema_has_all_fields(self):
-        """JSON 스키마에 8개 필드 존재."""
+        """JSON 스키마에 7개 필드 존재 (hook_candidates는 Gemini 전담)."""
         p = _CANDIDATE_PROMPT_KO
         for field in [
-            "key_facts", "hook_candidates", "one_liner",
+            "key_facts", "one_liner",
             "cautions", "watch_points", "certainty_level",
             "topic_tags", "risk_flags",
         ]:
             assert field in p
+        # hook_candidates는 OpenAI 프롬프트에서 제거됨 (Gemini thesis_cards로 이관)
+        assert "hook_candidates" not in p or "생성하지 마라" in p
 
     def test_openai_does_not_generate_thesis(self):
         """OpenAI 프롬프트에서 thesis_cards 생성 지시 제거 확인."""
@@ -1849,7 +1852,7 @@ class TestValidateFinalPost:
     def test_clean_post_no_warnings(self):
         """깨끗한 게시글은 경고 없음."""
         post = "관건은 이 관세가 반도체까지 확대되느냐다."
-        short = "반도체 관세 확대 여부가 변수다."
+        short = "반도체 관세가 확대되면 삼성 마진이 줄어든다."
         _, _, warnings = _validate_final_post(post, short)
         assert len(warnings) == 0
 
@@ -3356,8 +3359,8 @@ class TestParseThesisCards:
         assert card.hook_candidates[0] == "첫문장A"
         assert card.hook_candidates[1] == "첫문장B"
 
-    def test_hook_candidates_preserved_when_both(self):
-        """hook_candidates와 thesis_cards 둘 다 있으면 hook_candidates 유지."""
+    def test_hook_candidates_from_thesis_cards_only(self):
+        """hook_candidates는 thesis_cards opener에서만 채워짐 (OpenAI 것 무시)."""
         raw = json.dumps({
             "key_facts": ["팩트1"],
             "hook_candidates": ["기존훅1", "기존훅2"],
@@ -3373,7 +3376,8 @@ class TestParseThesisCards:
         })
         card = _parse_candidate_card(raw)
         assert card is not None
-        assert card.hook_candidates == ["기존훅1", "기존훅2"]
+        # OpenAI hook_candidates 무시, thesis_cards opener에서만 채움
+        assert card.hook_candidates == ["첫문장A"]
 
     def test_thesis_cards_max_3(self):
         """thesis_cards는 최대 3개까지만 파싱."""
