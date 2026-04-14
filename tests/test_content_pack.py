@@ -1694,156 +1694,67 @@ class TestCertaintyCeilingEnforcement:
 
 
 class TestFinalizePromptRules:
-    """_FINALIZE_PROMPT_KO 프롬프트 규칙 검증."""
+    """_FINALIZE_PROMPT_KO 프롬프트 규칙 검증 — 슬롯 조립 구조."""
 
-    def test_hook_single_axis(self):
-        """골든룰 1: 논지 1개 중심축."""
+    def test_slot_assembly_role(self):
+        """역할이 슬롯 조립 담당."""
         p = _FINALIZE_PROMPT_KO
-        assert "논지(thesis) 1개 = 중심축 1개" in p
-        assert "다른 방향" in p
+        assert "슬롯 조립 담당" in p
 
-    def test_first_sentence_meaning_first(self):
-        """골든룰 2: 첫 문장은 해석/의미 선행."""
+    def test_three_sentence_structure(self):
+        """3문장 조립 구조: 변화/팩트/검증."""
         p = _FINALIZE_PROMPT_KO
-        assert "왜 중요한가" in p
-        assert "사실 나열" in p
-        assert "보도가 나왔다" in p  # 금지 예시
+        assert "변화/갈등/차이" in p
+        assert "팩트 근거" in p or "팩트 1개" in p
+        assert "검증 포인트" in p
 
-    def test_impact_path_max_2(self):
-        """골든룰 3: 파급 경로 최대 2개."""
+    def test_banned_endings_in_prompt(self):
+        """금지 마감 패턴 포함."""
         p = _FINALIZE_PROMPT_KO
-        assert "파급 경로는 최대 2개" in p
-        assert "3개 이상 나열하면 실패" in p
+        assert "심각하다" in p
+        assert "변수다" in p
+        assert "관건이다" in p
+        assert "확인이 필요하다" in p
 
-    def test_certainty_level_downgrade(self):
-        """골든룰 4: 미확인/정치 해석 한 단계 낮춤."""
-        p = _FINALIZE_PROMPT_KO
-        assert "확정 → 단정형 허용" in p
-        assert "미확인 →" in p
-        assert "상충 →" in p
-        assert "시사했다" in p
-
-    def test_last_sentence_type_enforcement(self):
-        """골든룰 5: 마지막 문장은 조건형/대비형/질문형 중 하나."""
+    def test_ending_types(self):
+        """마지막 문장 유형: 조건형/대비형/질문형."""
         p = _FINALIZE_PROMPT_KO
         assert "조건형" in p
         assert "대비형" in p
         assert "질문형" in p
 
-    def test_bad_endings_banned(self):
-        """전망문/훈계문/뻔한 마감 금지."""
+    def test_article_summary_banned(self):
+        """기사 재요약 금지."""
         p = _FINALIZE_PROMPT_KO
-        assert "영향을 주목해야 할 시점이다" in p  # 금지 예시
-        assert "악영향이 예상된다" in p
-        assert "교훈형" in p
-        assert "훈계형" in p
-
-    def test_good_ending_examples(self):
-        """좋은 마감 예시가 포함 (조건형/대비형/질문형)."""
-        p = _FINALIZE_PROMPT_KO
-        # 조건형 예시
-        assert "문제는 이 발언이 실제 정책으로 이어지느냐다" in p
-        # 대비형 예시
-        assert "시장은 말보다 규칙 변화를 먼저 본다" in p
-
-    def test_style_rules(self):
-        """문체 규칙: 칼럼 금지, 3문장 구조."""
-        p = _FINALIZE_PROMPT_KO
-        assert "칼럼" in p and "문체 금지" in p
-        assert "3문장이 기본" in p
-        assert "4문장까지 허용" in p
+        assert "기사 재요약" in p or "기사 요약 금지" in p
+        assert "것으로 전해졌다" in p
 
     def test_cautions_conflict_rule(self):
-        """골든룰 6: cautions 충돌 금지."""
+        """cautions 충돌 금지."""
         p = _FINALIZE_PROMPT_KO
         assert "cautions" in p and "충돌" in p
 
-    def test_only_two_output_fields(self):
-        """출력 필드가 2개(final_post, final_short)만."""
+    def test_output_fields(self):
+        """출력 필드: final_post, final_short."""
         p = _FINALIZE_PROMPT_KO
         assert "final_post" in p
         assert "final_short" in p
-        assert "2개 필드만 생성하라" in p
-
-    def test_has_good_examples(self):
-        """좋은 마감 예시 3개 포함."""
-        p = _FINALIZE_PROMPT_KO
-        assert "반도체 관세" in p  # 예시 A
-        assert "서울 아파트 거래" in p  # 예시 B
-        assert "한은 총재 발언" in p  # 예시 C
-
-    def test_diversity_rule_exists(self):
-        """다양성 규칙 섹션이 존재."""
-        p = _FINALIZE_PROMPT_KO
-        assert "다양성 규칙" in p
-
-    def test_diversity_start_patterns(self):
-        """시작 패턴 다양화: 질문형, 단정형, 수치형, 대비형."""
-        p = _FINALIZE_PROMPT_KO
-        assert "질문형" in p
-        assert "단정형" in p
-        assert "수치" in p
-        assert "대비형" in p
-
-    def test_diversity_ending_patterns(self):
-        """마무리 다양화: 조건형, 대비형, 질문형."""
-        p = _FINALIZE_PROMPT_KO
-        assert "조건형" in p
-        assert "대비형" in p
-        assert "질문형" in p
-
-    def test_diversity_no_repeat_structure(self):
-        """같은 구조 반복 금지."""
-        p = _FINALIZE_PROMPT_KO
-        assert "구조 자체도 바꿔라" in p
-
-    def test_first_sentence_fact_narration_ban(self):
-        """첫 문장 사실나열 금지 규칙."""
-        p = _FINALIZE_PROMPT_KO
-        assert "기사 사실 요약으로 시작하면 실패" in p
-        assert "것으로 전해졌다" in p
-
-    def test_tone_temperature_rule(self):
-        """문장 온도 규칙: 과장 표현 약화."""
-        p = _FINALIZE_PROMPT_KO
-        assert "직격탄" in p
-        assert "불가피" in p
-        assert "과장 표현 기본 약화" in p
-
-    def test_paragraph_density_rule(self):
-        """문단 밀도: 변수 2개까지만."""
-        p = _FINALIZE_PROMPT_KO
-        assert "변수 2개까지만" in p
-
-    def test_short_version_independence(self):
-        """final_short 독립 규칙."""
-        p = _FINALIZE_PROMPT_KO
-        assert "압축본이 아니다" in p
-        assert "독립적으로 읽혀야 한다" in p
-        assert "다른 각도로 시작" in p
 
     def test_self_check_section(self):
         """셀프 체크 섹션 존재."""
         p = _FINALIZE_PROMPT_KO
         assert "셀프 체크" in p
-        assert "과장 표현" in p
 
-    def test_political_conservative_rule(self):
-        """정치/외교/군사 보수적 규칙."""
+    def test_short_version_independence(self):
+        """final_short 독립 규칙."""
         p = _FINALIZE_PROMPT_KO
-        assert "정치/외교/군사 주제는 더 보수적" in p
+        assert "독립적으로 읽혀야 한다" in p
+        assert "다른 각도로 시작" in p
 
-    def test_more_banned_endings(self):
-        """추가 금지 마감 패턴."""
+    def test_overstatement_reduction(self):
+        """과장 약화 규칙."""
         p = _FINALIZE_PROMPT_KO
-        assert "추이를 봐야 한다" in p
-        assert "시장에 미칠 여파가 클 것으로 보인다" in p
-        assert "보고서 투" in p
-
-    def test_final_short_examples(self):
-        """final_short 독립 예시 포함."""
-        p = _FINALIZE_PROMPT_KO
-        assert "final_short 예시" in p
+        assert "불가피" in p
 
 
 class TestValidateFinalPost:
@@ -2144,7 +2055,7 @@ class TestWeakPatternValidation:
 
 
 class TestFinalizePromptEndingRules:
-    """_FINALIZE_PROMPT_KO 마지막 문장 유형 강제 규칙 검증."""
+    """_FINALIZE_PROMPT_KO 마지막 문장 유형 강제 규칙 검증 — 슬롯 구조."""
 
     def test_three_ending_types(self):
         """조건형/대비형/질문형 3가지 유형이 명시."""
@@ -2153,24 +2064,23 @@ class TestFinalizePromptEndingRules:
         assert "대비형" in p
         assert "질문형" in p
 
-    def test_banned_ending_examples_in_prompt(self):
-        """금지 마감 예시가 프롬프트에 포함."""
+    def test_banned_ending_patterns_in_prompt(self):
+        """금지 마감 패턴이 프롬프트에 포함."""
         p = _FINALIZE_PROMPT_KO
-        assert "추이를 봐야 한다" in p
-        assert "영향을 미칠 수 있다" in p
-        assert "가능성이 커졌다" in p
+        assert "변수다" in p
+        assert "관건이다" in p
+        assert "확인이 필요하다" in p
 
-    def test_memo_contamination_rule(self):
-        """내부 메모 오염 금지 규칙이 프롬프트에 포함."""
+    def test_no_article_summary(self):
+        """기사 재요약 금지 규칙."""
         p = _FINALIZE_PROMPT_KO
-        assert "내부 메모 언어 오염 금지" in p
-        assert "복붙하지 마라" in p
+        assert "기사 요약 금지" in p or "기사 재요약" in p
 
-    def test_selfcheck_updated(self):
-        """셀프 체크에 새 항목 포함."""
+    def test_selfcheck_exists(self):
+        """셀프 체크 섹션."""
         p = _FINALIZE_PROMPT_KO
+        assert "셀프 체크" in p
         assert "조건형/대비형/질문형" in p
-        assert "뻔한 마감" in p
 
 
 class TestGeminiThesisPromptRules:
@@ -2181,9 +2091,9 @@ class TestGeminiThesisPromptRules:
         assert _GEMINI_THESIS_PROMPT
         assert len(_GEMINI_THESIS_PROMPT) > 100
 
-    def test_gemini_persona_is_thesis_generator(self):
-        """Gemini 페르소나가 논지 분기기."""
-        assert "논지 분기기" in _GEMINI_THESIS_PROMPT
+    def test_gemini_persona_is_slot_filler(self):
+        """Gemini 페르소나가 해석 슬롯 채우기 기계."""
+        assert "해석 슬롯 채우기 기계" in _GEMINI_THESIS_PROMPT
 
     def test_thesis_card_fields(self):
         """thesis_card 필드(thesis, why_not_summary, reader_stake, opener) 정의."""
@@ -2193,17 +2103,17 @@ class TestGeminiThesisPromptRules:
         assert "reader_stake" in p
         assert "opener" in p
 
-    def test_divergence_rules(self):
-        """논지 분기 규칙 (서로 다른 해석 축)."""
+    def test_fixed_slot_rules(self):
+        """고정 슬롯 3개 규칙."""
         p = _GEMINI_THESIS_PROMPT
-        assert "해석 축" in p
+        assert "고정 슬롯" in p
 
     def test_dead_patterns_banned(self):
-        """dead pattern 금지 목록."""
+        """금지 종결 패턴 목록."""
         p = _GEMINI_THESIS_PROMPT
-        assert "하려는 시도다" in p
-        assert "로 해석된다" in p
-        assert "가 관건이다" in p
+        assert "해석된다" in p
+        assert "관건이다" in p
+        assert "변수다" in p
 
 
 class TestClaudeReviewPromptUpdated:
@@ -2272,17 +2182,16 @@ class TestNewBannedEndingPatterns:
 class TestRoleLoyaltyInPrompt:
     """역할 충성 원칙이 프롬프트에 포함된 테스트."""
 
-    def test_finalize_role_loyalty(self):
-        """마감 프롬프트에 역할 충성 원칙이 있음."""
+    def test_finalize_role_is_slot_assembler(self):
+        """마감 프롬프트에 슬롯 조립 역할이 명시."""
         p = _FINALIZE_PROMPT_KO
-        assert "역할 충성 원칙" in p
-        assert "기억에 남는 해석" in p
-        assert "안전한 설명문" in p
+        assert "슬롯 조립 담당" in p
+        assert "기사를 요약하는 사람이 아니다" in p
 
     def test_finalize_forbidden_actions(self):
         """마감 프롬프트에 금지 행동이 명시."""
         p = _FINALIZE_PROMPT_KO
-        assert "기사 내용을 다시 줄줄 요약" in p
+        assert "기사 재요약" in p
         assert "뉴스 후기" in p
 
     def test_gemini_thesis_critical(self):
@@ -2427,10 +2336,10 @@ class TestKoreaAngleGeminiThesisPrompt:
     """Gemini thesis 프롬프트에 한국 관점 훅 규칙이 있는지 검증."""
 
     def test_korea_angle_rule_exists(self):
-        """한국 관점 해석 축 규칙이 Gemini thesis 프롬프트에 존재."""
+        """한국 관점 규칙이 Gemini thesis 프롬프트에 존재."""
         p = _GEMINI_THESIS_PROMPT
         assert "한국" in p
-        assert "해석 축" in p
+        assert "한국 관점" in p
 
     def test_international_news_rule(self):
         """국제 뉴스 특별 규칙이 Gemini thesis 프롬프트에 존재."""
@@ -2564,20 +2473,20 @@ class TestThesisCardQualityRules:
         assert "reader_stake" in p
 
     def test_thesis_divergence_rule(self):
-        """논지 분기 규칙(서로 다른 해석 축) 존재."""
+        """고정 슬롯 규칙 존재."""
         p = _GEMINI_THESIS_PROMPT
-        assert "해석 축" in p
+        assert "고정 슬롯" in p
 
 
 class TestFinalPostThreeSlotStructure:
     """마감 프롬프트에 3문장 구조(WHY/WHAT/SO WHAT)가 있는지 검증."""
 
     def test_three_slots_exist(self):
-        """WHY/WHAT/SO WHAT 슬롯이 존재."""
+        """3문장 조립 구조(변화/팩트/검증)가 존재."""
         p = _FINALIZE_PROMPT_KO
-        assert "WHY" in p
-        assert "WHAT" in p
-        assert "SO WHAT" in p
+        assert "문장 1" in p
+        assert "문장 2" in p
+        assert "문장 3" in p
 
     def test_three_sentence_default(self):
         """3문장 기본, 4문장 허용 규칙 존재."""
@@ -2588,7 +2497,7 @@ class TestFinalPostThreeSlotStructure:
     def test_no_room_for_summary(self):
         """기사 재설명 문장이 끼어들 자리 없다는 규칙 존재."""
         p = _FINALIZE_PROMPT_KO
-        assert "기사 내용을 다시 설명하는 문장" in p
+        assert "기사를 다시 설명하는 문장" in p
 
 
 class TestValidationGate:
@@ -2835,10 +2744,10 @@ class TestThesisAngleSeparation:
         assert "CRITICAL" in p
 
     def test_dead_patterns_in_gemini(self):
-        """Gemini thesis 프롬프트에 dead pattern 금지 존재."""
+        """Gemini thesis 프롬프트에 금지 종결 패턴 존재."""
         p = _GEMINI_THESIS_PROMPT
-        assert "하려는 시도다" in p
-        assert "로 해석된다" in p
+        assert "해석된다" in p
+        assert "관건이다" in p
 
     def test_reader_stake_in_gemini(self):
         """Gemini thesis 프롬프트에 reader_stake 규칙 존재."""
@@ -2890,14 +2799,14 @@ class TestAntiReportToneInFinalize:
     """마감 프롬프트에 보고서 톤 방지 규칙이 있는지 검증."""
 
     def test_supply_chain_anti_report(self):
-        """산업/공급망 보고서 톤 방지 규칙 존재."""
+        """보고서 톤 방지 규칙 존재."""
         p = _FINALIZE_PROMPT_KO
-        assert "산업 리스크 보고서" in p
+        assert "보고서 X" in p
 
     def test_narrow_down_rule(self):
-        """'한 문장으로 좁혀라' 규칙 존재."""
+        """간결한 조립 구조 규칙 존재."""
         p = _FINALIZE_PROMPT_KO
-        assert "한 문장으로 좁혀라" in p
+        assert "2~3문장이 기본" in p
 
 
 class TestColumnStructureBan:
@@ -2906,8 +2815,8 @@ class TestColumnStructureBan:
     # ── _FINALIZE_PROMPT_KO 검증 ──
 
     def test_finalize_has_column_ban_section(self):
-        """마감 프롬프트에 칼럼/사설 구조 금지 섹션이 존재."""
-        assert "칼럼/사설 구조 금지" in _FINALIZE_PROMPT_KO
+        """마감 프롬프트에 사설체 금지가 존재."""
+        assert "사설체 금지" in _FINALIZE_PROMPT_KO
 
     def test_finalize_bans_moonjeneun(self):
         """'문제는 ~것이다' 금지 패턴이 마감 프롬프트에 존재."""
@@ -2917,17 +2826,18 @@ class TestColumnStructureBan:
         """'핵심이다' 금지 패턴이 마감 프롬프트에 존재."""
         assert "핵심이다" in _FINALIZE_PROMPT_KO
 
-    def test_finalize_bans_bonjileun(self):
-        """'본질은 ~' 금지 패턴이 마감 프롬프트에 존재."""
-        assert "본질은 ~" in _FINALIZE_PROMPT_KO
+    def test_finalize_bans_moonjeneun(self):
+        """'문제는 ~것이다' 금지 패턴이 마감 프롬프트에 존재."""
+        assert "문제는 ~것이다" in _FINALIZE_PROMPT_KO
 
     def test_finalize_has_alternative_example(self):
-        """조건형/대비형 대안 예시가 존재."""
-        assert "갈림길은 시행 시점이다" in _FINALIZE_PROMPT_KO
+        """조건형/대비형 대안이 제시."""
+        assert "조건형" in _FINALIZE_PROMPT_KO
+        assert "대비형" in _FINALIZE_PROMPT_KO
 
-    def test_finalize_selfcheck_has_column_ban(self):
-        """셀프 체크 항목에 칼럼/사설 구조 체크가 존재."""
-        assert "칼럼/사설 구조가 없는가" in _FINALIZE_PROMPT_KO
+    def test_finalize_selfcheck_has_summary_ban(self):
+        """셀프 체크 항목에 기사 요약 체크가 존재."""
+        assert "기사 요약" in _FINALIZE_PROMPT_KO
 
     # ── _CLAUDE_REVIEW_PROMPT 검증 ──
 
@@ -2965,21 +2875,21 @@ class TestAntiContradictionRule:
 
     # ── _FINALIZE_PROMPT_KO 검증 ──
 
-    def test_finalize_has_anti_contradiction_section(self):
-        """마감 프롬프트에 반증 금지 섹션이 존재."""
-        assert "반증 금지" in _FINALIZE_PROMPT_KO
+    def test_finalize_has_cautions_conflict_rule(self):
+        """마감 프롬프트에 cautions 충돌 금지 규칙이 존재."""
+        assert "cautions와 충돌" in _FINALIZE_PROMPT_KO
 
-    def test_finalize_has_contradiction_example(self):
-        """'준비가 안 돼 있다' 반증 예시가 존재."""
-        assert "준비 안 됐다" in _FINALIZE_PROMPT_KO or "준비가 안 돼 있다" in _FINALIZE_PROMPT_KO
+    def test_finalize_has_certainty_rule(self):
+        """미확인이면 단정 금지 규칙이 존재."""
+        assert "미확인이면 단정 금지" in _FINALIZE_PROMPT_KO
 
-    def test_finalize_has_factual_acknowledgment_rule(self):
-        """사실 인정 후 좁히기 규칙이 존재."""
-        assert "사실을 인정한 뒤 좁혀라" in _FINALIZE_PROMPT_KO
+    def test_finalize_has_no_exaggeration_rule(self):
+        """과장 약화 규칙이 존재."""
+        assert "과장 약화" in _FINALIZE_PROMPT_KO
 
-    def test_finalize_selfcheck_has_contradiction(self):
-        """셀프 체크 항목에 반증 체크가 존재."""
-        assert "모순되는 단정" in _FINALIZE_PROMPT_KO
+    def test_finalize_selfcheck_has_cautions_check(self):
+        """셀프 체크 항목에 cautions 충돌 체크가 존재."""
+        assert "cautions와 충돌하는 표현이 없는가" in _FINALIZE_PROMPT_KO
 
     # ── _CLAUDE_REVIEW_PROMPT 검증 ──
 
@@ -3009,14 +2919,14 @@ class TestColumnAndContradictionSync:
         assert "핵심이다" in _FINALIZE_PROMPT_KO
         assert "핵심이다" in _CLAUDE_REVIEW_PROMPT
 
-    def test_both_have_anti_contradiction(self):
-        """양쪽 모두 반증 금지 규칙 보유."""
-        assert "반증 금지" in _FINALIZE_PROMPT_KO
-        assert "반증 금지" in _CLAUDE_REVIEW_PROMPT
+    def test_both_have_cautions_rule(self):
+        """양쪽 모두 cautions 충돌 규칙 보유."""
+        assert "cautions" in _FINALIZE_PROMPT_KO
+        assert "cautions" in _CLAUDE_REVIEW_PROMPT
 
-    def test_both_have_column_ban(self):
-        """양쪽 모두 칼럼/사설 구조 금지 섹션 보유."""
-        assert "칼럼/사설 구조 금지" in _FINALIZE_PROMPT_KO
+    def test_both_have_column_or_editorial_ban(self):
+        """양쪽 모두 사설체/칼럼 금지 규칙 보유."""
+        assert "사설체 금지" in _FINALIZE_PROMPT_KO or "핵심이다" in _FINALIZE_PROMPT_KO
         assert "칼럼/사설 구조 금지" in _CLAUDE_REVIEW_PROMPT
 
 
@@ -3415,20 +3325,20 @@ class TestWeakPatternDeadPatterns:
 class TestFinalizePromptThesisReference:
     """_FINALIZE_PROMPT_KO에 thesis 참조가 올바른지 검증."""
 
-    def test_thesis_axis_rule(self):
-        """골든룰에 '논지(thesis)' 참조."""
+    def test_slot_interpretation_rule(self):
+        """골든룰에 슬롯 해석 방향 규칙."""
         p = _FINALIZE_PROMPT_KO
-        assert "논지(thesis)" in p
+        assert "슬롯 해석 방향" in p
 
-    def test_reader_stake_reference(self):
-        """reader_stake를 첫 문장에서 보여주라는 지시."""
+    def test_tension_reference(self):
+        """긴장점을 드러내라는 지시."""
         p = _FINALIZE_PROMPT_KO
-        assert "reader_stake" in p
+        assert "긴장점" in p
 
-    def test_why_not_summary_reference(self):
-        """why_not_summary를 지침으로 삼으라는 지시."""
+    def test_verification_point_reference(self):
+        """검증 포인트로 끝내라는 지시."""
         p = _FINALIZE_PROMPT_KO
-        assert "why_not_summary" in p
+        assert "검증 포인트" in p
 
 
 class TestClaudePromptCorrectorRole:

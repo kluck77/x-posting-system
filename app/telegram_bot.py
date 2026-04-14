@@ -1555,10 +1555,11 @@ async def _run_candidate_card(
             thesis_index = cm.get("hook_index")
 
             if thesis_index is not None:
-                label = ["A", "B", "C"][thesis_index] if thesis_index < 3 else str(thesis_index)
+                _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
+                slot_name = _slot_names[thesis_index] if thesis_index < 3 else f"슬롯 {thesis_index + 1}"
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
-                        f"✏️ 논지 {label} 로 마감",
+                        f"✏️ {slot_name} → 마감",
                         callback_data=f"thesis_select:{thesis_index}",
                     )
                 ]])
@@ -1605,15 +1606,14 @@ async def _handle_thesis_select_callback(
         await query.message.reply_text("⚠️ 후보 카드 세션 만료. /pack 으로 다시 시작해주세요.")
         return
 
-    # 선택된 논지 카드 정보 추출
+    # 선택된 해석 슬롯 정보 추출
     selected_thesis = None
-    thesis_label_short = ""
+    _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
     if thesis_index < len(card.thesis_cards):
         selected_thesis = card.thesis_cards[thesis_index]
-        label = ["A", "B", "C"][thesis_index] if thesis_index < 3 else str(thesis_index)
-        thesis_label_short = f"논지 {label}"
+        thesis_label_short = _slot_names[thesis_index] if thesis_index < 3 else f"슬롯 {thesis_index + 1}"
     else:
-        thesis_label_short = f"훅 {thesis_index + 1}"
+        thesis_label_short = f"슬롯 {thesis_index + 1}"
 
     # 버튼 제거
     await _safe_remove_markup(query)
