@@ -2171,7 +2171,7 @@ class TestFirstSentenceLengthGate:
     """첫 문장 길이 게이트 테스트."""
 
     def test_long_first_sentence_triggers_gate(self):
-        """75자 초과 첫 문장은 WEAK_OPENER 게이트 실패."""
+        """60자 초과 첫 문장은 WEAK_OPENER 게이트 실패 (95점 기준 — 60자로 강화)."""
         post = "11일 파키스탄 협상 결렬 이후 로이터 통신이 보도한 이번 주 후반 이슬라마바드 재협상이 실제로 이루어지는지 여부가 미국과 이란 관계의 분기점이다."
         _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
         assert "WEAK_OPENER" in gate_fails
@@ -2183,15 +2183,14 @@ class TestFirstSentenceLengthGate:
         assert "WEAK_OPENER" not in gate_fails
 
     def test_moderate_first_sentence_passes(self):
-        """60자 이내 첫 문장은 게이트 통과 (경고만)."""
+        """45자 이내 첫 문장은 게이트 통과 (경고 없음)."""
         post = "미국의 대이란 봉쇄가 선언에 그칠지 실제 통제로 갈지 곧 드러난다. 후속 조치."
         _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
         assert "WEAK_OPENER" not in gate_fails
 
-    def test_61_to_75_first_sentence_warning_only(self):
-        """61~75자 첫 문장은 경고만, 게이트 실패 아님."""
-        # 65자 정도 첫 문장
-        post = "미국과 이란 사이에서 중재국을 통한 비공식 소통 채널이 아직 살아 있는지가 이번 국면에서 가장 중요한 포인트다. 근거 있다."
+    def test_46_to_60_first_sentence_warning_only(self):
+        """46~60자 첫 문장은 경고만, 게이트 실패 아님 (95점 기준 새 경계)."""
+        post = "이번 협상에서 미국과 이란이 보상안과 사찰 수용 조건을 놓고 완전히 갈린 것이 본질이다. 근거 있다."
         _, _, warnings, gate_fails = _validate_final_post(post, "짧은 버전.")
         assert "WEAK_OPENER" not in gate_fails
         assert any("길이 경고" in w for w in warnings)
@@ -3993,3 +3992,80 @@ class TestTrimDisplay:
         result = trim_display(text, 20)
         assert len(result) <= 21  # 공백 + '…'
         assert result.endswith("…") or len(result) <= 20
+
+
+class TestFirstSentenceHardGate:
+    """첫 문장 즉시 이해성 — 95점 기준 하드 게이트."""
+
+    def test_first_sentence_over_60_chars_gated(self):
+        """첫 문장 60자 초과 → WEAK_OPENER 하드 게이트."""
+        long_first = (
+            "미국 행정부의 대이란 협상 기조가 과거의 강경 일변도에서 "
+            "조건부 접근 방식으로 빠르게 전환되는 조짐이 드러나고 있다."
+        )
+        assert len(long_first) > 60
+        post = long_first + "\n근거 팩트 한 줄.\n판별 신호: X가 나오면 확정."
+        short = "짧은 버전 전달문이다."
+        _, _, warnings, gate_fails = _validate_final_post(post, short)
+        assert "WEAK_OPENER" in gate_fails
+        assert any("60자 초과" in w for w in warnings)
+
+    def test_first_sentence_45_to_60_warning_only(self):
+        """첫 문장 46~60자 → 경고만, 게이트 통과."""
+        mid_first = "이번 협상에서 미국과 이란이 보상안과 사찰 수용 조건을 놓고 완전히 갈린 것이 본질이다."
+        assert 45 < len(mid_first) <= 60
+        post = mid_first + "\n서울 48%, 인천 36%.\n사찰 수용이 답이다."
+        short = "짧은 버전 전달문."
+        _, _, warnings, gate_fails = _validate_final_post(post, short)
+        assert "WEAK_OPENER" not in gate_fails
+        assert any("45자 이내 권장" in w for w in warnings)
+
+    def test_first_sentence_under_45_pass(self):
+        """첫 문장 45자 이내 → 통과."""
+        post = (
+            "미국이 처음 보상안을 꺼냈다.\n"
+            "서울 48%가 공급을 먼저 꼽았다.\n"
+            "사찰 수용이 답이다."
+        )
+        short = "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다."
+        _, _, warnings, gate_fails = _validate_final_post(post, short)
+        # 첫 문장 길이 경고/게이트 없음 (다른 이유로 WEAK_OPENER 올 수는 있음)
+        first_warnings = [w for w in warnings if "첫 문장" in w and "자" in w]
+        assert not any("60자 초과" in w or "45자 이내 권장" in w for w in first_warnings)
+
+    def test_first_sentence_starts_with_ihu_gated(self):
+        """첫 문장이 '~이후' 시작 → WEAK_OPENER 게이트."""
+        post = (
+            "11일 협상 결렬 이후 로이터가 재협상을 보도했다.\n"
+            "실제 재회는 금요일.\n"
+            "그날 결정된다."
+        )
+        short = "짧은 버전."
+        _, _, warnings, gate_fails = _validate_final_post(post, short)
+        assert "WEAK_OPENER" in gate_fails
+        assert any("배경 설명 시작" in w for w in warnings)
+
+    def test_first_sentence_starts_with_bodohan_gated(self):
+        """첫 문장에 '~보도한' 이 앞쪽에 있으면 WEAK_OPENER 게이트."""
+        post = (
+            "로이터가 보도한 재협상은 실제로는 확정되지 않았다.\n"
+            "사찰 수용이 먼저.\n"
+            "그다음 재회다."
+        )
+        short = "짧은 버전."
+        _, _, warnings, gate_fails = _validate_final_post(post, short)
+        assert "WEAK_OPENER" in gate_fails
+
+    def test_finalize_prompt_first_sentence_45_hard_gate(self):
+        """마감 프롬프트에 첫 문장 45자 이내 하드 게이트 명시."""
+        assert "45자 이내" in _FINALIZE_PROMPT_KO
+        assert "60자 넘으면" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_prompt_final_short_120(self):
+        """마감 프롬프트의 final_short 상한이 120자로 조정됨."""
+        assert "120자 안쪽" in _FINALIZE_PROMPT_KO
+
+    def test_finalize_prompt_final_short_banned_hints(self):
+        """final_short 금지어 명시."""
+        # "중요하다 / 관건이다 / 변수다" 명시
+        assert "중요하다" in _FINALIZE_PROMPT_KO and "관건이다" in _FINALIZE_PROMPT_KO

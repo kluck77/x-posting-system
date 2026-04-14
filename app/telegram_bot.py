@@ -1694,19 +1694,28 @@ async def _handle_thesis_select_callback(
                 else "?"
             )
 
+        # 앞뒤 공백/빈 줄 방어 — 텔레그램 첫 줄 잘림 체감 버그 원인
+        _post_clean = (result.final_post or "").strip()
+        _short_clean = (result.final_short or "").strip()
+
+        # 첫 줄 미리보기: final_post의 첫 문장만 60자 안쪽으로 압축 표시
+        _first_line = _post_clean.split("\n")[0] if _post_clean else ""
+        _first_preview = trim_display(_first_line, 60)
+
         result_text = (
             f"✅ <b>최종 마감 완료</b>\n\n"
             f"🎯 <b>선택된 슬롯</b>\n"
             f"해석축: {thesis_text}\n\n"
+            f"📌 <b>첫 줄:</b> {_first_preview}\n\n"
             f"{'─' * 24}\n\n"
-            f"📝 <b>게시글</b> ({len(result.final_post)}자)\n\n"
-            f"{result.final_post}\n\n"
+            f"📝 <b>게시글</b> ({len(_post_clean)}자)\n\n"
+            f"{_post_clean}\n\n"
         )
-        if result.final_short:
+        if _short_clean:
             result_text += (
                 f"{'─' * 24}\n\n"
-                f"⚡ <b>짧은 버전</b> ({len(result.final_short)}자)\n\n"
-                f"{result.final_short}"
+                f"⚡ <b>짧은 버전</b> ({len(_short_clean)}자)\n\n"
+                f"{_short_clean}"
             )
 
         # 게이트 실패 잔존 시 경고 표시

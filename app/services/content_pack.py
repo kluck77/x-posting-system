@@ -1424,7 +1424,8 @@ _FINALIZE_PROMPT_KO = """너는 "3초 안에 이해되는 설명문" 제작자�
 절대 규칙:
 - 한 문장에 주장/판단 1개만. 2개 넣지 마라.
 - 배경 설명으로 시작 금지. 핵심 명제부터 박아라.
-- 첫 문장은 40자 이내 권장. 종속절("~에도 불구하고" "~하는 가운데") 금지.
+- 첫 문장은 45자 이내, 60자 넘으면 재작성 대상 (하드 게이트).
+- 첫 문장 시작 금지: "~이후 ~" / "~보도한 ~" / "~에도 불구하고" / "~하는 가운데".
 - "A가 일어나면서 B가 영향을 받고 C가 중요해진다" 식 복합문 금지.
 
 좋은 첫 문장 (5가지 톤 — 한 말투로 수렴하지 마라):
@@ -1586,8 +1587,9 @@ certainty_level이 미확인 또는 상충이면:
 
 - final_post와 다른 각도로 시작. 독립적으로 읽혀야 한다.
 - "요약"이 아니라 "전달 가능한 한 줄". 공유하고 싶은 문장처럼.
-- 구조: "변화 한 줄. + 판별 기준 한 줄." — 두 문장 이내, 200자 안쪽.
-- 길이: 장황한 배경 설명 금지. 짧게 박아라.
+- 구조: "변화 한 줄. + 판별 기준 한 줄." — 두 문장 이내, **120자 안쪽**.
+- 장황한 배경 설명 금지. 짧게 박아라.
+- 금지어: "중요하다" "관건이다" "변수다" "가능성이 있다" "시사한다" "보여준다".
 - 좋은 예 (전달문 톤):
   ✓ "로이터는 재협상, 이란은 신중. 진짜 답은 금요일 재회다."
   ✓ "국내 주식 늘려도 돈은 대형주로 더 몰렸다."
@@ -3798,14 +3800,29 @@ def _validate_final_post(
             break
 
     # 첫 문장 길이 이중 게이트 — 즉시 이해성 핵심
+    # 95점 기준: 45자가 권장, 60자 초과는 게이트 실패 (기존 75자 → 60자로 강화)
     if first_line and "WEAK_OPENER" not in gate_fails:
         first_sent = first_line.split(".")[0] + "." if "." in first_line else first_line
         sent_len = len(first_sent)
-        if sent_len > 75:
-            warnings.append(f"첫 문장 과장 ({sent_len}자) — 75자 초과, 재작성 필요")
+        if sent_len > 60:
+            warnings.append(f"첫 문장 과장 ({sent_len}자) — 60자 초과, 재작성 필요")
             gate_fails.append("WEAK_OPENER")
-        elif sent_len > 60:
-            warnings.append(f"첫 문장 길이 경고 ({sent_len}자) — 40자 이내 권장")
+        elif sent_len > 45:
+            warnings.append(f"첫 문장 길이 경고 ({sent_len}자) — 45자 이내 권장")
+
+    # 첫 문장 배경 설명 시작 패턴 게이트 — "~이후 ...", "~보도한 ..." 구조 차단
+    # 처음 20자 안에 배경 설명 연결어가 있으면 핵심 명제 선행이 아님
+    if first_line and "WEAK_OPENER" not in gate_fails:
+        first_sent = first_line.split(".")[0] if "." in first_line else first_line
+        head = first_sent[:20]
+        _background_starts = ["이후 ", "보도한 ", "보도된 ", "전해진 ", "알려진 "]
+        for bg in _background_starts:
+            if bg in head:
+                warnings.append(
+                    f"첫 문장 배경 설명 시작 ('{bg.strip()}') — 핵심 명제 선행 필요"
+                )
+                gate_fails.append("WEAK_OPENER")
+                break
 
     # 첫 문장 접속 구조 게이트 — 배경 설명/종속절 시작 차단
     # 접속 표현 2개+ 또는 (쉼표 2개+ AND 접속 1개+) → 첫 문장이 사실+해석+전망 혼합 신호
