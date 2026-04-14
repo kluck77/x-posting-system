@@ -2811,3 +2811,90 @@ class TestShouldInvokeExtendedReview:
             post="라는 보도가 나왔다. 시장 반응을 봐야 한다.",
         )
         assert _should_invoke_extended_review(card, draft) is True
+
+
+# ─── 훅 각도 분리 + 약한 패턴 보강 테스트 ──────────────────────────────────────
+
+
+class TestHookAngleSeparation:
+    """후보 카드 프롬프트에 훅 각도 분리 규칙이 있는지 검증."""
+
+    def test_angle_separation_rule_exists(self):
+        """각도 분리 CRITICAL 규칙이 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "훅 각도 분리" in p
+        assert "CRITICAL" in p
+
+    def test_axis_examples_exist(self):
+        """분리 축 예시가 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "비용/가격 축" in p
+        assert "비교/대비 축" in p
+        assert "시간/조건 축" in p
+        assert "수혜/피해 축" in p
+        assert "정책/구조 축" in p
+
+    def test_bad_example_exists(self):
+        """나쁜 훅 예시(같은 축 반복)가 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "시급하다" in p
+        assert "우려가 커지고 있다" in p
+
+    def test_good_example_exists(self):
+        """좋은 훅 예시(다른 축)가 포함."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "TSMC" in p
+
+    def test_thesis_repeat_banned(self):
+        """기사 thesis 어미 반복 금지 규칙 존재."""
+        p = _CANDIDATE_PROMPT_KO
+        assert "어미만 바꿔" in p
+
+
+class TestWeakPatternsExtended:
+    """추가된 약한 패턴 검증."""
+
+    def test_new_patterns_exist(self):
+        """새로 추가된 경고문/당위형 종결 패턴이 포함."""
+        for pat in ["핵심이다", "시급하다", "시급한 과제",
+                     "우려가 커지고 있다", "리스크가 커질 수 있다",
+                     "중요한 변수다"]:
+            assert pat in _WEAK_PATTERNS, f"'{pat}' 누락"
+
+    def test_validate_catches_core_is(self):
+        """'핵심이다' 패턴이 validation에서 감지."""
+        post = "한국 반도체가 취약한지가 핵심이다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("뻔한 표현" in w for w in warnings)
+
+    def test_validate_catches_urgent(self):
+        """'시급하다' 패턴이 validation에서 감지."""
+        post = "중동 의존도를 줄이는 것이 시급하다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("뻔한 표현" in w for w in warnings)
+
+    def test_validate_catches_risk_grow(self):
+        """'리스크가 커질 수 있다' 패턴이 validation에서 감지."""
+        post = "향후 경제적 리스크가 커질 수 있다."
+        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        assert any("뻔한 표현" in w for w in warnings)
+
+    def test_no_false_positive_on_clean(self):
+        """깨끗한 글에서 새 패턴 false positive 없음."""
+        post = "브롬 가격이 2배 되면 반도체 원가에서 먼저 흔들리는 건 식각 공정이다."
+        _, _, warnings = _validate_final_post(post, "독립 짧은 버전.")
+        assert not any("뻔한 표현" in w for w in warnings)
+
+
+class TestAntiReportToneInFinalize:
+    """마감 프롬프트에 보고서 톤 방지 규칙이 있는지 검증."""
+
+    def test_supply_chain_anti_report(self):
+        """산업/공급망 보고서 톤 방지 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "산업 리스크 보고서" in p
+
+    def test_narrow_down_rule(self):
+        """'한 문장으로 좁혀라' 규칙 존재."""
+        p = _FINALIZE_PROMPT_KO
+        assert "한 문장으로 좁혀라" in p
