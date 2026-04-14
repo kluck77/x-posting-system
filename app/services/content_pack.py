@@ -2130,7 +2130,7 @@ async def generate_final_post(
     )
 
     if raw:
-        result = _parse_final_post(raw)
+        result = _parse_final_post(raw, certainty_level=card.certainty_level)
         if result:
             logger.info(
                 f"1차 마감 완료 (OpenAI): post={len(result.final_post)}자, "
@@ -3157,6 +3157,20 @@ async def _claude_review_final(
                 "한 문장 한 주장. 쉼표 2개 이상 금지. "
                 "단, 논지를 바꾸지 마라. 표현만 분리하라."
             ),
+            "STRUCTURE_COLUMN": (
+                "🚨 요약→의견→관건 3단 구조(사설체)가 감지됐다. "
+                "'하려는 시도다/의지를 보여준다/로 해석된다'로 시작해 "
+                "'가 관건이다/에 달려 있다'로 끝나는 구조를 해체하라. "
+                "마지막 문장은 판별 신호('무엇이 나오면/안 나오면')로 교체. "
+                "논지는 유지하고 문장 기능만 바꿔라."
+            ),
+            "LOW_CONFIDENCE_OVERREACH": (
+                "🚨 저신뢰(미확인/상충) 기사인데 본문에 "
+                "'정치적 계산/숨은 의도/노림수/본심'류 동기 추정이 2개 이상 남아 있다. "
+                "동기 추정 문장을 확인 신호 중심으로 교체하라. "
+                "꼭 필요하면 '~라는 해석이 나온다' 수준으로 1단계 낮춰라. "
+                "사실과 검증 포인트를 앞세워라."
+            ),
         }
         parts = []
         for tag in gate_fails:
@@ -3215,7 +3229,9 @@ async def _claude_review_final(
                 pass
 
             raw = data["content"][0]["text"]
-            result = _parse_final_post(raw)
+            result = _parse_final_post(
+                raw, certainty_level=card.certainty_level
+            )
             if result and result.final_post:
                 return result
 
@@ -3726,15 +3742,20 @@ def _run_all_validations(
     return warnings
 
 
-def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str], list[str]]:
+def _validate_final_post(
+    post: str, short: str, certainty_level: Optional[str] = None
+) -> tuple[str, str, list[str], list[str]]:
     """마감 결과 검증 및 자동 보정. (post, short, warnings, gate_fails) 반환.
 
     gate_fails: 게이트 실패 태그 목록. 비어 있으면 통과.
       - WEAK_OPENER: 첫 문장 사실나열 / 과장
       - DEAD_ENDING: 금지 마감 패턴
       - BRIEFING_SMELL: 브리핑 장황 표현 2개+
-      - OPINION_LEAK: 근거 없는 일반론
+      - OPINION_LEAK: 근거 없는 일반론 2개+ (기준 완화: 1→2)
       - COMPLEX_SENTENCE: 문장 구조 복잡 (쉼표/접속사 과다)
+      - STRUCTURE_COLUMN: 요약→의견→관건 3단 사설체 구조
+      - LOW_CONFIDENCE_OVERREACH: certainty 미확인/상충인데
+        _SPECULATIVE_MOTIVE_PATTERNS가 본문에 2개 이상 침투
     """
     warnings: list[str] = []
     gate_fails: list[str] = []
@@ -3801,12 +3822,36 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str], li
         if len(briefing_hits) >= 2:
             gate_fails.append("BRIEFING_SMELL")
 
-    # 일반론 의견 패턴 감지 (원칙 C)
-    for pat in _OPINION_PATTERNS:
-        if pat in post:
-            warnings.append(f"일반론 의견 패턴: '{pat}'")
+    # 일반론 의견 패턴 감지 (원칙 C) — 1개는 경고, 2개 이상이면 게이트
+    opinion_hits = [pat for pat in _OPINION_PATTERNS if pat in post]
+    if opinion_hits:
+        warnings.append(f"일반론 의견 패턴: {opinion_hits[:3]}")
+        if len(opinion_hits) >= 2:
             gate_fails.append("OPINION_LEAK")
-            break  # 첫 번째 하나만
+
+    # 요약→의견→관건 3단 사설체 감지 → STRUCTURE_COLUMN 게이트
+    has_summary_start = any(
+        p in post for p in _SUMMARY_OPINION_CRUX_PATTERNS["summary_starters"]
+    )
+    stripped = post.rstrip().rstrip(".")
+    has_crux_end = any(
+        stripped.endswith(p) for p in _SUMMARY_OPINION_CRUX_PATTERNS["crux_endings"]
+    )
+    if has_summary_start and has_crux_end:
+        warnings.append("요약→의견→관건 3단 구조 (사설체) 감지")
+        gate_fails.append("STRUCTURE_COLUMN")
+
+    # 저신뢰 과해석 본문 침투 → LOW_CONFIDENCE_OVERREACH 게이트
+    if certainty_level in ("미확인", "상충"):
+        post_lower = post.lower()
+        motive_hits = [
+            p for p in _SPECULATIVE_MOTIVE_PATTERNS if p.lower() in post_lower
+        ]
+        if len(motive_hits) >= 2:
+            warnings.append(
+                f"저신뢰 과해석 본문 침투 ({len(motive_hits)}개): {motive_hits[:3]}"
+            )
+            gate_fails.append("LOW_CONFIDENCE_OVERREACH")
 
     # final_short가 final_post 첫 문장과 동일한지 체크
     first_sentence = post.split(".")[0].split("\n")[0].strip()
@@ -3817,8 +3862,13 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str], li
     return post, short, warnings, gate_fails
 
 
-def _parse_final_post(raw: str) -> Optional[FinalPost]:
-    """AI 응답 JSON → FinalPost. 검증 포함."""
+def _parse_final_post(
+    raw: str, certainty_level: Optional[str] = None
+) -> Optional[FinalPost]:
+    """AI 응답 JSON → FinalPost. 검증 포함.
+
+    certainty_level이 주어지면 LOW_CONFIDENCE_OVERREACH 게이트를 활성화.
+    """
     try:
         text = raw.strip()
         if "```" in text:
@@ -3833,7 +3883,9 @@ def _parse_final_post(raw: str) -> Optional[FinalPost]:
             return None
 
         # 검증 및 자동 보정
-        post, short, warnings, gate_fails = _validate_final_post(post, short)
+        post, short, warnings, gate_fails = _validate_final_post(
+            post, short, certainty_level=certainty_level
+        )
         for w in warnings:
             logger.warning(f"[마감검증] {w}")
 

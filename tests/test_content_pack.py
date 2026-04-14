@@ -2223,6 +2223,81 @@ class TestComplexSentenceGate:
         assert any("복잡한 문장" in w for w in warnings)
 
 
+class TestStructureColumnGate:
+    """요약→의견→관건 3단 사설체 게이트 테스트."""
+
+    def test_summary_to_crux_structure_gated(self):
+        """'하려는 시도다' + 마지막에 '가 관건이다' → STRUCTURE_COLUMN 게이트."""
+        post = (
+            "이번 조치는 안정을 꾀하려는 시도다. "
+            "후속 조치가 더 나온다. 결국 시행 속도가 관건이다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "STRUCTURE_COLUMN" in gate_fails
+
+    def test_summary_alone_no_gate(self):
+        """요약 시작만 있고 관건 마감이 없으면 게이트 없음."""
+        post = "이번 조치는 안정을 꾀하려는 시도다. 금요일에 시행령이 나오면 실행, 아니면 선언에 그친다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "STRUCTURE_COLUMN" not in gate_fails
+
+    def test_clean_structure_passes(self):
+        """정상 구조는 STRUCTURE_COLUMN 게이트 통과."""
+        post = "지금 포인트는 시행 시점이다. 근거는 시행령 준비 상태다. 금요일까지 안 나오면 선언이다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "STRUCTURE_COLUMN" not in gate_fails
+
+
+class TestLowConfidenceOverreachGate:
+    """저신뢰 과해석 본문 침투 게이트 테스트."""
+
+    def test_low_confidence_with_motives_gated(self):
+        """certainty 미확인 + 추정성 동기 2개 → LOW_CONFIDENCE_OVERREACH."""
+        post = "이번 조치는 정치적 계산에서 나온 포석이다. 선거용 카드로 쓰려는 노림수가 읽힌다."
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.", certainty_level="미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_confirmed_with_motives_no_gate(self):
+        """certainty 확정이면 동기 추정이 있어도 게이트 없음."""
+        post = "이번 조치는 정치적 계산에서 나온 포석이다. 선거용 카드로 쓰려는 노림수가 읽힌다."
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.", certainty_level="확정"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+    def test_low_confidence_single_motive_no_gate(self):
+        """저신뢰라도 동기 추정이 1개면 게이트 없음 (기준 2개 이상)."""
+        post = "이번 조치는 정치적 계산에서 나왔다. 금요일 시행령이 관전 포인트."
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.", certainty_level="상충"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+    def test_no_certainty_no_gate(self):
+        """certainty_level 미지정이면 게이트 비활성화."""
+        post = "이번 조치는 정치적 계산에서 나온 포석이다. 선거용 카드로 쓰려는 노림수가 읽힌다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
+class TestOpinionLeakGateRelaxed:
+    """OPINION_LEAK 게이트 완화: 1개는 경고만, 2개 이상만 게이트."""
+
+    def test_single_opinion_no_gate(self):
+        """일반론 패턴 1개는 경고만, OPINION_LEAK 게이트 실패 아님."""
+        post = "역사적으로 이런 상황에서는 위기가 반복되었다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "OPINION_LEAK" not in gate_fails
+
+    def test_double_opinion_gated(self):
+        """일반론 패턴 2개 이상이면 OPINION_LEAK 게이트."""
+        post = "역사적으로 이런 상황은 큰 파장을 낳기 쉽다. 전략이다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "OPINION_LEAK" in gate_fails
+
+
 class TestNewBannedEndingPatterns:
     """새로 추가된 금지 마감 패턴 테스트."""
 
