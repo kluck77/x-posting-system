@@ -3037,8 +3037,8 @@ class TestGrokDraftPrompt:
         assert len(_GROK_DRAFT_PROMPT) > 100
 
     def test_grok_persona_is_x_editor(self):
-        """Grok 페르소나가 X 에디터/계정 운영자."""
-        assert "해설 계정 운영자" in _GROK_DRAFT_PROMPT
+        """Grok 페르소나가 X 에디터."""
+        assert "X 에디터" in _GROK_DRAFT_PROMPT
 
     def test_grok_persona_differs_from_openai(self):
         """Grok 페르소나가 OpenAI 페르소나(증권사 출신 해설자)와 다름."""
@@ -3065,9 +3065,10 @@ class TestGrokDraftPrompt:
         assert "검증 결과" in _GROK_DRAFT_PROMPT
         assert "강한 주장 금지" in _GROK_DRAFT_PROMPT
 
-    def test_grok_requires_why_first(self):
-        """첫 문장에 왜 중요한가 요구."""
-        assert "왜" in _GROK_DRAFT_PROMPT and "봐야 하는가" in _GROK_DRAFT_PROMPT
+    def test_grok_requires_fact_first(self):
+        """첫 문장에 구체 팩트 요구."""
+        assert "구체 팩트" in _GROK_DRAFT_PROMPT
+        assert "첫 문장" in _GROK_DRAFT_PROMPT
 
     def test_grok_3_sentence_structure(self):
         """3문장 구조 존재."""
@@ -3193,3 +3194,84 @@ class TestGrokPromptSync:
         """Grok과 OpenAI 모두 3문장 구조."""
         assert "3문장" in _FINALIZE_PROMPT_KO
         assert "3문장" in _GROK_DRAFT_PROMPT
+
+
+class TestGrokToneRegisterSplit:
+    """Grok 톤 레지스터 분리 검증 — Phase 3 톤 차별화."""
+
+    def test_grok_persona_is_fact_curator(self):
+        """Grok 페르소나가 '팩트 큐레이터' 스타일 (팩트 먼저 던지기)."""
+        assert "팩트 1개를 먼저 던지고" in _GROK_DRAFT_PROMPT
+
+    def test_grok_persona_no_analyst_label(self):
+        """Grok 역할 섹션에 '해설자'/'해설 계정 운영자' 없음."""
+        # 역할 섹션만 검사 (before/after 예시의 '분석가' 제외)
+        role_section = _GROK_DRAFT_PROMPT.split("━━━ 역할 ━━━")[1].split("━━━")[0]
+        assert "해설자" not in role_section
+        assert "해설 계정 운영자" not in role_section
+
+    def test_grok_has_fact_first_rule(self):
+        """첫 문장 구체 팩트 선행 규칙 존재."""
+        assert "첫 문장은 구체 팩트" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_interpretation_start(self):
+        """해석/판단/의견으로 시작 금지 명시."""
+        assert "해석·판단·의견으로 시작하면 실패" in _GROK_DRAFT_PROMPT
+
+    def test_grok_has_banned_openers(self):
+        """금지 출발 패턴 리스트 존재."""
+        for pat in ["핵심은", "문제는", "주목할 점은", "중요한 건"]:
+            assert pat in _GROK_DRAFT_PROMPT, f"금지 출발 '{pat}' 누락"
+
+    def test_grok_has_allowed_openers(self):
+        """허용 출발 예시 존재."""
+        for pat in ["롯데건설이", "BIS 출신이", "취업자 수가"]:
+            assert pat in _GROK_DRAFT_PROMPT, f"허용 출발 '{pat}' 누락"
+
+    def test_grok_has_before_after_examples(self):
+        """분석가 vs X 문장 before/after 예시가 3쌍 이상."""
+        bad_count = _GROK_DRAFT_PROMPT.count("❌ 분석가:")
+        good_count = _GROK_DRAFT_PROMPT.count("✅ X 문장:")
+        assert bad_count >= 3, f"분석가 예시 {bad_count}개 < 3"
+        assert good_count >= 3, f"X 문장 예시 {good_count}개 < 3"
+        assert bad_count == good_count, "before/after 쌍이 불일치"
+
+    def test_grok_explains_core_difference(self):
+        """핵심 차이 설명 존재 (팩트 먼저, 해석 뒤)."""
+        assert "팩트가 먼저" in _GROK_DRAFT_PROMPT
+        assert "해석이 뒤" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bloomberg_sensibility(self):
+        """블룸버그 헤드라인 감각 언급."""
+        assert "블룸버그" in _GROK_DRAFT_PROMPT
+
+    def test_grok_why_line_uses_fact_start(self):
+        """WHY 문장 설명이 '구체 팩트로 시작'."""
+        # 3문장 구조의 1문장(WHY) 설명 확인
+        assert "구체 팩트로 시작" in _GROK_DRAFT_PROMPT
+
+    def test_grok_calls_it_fact_preceding_draft(self):
+        """Grok 초안을 '팩트 선행형'으로 명명."""
+        assert "팩트 선행형 초안" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_weak_generalization(self):
+        """'피할 수 없다' '일으킬 수 있다' 약한 일반화 금지."""
+        assert "피할 수 없다" in _GROK_DRAFT_PROMPT
+        assert "일으킬 수 있다" in _GROK_DRAFT_PROMPT
+
+
+class TestWeakPatternNewAdditions:
+    """_WEAK_PATTERNS 신규 추가 패턴 검증."""
+
+    def test_weak_pattern_pihal_su(self):
+        """'피할 수 없다' 패턴이 _WEAK_PATTERNS에 있음."""
+        assert "피할 수 없다" in _WEAK_PATTERNS
+
+    def test_weak_pattern_ilukil_su(self):
+        """'일으킬 수 있다' 패턴이 _WEAK_PATTERNS에 있음."""
+        assert "일으킬 수 있다" in _WEAK_PATTERNS
+
+    def test_weak_patterns_total_count(self):
+        """_WEAK_PATTERNS 총 개수가 예상 범위."""
+        # 기존 ~22개 + 2개 = ~24개
+        assert len(_WEAK_PATTERNS) >= 24
