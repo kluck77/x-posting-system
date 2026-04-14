@@ -404,7 +404,14 @@ async def _translate_to_korean(text: str) -> str | None:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.post(
                 url,
-                json={"contents": [{"parts": [{"text": prompt}]}]},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "thinkingConfig": {
+                            "thinkingBudget": 0,
+                        },
+                    },
+                },
             )
             r.raise_for_status()
             data = r.json()
@@ -413,6 +420,7 @@ async def _translate_to_korean(text: str) -> str | None:
                 f"[API-COST] gemini gemini-2.5-flash "
                 f"in={usage_meta.get('promptTokenCount', '?')} "
                 f"out={usage_meta.get('candidatesTokenCount', '?')} "
+                f"think={usage_meta.get('thoughtsTokenCount', 0)} "
                 f"caller=Translate"
             )
             try:

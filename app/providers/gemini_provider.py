@@ -108,6 +108,9 @@ class GeminiResearcher(BaseResearcher):
                         "generationConfig": {
                             "temperature": 0.4,
                             "responseMimeType": "application/json",
+                            "thinkingConfig": {
+                                "thinkingBudget": 1024,
+                            },
                         },
                     },
                 )
@@ -118,6 +121,7 @@ class GeminiResearcher(BaseResearcher):
                     f"[API-COST] gemini {GEMINI_MODEL} "
                     f"in={usage_meta.get('promptTokenCount', '?')} "
                     f"out={usage_meta.get('candidatesTokenCount', '?')} "
+                    f"think={usage_meta.get('thoughtsTokenCount', 0)} "
                     f"caller=Researcher"
                 )
                 try:

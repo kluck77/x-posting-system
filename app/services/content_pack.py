@@ -2258,6 +2258,9 @@ async def _gemini_opinion_card(
                     "generationConfig": {
                         "temperature": 0.8,
                         "responseMimeType": "application/json",
+                        "thinkingConfig": {
+                            "thinkingBudget": 1024,
+                        },
                     },
                 },
             )
@@ -2268,6 +2271,7 @@ async def _gemini_opinion_card(
                 f"[API-COST] gemini gemini-2.5-flash "
                 f"in={usage.get('promptTokenCount', '?')} "
                 f"out={usage.get('candidatesTokenCount', '?')} "
+                f"think={usage.get('thoughtsTokenCount', 0)} "
                 f"caller=GeminiOpinionCard"
             )
             try:
