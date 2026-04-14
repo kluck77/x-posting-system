@@ -24,6 +24,9 @@ from app.services.content_pack import (
     # Phase 2: Gemini 대안 의견 카드
     _GEMINI_OPINION_PROMPT, GeminiOpinionCard,
     _should_invoke_extended_review, _EXTENDED_REVIEW_TOPICS,
+    # Phase 3: Grok 경쟁 초안
+    _GROK_DRAFT_PROMPT,
+    _noop_async, _log_draft_comparison,
 )
 from app.models.content_request import ContentRequest
 
@@ -3018,3 +3021,175 @@ class TestColumnAndContradictionSync:
         """양쪽 모두 칼럼/사설 구조 금지 섹션 보유."""
         assert "칼럼/사설 구조 금지" in _FINALIZE_PROMPT_KO
         assert "칼럼/사설 구조 금지" in _CLAUDE_REVIEW_PROMPT
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Phase 3: Grok 경쟁 초안 테스트
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestGrokDraftPrompt:
+    """Grok 경쟁 초안 시스템 프롬프트 규칙 검증."""
+
+    def test_grok_prompt_exists(self):
+        """_GROK_DRAFT_PROMPT가 존재하고 비어있지 않음."""
+        assert _GROK_DRAFT_PROMPT
+        assert len(_GROK_DRAFT_PROMPT) > 100
+
+    def test_grok_persona_is_x_editor(self):
+        """Grok 페르소나가 X 에디터/계정 운영자."""
+        assert "해설 계정 운영자" in _GROK_DRAFT_PROMPT
+
+    def test_grok_persona_differs_from_openai(self):
+        """Grok 페르소나가 OpenAI 페르소나(증권사 출신 해설자)와 다름."""
+        assert "증권사 출신" not in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_title_copy(self):
+        """기사 제목 복붙/재진술 금지."""
+        assert "기사 제목 복붙" in _GROK_DRAFT_PROMPT or "제목 복붙" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_column_structure(self):
+        """칼럼/사설체 금지."""
+        assert "칼럼/사설" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_moonjeneun(self):
+        """'문제는 ~것이다' 금지."""
+        assert "문제는 ~것이다" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_unsupported_claims(self):
+        """근거 없는 일반론 금지."""
+        assert "근거 없는 일반론 금지" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_caution_override(self):
+        """검증 결과보다 강한 주장 금지."""
+        assert "검증 결과" in _GROK_DRAFT_PROMPT
+        assert "강한 주장 금지" in _GROK_DRAFT_PROMPT
+
+    def test_grok_requires_why_first(self):
+        """첫 문장에 왜 중요한가 요구."""
+        assert "왜" in _GROK_DRAFT_PROMPT and "봐야 하는가" in _GROK_DRAFT_PROMPT
+
+    def test_grok_3_sentence_structure(self):
+        """3문장 구조 존재."""
+        assert "3문장" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_report_start(self):
+        """'~보도가 나왔다' 시작 금지."""
+        assert "보도가 나왔다" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_forecast_endings(self):
+        """전망문 금지."""
+        assert "추이를 봐야 한다" in _GROK_DRAFT_PROMPT
+
+    def test_grok_output_json_format(self):
+        """JSON 출력 형식 명시."""
+        assert "final_post" in _GROK_DRAFT_PROMPT
+        assert "final_short" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_commentary_judgment(self):
+        """논평/비난/자격 판정 금지."""
+        assert "논평" in _GROK_DRAFT_PROMPT and "판정 금지" in _GROK_DRAFT_PROMPT
+
+    def test_grok_bans_contradiction(self):
+        """기사 사실과 모순되는 단정 금지."""
+        assert "모순되는 단정 금지" in _GROK_DRAFT_PROMPT
+
+
+class TestClaudeDraftComparisonRules:
+    """Claude 초안 비교 통합 규칙 검증."""
+
+    def test_claude_has_comparison_section(self):
+        """초안 비교 통합 규칙 섹션이 존재."""
+        assert "초안 비교 통합 규칙" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_pick_base_draft(self):
+        """기반 초안 선택 규칙이 존재."""
+        assert "기반 초안" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_no_averaging(self):
+        """평균문 금지 규칙이 존재."""
+        assert "평균문" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_no_stitching(self):
+        """이어붙이기 금지 규칙이 존재."""
+        assert "이어붙여" in _CLAUDE_REVIEW_PROMPT or "늘리지 마라" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_absorb_limit(self):
+        """다른 초안에서 흡수 가능 범위가 제한됨."""
+        p = _CLAUDE_REVIEW_PROMPT
+        assert "표현 1개" in p or "해석 축 1개만" in p
+
+    def test_claude_single_voice(self):
+        """최종 문체가 하나여야 한다는 규칙 존재."""
+        assert "한 사람이 처음부터 끝까지" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_scroll_stop_priority(self):
+        """스크롤 멈추는 힘 우선 검토 규칙 존재."""
+        assert "스크롤 멈추는" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_single_draft_fallback(self):
+        """초안 1개일 때 기존 동작 유지 규칙 존재."""
+        assert "1개만 있으면 기존과 동일" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_role_mentions_two_drafts(self):
+        """역할 설명에 초안 2개 가능성 언급."""
+        assert "초안이 2개" in _CLAUDE_REVIEW_PROMPT or "2개(OpenAI" in _CLAUDE_REVIEW_PROMPT
+
+
+class TestNoopAsync:
+    """_noop_async 헬퍼 함수 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_noop_returns_none(self):
+        """_noop_async()가 None을 반환."""
+        result = await _noop_async()
+        assert result is None
+
+
+class TestLogDraftComparison:
+    """_log_draft_comparison 로깅 함수 테스트."""
+
+    def test_log_with_all_drafts(self):
+        """OpenAI + Grok + Gemini 모두 있을 때 정상 동작."""
+        oa = FinalPost(final_post="OpenAI 첫 줄", final_short="짧은 버전")
+        gk = FinalPost(final_post="Grok 첫 줄", final_short="짧은 버전")
+        gm = GeminiOpinionCard(first_line_suggestion="Gemini 제안")
+        # 예외 없이 호출되면 성공
+        _log_draft_comparison(oa, gk, gm)
+
+    def test_log_with_grok_none(self):
+        """Grok 없을 때 정상 동작."""
+        oa = FinalPost(final_post="OpenAI 첫 줄", final_short="짧은 버전")
+        _log_draft_comparison(oa, None, None)
+
+    def test_log_with_empty_drafts(self):
+        """빈 초안도 정상 처리."""
+        oa = FinalPost(final_post="", final_short="")
+        _log_draft_comparison(oa, None, None)
+
+
+class TestGrokPromptSync:
+    """Grok 프롬프트와 다른 프롬프트 간 핵심 규칙 동기화 검증."""
+
+    def test_all_three_ban_column_structure(self):
+        """OpenAI/Grok/Claude 3개 프롬프트 모두 칼럼/사설 금지."""
+        assert "칼럼" in _FINALIZE_PROMPT_KO
+        assert "칼럼" in _GROK_DRAFT_PROMPT
+        assert "칼럼" in _CLAUDE_REVIEW_PROMPT
+
+    def test_all_three_ban_moonjeneun(self):
+        """3개 프롬프트 모두 '문제는 ~것이다' 금지."""
+        assert "문제는 ~것이다" in _FINALIZE_PROMPT_KO
+        assert "문제는 ~것이다" in _GROK_DRAFT_PROMPT
+        assert "문제는 ~것이다" in _CLAUDE_REVIEW_PROMPT
+
+    def test_all_three_ban_unsupported(self):
+        """3개 프롬프트 모두 근거 없는 일반론 금지."""
+        assert "근거 없는 일반론" in _FINALIZE_PROMPT_KO
+        assert "근거 없는 일반론 금지" in _GROK_DRAFT_PROMPT
+        assert "근거 없는 일반론" in _CLAUDE_REVIEW_PROMPT
+
+    def test_grok_and_openai_have_3sentence(self):
+        """Grok과 OpenAI 모두 3문장 구조."""
+        assert "3문장" in _FINALIZE_PROMPT_KO
+        assert "3문장" in _GROK_DRAFT_PROMPT
