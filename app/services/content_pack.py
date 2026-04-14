@@ -20,6 +20,7 @@
 - OpenAI 우선, Anthropic 폴백, Mock 항상 가능
 """
 
+import asyncio
 import json
 import logging
 import re
