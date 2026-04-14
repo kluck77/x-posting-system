@@ -2171,7 +2171,7 @@ class TestFirstSentenceLengthGate:
     """첫 문장 길이 게이트 테스트."""
 
     def test_long_first_sentence_triggers_gate(self):
-        """70자 초과 첫 문장은 WEAK_OPENER 게이트 실패."""
+        """75자 초과 첫 문장은 WEAK_OPENER 게이트 실패."""
         post = "11일 파키스탄 협상 결렬 이후 로이터 통신이 보도한 이번 주 후반 이슬라마바드 재협상이 실제로 이루어지는지 여부가 미국과 이란 관계의 분기점이다."
         _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
         assert "WEAK_OPENER" in gate_fails
@@ -2183,10 +2183,44 @@ class TestFirstSentenceLengthGate:
         assert "WEAK_OPENER" not in gate_fails
 
     def test_moderate_first_sentence_passes(self):
-        """70자 이내 첫 문장은 통과."""
-        post = "미국의 대이란 봉쇄가 선언에 그칠지 실제 통제로 갈지 곧 드러난다. 후속 조치가 관건이다."
+        """60자 이내 첫 문장은 게이트 통과 (경고만)."""
+        post = "미국의 대이란 봉쇄가 선언에 그칠지 실제 통제로 갈지 곧 드러난다. 후속 조치."
         _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
         assert "WEAK_OPENER" not in gate_fails
+
+    def test_61_to_75_first_sentence_warning_only(self):
+        """61~75자 첫 문장은 경고만, 게이트 실패 아님."""
+        # 65자 정도 첫 문장
+        post = "미국과 이란 사이에서 중재국을 통한 비공식 소통 채널이 아직 살아 있는지가 이번 국면에서 가장 중요한 포인트다. 근거 있다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" not in gate_fails
+        assert any("길이 경고" in w for w in warnings)
+
+
+class TestComplexSentenceGate:
+    """문장 구조 복잡도 게이트 테스트."""
+
+    def test_complex_sentence_detected(self):
+        """쉼표 3개 이상 문장이 2개면 COMPLEX_SENTENCE 게이트."""
+        post = (
+            "미국이 봉쇄를 선언하면서, 이란은 반발하고, 중재국은 관망하며, 시장은 흔들렸다. "
+            "한국은 에너지 가격에 영향을 받고, 환율이 흔들리며, 수출 기업이 긴장하고, 정부는 대응을 준비한다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "COMPLEX_SENTENCE" in gate_fails
+
+    def test_simple_sentences_pass(self):
+        """단순한 문장들은 통과."""
+        post = "지금 포인트는 재회담 성사 여부다. 이란은 신중하다. 금요일까지 답이 나온다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "COMPLEX_SENTENCE" not in gate_fails
+
+    def test_single_complex_is_warning_only(self):
+        """복잡한 문장 1개는 경고만, 게이트 실패 아님."""
+        post = "미국이 봉쇄를 선언하면서, 이란은 반발하고, 중재국은 관망하며, 시장은 흔들렸다. 금요일이 분기점이다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "COMPLEX_SENTENCE" not in gate_fails
+        assert any("복잡한 문장" in w for w in warnings)
 
 
 class TestNewBannedEndingPatterns:

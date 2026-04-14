@@ -1715,6 +1715,7 @@ async def _handle_thesis_select_callback(
                 "DEAD_ENDING": "죽은 마감",
                 "BRIEFING_SMELL": "브리핑체 잔존",
                 "OPINION_LEAK": "일반론 의견",
+                "COMPLEX_SENTENCE": "문장 복잡",
             }
             fail_labels = [_tag_labels.get(t, t) for t in result.gate_fails]
             result_text += (

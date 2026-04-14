@@ -713,13 +713,13 @@ def send_candidate_card_messages(card) -> list[dict]:
 
             # 압축형: 제목 → 빈 줄 → 해석 → 빈 줄 → 좌표 → 빈 줄 → 신호
             lines = [f"🎯 <b>{slot_name}</b>", ""]
-            lines.append(f"해석: {_trim(tc.thesis, 100)}")
+            lines.append(f"해석: {_trim(tc.thesis, 80)}")
             if getattr(tc, "judgment_coord", ""):
                 lines.append("")
-                lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 70)}")
+                lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 60)}")
             if getattr(tc, "verification_signal", ""):
                 lines.append("")
-                lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 70)}")
+                lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 60)}")
             if spec_badge:
                 lines.append(spec_badge)
 

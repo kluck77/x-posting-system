@@ -1396,11 +1396,12 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "슬롯 조�
 - 첫 문장은 40자 이내 권장. 종속절("~에도 불구하고" "~하는 가운데") 금지.
 - "A가 일어나면서 B가 영향을 받고 C가 중요해진다" 식 복합문 금지.
 
-좋은 첫 문장:
-  ✓ "지금 포인트는 회담 재개 여부 하나다."
-  ✓ "미국의 대이란 봉쇄가 선언에 그칠지 곧 드러난다."
-  ✓ "돈은 결국 대형주 몇 종목에 더 몰렸다."
-  ✓ "중동발 원자재 불안이 제조업 생산라인까지 흔든다."
+좋은 첫 문장 (5가지 톤 — 한 말투로 수렴하지 마라):
+  ✓ 직설형: "지금 포인트는 회담 재개 여부 하나다."
+  ✓ 대비형: "로이터는 재협상을 썼고, 이란은 여전히 신중하다."
+  ✓ 판정형: "미국의 대이란 봉쇄가 선언에 그칠지 곧 드러난다."
+  ✓ 신호형: "항만 물동량과 보험료가 답을 준다."
+  ✓ 변화형: "결렬 이후에도 채널이 살아 있는지가 핵심이다."
 나쁜 첫 문장:
   ✗ "11일 협상 결렬 이후 로이터가 보도한 재협상이 실제로 이루어지는지 여부가 분기점이다." ← 길고 배경 설명
   ✗ "미국과 이란의 1차 중전 협상 결렬에도 불구하고 양국 간의 외교 채널은..." ← 종속절 시작
@@ -1441,6 +1442,16 @@ _FINALIZE_PROMPT_KO = """너는 한국 이슈 해설형 X 계정의 "슬롯 조�
     ✗ 즉, "뭘 봐야 하는지"를 말하지 않고 "봐야 한다"만 말하면 실패.
 
 2~4문장. 각 문장이 하나의 기능만 수행. 장황한 칼럼체 금지.
+
+━━━ 문장 구조 규칙 ━━━
+
+복잡한 문장 = 리뷰체의 원인. 아래 금지:
+- 한 문장에 쉼표 2개 이상 금지
+- 접속 표현 과다 금지: ~면서/~인데/~하고/~하며를 한 문장에 2개 이상 쓰지 마라
+- 종속절 2개 이상 금지: "~에도 불구하고 ~하는 가운데 ~가..." 식
+- 한 문장에 사실+해석+전망을 동시에 넣지 마라
+
+지키지 않으면 브리핑체/리뷰체로 판정.
 
 ━━━ 절대 금지 (CRITICAL) ━━━
 
@@ -2412,6 +2423,9 @@ Grok 평가는 톤 보정 참고 자료다. 논지 변경 근거가 아니다.
    ✗ "A가 일어나면서 B가 영향을 받고 C가 중요해진다" → ✓ 문장 3개로 분리
 3. 판별 신호는 짧고 직접적으로.
    ✗ "~여부가 분기점이다" → ✓ "금요일까지 재회 소식이 나오면 대화는 살아 있다."
+4. 쉼표 2개 이상/접속사 2개 이상 문장은 쪼개라.
+5. 보정 시 논지를 바꾸지 마라. 새 논지 추가 금지. 표현만 압축/분리하라.
+   판단 좌표와 판별 신호는 유지한 채 문장만 단순하게 만들어라.
 
 ━━━ 문장 구조 ━━━
 
@@ -3052,23 +3066,32 @@ async def _claude_review_final(
     if gate_fails:
         _tag_to_instruction = {
             "WEAK_OPENER": (
-                "🚨 첫 문장이 배경 설명/사실나열이거나 70자를 넘는다. "
+                "🚨 첫 문장이 배경 설명/사실나열이거나 60자를 넘는다. "
                 "반드시 첫 문장을 핵심 명제 한 줄로 다시 써라. 40자 이내 권장. "
                 "배경 설명/종속절('~에도 불구하고') 시작 금지. "
+                "단, 선택된 슬롯의 논지를 바꾸지 마라. 표현만 압축하라. "
                 "좋은 예: '지금 포인트는 재회담 성사 여부다.' "
-                "'돈은 결국 대형주 몇 종목에 더 몰렸다.'"
+                "'결렬 이후에도 채널이 살아 있는지가 핵심이다.'"
             ),
             "DEAD_ENDING": (
                 "🚨 마지막 문장이 '관건이다/변수다/중요하다'류 죽은 마감이다. "
-                "반드시 판별 신호로 교체하라: '무엇이 나오면/안 나오면' 구체적 검증 포인트."
+                "반드시 판별 신호로 교체하라: '무엇이 나오면/안 나오면' 구체적 검증 포인트. "
+                "판단 좌표와 판별 신호는 유지한 채 표현만 교체."
             ),
             "BRIEFING_SMELL": (
                 "🚨 브리핑/보고서 냄새 표현이 2개 이상 감지됐다. "
-                "장황한 표현을 전부 짧고 단단한 문장으로 압축하라."
+                "장황한 표현을 전부 짧고 단단한 문장으로 압축하라. "
+                "한 문장에 주장 1개만. 쉼표 2개 이상 문장은 쪼개라."
             ),
             "OPINION_LEAK": (
                 "🚨 근거 없는 일반론 의견이 감지됐다. "
                 "반드시 확인된 사실+수치로 뒷받침하거나 해당 문장을 삭제하라."
+            ),
+            "COMPLEX_SENTENCE": (
+                "🚨 문장이 복잡하다 (쉼표/접속사 과다). "
+                "복잡한 문장을 짧은 2~3문장으로 쪼개라. "
+                "한 문장 한 주장. 쉼표 2개 이상 금지. "
+                "단, 논지를 바꾸지 마라. 표현만 분리하라."
             ),
         }
         parts = []
@@ -3081,6 +3104,10 @@ async def _claude_review_final(
                 "\n\n━━━ 품질 게이트 실패 — 반드시 교정 ━━━\n"
                 + "\n".join(parts)
                 + "\n위 항목은 반드시 교정하라. 교정하지 않으면 게시 불가.\n"
+                + "\n⚠️ 보정 제약: 더 직선적으로 다시 써라. "
+                "단, 선택된 슬롯의 논지를 바꾸지 마라. 새 논지를 만들지 마라. "
+                "판단 좌표와 판별 신호는 유지한 채 표현만 압축하라. "
+                "슬롯 이동 금지.\n"
             )
 
     user_prompt += (
@@ -3639,10 +3666,11 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str], li
     """마감 결과 검증 및 자동 보정. (post, short, warnings, gate_fails) 반환.
 
     gate_fails: 게이트 실패 태그 목록. 비어 있으면 통과.
-      - WEAK_OPENER: 첫 문장 사실나열
+      - WEAK_OPENER: 첫 문장 사실나열 / 과장
       - DEAD_ENDING: 금지 마감 패턴
       - BRIEFING_SMELL: 브리핑 장황 표현 2개+
       - OPINION_LEAK: 근거 없는 일반론
+      - COMPLEX_SENTENCE: 문장 구조 복잡 (쉼표/접속사 과다)
     """
     warnings: list[str] = []
     gate_fails: list[str] = []
@@ -3655,13 +3683,29 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str], li
             gate_fails.append("WEAK_OPENER")
             break
 
-    # 첫 문장 길이/복합절 감지 — 즉시 이해성 저하
+    # 첫 문장 길이 이중 게이트 — 즉시 이해성 핵심
     if first_line and "WEAK_OPENER" not in gate_fails:
-        # 마침표 기준 첫 문장 추출 (첫 줄 내에서)
         first_sent = first_line.split(".")[0] + "." if "." in first_line else first_line
-        if len(first_sent) > 70:
-            warnings.append(f"첫 문장 과장 ({len(first_sent)}자) — 40자 이내 권장")
+        sent_len = len(first_sent)
+        if sent_len > 75:
+            warnings.append(f"첫 문장 과장 ({sent_len}자) — 75자 초과, 재작성 필요")
             gate_fails.append("WEAK_OPENER")
+        elif sent_len > 60:
+            warnings.append(f"첫 문장 길이 경고 ({sent_len}자) — 40자 이내 권장")
+
+    # 문장 구조 복잡도 감지 — 리뷰체의 원인
+    _connectors = ["면서 ", "인데 ", "하고 ", "하며 ", "지만 ", "반면 "]
+    sentences = [s.strip() for s in post.replace("\n", " ").split(".") if s.strip()]
+    complex_hits = 0
+    for sent in sentences:
+        comma_count = sent.count(",")
+        connector_count = sum(1 for c in _connectors if c in sent)
+        if comma_count >= 3 or connector_count >= 2:
+            complex_hits += 1
+    if complex_hits >= 1:
+        warnings.append(f"복잡한 문장 {complex_hits}개 (쉼표/접속사 과다)")
+        if complex_hits >= 2:
+            gate_fails.append("COMPLEX_SENTENCE")
 
     # 금지 마무리 패턴 감지
     for banned in _BANNED_ENDINGS:
