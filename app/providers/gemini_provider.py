@@ -109,9 +109,13 @@ class GeminiResearcher(BaseResearcher):
                             "temperature": 0.4,
                             "responseMimeType": "application/json",
                         },
-                        "thinkingConfig": {"thinkingBudget": 0},
                     },
                 )
+                if resp.status_code >= 400:
+                    body = resp.text
+                    if settings.gemini_api_key:
+                        body = body.replace(settings.gemini_api_key, "***")
+                    logger.error(f"[Gemini Researcher] API {resp.status_code}: {body[:500]}")
                 resp.raise_for_status()
                 resp_data = resp.json()
                 usage_meta = resp_data.get("usageMetadata", {})

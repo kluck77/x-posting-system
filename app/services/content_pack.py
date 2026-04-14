@@ -1705,9 +1705,13 @@ async def _gemini_generate_thesis_cards(
                         "temperature": 0.9,
                         "responseMimeType": "application/json",
                     },
-                    "thinkingConfig": {"thinkingBudget": 0},
                 },
             )
+            if r.status_code >= 400:
+                body = r.text
+                if settings.gemini_api_key:
+                    body = body.replace(settings.gemini_api_key, "***")
+                logger.error(f"[GeminiThesis] API {r.status_code}: {body[:500]}")
             r.raise_for_status()
             data = r.json()
             usage = data.get("usageMetadata", {})
@@ -2802,9 +2806,13 @@ async def _gemini_opinion_card(
                         "temperature": 0.8,
                         "responseMimeType": "application/json",
                     },
-                    "thinkingConfig": {"thinkingBudget": 0},
                 },
             )
+            if r.status_code >= 400:
+                body = r.text
+                if settings.gemini_api_key:
+                    body = body.replace(settings.gemini_api_key, "***")
+                logger.error(f"[GeminiOpinion] API {r.status_code}: {body[:500]}")
             r.raise_for_status()
             data = r.json()
             usage = data.get("usageMetadata", {})
