@@ -1350,63 +1350,7 @@ QA 체크:
 - 한국어 JSON만 출력하라.
 - 완성 게시글 문체로 길게 쓰지 마라.
 - 후보 재료만 간결하게 정리할 것.
-
-━━━ thesis_cards 규칙 (CRITICAL — 위반 시 전체 실패) ━━━
-
-■ 핵심 원칙:
-thesis_cards는 "기사 제목 변주"가 아니다.
-같은 기사를 서로 다른 해석 축으로 읽는 "논지 카드" 3개다.
-A/B/C는 "같은 뜻의 다른 문장"이 아니라 "서로 다른 논지"여야 한다.
-
-■ 각 thesis_card 필드:
-  - thesis: 이 기사를 어떤 해석 축으로 볼 것인지 한 줄 논지
-  - why_not_summary: 이 논지가 왜 기사 재진술이 아닌지 한 줄
-  - reader_stake: 독자가 왜 이걸 지금 중요하게 봐야 하는지 한 줄
-  - opener: 이 논지에 맞는 첫 문장 초안 1개
-
-■ 논지 분기 규칙 (CRITICAL — 같은 축 반복 시 전체 실패):
-  3개 카드의 thesis가 의미상 같으면 실패.
-  3개 중 최소 2개는 서로 다른 해석 축이어야 한다.
-  허용 축 예시:
-  - 비용/가격 축: 이 문제가 가격·원가·마진에 어떤 의미인가
-  - 비교/대비 축: 한국만 더 취약한가, 다른 국가·기업과 뭐가 다른가
-  - 시간/조건 축: 지금은 버티지만 어떤 조건에서 문제가 현실화되는가
-  - 수혜/피해 축: 이 변화로 누가 타격받고 누가 상대적으로 유리한가
-  - 정책/구조 축: 단기 뉴스가 아니라 구조적 취약점인지, 대응 가능한지
-
-  ✗ 3개 다 "~리스크가 커진다 / ~우려가 있다 / ~시급하다" 식 경고문 → 실패
-  ✗ 기사 thesis를 어미만 바꿔 3번 반복 → 실패
-
-  나쁨 (3개 같은 축):
-    A thesis: "부동산 정책의 투명성을 높이기 위한 강력한 의지를 보여준다"
-    B thesis: "이해충돌 문제를 최소화하기 위한 초강수로 해석된다"
-    C thesis: "이해충돌을 차단하려는 의도가 분명히 드러난다"
-    → 3개 다 "의지/의도" 논지. 실패.
-
-  좋음 (3개 다른 축):
-    A(직접 변화): "복사 직원까지 배제하면 실무 공백이 생긴다. 누가 채우나"
-    B(구조): "다주택자 배제가 부동산 정책 자체의 방향을 바꿀 수 있다"
-    C(검증): "이 조치를 실제로 이행할 인력/시스템이 있는가가 관건이다"
-
-■ reader_stake 품질 규칙:
-  reader_stake가 아래 수준이면 불합격:
-  ✗ "중요하다" "주목해야 한다" "관심이 필요하다"
-  ✓ 구체적이어야 함: "내 전세 만기 때 영향받을 수 있다" "수출 기업 마진이 줄어든다"
-
-■ opener 규칙:
-  opener = 이 논지에 맞는 "해석이 담긴 완성 문장".
-  기사 제목 재진술 금지. 기자 질문형 금지.
-  읽었을 때 "이 사람 뭔가 아네"라는 느낌이 들어야 한다.
-
-■ 금지 패턴:
-  ✗ "~하려는 시도다" "~의지를 보여준다" "~로 해석된다" "~의도가 드러난다"
-  ✗ "~가 관건이다" "~에 달려 있다" "~가 결정된다"
-  ✗ 기자 질문형: "~은 무엇일까?" "~어떻게 될까?"
-  ✗ 명사형 제목, 화살표 나열, 내부 메모 톤
-
-■ 국제/지정학/거시경제 뉴스 특별 규칙:
-  국제 뉴스일 때 최소 1개 카드는 한국 관점 해석 축 포함 필수.
-  한국 관점 = 한국 수입물가/환율/기업/증시/가계비용/정부대응 등.
+- thesis_cards는 생성하지 마라. 별도 단계(Gemini)에서 생성된다.
 
 ■ 근거 없는 일반론 금지:
   - "역사적으로 ~" "~전략이다" "~낳기 쉽다" 같은 칼럼체 금지
@@ -1415,14 +1359,6 @@ A/B/C는 "같은 뜻의 다른 문장"이 아니라 "서로 다른 논지"여야
 JSON 스키마:
 {
   "key_facts": ["팩트1", "팩트2", "팩트3"],
-  "thesis_cards": [
-    {
-      "thesis": "해석 축 한 줄",
-      "why_not_summary": "왜 기사 재진술이 아닌지",
-      "reader_stake": "독자가 왜 지금 봐야 하는지",
-      "opener": "이 논지에 맞는 첫 문장"
-    }
-  ],
   "one_liner": ["한줄1", "한줄2"],
   "cautions": ["주의1", "주의2"],
   "watch_points": ["포인트1", "포인트2", "포인트3"],
@@ -1701,6 +1637,180 @@ final_short 예시 C (독립 버전):
 }"""
 
 
+# ─── Gemini: thesis card 생성 전담 ──────────────────────────────────────────
+
+_GEMINI_THESIS_PROMPT = """너는 "논지 분기기"다.
+
+━━━ 역할 ━━━
+
+기사 핵심 팩트를 바탕으로 서로 다른 해석 축의 thesis card 3개를 생성하라.
+너는 의견 카드 작성기가 아니다. 논지 분기기다.
+같은 뜻의 패러프레이즈 3개면 실패 처리된다.
+
+━━━ 각 thesis_card 필드 ━━━
+
+1. thesis: 이 기사를 어떤 해석 축으로 볼 것인지 한 줄 논지
+2. why_not_summary: 이 논지가 왜 기사 재진술이 아닌지 한 줄
+3. reader_stake: 독자가 왜 이걸 지금 중요하게 봐야 하는지 (구체적으로)
+4. opener: 이 논지에 맞는 첫 문장 초안 1개
+
+━━━ 논지 분기 규칙 (CRITICAL) ━━━
+
+3개 카드의 thesis가 의미상 같으면 전체 실패.
+3개 중 최소 2개는 서로 다른 해석 축이어야 한다.
+
+허용 축 예시 (참고만, 하드코딩 아님):
+- 직접 변화 축: 지금 실제로 무엇이 바뀌는가
+- 구조 변화 축: 제도/의사결정 구조에서 뭐가 바뀌는가
+- 시장/이해관계자 축: 누가 압박을 받고 어떤 반응이 나올 수 있는가
+- 다음 검증 포인트 축: 앞으로 어디서 진짜가 갈리는가
+- 비용/가격 축: 이 문제가 가격·원가·마진에 어떤 의미인가
+
+✗ 3개 다 "~리스크가 커진다 / ~우려가 있다 / ~시급하다" 식 경고문 → 실패
+✗ 기사 thesis를 어미만 바꿔 3번 반복 → 실패
+
+나쁨 (같은 축 3개):
+  A: "투명성을 높이기 위한 강력한 의지를 보여준다"
+  B: "이해충돌을 최소화하기 위한 초강수로 해석된다"
+  C: "이해충돌을 차단하려는 의도가 드러난다"
+  → 3개 다 "의지/의도" 논지. 실패.
+
+좋음 (다른 축 3개):
+  A(직접 변화): "복사 직원까지 배제하면 실무 공백이 생긴다. 누가 채우나"
+  B(구조): "다주택자 배제가 부동산 정책 자체의 방향을 바꿀 수 있다"
+  C(검증): "후속 지침이 나오기 전까지는 선언에 그칠 수 있다"
+
+━━━ reader_stake 품질 규칙 ━━━
+
+✗ "중요하다" "주목해야 한다" "관심이 필요하다" → 불합격
+✓ "내 전세 만기 때 영향받을 수 있다" "수출 기업 마진이 줄어든다" → 합격
+
+━━━ opener 규칙 ━━━
+
+opener = "해석이 담긴 완성 문장". 기사 제목 재진술 금지. 기자 질문형 금지.
+읽었을 때 "이 사람 뭔가 아네"라는 느낌이 들어야 한다.
+
+━━━ 금지 패턴 ━━━
+
+✗ "~하려는 시도다" "~의지를 보여준다" "~로 해석된다" "~의도가 드러난다"
+✗ "~가 관건이다" "~에 달려 있다" "~가 결정된다"
+✗ "~은 무엇일까?" "~어떻게 될까?"
+✗ "~영향은 확인이 필요하다" "~시장 반응을 주목해야 한다"
+✗ 명사형 제목, 화살표 나열
+
+━━━ 국제 뉴스 특별 규칙 ━━━
+
+국제 뉴스일 때 최소 1개 카드는 한국 관점 해석 축 포함 필수.
+
+━━━ 출력 ━━━
+한국어 JSON만 출력:
+{
+  "thesis_cards": [
+    {
+      "thesis": "해석 축 한 줄",
+      "why_not_summary": "왜 기사 재진술이 아닌지",
+      "reader_stake": "독자가 왜 지금 봐야 하는지 (구체적)",
+      "opener": "이 논지에 맞는 첫 문장"
+    }
+  ]
+}"""
+
+
+async def _gemini_generate_thesis_cards(
+    key_facts: list[str],
+    source_text: str,
+    topic_tags: list[str] | None = None,
+    cautions: list[str] | None = None,
+) -> list[ThesisCard]:
+    """Gemini로 thesis card 3개 생성. 실패 시 빈 리스트."""
+    from app.config import settings
+
+    if not settings.has_gemini:
+        logger.info("[GeminiThesis] Gemini API 키 없음 — 스킵")
+        return []
+
+    user_prompt = "━━━ 입력 ━━━\n"
+    if key_facts:
+        user_prompt += "핵심 팩트:\n"
+        for i, fact in enumerate(key_facts, 1):
+            user_prompt += f"  {i}. {fact}\n"
+    if topic_tags:
+        user_prompt += f"topic_tags: {', '.join(topic_tags)}\n"
+    if cautions:
+        user_prompt += "cautions:\n"
+        for c in cautions:
+            user_prompt += f"  - {c}\n"
+    if source_text:
+        user_prompt += f"\n원문 (참고):\n{source_text[:2000]}\n"
+    user_prompt += "\n위 팩트를 바탕으로 서로 다른 해석 축의 thesis card 3개를 JSON으로 생성하라."
+
+    try:
+        import httpx
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta"
+            "/models/gemini-2.5-flash:generateContent"
+        )
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                url,
+                params={"key": settings.gemini_api_key},
+                headers={"Content-Type": "application/json"},
+                json={
+                    "system_instruction": {
+                        "parts": [{"text": _GEMINI_THESIS_PROMPT}],
+                    },
+                    "contents": [
+                        {"parts": [{"text": user_prompt}]},
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.9,
+                        "responseMimeType": "application/json",
+                        "thinkingConfig": {
+                            "thinkingBudget": 1024,
+                        },
+                    },
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            usage = data.get("usageMetadata", {})
+            logger.info(
+                f"[API-COST] gemini gemini-2.5-flash "
+                f"in={usage.get('promptTokenCount', '?')} "
+                f"out={usage.get('candidatesTokenCount', '?')} "
+                f"think={usage.get('thoughtsTokenCount', 0)} "
+                f"caller=GeminiThesisCards"
+            )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage(
+                    "gemini", "gemini-2.5-flash", "GeminiThesisCards",
+                    usage.get("promptTokenCount", 0),
+                    usage.get("candidatesTokenCount", 0),
+                )
+            except Exception:
+                pass
+
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = json.loads(raw_text)
+            raw_cards = parsed.get("thesis_cards", [])
+            cards: list[ThesisCard] = []
+            for tc in raw_cards[:3]:
+                if isinstance(tc, dict):
+                    cards.append(ThesisCard(
+                        thesis=str(tc.get("thesis", "")),
+                        why_not_summary=str(tc.get("why_not_summary", "")),
+                        reader_stake=str(tc.get("reader_stake", "")),
+                        opener=str(tc.get("opener", "")),
+                    ))
+            logger.info(f"[GeminiThesis] thesis card {len(cards)}개 생성 완료")
+            return cards
+
+    except Exception as e:
+        logger.warning(f"[GeminiThesis] 호출 실패: {e}")
+        return []
+
+
 # ─── 1차: 후보 카드 생성 ─────────────────────────────────────────────────────
 
 async def generate_candidate_card(
@@ -1770,14 +1880,31 @@ async def generate_candidate_card(
 
     if raw:
         card = _parse_candidate_card(raw, certainty_ceiling=verification_ceiling)
-        if card and card.is_valid():
+        if card and card.key_facts:
             card.source_url = request.source_url
             card.source_type = request.source_type
             card.fact_sheet_summary = (
                 f"topic={fact_sheet.topic}, score={fact_sheet.data_density_score}"
             )
+
+            # ── Gemini: thesis card 생성 (OpenAI base card → Gemini thesis) ──
+            thesis_cards = await _gemini_generate_thesis_cards(
+                key_facts=card.key_facts,
+                source_text=raw_input[:2000],
+                topic_tags=card.topic_tags,
+                cautions=card.cautions,
+            )
+            if thesis_cards:
+                card.thesis_cards = thesis_cards
+                # hook_candidates를 opener에서 채움 (하위호환)
+                card.hook_candidates = [tc.opener for tc in thesis_cards if tc.opener]
+            elif not card.hook_candidates:
+                # Gemini 실패 + hook도 없으면 기본 hook 생성
+                card.hook_candidates = [f"[Gemini실패] {card.key_facts[0][:60]}"]
+
             logger.info(
                 f"후보 카드 생성 완료: facts={len(card.key_facts)}, "
+                f"thesis={len(card.thesis_cards)}, "
                 f"hooks={len(card.hook_candidates)}, "
                 f"certainty={card.certainty_level}"
             )
@@ -1808,21 +1935,20 @@ async def _noop_async() -> None:
 def _log_draft_comparison(
     openai_draft: FinalPost,
     grok_eval: Optional["GrokEvalCard"],
-    gemini_opinion: Optional["GeminiOpinionCard"],
+    gemini_opinion: Optional["GeminiOpinionCard"] = None,
 ) -> None:
-    """OpenAI 초안 + Grok 평가 + Gemini 의견 로깅."""
+    """OpenAI 초안 + Grok 평가 로깅."""
     oa_first = openai_draft.final_post.split("\n")[0][:60] if openai_draft.final_post else "없음"
     gk_info = (
-        f"score={grok_eval.x_hook_score} safe={grok_eval.too_safe} "
+        f"score={grok_eval.score}/10 tags={grok_eval.fail_tags} "
+        f"scope={grok_eval.rewrite_scope} "
         f"problem=\"{grok_eval.problem[:40]}\""
         if grok_eval else "없음"
     )
-    gm_first = gemini_opinion.first_line_suggestion[:60] if gemini_opinion and gemini_opinion.first_line_suggestion else "없음"
 
     logger.info(
         f"[초안+평가] OpenAI첫줄=\"{oa_first}\" | "
-        f"Grok평가={gk_info} | "
-        f"Gemini제안=\"{gm_first}\""
+        f"Grok평가={gk_info}"
     )
 
 
@@ -1958,48 +2084,44 @@ async def generate_final_post(
                 f"short={len(result.final_short)}자"
             )
 
-            # Phase 3: Grok 평가 + Phase 2: Gemini 의견카드 — 병렬 호출
-            # Gemini 조건부 판정은 OpenAI 초안 기준
-            should_gemini = _should_invoke_extended_review(card, result)
-
-            await _notify_progress("grok_gemini")
-            grok_result, gemini_opinion = await asyncio.gather(
-                _grok_eval(result, card, selected_hook=selected_hook),
-                _gemini_opinion_card(
-                    card, result, selected_hook=selected_hook
-                ) if should_gemini else _noop_async(),
-                return_exceptions=True,
-            )
-
-            # 예외 처리 — 실패 시 None으로 폴백
+            # Phase 2: Grok X 감각 심사 (Gemini는 thesis 단계에서 이미 사용 → 여기선 생략)
+            await _notify_progress("grok")
+            grok_result = await _grok_eval(result, card, selected_hook=selected_hook)
             if isinstance(grok_result, Exception):
-                logger.warning(f"[Grok평가] 병렬 실행 오류: {grok_result}")
+                logger.warning(f"[Grok평가] 실행 오류: {grok_result}")
                 grok_result = None
-            if isinstance(gemini_opinion, Exception):
-                logger.warning(f"[Gemini의견카드] 병렬 실행 오류: {gemini_opinion}")
-                gemini_opinion = None
 
             # 비교 로깅
-            _log_draft_comparison(result, grok_result, gemini_opinion)
+            _log_draft_comparison(result, grok_result, None)
 
-            # Phase 1: Claude 상시 최종 통합 — 항상 호출
+            # Phase 3: Claude 사실/톤 보정 — 항상 호출
             await _notify_progress("claude")
             reviewed = await _claude_review_final(
                 card, result,
                 selected_hook=selected_hook,
-                gemini_opinion=gemini_opinion,
+                gemini_opinion=None,
                 grok_eval=grok_result,
             )
+            final = reviewed if reviewed else result
             if reviewed:
                 logger.info(
                     f"Claude 최종통합 완료: post={len(reviewed.final_post)}자, "
                     f"short={len(reviewed.final_short)}자"
                 )
-                return reviewed
+            else:
+                logger.warning("[Claude통합] 실패 — OpenAI 1차 결과 사용")
 
-            # Claude 실패 시 OpenAI 1차 결과로 폴백
-            logger.warning("[Claude통합] 실패 — OpenAI 1차 결과 사용")
-            return result
+            # 7대 검증 규칙 실행
+            v_warnings = _run_all_validations(
+                final.final_post,
+                card=card,
+                selected_thesis=selected_thesis,
+                grok_eval=grok_result,
+            )
+            for vw in v_warnings:
+                logger.warning(f"[7대검증] {vw}")
+
+            return final
 
     logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
     return FinalPost(
@@ -2137,14 +2259,19 @@ OpenAI가 선택된 논지(thesis)로 쓴 초안이 제공된다.
 
 Grok 평가는 톤 보정 참고 자료다. 논지 변경 근거가 아니다.
 
-1. headline_clone=true → 첫 문장 표현만 다듬어라. 논지는 유지.
-2. too_safe=true → 종결형("중요하다" "리스크다")만 구체적 표현으로 교체.
-3. new_angle_missing=true → 참고만. 새 각도를 추가하지 마라.
-4. x_hook_score 1~2 → 첫 문장 표현력만 높여라. 방향은 유지.
-5. x_hook_score 4~5 → 첫 문장 유지. 톤/사실만 다듬어라.
-6. fix_direction은 톤 보정 참고만. 논지 변경에 쓰지 마라.
-7. Grok 평가가 없으면 사실/톤 보정만 하라.
-8. 새 사실 추가 금지.
+1. rewrite_scope=KEEP → 사실/톤만 최소 보정. 첫 문장 유지.
+2. rewrite_scope=REWRITE_OPENER_ONLY → 첫 문장 표현만 다듬어라. 논지는 유지.
+3. rewrite_scope=REJECT_AND_REGENERATE → 첫 문장을 크게 다듬되 논지 방향은 유지.
+4. fail_tags 활용:
+   - HEADLINE_RESTATEMENT → 첫 문장을 기사 제목과 다르게 표현.
+   - PRESS_RELEASE_TONE / POLICY_MEMO_TONE → 해당 문체만 트윗체로 교정.
+   - COLUMN_ENDING → 종결 패턴만 조건형/대비형으로 교체.
+   - NO_READER_STAKE → 독자 이해관계를 더 드러내되, 새 사실 추가 금지.
+   - GENERIC_SKEPTICISM → 구체적 조건/변수로 좁혀라.
+   - SAME_THESIS → 참고만. 논지 자체를 바꾸지 마라.
+5. fix_direction은 톤 보정 참고만. 논지 변경에 쓰지 마라.
+6. Grok 평가가 없으면 사실/톤 보정만 하라.
+7. 새 사실 추가 금지.
 
 ━━━ 문체 모델 ━━━
 
@@ -2277,13 +2404,30 @@ OpenAI가 작성한 1차 초안(final_post, final_short)을 읽고,
 
 @dataclass
 class GrokEvalCard:
-    """Grok X 감각 평가 카드."""
-    headline_clone: bool = False
-    too_safe: bool = False
-    new_angle_missing: bool = False
-    x_hook_score: int = 3
+    """Grok X 감각 평가 카드 (구조화 버전).
+
+    score: 0-10 (0=완전 기사복붙, 10=X 네이티브 완벽)
+    fail_tags: 감지된 실패 태그 목록
+    rewrite_scope: KEEP / REWRITE_OPENER_ONLY / REJECT_AND_REGENERATE
+    problem: 왜 약한지 한 줄
+    fix_direction: 어떻게 고칠지 한 줄
+    """
+    score: int = 5
+    fail_tags: list[str] = field(default_factory=list)
+    rewrite_scope: str = "KEEP"
     problem: str = ""
     fix_direction: str = ""
+
+# Grok fail_tags 유효 목록
+_GROK_VALID_FAIL_TAGS = {
+    "SAME_THESIS",           # 논지가 기사 요약과 같음
+    "PRESS_RELEASE_TONE",    # 보도자료/기사체
+    "POLICY_MEMO_TONE",      # 정책 보고서체
+    "COLUMN_ENDING",         # 칼럼/사설 종결
+    "NO_READER_STAKE",       # 독자 이해관계 없음
+    "GENERIC_SKEPTICISM",    # 막연한 회의론
+    "HEADLINE_RESTATEMENT",  # 기사 제목 재진술
+}
 
 _GROK_EVAL_PROMPT = """너는 X 게시글 "X 감각 심사관"이다.
 
@@ -2292,35 +2436,37 @@ _GROK_EVAL_PROMPT = """너는 X 게시글 "X 감각 심사관"이다.
 너는 X에서 한국 이슈 글을 매일 보는 편집자다.
 기사 요약문, 평균문, 안전한 해설문을 바로 알아본다.
 네 역할은 글을 다시 쓰는 것이 아니라,
-이 글이 왜 약한지와 어디를 고치면 되는지를 짧게 판정하는 것이다.
+이 글이 왜 약한지를 구조화된 태그로 판정하는 것이다.
 
 ━━━ 판정 기준 ━━━
 
-1. headline_clone (true/false)
-   첫 문장이 기사 제목/요약을 재진술하면 true.
-   고유명사+사건은 공유해도 되지만, 구조와 표현이 제목과 같으면 clone이다.
+1. score (0~10)
+   0 = 기사 제목 복붙 수준
+   3 = 요약문/보도자료체
+   5 = 보통 (읽을 만하지만 X 감각 부족)
+   7 = 좋음 (눈이 멈춤)
+   9 = 매우 좋음 (반드시 읽게 됨)
+   10 = X 네이티브 완벽
 
-2. too_safe (true/false)
-   "중요하다" "리스크다" "우려가 커진다" "영향을 미칠 수 있다" 식
-   평균문·안전문으로 끝나면 true.
+2. fail_tags (배열 — 해당하는 것만)
+   아래 태그 중 해당하는 것만 넣어라. 해당 없으면 빈 배열 [].
+   - SAME_THESIS: 논지가 기사 요약과 같음. 독자적 해석 축 없음.
+   - PRESS_RELEASE_TONE: "~밝혔다" "~발표했다" "~전했다" 보도자료/기사 문체.
+   - POLICY_MEMO_TONE: "~해야 한다" "~시급하다" "~필요하다" 정책 보고서체.
+   - COLUMN_ENDING: "핵심이다" "문제는 ~것이다" "관건이다" 칼럼/사설 종결.
+   - NO_READER_STAKE: 독자 이해관계(돈/시간/기회/위험)가 없음. 추상적 중요성만.
+   - GENERIC_SKEPTICISM: "과연 ~할까?" "~일지 미지수" 막연한 회의론.
+   - HEADLINE_RESTATEMENT: 첫 문장이 기사 제목/요약 재진술.
 
-3. new_angle_missing (true/false)
-   기사 내용을 정리만 했고 새로운 해석 축이 없으면 true.
-   "왜 지금 중요한가" "누가 손해/이득인가" "뭘 보면 알 수 있나" 중
-   하나도 없으면 true.
+3. rewrite_scope
+   - "KEEP": score 7 이상이고 fail_tags 없거나 1개 이하 → 현재 초안 유지
+   - "REWRITE_OPENER_ONLY": score 4~6이거나 fail_tags 1~2개 → 첫 문장만 수정
+   - "REJECT_AND_REGENERATE": score 3 이하이거나 fail_tags 3개 이상 → 전면 재생성 필요
 
-4. x_hook_score (1~5)
-   첫 문장만 보고 점수:
-   1 = 기사 제목 복붙 수준
-   2 = 요약문
-   3 = 보통
-   4 = 눈이 멈춤
-   5 = 반드시 읽게 됨
-
-5. problem
+4. problem
    이 글이 왜 X에서 안 먹히는지 한 줄.
 
-6. fix_direction
+5. fix_direction
    어떻게 고치면 되는지 한 줄. 방향만. 전체 리라이트 금지.
 
 ━━━ 절대 금지 ━━━
@@ -2328,14 +2474,14 @@ _GROK_EVAL_PROMPT = """너는 X 게시글 "X 감각 심사관"이다.
 - 글 전체를 다시 쓰지 마라
 - 대안 문장을 3줄 이상 쓰지 마라
 - 새 사실/수치를 추가하지 마라
+- 위 목록에 없는 fail_tag를 만들지 마라
 
 ━━━ 출력 ━━━
 JSON만 출력:
 {
-  "headline_clone": true/false,
-  "too_safe": true/false,
-  "new_angle_missing": true/false,
-  "x_hook_score": 1-5,
+  "score": 0-10,
+  "fail_tags": ["TAG1", "TAG2"],
+  "rewrite_scope": "KEEP|REWRITE_OPENER_ONLY|REJECT_AND_REGENERATE",
   "problem": "한 줄",
   "fix_direction": "한 줄"
 }"""
@@ -2355,7 +2501,7 @@ async def _grok_eval(
         f"final_post: {draft.final_post}\n"
         f"final_short: {draft.final_short}\n\n"
         f"━━━ 기사 정보 ━━━\n"
-        f"선택된 훅: {selected_hook}\n"
+        f"선택된 논지/훅: {selected_hook}\n"
         f"certainty_level: {card.certainty_level}\n"
     )
     if card.key_facts:
@@ -2414,19 +2560,28 @@ async def _grok_eval(
                 clean = re.sub(r"\s*```$", "", clean)
             parsed = json.loads(clean)
 
+            # fail_tags 유효성 필터링
+            raw_tags = parsed.get("fail_tags", [])
+            if isinstance(raw_tags, list):
+                valid_tags = [t for t in raw_tags if t in _GROK_VALID_FAIL_TAGS]
+            else:
+                valid_tags = []
+
+            raw_scope = str(parsed.get("rewrite_scope", "KEEP"))
+            if raw_scope not in ("KEEP", "REWRITE_OPENER_ONLY", "REJECT_AND_REGENERATE"):
+                raw_scope = "KEEP"
+
             eval_card = GrokEvalCard(
-                headline_clone=bool(parsed.get("headline_clone", False)),
-                too_safe=bool(parsed.get("too_safe", False)),
-                new_angle_missing=bool(parsed.get("new_angle_missing", False)),
-                x_hook_score=int(parsed.get("x_hook_score", 3)),
+                score=max(0, min(10, int(parsed.get("score", 5)))),
+                fail_tags=valid_tags,
+                rewrite_scope=raw_scope,
                 problem=str(parsed.get("problem", "")),
                 fix_direction=str(parsed.get("fix_direction", "")),
             )
             logger.info(
-                f"[Grok평가] score={eval_card.x_hook_score} "
-                f"headline_clone={eval_card.headline_clone} "
-                f"too_safe={eval_card.too_safe} "
-                f"new_angle={eval_card.new_angle_missing} "
+                f"[Grok평가] score={eval_card.score}/10 "
+                f"fail_tags={eval_card.fail_tags} "
+                f"rewrite_scope={eval_card.rewrite_scope} "
                 f"problem=\"{eval_card.problem[:50]}\""
             )
             return eval_card
@@ -2618,10 +2773,9 @@ async def _claude_review_final(
     if grok_eval:
         user_prompt += (
             f"━━━ Grok X 감각 평가 ━━━\n"
-            f"headline_clone: {grok_eval.headline_clone}\n"
-            f"too_safe: {grok_eval.too_safe}\n"
-            f"new_angle_missing: {grok_eval.new_angle_missing}\n"
-            f"x_hook_score: {grok_eval.x_hook_score}/5\n"
+            f"score: {grok_eval.score}/10\n"
+            f"fail_tags: {grok_eval.fail_tags}\n"
+            f"rewrite_scope: {grok_eval.rewrite_scope}\n"
             f"problem: {grok_eval.problem}\n"
             f"fix_direction: {grok_eval.fix_direction}\n\n"
         )
@@ -2993,6 +3147,199 @@ _TONE_SOFTENERS = {
     "토해냈다": "줄었다",
     "충격": "영향",
 }
+
+
+# ─── 7대 검증 규칙 ────────────────────────────────────────────────────────
+
+# 요약→의견→관건 3단 구조 감지용 패턴
+_SUMMARY_OPINION_CRUX_PATTERNS = {
+    "summary_starters": ["하려는 시도다", "의지를 보여준다", "로 해석된다", "의도가 드러난다"],
+    "crux_endings": ["가 관건이다", "에 달려 있다", "가 결정된다", "관건이다", "달려 있다"],
+}
+
+# 추상적 reader_stake 감지 패턴
+_ABSTRACT_STAKE_PATTERNS = [
+    "중요한 의미",
+    "큰 의미",
+    "시사하는 바",
+    "주목할 만",
+    "영향을 미칠",
+    "파급효과",
+    "파장이",
+    "주의 깊게",
+    "면밀히",
+]
+
+
+def _validate_thesis_similarity(
+    thesis: str, key_facts: list[str]
+) -> Optional[str]:
+    """규칙1: thesis가 key_facts(기사 요약)와 너무 유사하면 경고."""
+    if not thesis or not key_facts:
+        return None
+    thesis_lower = thesis.strip().lower()
+    for fact in key_facts:
+        fact_lower = fact.strip().lower()
+        # 단순 포함 관계 체크 (한쪽이 다른 쪽에 70% 이상 포함)
+        if len(thesis_lower) > 10 and len(fact_lower) > 10:
+            # 공통 단어 비율
+            thesis_words = set(thesis_lower.split())
+            fact_words = set(fact_lower.split())
+            if thesis_words and fact_words:
+                overlap = thesis_words & fact_words
+                ratio = len(overlap) / min(len(thesis_words), len(fact_words))
+                if ratio > 0.7:
+                    return f"thesis가 key_fact와 유사 (overlap={ratio:.0%}): '{thesis[:40]}'"
+    return None
+
+
+def _validate_headline_restatement(first_line: str, key_facts: list[str]) -> Optional[str]:
+    """규칙2: 첫 문장이 기사 제목/핵심팩트 재진술이면 경고."""
+    if not first_line or not key_facts:
+        return None
+    fl = first_line.strip().lower()
+    for fact in key_facts[:2]:  # 첫 2개 팩트만 비교
+        fact_l = fact.strip().lower()
+        if len(fl) > 10 and len(fact_l) > 10:
+            fl_words = set(fl.split())
+            fact_words = set(fact_l.split())
+            if fl_words and fact_words:
+                overlap = fl_words & fact_words
+                ratio = len(overlap) / min(len(fl_words), len(fact_words))
+                if ratio > 0.65:
+                    return f"첫 문장이 기사 팩트 재진술 (overlap={ratio:.0%})"
+    return None
+
+
+def _validate_dead_patterns(post: str) -> list[str]:
+    """규칙3: _WEAK_PATTERNS 기반 dead pattern 감지. 모든 매칭 반환."""
+    found = []
+    for pat in _WEAK_PATTERNS:
+        if pat in post:
+            found.append(pat)
+    return found
+
+
+def _validate_structure_detection(post: str) -> Optional[str]:
+    """규칙4: 요약→의견→관건 3단 구조 감지."""
+    has_summary = any(
+        p in post for p in _SUMMARY_OPINION_CRUX_PATTERNS["summary_starters"]
+    )
+    has_crux = any(
+        post.rstrip().endswith(p) or post.rstrip().endswith(p + ".")
+        for p in _SUMMARY_OPINION_CRUX_PATTERNS["crux_endings"]
+    )
+    if has_summary and has_crux:
+        return "요약→의견→관건 3단 구조 감지 (사설/칼럼체)"
+    return None
+
+
+def _validate_reader_stake(reader_stake: str) -> Optional[str]:
+    """규칙5: reader_stake가 추상적이면 경고."""
+    if not reader_stake:
+        return "reader_stake 없음"
+    for pat in _ABSTRACT_STAKE_PATTERNS:
+        if pat in reader_stake:
+            return f"reader_stake 추상적: '{pat}' 포함"
+    # 길이가 너무 짧으면 추상적일 가능성
+    if len(reader_stake.strip()) < 10:
+        return "reader_stake 너무 짧음 (구체성 부족)"
+    return None
+
+
+def _validate_grok_fail_tags_gating(grok_eval: Optional["GrokEvalCard"]) -> Optional[str]:
+    """규칙6: Grok fail_tags ≥ 2이면 게이팅 경고."""
+    if not grok_eval:
+        return None
+    if len(grok_eval.fail_tags) >= 2:
+        return (
+            f"Grok fail_tags {len(grok_eval.fail_tags)}개 감지: "
+            f"{grok_eval.fail_tags} → rewrite_scope={grok_eval.rewrite_scope}"
+        )
+    return None
+
+
+def _validate_thesis_preservation(
+    final_post: str, selected_thesis: Optional["ThesisCard"]
+) -> Optional[str]:
+    """규칙7: 최종 결과가 선택된 thesis 방향을 유지하는지 검증."""
+    if not selected_thesis or not selected_thesis.thesis or not final_post:
+        return None
+    # thesis에서 핵심 명사/키워드 추출 (2글자 이상, 조사 제거)
+    thesis_words = selected_thesis.thesis.split()
+    # 한국어 조사 패턴 제거: 이/가/을/를/은/는/의/에/로/와/과 등
+    import re as _re
+    thesis_keywords = set()
+    for w in thesis_words:
+        # 끝에 붙은 한국어 조사 제거
+        stem = _re.sub(r"[이가을를은는의에로와과도만까지에서으로]$", "", w)
+        if len(stem) >= 2:
+            thesis_keywords.add(stem)
+    if not thesis_keywords:
+        return None
+
+    post_text = final_post
+    matched = sum(1 for kw in thesis_keywords if kw in post_text)
+    match_ratio = matched / len(thesis_keywords) if thesis_keywords else 0
+
+    if match_ratio < 0.2:
+        return (
+            f"thesis 방향 이탈 가능: thesis 키워드 매칭률 {match_ratio:.0%} "
+            f"(thesis: '{selected_thesis.thesis[:40]}')"
+        )
+    return None
+
+
+def _run_all_validations(
+    post: str,
+    card: Optional["CandidateCard"] = None,
+    selected_thesis: Optional["ThesisCard"] = None,
+    grok_eval: Optional["GrokEvalCard"] = None,
+) -> list[str]:
+    """7대 검증 규칙 일괄 실행. 경고 목록 반환."""
+    warnings: list[str] = []
+
+    first_line = post.split("\n")[0].strip() if post else ""
+    key_facts = card.key_facts if card else []
+
+    # 규칙1: thesis 유사도
+    if selected_thesis:
+        w = _validate_thesis_similarity(selected_thesis.thesis, key_facts)
+        if w:
+            warnings.append(f"[V1-유사도] {w}")
+
+    # 규칙2: 헤드라인 재진술
+    w = _validate_headline_restatement(first_line, key_facts)
+    if w:
+        warnings.append(f"[V2-재진술] {w}")
+
+    # 규칙3: dead patterns
+    dead = _validate_dead_patterns(post)
+    if dead:
+        warnings.append(f"[V3-데드패턴] {len(dead)}개: {dead[:3]}")
+
+    # 규칙4: 요약→의견→관건 구조
+    w = _validate_structure_detection(post)
+    if w:
+        warnings.append(f"[V4-구조] {w}")
+
+    # 규칙5: reader_stake 품질
+    if selected_thesis:
+        w = _validate_reader_stake(selected_thesis.reader_stake)
+        if w:
+            warnings.append(f"[V5-이해관계] {w}")
+
+    # 규칙6: Grok fail_tags 게이팅
+    w = _validate_grok_fail_tags_gating(grok_eval)
+    if w:
+        warnings.append(f"[V6-Grok게이팅] {w}")
+
+    # 규칙7: thesis 보존
+    w = _validate_thesis_preservation(post, selected_thesis)
+    if w:
+        warnings.append(f"[V7-논지보존] {w}")
+
+    return warnings
 
 
 def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str]]:

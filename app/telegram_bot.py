@@ -1557,7 +1557,7 @@ async def _run_candidate_card(
             if hook_index is not None:
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
-                        "✏️ 이 훅으로 마감",
+                        "✏️ 이 논지로 마감",
                         callback_data=f"hook_select:{hook_index}",
                     )
                 ]])
@@ -1612,7 +1612,7 @@ async def _handle_hook_select_callback(
     # 단계별 진행 표시 콜백
     _stage_labels = {
         "openai": "✍️ OpenAI 초안 작성 중...",
-        "grok_gemini": "🔍 Grok 평가 + Gemini 의견 수집 중...",
+        "grok": "🔍 Grok X 감각 심사 중...",
         "claude": "🧠 Claude 최종 편집 중...",
     }
 

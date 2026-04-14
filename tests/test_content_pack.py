@@ -22,12 +22,18 @@ from app.services.content_pack import (
     _SENSITIVE_TOPICS, _WEAK_PATTERNS,
     _FACT_NARRATION_STARTS,
     _OPINION_PATTERNS,
-    # Phase 2: Gemini 대안 의견 카드
+    # Phase 2: Gemini 대안 의견 카드 + Gemini thesis 생성
     _GEMINI_OPINION_PROMPT, GeminiOpinionCard,
     _should_invoke_extended_review, _EXTENDED_REVIEW_TOPICS,
-    # Phase 3: Grok X 감각 심사
-    _GROK_EVAL_PROMPT, GrokEvalCard,
+    _GEMINI_THESIS_PROMPT,
+    # Phase 3: Grok X 감각 심사 (구조화 버전)
+    _GROK_EVAL_PROMPT, GrokEvalCard, _GROK_VALID_FAIL_TAGS,
     _noop_async, _log_draft_comparison,
+    # 7대 검증 규칙
+    _validate_thesis_similarity, _validate_headline_restatement,
+    _validate_dead_patterns, _validate_structure_detection,
+    _validate_reader_stake, _validate_grok_fail_tags_gating,
+    _validate_thesis_preservation, _run_all_validations,
 )
 from app.models.content_request import ContentRequest
 
@@ -1525,14 +1531,11 @@ class TestCandidatePromptRules:
         ]:
             assert field in p
 
-    def test_hook_sentence_form_rules(self):
-        """thesis_cards 규칙이 해석 문장 강제 규칙을 포함."""
+    def test_openai_does_not_generate_thesis(self):
+        """OpenAI 프롬프트에서 thesis_cards 생성 지시 제거 확인."""
         p = _CANDIDATE_PROMPT_KO
-        assert "thesis_cards 규칙" in p
-        # 금지: 기자 질문형
-        assert "기자 질문형" in p
-        assert "무엇일까" in p
-        assert "어떻게 될까" in p
+        assert "thesis_cards는 생성하지 마라" in p
+        assert "thesis_cards 규칙" not in p
 
     def test_no_complete_sentence_instruction(self):
         """완성 문장 금지 지시가 있다."""
@@ -2167,37 +2170,34 @@ class TestFinalizePromptEndingRules:
         assert "뻔한 마감" in p
 
 
-class TestCandidatePromptThesisCardRules:
-    """_CANDIDATE_PROMPT_KO thesis_cards 규칙 검증."""
+class TestGeminiThesisPromptRules:
+    """_GEMINI_THESIS_PROMPT thesis_cards 규칙 검증 (Gemini가 논지 생성)."""
 
-    def test_arrow_notation_banned(self):
-        """명사형 제목/화살표 나열 금지가 명시."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "명사형 제목" in p and "금지" in p
+    def test_gemini_thesis_prompt_exists(self):
+        """_GEMINI_THESIS_PROMPT가 존재하고 비어있지 않음."""
+        assert _GEMINI_THESIS_PROMPT
+        assert len(_GEMINI_THESIS_PROMPT) > 100
+
+    def test_gemini_persona_is_thesis_generator(self):
+        """Gemini 페르소나가 논지 분기기."""
+        assert "논지 분기기" in _GEMINI_THESIS_PROMPT
 
     def test_thesis_card_fields(self):
         """thesis_card 필드(thesis, why_not_summary, reader_stake, opener) 정의."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "thesis:" in p
-        assert "why_not_summary:" in p
-        assert "reader_stake:" in p
-        assert "opener:" in p
+        p = _GEMINI_THESIS_PROMPT
+        assert "thesis" in p
+        assert "why_not_summary" in p
+        assert "reader_stake" in p
+        assert "opener" in p
 
-    def test_good_thesis_examples(self):
-        """좋은 논지 예시가 서로 다른 축."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "복사 직원까지 배제하면" in p
-        assert "다주택자 배제가 부동산 정책" in p
-
-    def test_bad_thesis_examples(self):
-        """나쁜 논지 예시 (같은 축 반복)."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "의지를 보여준다" in p
-        assert "의도가 드러난다" in p
+    def test_divergence_rules(self):
+        """논지 분기 규칙 (서로 다른 해석 축)."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "해석 축" in p
 
     def test_dead_patterns_banned(self):
         """dead pattern 금지 목록."""
-        p = _CANDIDATE_PROMPT_KO
+        p = _GEMINI_THESIS_PROMPT
         assert "하려는 시도다" in p
         assert "로 해석된다" in p
         assert "가 관건이다" in p
@@ -2282,11 +2282,10 @@ class TestRoleLoyaltyInPrompt:
         assert "기사 내용을 다시 줄줄 요약" in p
         assert "뉴스 후기" in p
 
-    def test_candidate_hook_critical(self):
-        """후보 카드 thesis_cards 규칙이 CRITICAL 레벨."""
-        p = _CANDIDATE_PROMPT_KO
+    def test_gemini_thesis_critical(self):
+        """Gemini thesis 프롬프트 규칙이 CRITICAL 레벨."""
+        p = _GEMINI_THESIS_PROMPT
         assert "CRITICAL" in p
-        assert "전체 실패" in p
 
     def test_claude_review_correction_criteria(self):
         """Claude 보정 프롬프트에 보정 판정 기준이 있음."""
@@ -2421,25 +2420,19 @@ class TestSendCandidateCardMessages:
 # ─── 국제 뉴스 한국 관점 강화 테스트 ─────────────────────────────────────────
 
 
-class TestKoreaAngleCandidatePrompt:
-    """후보 카드 프롬프트에 한국 관점 훅 규칙이 있는지 검증."""
+class TestKoreaAngleGeminiThesisPrompt:
+    """Gemini thesis 프롬프트에 한국 관점 훅 규칙이 있는지 검증."""
 
     def test_korea_angle_rule_exists(self):
-        """한국 관점 해석 축 규칙이 후보 카드 프롬프트에 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "한국 관점" in p
+        """한국 관점 해석 축 규칙이 Gemini thesis 프롬프트에 존재."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "한국" in p
         assert "해석 축" in p
 
-    def test_general_opinion_ban_in_candidate(self):
-        """일반론 금지 규칙이 후보 카드 프롬프트에 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "일반론 금지" in p
-        assert "역사적으로" in p
-
     def test_international_news_rule(self):
-        """국제/지정학/거시경제 뉴스 특별 규칙이 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "국제" in p or "지정학" in p or "거시경제" in p
+        """국제 뉴스 특별 규칙이 Gemini thesis 프롬프트에 존재."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "국제" in p
 
 
 class TestFinalizePromptPrincipleABC:
@@ -2560,18 +2553,17 @@ class TestOpinionPatternsNoFalsePositive:
 
 
 class TestThesisCardQualityRules:
-    """후보 카드 프롬프트에 thesis card 품질 규칙이 있는지 검증."""
+    """Gemini thesis 프롬프트에 thesis card 품질 규칙이 있는지 검증."""
 
     def test_reader_stake_quality_rule(self):
         """reader_stake 품질 규칙 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "reader_stake 품질 규칙" in p
+        p = _GEMINI_THESIS_PROMPT
+        assert "reader_stake" in p
 
     def test_thesis_divergence_rule(self):
-        """논지 분기 규칙(같은 축 반복 금지) 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "논지 분기 규칙" in p
-        assert "같은 축 반복" in p or "전체 실패" in p
+        """논지 분기 규칙(서로 다른 해석 축) 존재."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "해석 축" in p
 
 
 class TestFinalPostThreeSlotStructure:
@@ -2832,38 +2824,28 @@ class TestShouldInvokeExtendedReview:
 
 
 class TestThesisAngleSeparation:
-    """후보 카드 프롬프트에 논지 분기(각도 분리) 규칙이 있는지 검증."""
+    """Gemini thesis 프롬프트에 논지 분기(각도 분리) 규칙이 있는지 검증."""
 
     def test_angle_separation_rule_exists(self):
         """논지 분기 CRITICAL 규칙이 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "논지 분기 규칙" in p
+        p = _GEMINI_THESIS_PROMPT
         assert "CRITICAL" in p
 
-    def test_axis_examples_exist(self):
-        """분리 축 예시가 포함."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "비용/가격 축" in p
-        assert "비교/대비 축" in p
-        assert "시간/조건 축" in p
-        assert "수혜/피해 축" in p
-        assert "정책/구조 축" in p
+    def test_dead_patterns_in_gemini(self):
+        """Gemini thesis 프롬프트에 dead pattern 금지 존재."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "하려는 시도다" in p
+        assert "로 해석된다" in p
 
-    def test_bad_example_exists(self):
-        """나쁜 논지 예시(같은 축 반복)가 포함."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "의지를 보여준다" in p
-        assert "의도가 분명히 드러난다" in p
+    def test_reader_stake_in_gemini(self):
+        """Gemini thesis 프롬프트에 reader_stake 규칙 존재."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "reader_stake" in p
 
-    def test_good_example_exists(self):
-        """좋은 논지 예시(다른 축)가 포함."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "복사 직원까지 배제" in p
-
-    def test_thesis_repeat_banned(self):
-        """기사 thesis 어미 반복 금지 규칙 존재."""
-        p = _CANDIDATE_PROMPT_KO
-        assert "어미만 바꿔" in p
+    def test_opener_in_gemini(self):
+        """Gemini thesis 프롬프트에 opener 규칙 존재."""
+        p = _GEMINI_THESIS_PROMPT
+        assert "opener" in p
 
 
 class TestWeakPatternsExtended:
@@ -3041,7 +3023,7 @@ class TestColumnAndContradictionSync:
 
 
 class TestGrokEvalPrompt:
-    """Grok X 감각 심사관 프롬프트 규칙 검증."""
+    """Grok X 감각 심사관 프롬프트 규칙 검증 (구조화 버전)."""
 
     def test_grok_prompt_exists(self):
         """_GROK_EVAL_PROMPT가 존재하고 비어있지 않음."""
@@ -3059,28 +3041,27 @@ class TestGrokEvalPrompt:
         assert "작가" not in role_section
 
     def test_grok_role_is_judgment(self):
-        """글을 다시 쓰지 않고 판정하는 역할."""
+        """구조화된 태그로 판정하는 역할."""
         assert "판정" in _GROK_EVAL_PROMPT
         assert "다시 쓰는 것이 아니라" in _GROK_EVAL_PROMPT
 
-    def test_grok_has_headline_clone_field(self):
-        """headline_clone 판정 기준 존재."""
-        assert "headline_clone" in _GROK_EVAL_PROMPT
-        assert "재진술" in _GROK_EVAL_PROMPT
+    def test_grok_has_score_field(self):
+        """score 0~10 점수 체계 존재."""
+        assert "score" in _GROK_EVAL_PROMPT
+        assert "0~10" in _GROK_EVAL_PROMPT or "0-10" in _GROK_EVAL_PROMPT
 
-    def test_grok_has_too_safe_field(self):
-        """too_safe 판정 기준 존재."""
-        assert "too_safe" in _GROK_EVAL_PROMPT
-        assert "평균문" in _GROK_EVAL_PROMPT
+    def test_grok_has_fail_tags_field(self):
+        """fail_tags 배열 필드 존재."""
+        assert "fail_tags" in _GROK_EVAL_PROMPT
+        for tag in _GROK_VALID_FAIL_TAGS:
+            assert tag in _GROK_EVAL_PROMPT, f"fail_tag '{tag}' 프롬프트에 누락"
 
-    def test_grok_has_new_angle_missing_field(self):
-        """new_angle_missing 판정 기준 존재."""
-        assert "new_angle_missing" in _GROK_EVAL_PROMPT
-
-    def test_grok_has_x_hook_score(self):
-        """x_hook_score 1~5 점수 체계 존재."""
-        assert "x_hook_score" in _GROK_EVAL_PROMPT
-        assert "1~5" in _GROK_EVAL_PROMPT or "1-5" in _GROK_EVAL_PROMPT
+    def test_grok_has_rewrite_scope_field(self):
+        """rewrite_scope 필드 및 3가지 옵션 존재."""
+        assert "rewrite_scope" in _GROK_EVAL_PROMPT
+        assert "KEEP" in _GROK_EVAL_PROMPT
+        assert "REWRITE_OPENER_ONLY" in _GROK_EVAL_PROMPT
+        assert "REJECT_AND_REGENERATE" in _GROK_EVAL_PROMPT
 
     def test_grok_has_problem_field(self):
         """problem 필드 존재."""
@@ -3098,75 +3079,86 @@ class TestGrokEvalPrompt:
         """새 사실/수치 추가 금지."""
         assert "새 사실" in _GROK_EVAL_PROMPT
 
+    def test_grok_bans_custom_tags(self):
+        """목록에 없는 fail_tag 생성 금지."""
+        assert "목록에 없는 fail_tag" in _GROK_EVAL_PROMPT or "위 목록에 없는" in _GROK_EVAL_PROMPT
+
     def test_grok_output_json_format(self):
-        """JSON 출력 형식에 6개 필드 모두 명시."""
-        for field in ["headline_clone", "too_safe", "new_angle_missing",
-                       "x_hook_score", "problem", "fix_direction"]:
-            assert field in _GROK_EVAL_PROMPT, f"출력 필드 '{field}' 누락"
+        """JSON 출력 형식에 5개 필드 모두 명시."""
+        for f in ["score", "fail_tags", "rewrite_scope", "problem", "fix_direction"]:
+            assert f in _GROK_EVAL_PROMPT, f"출력 필드 '{f}' 누락"
 
     def test_grok_score_descriptions(self):
         """점수별 설명 존재."""
-        assert "기사 제목 복붙" in _GROK_EVAL_PROMPT  # score 1 설명
-        assert "반드시 읽게 됨" in _GROK_EVAL_PROMPT    # score 5 설명
+        assert "기사 제목 복붙" in _GROK_EVAL_PROMPT  # score 0 설명
+        assert "반드시 읽게 됨" in _GROK_EVAL_PROMPT    # score 9 설명
 
 
 class TestGrokEvalCard:
-    """GrokEvalCard 데이터클래스 검증."""
+    """GrokEvalCard 데이터클래스 검증 (구조화 버전)."""
 
     def test_eval_card_defaults(self):
         """기본값 확인."""
         card = GrokEvalCard()
-        assert card.headline_clone is False
-        assert card.too_safe is False
-        assert card.new_angle_missing is False
-        assert card.x_hook_score == 3
+        assert card.score == 5
+        assert card.fail_tags == []
+        assert card.rewrite_scope == "KEEP"
         assert card.problem == ""
         assert card.fix_direction == ""
 
     def test_eval_card_with_values(self):
         """값 설정 확인."""
         card = GrokEvalCard(
-            headline_clone=True,
-            too_safe=True,
-            new_angle_missing=False,
-            x_hook_score=2,
+            score=3,
+            fail_tags=["HEADLINE_RESTATEMENT", "PRESS_RELEASE_TONE"],
+            rewrite_scope="REWRITE_OPENER_ONLY",
             problem="첫 문장이 기사 제목 복붙",
             fix_direction="구체 숫자로 시작하라",
         )
-        assert card.headline_clone is True
-        assert card.x_hook_score == 2
+        assert card.score == 3
+        assert len(card.fail_tags) == 2
+        assert "HEADLINE_RESTATEMENT" in card.fail_tags
+        assert card.rewrite_scope == "REWRITE_OPENER_ONLY"
         assert "복붙" in card.problem
+
+    def test_valid_fail_tags_constant(self):
+        """_GROK_VALID_FAIL_TAGS에 7개 태그 존재."""
+        assert len(_GROK_VALID_FAIL_TAGS) == 7
+        expected = {
+            "SAME_THESIS", "PRESS_RELEASE_TONE", "POLICY_MEMO_TONE",
+            "COLUMN_ENDING", "NO_READER_STAKE", "GENERIC_SKEPTICISM",
+            "HEADLINE_RESTATEMENT",
+        }
+        assert _GROK_VALID_FAIL_TAGS == expected
 
 
 class TestClaudeGrokEvalRules:
-    """Claude 프롬프트의 Grok 평가 활용 규칙 검증."""
+    """Claude 프롬프트의 Grok 평가 활용 규칙 검증 (구조화 버전)."""
 
     def test_claude_has_eval_section(self):
         """Grok 평가 활용 규칙 섹션 존재."""
         assert "Grok 평가 활용 규칙" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_headline_clone_rule(self):
-        """headline_clone=true 시 첫 문장 표현 다듬기 지시."""
-        assert "headline_clone=true" in _CLAUDE_REVIEW_PROMPT
-        assert "첫 문장 표현만 다듬어라" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_rewrite_scope_keep_rule(self):
+        """rewrite_scope=KEEP 시 사실/톤만 최소 보정."""
+        assert "KEEP" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_too_safe_rule(self):
-        """too_safe=true 시 종결형 교체 지시."""
-        assert "too_safe=true" in _CLAUDE_REVIEW_PROMPT
-        assert "종결형" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_rewrite_scope_opener_rule(self):
+        """rewrite_scope=REWRITE_OPENER_ONLY 시 첫 문장만 다듬기."""
+        assert "REWRITE_OPENER_ONLY" in _CLAUDE_REVIEW_PROMPT
+        assert "첫 문장" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_new_angle_rule(self):
-        """new_angle_missing=true 시 참고만(새 각도 추가 금지)."""
-        assert "new_angle_missing=true" in _CLAUDE_REVIEW_PROMPT
-        assert "참고만" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_rewrite_scope_reject_rule(self):
+        """rewrite_scope=REJECT_AND_REGENERATE 시 크게 다듬기."""
+        assert "REJECT_AND_REGENERATE" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_low_score_rule(self):
-        """x_hook_score 1~2 시 첫 문장 표현력만 높이기."""
-        assert "x_hook_score 1~2" in _CLAUDE_REVIEW_PROMPT or "1~2" in _CLAUDE_REVIEW_PROMPT
-
-    def test_claude_high_score_rule(self):
-        """x_hook_score 4~5 시 첫 문장 유지."""
-        assert "x_hook_score 4~5" in _CLAUDE_REVIEW_PROMPT or "4~5" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_fail_tags_rules(self):
+        """주요 fail_tags 활용 규칙 존재."""
+        assert "HEADLINE_RESTATEMENT" in _CLAUDE_REVIEW_PROMPT
+        assert "PRESS_RELEASE_TONE" in _CLAUDE_REVIEW_PROMPT
+        assert "COLUMN_ENDING" in _CLAUDE_REVIEW_PROMPT
+        assert "NO_READER_STAKE" in _CLAUDE_REVIEW_PROMPT
+        assert "GENERIC_SKEPTICISM" in _CLAUDE_REVIEW_PROMPT
 
     def test_claude_no_thesis_change_from_grok(self):
         """Grok 평가로 논지 변경 금지."""
@@ -3195,21 +3187,20 @@ class TestLogDraftComparison:
     """_log_draft_comparison 로깅 함수 테스트."""
 
     def test_log_with_all_components(self):
-        """OpenAI + GrokEval + Gemini 모두 있을 때 정상 동작."""
+        """OpenAI + GrokEval 모두 있을 때 정상 동작."""
         oa = FinalPost(final_post="OpenAI 첫 줄", final_short="짧은 버전")
-        gk = GrokEvalCard(x_hook_score=3, too_safe=True, problem="평균문")
-        gm = GeminiOpinionCard(first_line_suggestion="Gemini 제안")
-        _log_draft_comparison(oa, gk, gm)
+        gk = GrokEvalCard(score=7, fail_tags=["PRESS_RELEASE_TONE"], problem="보도자료체")
+        _log_draft_comparison(oa, gk)
 
     def test_log_with_grok_none(self):
         """Grok 없을 때 정상 동작."""
         oa = FinalPost(final_post="OpenAI 첫 줄", final_short="짧은 버전")
-        _log_draft_comparison(oa, None, None)
+        _log_draft_comparison(oa, None)
 
     def test_log_with_empty_drafts(self):
         """빈 초안도 정상 처리."""
         oa = FinalPost(final_post="", final_short="")
-        _log_draft_comparison(oa, None, None)
+        _log_draft_comparison(oa, None)
 
 
 class TestGrokPromptSync:
@@ -3454,3 +3445,181 @@ class TestClaudePromptCorrectorRole:
         """논지 변경 금지가 명시."""
         p = _CLAUDE_REVIEW_PROMPT
         assert "논지(thesis)를 바꾸거나" in p
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 7대 검증 규칙 테스트
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestValidationRule1ThesisSimilarity:
+    """규칙1: thesis가 key_facts와 유사하면 경고."""
+
+    def test_similar_thesis_warns(self):
+        """thesis가 key_fact와 70% 이상 겹치면 경고."""
+        result = _validate_thesis_similarity(
+            "삼성전자가 반도체 투자를 확대한다",
+            ["삼성전자가 반도체 투자를 확대한다고 발표"]
+        )
+        assert result is not None
+
+    def test_different_thesis_ok(self):
+        """완전히 다른 thesis는 경고 없음."""
+        result = _validate_thesis_similarity(
+            "관건은 HBM 수율이 TSMC를 넘느냐다",
+            ["삼성전자가 반도체 투자를 확대한다고 발표"]
+        )
+        assert result is None
+
+    def test_empty_inputs_ok(self):
+        """빈 입력은 경고 없음."""
+        assert _validate_thesis_similarity("", []) is None
+        assert _validate_thesis_similarity("test", []) is None
+
+
+class TestValidationRule2HeadlineRestatement:
+    """규칙2: 첫 문장이 기사 팩트 재진술이면 경고."""
+
+    def test_restatement_warns(self):
+        result = _validate_headline_restatement(
+            "삼성전자가 반도체 투자를 확대한다",
+            ["삼성전자가 반도체 투자를 확대한다고 발표"]
+        )
+        assert result is not None
+
+    def test_unique_opener_ok(self):
+        result = _validate_headline_restatement(
+            "HBM 수율이 관건인 이유는 간단하다",
+            ["삼성전자가 반도체 투자를 확대한다고 발표"]
+        )
+        assert result is None
+
+
+class TestValidationRule3DeadPatterns:
+    """규칙3: _WEAK_PATTERNS 감지."""
+
+    def test_detects_weak_pattern(self):
+        found = _validate_dead_patterns("추이를 봐야 한다. 중요한 시점이다.")
+        assert len(found) >= 1
+
+    def test_clean_text_ok(self):
+        found = _validate_dead_patterns("HBM 수율이 3분기 갈림길이다.")
+        assert len(found) == 0
+
+
+class TestValidationRule4StructureDetection:
+    """규칙4: 요약→의견→관건 3단 구조 감지."""
+
+    def test_detects_column_structure(self):
+        text = "정부의 의지를 보여준다. 시장 반응이 좋다. 성패는 실행에 달려 있다."
+        result = _validate_structure_detection(text)
+        assert result is not None
+
+    def test_clean_structure_ok(self):
+        text = "HBM 수율이 3분기 갈림길이다."
+        result = _validate_structure_detection(text)
+        assert result is None
+
+
+class TestValidationRule5ReaderStake:
+    """규칙5: reader_stake 추상성 검증."""
+
+    def test_abstract_stake_warns(self):
+        result = _validate_reader_stake("중요한 의미를 가진다")
+        assert result is not None
+
+    def test_concrete_stake_ok(self):
+        result = _validate_reader_stake("전세 2억 이하 세입자는 보증금 회수 못 할 수 있다")
+        assert result is None
+
+    def test_empty_stake_warns(self):
+        result = _validate_reader_stake("")
+        assert result is not None
+
+    def test_too_short_warns(self):
+        result = _validate_reader_stake("중요하다")
+        assert result is not None
+
+
+class TestValidationRule6GrokGating:
+    """규칙6: Grok fail_tags ≥ 2 게이팅."""
+
+    def test_two_tags_warns(self):
+        gk = GrokEvalCard(
+            score=4,
+            fail_tags=["HEADLINE_RESTATEMENT", "PRESS_RELEASE_TONE"],
+            rewrite_scope="REWRITE_OPENER_ONLY",
+        )
+        result = _validate_grok_fail_tags_gating(gk)
+        assert result is not None
+        assert "2개" in result
+
+    def test_one_tag_ok(self):
+        gk = GrokEvalCard(score=7, fail_tags=["PRESS_RELEASE_TONE"])
+        result = _validate_grok_fail_tags_gating(gk)
+        assert result is None
+
+    def test_no_grok_ok(self):
+        result = _validate_grok_fail_tags_gating(None)
+        assert result is None
+
+
+class TestValidationRule7ThesisPreservation:
+    """규칙7: 최종 결과가 thesis 방향을 유지하는지."""
+
+    def test_preserved_thesis_ok(self):
+        tc = ThesisCard(thesis="HBM 수율이 삼성의 갈림길이다")
+        result = _validate_thesis_preservation(
+            "HBM 수율 경쟁에서 삼성이 뒤처지면 갈림길을 넘기 어렵다.", tc
+        )
+        assert result is None
+
+    def test_diverged_thesis_warns(self):
+        tc = ThesisCard(thesis="HBM 수율이 삼성의 갈림길이다")
+        result = _validate_thesis_preservation(
+            "미국 연준의 금리 인하가 세계 경제를 흔든다.", tc
+        )
+        assert result is not None
+
+    def test_no_thesis_ok(self):
+        result = _validate_thesis_preservation("아무 글이나", None)
+        assert result is None
+
+
+class TestRunAllValidations:
+    """_run_all_validations 통합 실행 테스트."""
+
+    def test_clean_post_no_warnings(self):
+        """깨끗한 글에는 경고 없음."""
+        card = CandidateCard(key_facts=["미국 CPI 발표"])
+        tc = ThesisCard(
+            thesis="CPI 둔화가 한국 수출에 미치는 영향",
+            reader_stake="수출 기업 주가가 CPI 둔화 폭에 연동될 수 있다",
+        )
+        warnings = _run_all_validations(
+            "CPI 둔화 폭이 한국 수출 기업 주가를 좌우한다.",
+            card=card,
+            selected_thesis=tc,
+        )
+        # 경고가 아예 없거나 최소
+        assert len(warnings) <= 1
+
+    def test_bad_post_multiple_warnings(self):
+        """문제 많은 글은 여러 경고."""
+        card = CandidateCard(key_facts=["삼성전자 반도체 투자 확대 발표"])
+        tc = ThesisCard(
+            thesis="삼성전자 반도체 투자 확대",
+            reader_stake="중요한 의미를 가진다",
+        )
+        gk = GrokEvalCard(
+            score=2,
+            fail_tags=["HEADLINE_RESTATEMENT", "PRESS_RELEASE_TONE", "NO_READER_STAKE"],
+            rewrite_scope="REJECT_AND_REGENERATE",
+        )
+        warnings = _run_all_validations(
+            "삼성전자 반도체 투자 확대 발표. 추이를 봐야 한다.",
+            card=card,
+            selected_thesis=tc,
+            grok_eval=gk,
+        )
+        assert len(warnings) >= 3
