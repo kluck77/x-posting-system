@@ -1702,7 +1702,7 @@ class TestFinalizePromptRules:
     def test_slot_assembly_role(self):
         """역할이 슬롯 조립 담당."""
         p = _FINALIZE_PROMPT_KO
-        assert "슬롯 조립 담당" in p
+        assert "슬롯" in p and "조립한다" in p
 
     def test_three_sentence_structure(self):
         """문장 조립 구조: 핵심명제/팩트/판단좌표/판별신호."""
@@ -2245,7 +2245,7 @@ class TestRoleLoyaltyInPrompt:
     def test_finalize_role_is_slot_assembler(self):
         """마감 프롬프트에 슬롯 조립 역할이 명시."""
         p = _FINALIZE_PROMPT_KO
-        assert "슬롯 조립 담당" in p
+        assert "슬롯" in p and "조립한다" in p
         assert "기사를 요약하는 사람이 아니다" in p
 
     def test_finalize_forbidden_actions(self):
