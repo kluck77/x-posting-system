@@ -1687,7 +1687,7 @@ async def _gemini_generate_thesis_cards(
         import httpx
         url = (
             "https://generativelanguage.googleapis.com/v1beta"
-            "/models/gemini-2.0-flash:generateContent"
+            "/models/gemini-2.5-flash:generateContent"
         )
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
@@ -1711,7 +1711,7 @@ async def _gemini_generate_thesis_cards(
             data = r.json()
             usage = data.get("usageMetadata", {})
             logger.info(
-                f"[API-COST] gemini gemini-2.0-flash "
+                f"[API-COST] gemini gemini-2.5-flash "
                 f"in={usage.get('promptTokenCount', '?')} "
                 f"out={usage.get('candidatesTokenCount', '?')} "
                 f"caller=GeminiThesisCards"
@@ -1719,7 +1719,7 @@ async def _gemini_generate_thesis_cards(
             try:
                 from app.services.api_cost_tracker import record_usage
                 record_usage(
-                    "gemini", "gemini-2.0-flash", "GeminiThesisCards",
+                    "gemini", "gemini-2.5-flash", "GeminiThesisCards",
                     usage.get("promptTokenCount", 0),
                     usage.get("candidatesTokenCount", 0),
                 )
@@ -2783,7 +2783,7 @@ async def _gemini_opinion_card(
         import httpx
         url = (
             "https://generativelanguage.googleapis.com/v1beta"
-            "/models/gemini-2.0-flash:generateContent"
+            "/models/gemini-2.5-flash:generateContent"
         )
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(
@@ -2807,7 +2807,7 @@ async def _gemini_opinion_card(
             data = r.json()
             usage = data.get("usageMetadata", {})
             logger.info(
-                f"[API-COST] gemini gemini-2.0-flash "
+                f"[API-COST] gemini gemini-2.5-flash "
                 f"in={usage.get('promptTokenCount', '?')} "
                 f"out={usage.get('candidatesTokenCount', '?')} "
                 f"caller=GeminiOpinionCard"
@@ -2815,7 +2815,7 @@ async def _gemini_opinion_card(
             try:
                 from app.services.api_cost_tracker import record_usage
                 record_usage(
-                    "gemini", "gemini-2.0-flash", "GeminiOpinionCard",
+                    "gemini", "gemini-2.5-flash", "GeminiOpinionCard",
                     usage.get("promptTokenCount", 0),
                     usage.get("candidatesTokenCount", 0),
                 )
