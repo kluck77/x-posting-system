@@ -107,7 +107,6 @@ class GeminiResearcher(BaseResearcher):
                         ],
                         "generationConfig": {
                             "temperature": 0.4,
-                            "responseMimeType": "application/json",
                         },
                     },
                 )
@@ -134,7 +133,14 @@ class GeminiResearcher(BaseResearcher):
                 except Exception:
                     pass
                 raw_text = resp_data["candidates"][0]["content"]["parts"][0]["text"]
-                data = json.loads(raw_text)
+                # responseMimeType 미사용 시 마크다운 코드블록 제거
+                _t = raw_text.strip()
+                if _t.startswith("```"):
+                    _t = _t.split("\n", 1)[1] if "\n" in _t else _t[3:]
+                    if _t.endswith("```"):
+                        _t = _t[:-3]
+                    _t = _t.strip()
+                data = json.loads(_t)
 
             gaps = data.get("interpretation_gaps", [])
             labels = data.get("fact_labels", {})

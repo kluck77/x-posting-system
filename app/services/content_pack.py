@@ -1703,7 +1703,6 @@ async def _gemini_generate_thesis_cards(
                     ],
                     "generationConfig": {
                         "temperature": 0.9,
-                        "responseMimeType": "application/json",
                     },
                 },
             )
@@ -1732,7 +1731,13 @@ async def _gemini_generate_thesis_cards(
                 pass
 
             raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(raw_text)
+            _t = raw_text.strip()
+            if _t.startswith("```"):
+                _t = _t.split("\n", 1)[1] if "\n" in _t else _t[3:]
+                if _t.endswith("```"):
+                    _t = _t[:-3]
+                _t = _t.strip()
+            parsed = json.loads(_t)
 
             # 긴장점 파싱
             tensions = []
@@ -1758,7 +1763,10 @@ async def _gemini_generate_thesis_cards(
             return cards, tensions
 
     except Exception as e:
-        logger.warning(f"[GeminiThesis] 호출 실패: {e}")
+        safe_msg = str(e)
+        if settings.gemini_api_key:
+            safe_msg = safe_msg.replace(settings.gemini_api_key, "***")
+        logger.warning(f"[GeminiThesis] 호출 실패: {safe_msg}")
         return [], []
 
 
@@ -2804,7 +2812,6 @@ async def _gemini_opinion_card(
                     ],
                     "generationConfig": {
                         "temperature": 0.8,
-                        "responseMimeType": "application/json",
                     },
                 },
             )
@@ -2833,7 +2840,13 @@ async def _gemini_opinion_card(
                 pass
 
             raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(raw_text)
+            _t = raw_text.strip()
+            if _t.startswith("```"):
+                _t = _t.split("\n", 1)[1] if "\n" in _t else _t[3:]
+                if _t.endswith("```"):
+                    _t = _t[:-3]
+                _t = _t.strip()
+            parsed = json.loads(_t)
             result = GeminiOpinionCard(
                 first_line_suggestion=str(parsed.get("first_line_suggestion", "")),
                 alt_short=str(parsed.get("alt_short", "")),
@@ -2848,7 +2861,10 @@ async def _gemini_opinion_card(
             return result
 
     except Exception as e:
-        logger.warning(f"[Gemini의견카드] 호출 실패: {e}")
+        safe_msg = str(e)
+        if settings.gemini_api_key:
+            safe_msg = safe_msg.replace(settings.gemini_api_key, "***")
+        logger.warning(f"[Gemini의견카드] 호출 실패: {safe_msg}")
         return None
 
 
