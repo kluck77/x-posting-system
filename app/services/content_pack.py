@@ -1296,6 +1296,7 @@ class FinalPost:
     """2차 — 최종 마감 결과."""
     final_post: str = ""       # 완성본
     final_short: str = ""      # 짧은 버전
+    gate_fails: list = field(default_factory=list)  # 게이트 실패 태그
 
 
 # ─── 1차: 후보 카드 시스템 프롬프트 ──────────────────────────────────────────
@@ -2074,13 +2075,22 @@ async def generate_final_post(
             # 비교 로깅
             _log_draft_comparison(result, grok_result, None)
 
+            # ── 게이트 체크: 1차 초안 품질 ──
+            gate_fails_1st = result.gate_fails
+            if gate_fails_1st:
+                logger.warning(
+                    f"[품질게이트] 1차 초안 실패: {gate_fails_1st} → Claude 보정 강제"
+                )
+
             # Phase 3: Claude 사실/톤 보정 — 항상 호출
+            # 게이트 실패 시 실패 태그를 Claude에 전달하여 보정 강도 강화
             await _notify_progress("claude")
             reviewed = await _claude_review_final(
                 card, result,
                 selected_hook=selected_hook,
                 gemini_opinion=None,
                 grok_eval=grok_result,
+                gate_fails=gate_fails_1st,
             )
             final = reviewed if reviewed else result
             if reviewed:
@@ -2090,6 +2100,12 @@ async def generate_final_post(
                 )
             else:
                 logger.warning("[Claude통합] 실패 — OpenAI 1차 결과 사용")
+
+            # ── 게이트 체크: Claude 보정 후 ──
+            if final.gate_fails:
+                logger.warning(
+                    f"[품질게이트] Claude 보정 후에도 실패 잔존: {final.gate_fails}"
+                )
 
             # 7대 검증 규칙 실행
             v_warnings = _run_all_validations(
@@ -2734,7 +2750,7 @@ def _should_invoke_extended_review(
         reasons.append(f"certainty={card.certainty_level}")
 
     # 3. validation warning 2개 이상
-    _, _, warnings = _validate_final_post(draft.final_post, draft.final_short)
+    _, _, warnings, _ = _validate_final_post(draft.final_post, draft.final_short)
     if len(warnings) >= 2:
         reasons.append(f"validation경고 {len(warnings)}개")
 
@@ -2882,6 +2898,7 @@ async def _claude_review_final(
     selected_hook: str = "",
     gemini_opinion: Optional[GeminiOpinionCard] = None,
     grok_eval: Optional["GrokEvalCard"] = None,
+    gate_fails: Optional[list] = None,
 ) -> Optional[FinalPost]:
     """Anthropic Claude 최종 통합. 실패 시 None (OpenAI 결과로 폴백)."""
     from app.config import settings
@@ -2973,10 +2990,45 @@ async def _claude_review_final(
             "추정 → '~라는 해석이 나온다' 수준으로.\n"
         )
 
+    # ── 게이트 실패 시 보정 강도 강화 ──
+    _gate_instructions = ""
+    if gate_fails:
+        _tag_to_instruction = {
+            "WEAK_OPENER": (
+                "🚨 첫 문장이 사실나열/기사 재진술이다. "
+                "반드시 첫 문장을 '변화/충돌/독자 체감'으로 시작하도록 다시 써라. "
+                "기사 제목 반복 금지."
+            ),
+            "DEAD_ENDING": (
+                "🚨 마지막 문장이 '관건이다/변수다/중요하다'류 죽은 마감이다. "
+                "반드시 판별 신호로 교체하라: '무엇이 나오면/안 나오면' 구체적 검증 포인트."
+            ),
+            "BRIEFING_SMELL": (
+                "🚨 브리핑/보고서 냄새 표현이 2개 이상 감지됐다. "
+                "장황한 표현을 전부 짧고 단단한 문장으로 압축하라."
+            ),
+            "OPINION_LEAK": (
+                "🚨 근거 없는 일반론 의견이 감지됐다. "
+                "반드시 확인된 사실+수치로 뒷받침하거나 해당 문장을 삭제하라."
+            ),
+        }
+        parts = []
+        for tag in gate_fails:
+            instr = _tag_to_instruction.get(tag)
+            if instr:
+                parts.append(instr)
+        if parts:
+            _gate_instructions = (
+                "\n\n━━━ 품질 게이트 실패 — 반드시 교정 ━━━\n"
+                + "\n".join(parts)
+                + "\n위 항목은 반드시 교정하라. 교정하지 않으면 게시 불가.\n"
+            )
+
     user_prompt += (
         "\n위 초안의 사실/톤만 보정하고, JSON으로 반환하라. 논지를 바꾸지 마라.\n"
         "마지막 문장이 '관건이다/변수다/확인이 필요하다'류이면 "
         "반드시 외부 검증 신호(뭘 보면 판별되는지)로 교체하라."
+        + _gate_instructions
     )
 
     try:
@@ -3514,21 +3566,31 @@ def _run_all_validations(
     return warnings
 
 
-def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str]]:
-    """마감 결과 검증 및 자동 보정. (post, short, warnings) 반환."""
-    warnings = []
+def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str], list[str]]:
+    """마감 결과 검증 및 자동 보정. (post, short, warnings, gate_fails) 반환.
+
+    gate_fails: 게이트 실패 태그 목록. 비어 있으면 통과.
+      - WEAK_OPENER: 첫 문장 사실나열
+      - DEAD_ENDING: 금지 마감 패턴
+      - BRIEFING_SMELL: 브리핑 장황 표현 2개+
+      - OPINION_LEAK: 근거 없는 일반론
+    """
+    warnings: list[str] = []
+    gate_fails: list[str] = []
 
     # 첫 문장 사실나열 감지 (뉴스 후기 느낌의 원흉)
     first_line = post.split("\n")[0].strip() if post else ""
     for pattern in _FACT_NARRATION_STARTS:
         if pattern in first_line:
             warnings.append(f"첫 문장 사실나열 패턴: '{pattern}' — 해석 선행 필요")
+            gate_fails.append("WEAK_OPENER")
             break
 
     # 금지 마무리 패턴 감지
     for banned in _BANNED_ENDINGS:
         if post.rstrip().endswith(banned) or post.rstrip().endswith(banned + "."):
             warnings.append(f"final_post 금지 마감 패턴: '{banned}'")
+            gate_fails.append("DEAD_ENDING")
             break
         if short and (short.rstrip().endswith(banned) or short.rstrip().endswith(banned + ".")):
             warnings.append(f"final_short 금지 마감 패턴: '{banned}'")
@@ -3544,17 +3606,22 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str]]:
         if short and strong in short:
             short = short.replace(strong, soft)
 
-    # 뻔한 표현 경고 (본문 전체 검사)
+    # 뻔한 표현 경고 (본문 전체 검사) — 2개 이상이면 게이트 실패
+    briefing_hits = []
     for pat in _WEAK_PATTERNS:
         if pat in post:
-            warnings.append(f"뻔한 표현 감지: '{pat}'")
-            break  # 첫 번째 하나만 경고
+            briefing_hits.append(pat)
+    if briefing_hits:
+        warnings.append(f"뻔한 표현 감지: {', '.join(briefing_hits[:3])}")
+        if len(briefing_hits) >= 2:
+            gate_fails.append("BRIEFING_SMELL")
 
     # 일반론 의견 패턴 감지 (원칙 C)
     for pat in _OPINION_PATTERNS:
         if pat in post:
             warnings.append(f"일반론 의견 패턴: '{pat}'")
-            break  # 첫 번째 하나만 경고
+            gate_fails.append("OPINION_LEAK")
+            break  # 첫 번째 하나만
 
     # final_short가 final_post 첫 문장과 동일한지 체크
     first_sentence = post.split(".")[0].split("\n")[0].strip()
@@ -3562,7 +3629,7 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str]]:
     if first_sentence and short_first and first_sentence == short_first:
         warnings.append("final_short 첫 문장이 final_post와 동일")
 
-    return post, short, warnings
+    return post, short, warnings, gate_fails
 
 
 def _parse_final_post(raw: str) -> Optional[FinalPost]:
@@ -3581,11 +3648,11 @@ def _parse_final_post(raw: str) -> Optional[FinalPost]:
             return None
 
         # 검증 및 자동 보정
-        post, short, warnings = _validate_final_post(post, short)
+        post, short, warnings, gate_fails = _validate_final_post(post, short)
         for w in warnings:
             logger.warning(f"[마감검증] {w}")
 
-        return FinalPost(final_post=post, final_short=short)
+        return FinalPost(final_post=post, final_short=short, gate_fails=gate_fails)
     except Exception as e:
         logger.warning(f"FinalPost 파싱 오류: {e}")
         return None

@@ -1704,6 +1704,21 @@ async def _handle_thesis_select_callback(
                 f"<code>{result.final_short}</code>"
             )
 
+        # 게이트 실패 잔존 시 경고 표시
+        if getattr(result, "gate_fails", None):
+            _tag_labels = {
+                "WEAK_OPENER": "첫 문장 약함",
+                "DEAD_ENDING": "죽은 마감",
+                "BRIEFING_SMELL": "브리핑체 잔존",
+                "OPINION_LEAK": "일반론 의견",
+            }
+            fail_labels = [_tag_labels.get(t, t) for t in result.gate_fails]
+            result_text += (
+                f"\n\n{'─' * 24}\n"
+                f"⚠️ <b>품질 경고:</b> {' / '.join(fail_labels)}\n"
+                f"<i>자동 보정 시도됨 — 게시 전 확인 권장</i>"
+            )
+
         await query.message.reply_text(result_text, parse_mode="HTML")
 
     except asyncio.TimeoutError:

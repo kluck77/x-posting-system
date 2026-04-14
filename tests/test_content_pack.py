@@ -1768,25 +1768,25 @@ class TestValidateFinalPost:
         """깨끗한 게시글은 경고 없음."""
         post = "관건은 이 관세가 반도체까지 확대되느냐다."
         short = "반도체 관세가 확대되면 삼성 마진이 줄어든다."
-        _, _, warnings = _validate_final_post(post, short)
+        _, _, warnings, _ = _validate_final_post(post, short)
         assert len(warnings) == 0
 
     def test_banned_ending_detected(self):
         """금지 마감 패턴 감지."""
         post = "이번 사안은 영향을 미칠 것으로 보인다. 향후 추이를 지켜볼 필요가 있다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전")
         assert any("금지 마감 패턴" in w for w in warnings)
 
     def test_banned_ending_with_period(self):
         """마침표 포함 금지 패턴."""
         post = "시장에 미칠 여파가 클 것으로 보인다."
-        _, _, warnings = _validate_final_post(post, "")
+        _, _, warnings, _ = _validate_final_post(post, "")
         assert any("금지 마감 패턴" in w for w in warnings)
 
     def test_tone_softener_auto_replace(self):
         """과장 표현 자동 약화."""
         post = "이번 조치는 수출 기업에 직격탄이다."
-        result_post, _, warnings = _validate_final_post(post, "")
+        result_post, _, warnings, _ = _validate_final_post(post, "")
         assert "직격탄" not in result_post
         assert "영향" in result_post
         assert any("자동 약화" in w for w in warnings)
@@ -1794,7 +1794,7 @@ class TestValidateFinalPost:
     def test_multiple_softeners(self):
         """여러 과장 표현 동시 약화."""
         post = "급등이 불가피한 상황이다."
-        result_post, _, warnings = _validate_final_post(post, "")
+        result_post, _, warnings, _ = _validate_final_post(post, "")
         assert "급등" not in result_post
         assert "불가피" not in result_post
         assert "상승" in result_post
@@ -1804,7 +1804,7 @@ class TestValidateFinalPost:
         """final_short에서도 과장 표현 약화."""
         post = "정상 게시글."
         short = "시장이 붕괴되었다."
-        _, result_short, _ = _validate_final_post(post, short)
+        _, result_short, _, _ = _validate_final_post(post, short)
         assert "붕괴" not in result_short
         assert "하락" in result_short
 
@@ -1812,14 +1812,14 @@ class TestValidateFinalPost:
         """final_short 첫 문장이 final_post와 동일하면 경고."""
         post = "관세 확대가 핵심이다. 시장은 예외 품목을 본다."
         short = "관세 확대가 핵심이다."
-        _, _, warnings = _validate_final_post(post, short)
+        _, _, warnings, _ = _validate_final_post(post, short)
         assert any("첫 문장이 final_post와 동일" in w for w in warnings)
 
     def test_different_first_sentence_no_warning(self):
         """첫 문장이 다르면 경고 없음."""
         post = "관세 확대가 핵심이다. 시장은 예외 품목을 본다."
         short = "예외 품목 리스트가 관건이다."
-        _, _, warnings = _validate_final_post(post, short)
+        _, _, warnings, _ = _validate_final_post(post, short)
         assert not any("첫 문장이 final_post와 동일" in w for w in warnings)
 
 
@@ -2033,12 +2033,12 @@ class TestExpandedBannedEndings:
     def test_validate_catches_new_banned(self):
         """새로 추가된 금지 패턴이 _validate_final_post에서 감지."""
         post = "이번 사안의 추이를 봐야 한다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("금지 마감 패턴" in w for w in warnings)
 
     def test_validate_catches_possibility_grew(self):
         post = "이번 조치로 인해 가능성이 커졌다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("금지 마감 패턴" in w for w in warnings)
 
 
@@ -2048,13 +2048,13 @@ class TestWeakPatternValidation:
     def test_weak_pattern_warning(self):
         """본문 내 뻔한 표현이 경고로 기록."""
         post = "시장에 영향을 미칠 수 있다는 관측이 나온다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("뻔한 표현 감지" in w for w in warnings)
 
     def test_clean_post_no_weak_warning(self):
         """깨끗한 글에서는 뻔한 표현 경고 없음."""
         post = "시장은 발언이 아니라 시행령을 본다."
-        _, _, warnings = _validate_final_post(post, "독립 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "독립 버전.")
         assert not any("뻔한 표현 감지" in w for w in warnings)
 
 
@@ -2147,19 +2147,19 @@ class TestFactNarrationDetection:
     def test_detects_report_start(self):
         """'~보도가 나왔다' 패턴 감지."""
         post = "호르무즈 해협을 지나는 선박이 통과했다라는 보도가 나왔다. 정부는 확인 중."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("사실나열" in w for w in warnings)
 
     def test_detects_jeonhaejyeotda(self):
         """'~것으로 전해졌다' 패턴 감지."""
         post = "한국 선박이 해협을 통과한 것으로 전해졌다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("사실나열" in w for w in warnings)
 
     def test_clean_start_no_warning(self):
         """해석 선행 첫 문장은 경고 없음."""
         post = "외교 뉴스처럼 보이지만 먼저 흔들리는 건 비용이다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert not any("사실나열" in w for w in warnings)
 
     def test_fact_narration_starts_not_empty(self):
@@ -2173,13 +2173,13 @@ class TestNewBannedEndingPatterns:
     def test_journalist_question_banned(self):
         """기자 질문형 마감 감지."""
         post = "이 사안은 앞으로 어떻게 될까."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("금지 마감" in w or "뻔한 표현" in w for w in warnings)
 
     def test_market_reaction_banned(self):
         """시장 반응을 봐야 한다 감지."""
         post = "결국 시장 반응을 봐야 한다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("금지 마감" in w or "뻔한 표현" in w for w in warnings)
 
 
@@ -2402,14 +2402,14 @@ class TestOpinionPatterns:
     def test_validate_detects_opinion_pattern(self):
         """_validate_final_post가 일반론 의견 패턴을 감지."""
         post = "역사적으로 이런 상황에서는 항상 위기가 반복되었다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전")
         opinion_warns = [w for w in warnings if "일반론 의견" in w]
         assert len(opinion_warns) >= 1
 
     def test_validate_no_false_positive(self):
         """일반론 패턴이 없는 정상 문장은 경고 없음."""
         post = "한국 환율이 1400원을 넘기면 수입 물가 부담이 커진다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전")
         opinion_warns = [w for w in warnings if "일반론 의견" in w]
         assert len(opinion_warns) == 0
 
@@ -2516,7 +2516,7 @@ class TestValidationGate:
         """경고 1개는 강제 트리거 미발동."""
         # 금지 마감 패턴 1개만 걸리는 케이스
         post = "정상적인 첫 문장이다.\n해석 축 연결.\n추이를 봐야 한다."
-        _, _, warnings = _validate_final_post(post, "독립 짧은 버전")
+        _, _, warnings, _ = _validate_final_post(post, "독립 짧은 버전")
         # 금지 마감 1개만 걸림 — 강제 아님
         ban_warns = [w for w in warnings if "금지 마감" in w]
         assert len(ban_warns) >= 1
@@ -2527,13 +2527,13 @@ class TestValidationGate:
         """경고 2개 이상이면 강제 트리거."""
         # 첫 문장 사실나열 + 금지 마감 + 뻔한 표현 → 3개
         post = "라는 보도가 나왔다. 시장 반응을 봐야 한다."
-        _, _, warnings = _validate_final_post(post, "독립 짧은 버전")
+        _, _, warnings, _ = _validate_final_post(post, "독립 짧은 버전")
         assert len(warnings) >= 2, f"경고 2개 이상 예상, 실제: {warnings}"
 
     def test_clean_post_no_warnings(self):
         """깨끗한 포스트는 경고 0개."""
         post = "이 뉴스에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행령 여부다."
-        _, _, warnings = _validate_final_post(post, "환율 1400원대, 변수는 시행령이다.")
+        _, _, warnings, _ = _validate_final_post(post, "환율 1400원대, 변수는 시행령이다.")
         # 과장 표현도 없고 금지 마감도 없는 깨끗한 포스트
         assert len(warnings) == 0, f"경고 0개 예상, 실제: {warnings}"
 
@@ -2783,25 +2783,25 @@ class TestWeakPatternsExtended:
     def test_validate_catches_core_is(self):
         """'핵심이다' 패턴이 validation에서 감지."""
         post = "한국 반도체가 취약한지가 핵심이다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("뻔한 표현" in w for w in warnings)
 
     def test_validate_catches_urgent(self):
         """'시급하다' 패턴이 validation에서 감지."""
         post = "중동 의존도를 줄이는 것이 시급하다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("뻔한 표현" in w for w in warnings)
 
     def test_validate_catches_risk_grow(self):
         """'리스크가 커질 수 있다' 패턴이 validation에서 감지."""
         post = "향후 경제적 리스크가 커질 수 있다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("뻔한 표현" in w for w in warnings)
 
     def test_no_false_positive_on_clean(self):
         """깨끗한 글에서 새 패턴 false positive 없음."""
         post = "브롬 가격이 2배 되면 반도체 원가에서 먼저 흔들리는 건 식각 공정이다."
-        _, _, warnings = _validate_final_post(post, "독립 짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "독립 짧은 버전.")
         assert not any("뻔한 표현" in w for w in warnings)
 
 
@@ -2876,7 +2876,7 @@ class TestColumnStructureBan:
     def test_validate_catches_moonjeneun(self):
         """'문제는' 패턴이 validation에서 감지."""
         post = "문제는 기업들의 대응 속도가 느리다는 것이다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("뻔한 표현" in w for w in warnings)
 
 
@@ -3690,7 +3690,7 @@ class TestNewBannedEndingsFromScreenshot:
     def test_maintenance_duration_banned(self):
         """'오래 유지되는지가 관건' 패턴 금지."""
         post = "이 조치가 정말 실행되는지, 얼마나 오래 유지되는지가 관건이다."
-        _, _, warnings = _validate_final_post(post, "짧은 버전.")
+        _, _, warnings, _ = _validate_final_post(post, "짧은 버전.")
         assert any("금지 마감" in w for w in warnings)
 
     def test_really_executed_banned(self):
