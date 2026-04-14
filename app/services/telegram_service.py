@@ -752,11 +752,14 @@ def format_slot_detail(card, slot_index: int) -> str:
     if tc.reader_stake:
         lines.append(f"<b>독자 영향:</b> {tc.reader_stake}")
     if getattr(tc, "judgment_coord", ""):
-        lines.append(f"\n🧭 <b>판단 좌표:</b> {tc.judgment_coord}")
+        lines.append("")
+        lines.append(f"🧭 <b>판단 좌표:</b>\n{tc.judgment_coord}")
     if getattr(tc, "verification_signal", ""):
-        lines.append(f"\n🔍 <b>판별 신호:</b> {tc.verification_signal}")
+        lines.append("")
+        lines.append(f"🔍 <b>판별 신호:</b>\n{tc.verification_signal}")
     if tc.opener:
-        lines.append(f"\n<b>첫 문장 초안:</b>\n<code>{tc.opener}</code>")
+        lines.append("")
+        lines.append(f"<b>첫 문장 초안:</b>\n<code>{tc.opener}</code>")
 
     # 팩트 참고
     if card.key_facts:

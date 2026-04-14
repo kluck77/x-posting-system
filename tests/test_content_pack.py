@@ -1705,9 +1705,9 @@ class TestFinalizePromptRules:
         assert "슬롯 조립 담당" in p
 
     def test_three_sentence_structure(self):
-        """문장 조립 구조: 변화/팩트/판단좌표/판별신호."""
+        """문장 조립 구조: 핵심명제/팩트/판단좌표/판별신호."""
         p = _FINALIZE_PROMPT_KO
-        assert "변화 또는 긴장점" in p
+        assert "핵심 명제" in p
         assert "팩트 근거" in p
         assert "판단 좌표" in p
         assert "판별 신호" in p
@@ -2167,6 +2167,28 @@ class TestFactNarrationDetection:
         assert len(_FACT_NARRATION_STARTS) >= 5
 
 
+class TestFirstSentenceLengthGate:
+    """첫 문장 길이 게이트 테스트."""
+
+    def test_long_first_sentence_triggers_gate(self):
+        """70자 초과 첫 문장은 WEAK_OPENER 게이트 실패."""
+        post = "11일 파키스탄 협상 결렬 이후 로이터 통신이 보도한 이번 주 후반 이슬라마바드 재협상이 실제로 이루어지는지 여부가 미국과 이란 관계의 분기점이다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" in gate_fails
+
+    def test_short_first_sentence_passes(self):
+        """40자 이내 첫 문장은 통과."""
+        post = "지금 포인트는 재회담 성사 여부다. 근거는 이것이다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" not in gate_fails
+
+    def test_moderate_first_sentence_passes(self):
+        """70자 이내 첫 문장은 통과."""
+        post = "미국의 대이란 봉쇄가 선언에 그칠지 실제 통제로 갈지 곧 드러난다. 후속 조치가 관건이다."
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "WEAK_OPENER" not in gate_fails
+
+
 class TestNewBannedEndingPatterns:
     """새로 추가된 금지 마감 패턴 테스트."""
 
@@ -2569,7 +2591,7 @@ class TestClaudeAlwaysOnIntegrator:
     def test_prompt_has_sentence_structure(self):
         """문장 구조가 Claude 프롬프트에 포함."""
         p = _CLAUDE_REVIEW_PROMPT
-        assert "변화 또는 긴장점" in p
+        assert "핵심 명제" in p
         assert "팩트 근거" in p
         assert "판단 좌표" in p
         assert "판별 신호" in p
@@ -3625,17 +3647,10 @@ class TestSlotReorderForLowConfidence:
 class TestExternalVerificationSignalRule:
     """외부 검증 신호 규칙이 프롬프트에 있는지 검증."""
 
-    def test_finalize_has_signal_check(self):
-        """마감 프롬프트에 SIGNAL_CHECK가 있음."""
-        assert "SIGNAL_CHECK" in _FINALIZE_PROMPT_KO
-
-    def test_finalize_has_threshold_check(self):
-        """마감 프롬프트에 THRESHOLD_CHECK가 있음."""
-        assert "THRESHOLD_CHECK" in _FINALIZE_PROMPT_KO
-
-    def test_finalize_has_implementation_check(self):
-        """마감 프롬프트에 IMPLEMENTATION_CHECK가 있음."""
-        assert "IMPLEMENTATION_CHECK" in _FINALIZE_PROMPT_KO
+    def test_finalize_has_signal_examples(self):
+        """마감 프롬프트에 판별 신호 예시가 있음."""
+        assert "나오면" in _FINALIZE_PROMPT_KO
+        assert "선언에 그친다" in _FINALIZE_PROMPT_KO or "살아 있는 것이다" in _FINALIZE_PROMPT_KO
 
     def test_claude_has_verification_signal_rule(self):
         """Claude 프롬프트에 판별 신호 규칙이 있음."""
