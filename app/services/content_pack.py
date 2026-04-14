@@ -1945,9 +1945,17 @@ async def generate_candidate_card(
             return card
 
     logger.warning("후보 카드 AI 응답 파싱 실패 — Mock 카드 반환")
+    mock_fact = f"[Mock] {title[:60]}"
+    mock_thesis = ThesisCard(
+        thesis=f"[AI 실패] {title[:80]}",
+        why_not_summary="AI 응답 실패 — 자동 생성 불가",
+        reader_stake="수동 확인 필요",
+        opener=mock_fact,
+    )
     return CandidateCard(
-        key_facts=[f"[Mock] {title[:60]}"],
-        hook_candidates=["[Mock] 방향 제시 불가 — AI 응답 실패"],
+        key_facts=[mock_fact],
+        hook_candidates=[mock_fact],
+        thesis_cards=[mock_thesis],
         one_liner=["[Mock] 한줄 결론 불가"],
         cautions=["Mock 모드 — 실제 분석 불가"],
         watch_points=["Mock 모드"],
