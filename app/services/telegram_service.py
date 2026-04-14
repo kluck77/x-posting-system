@@ -711,12 +711,14 @@ def send_candidate_card_messages(card) -> list[dict]:
                 if any(p in combined for p in _spec_patterns):
                     spec_badge = "\n⚠️ <i>추정 해석 주의</i>"
 
-            # 압축형: 제목 → 빈 줄 → 해석/좌표/신호
+            # 압축형: 제목 → 빈 줄 → 해석 → 빈 줄 → 좌표 → 빈 줄 → 신호
             lines = [f"🎯 <b>{slot_name}</b>", ""]
             lines.append(f"해석: {_trim(tc.thesis, 100)}")
             if getattr(tc, "judgment_coord", ""):
+                lines.append("")
                 lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 70)}")
             if getattr(tc, "verification_signal", ""):
+                lines.append("")
                 lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 70)}")
             if spec_badge:
                 lines.append(spec_badge)
@@ -752,7 +754,7 @@ def format_slot_detail(card, slot_index: int) -> str:
     if getattr(tc, "judgment_coord", ""):
         lines.append(f"\n🧭 <b>판단 좌표:</b> {tc.judgment_coord}")
     if getattr(tc, "verification_signal", ""):
-        lines.append(f"🔍 <b>판별 신호:</b> {tc.verification_signal}")
+        lines.append(f"\n🔍 <b>판별 신호:</b> {tc.verification_signal}")
     if tc.opener:
         lines.append(f"\n<b>첫 문장 초안:</b>\n<code>{tc.opener}</code>")
 

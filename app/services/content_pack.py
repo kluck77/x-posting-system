@@ -2168,6 +2168,13 @@ _WEAK_PATTERNS = [
     "전환점이 될",
     "보여준다",
     "드러난다",
+    # 브리핑 장황체
+    "타격을 입히기 시작했다",
+    "영향을 미치고 있다",
+    "를 발생시킨다",
+    "를 발생시킬 수 있다",
+    "로 이어진다",
+    "로 이어질 수 있다",
 ]
 
 
@@ -3263,6 +3270,14 @@ _BANNED_ENDINGS = [
     "정말 실행되는지",
     "핵심이다",
     "심각하다",
+    # 브리핑/설명문 잔여
+    "문제다",
+    "가 더 중요하다",
+    "를 보면 알 수 있다",
+    "를 판단할 수 있다",
+    "가 중요하다",
+    "로 이어진다",
+    "이 중요하다",
 ]
 
 # 근거 없는 일반론 의견 패턴 (칼럼체/보고서체 — 원칙 C)
@@ -3300,6 +3315,9 @@ _TONE_SOFTENERS = {
     "폭등": "급상승",
     "토해냈다": "줄었다",
     "충격": "영향",
+    # 브리핑 냄새 — 조사 안전한 치환만
+    "직접적인 타격": "타격",
+    "가 더욱 중요해지고 있다": "가 갈린다",
 }
 
 
@@ -3516,11 +3534,13 @@ def _validate_final_post(post: str, short: str) -> tuple[str, str, list[str]]:
             warnings.append(f"final_short 금지 마감 패턴: '{banned}'")
             break
 
-    # 과장 표현 자동 약화
-    for strong, soft in _TONE_SOFTENERS.items():
+    # 과장/브리핑 표현 자동 약화 (긴 패턴 우선 — 부분 치환 방지)
+    for strong, soft in sorted(
+        _TONE_SOFTENERS.items(), key=lambda x: len(x[0]), reverse=True
+    ):
         if strong in post:
             post = post.replace(strong, soft)
-            warnings.append(f"과장 표현 자동 약화: '{strong}' → '{soft}'")
+            warnings.append(f"자동 약화: '{strong}' → '{soft}'")
         if short and strong in short:
             short = short.replace(strong, soft)
 
