@@ -1685,21 +1685,22 @@ async def _handle_thesis_select_callback(
 
         # ── 최종 결과: 압축형 ──
         if selected_thesis:
-            thesis_line = f"🎯 {thesis_label_short}: {selected_thesis.thesis[:80]}"
+            thesis_line = f"🎯 <b>선택된 슬롯</b>\n해석축: {selected_thesis.thesis[:60]}"
         else:
             selected_hook = card.hook_candidates[thesis_index] if thesis_index < len(card.hook_candidates) else "?"
-            thesis_line = f"📌 {selected_hook[:80]}"
+            thesis_line = f"🎯 <b>선택된 슬롯</b>\n해석축: {selected_hook[:60]}"
 
         result_text = (
             f"✅ <b>최종 마감 완료</b>\n\n"
-            f"{thesis_line}\n"
-            f"{'─' * 28}\n\n"
-            f"📝 <b>게시글</b> ({len(result.final_post)}자)\n"
+            f"{thesis_line}\n\n"
+            f"{'─' * 24}\n\n"
+            f"📝 <b>게시글</b> ({len(result.final_post)}자)\n\n"
             f"<code>{result.final_post}</code>\n\n"
         )
         if result.final_short:
             result_text += (
-                f"⚡ <b>짧은 버전</b> ({len(result.final_short)}자)\n"
+                f"{'─' * 24}\n\n"
+                f"⚡ <b>짧은 버전</b> ({len(result.final_short)}자)\n\n"
                 f"<code>{result.final_short}</code>"
             )
 

@@ -672,13 +672,29 @@ def send_candidate_card_messages(card) -> list[dict]:
 
     if card.risk_flags:
         flags = " / ".join(card.risk_flags)
-        overview_parts.append(f"⚠️ {flags}")
+        overview_parts.append(f"\n⚠️ {flags}")
 
     messages.append({"text": "\n".join(overview_parts), "hook_index": None})
 
     # ── 2. 해석 슬롯 × 3 (압축형 — 선택 버튼 있음) ──
     _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
     _is_low_confidence = card.certainty_level in ("미확인", "상충")
+
+    def _trim(text: str, limit: int) -> str:
+        """기본 카드용 문장 자르기. 한 문장 단위로 자르되 limit 초과 시 잘라냄."""
+        if not text or len(text) <= limit:
+            return text
+        # 마침표/다/됨 등 문장 종결 기준으로 자르기
+        cut = text[:limit]
+        for end in ("다.", "됨.", "임.", "음.", ". "):
+            idx = cut.rfind(end)
+            if idx > limit // 2:
+                return cut[: idx + len(end)]
+        # 종결점 못 찾으면 공백 단위
+        sp = cut.rfind(" ")
+        if sp > limit // 2:
+            return cut[:sp]
+        return cut
 
     if card.thesis_cards:
         for i, tc in enumerate(card.thesis_cards[:3]):
@@ -695,13 +711,13 @@ def send_candidate_card_messages(card) -> list[dict]:
                 if any(p in combined for p in _spec_patterns):
                     spec_badge = "\n⚠️ <i>추정 해석 주의</i>"
 
-            # 압축형: 슬롯명 + 해석 + 판단좌표 + 판별신호 (4줄)
-            lines = [f"🎯 <b>{slot_name}</b>"]
-            lines.append(f"  {tc.thesis}")
+            # 압축형: 제목 → 빈 줄 → 해석/좌표/신호
+            lines = [f"🎯 <b>{slot_name}</b>", ""]
+            lines.append(f"해석: {_trim(tc.thesis, 100)}")
             if getattr(tc, "judgment_coord", ""):
-                lines.append(f"🧭 {tc.judgment_coord}")
+                lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 70)}")
             if getattr(tc, "verification_signal", ""):
-                lines.append(f"🔍 {tc.verification_signal}")
+                lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 70)}")
             if spec_badge:
                 lines.append(spec_badge)
 
@@ -726,22 +742,24 @@ def format_slot_detail(card, slot_index: int) -> str:
     tc = card.thesis_cards[slot_index]
     slot_name = _slot_names[slot_index] if slot_index < 3 else f"슬롯 {slot_index + 1}"
 
-    lines = [f"📖 <b>{slot_name} — 상세</b>\n"]
+    lines = [f"📖 <b>{slot_name} — 상세</b>"]
+    lines.append("")
     lines.append(f"<b>해석:</b> {tc.thesis}")
     if tc.why_not_summary:
         lines.append(f"<b>긴장점:</b> {tc.why_not_summary}")
     if tc.reader_stake:
         lines.append(f"<b>독자 영향:</b> {tc.reader_stake}")
-    if tc.opener:
-        lines.append(f"<b>첫 문장 초안:</b> <code>{tc.opener}</code>")
     if getattr(tc, "judgment_coord", ""):
-        lines.append(f"🧭 <b>판단 좌표:</b> {tc.judgment_coord}")
+        lines.append(f"\n🧭 <b>판단 좌표:</b> {tc.judgment_coord}")
     if getattr(tc, "verification_signal", ""):
         lines.append(f"🔍 <b>판별 신호:</b> {tc.verification_signal}")
+    if tc.opener:
+        lines.append(f"\n<b>첫 문장 초안:</b>\n<code>{tc.opener}</code>")
 
     # 팩트 참고
     if card.key_facts:
-        lines.append("\n📌 <b>핵심 팩트</b>")
+        lines.append(f"\n{'─' * 24}")
+        lines.append("📌 <b>핵심 팩트</b>")
         for j, fact in enumerate(card.key_facts[:3], 1):
             lines.append(f"  {j}. {fact}")
 
