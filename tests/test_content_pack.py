@@ -24,8 +24,8 @@ from app.services.content_pack import (
     # Phase 2: Gemini 대안 의견 카드
     _GEMINI_OPINION_PROMPT, GeminiOpinionCard,
     _should_invoke_extended_review, _EXTENDED_REVIEW_TOPICS,
-    # Phase 3: Grok 경쟁 초안
-    _GROK_DRAFT_PROMPT,
+    # Phase 3: Grok X 감각 심사
+    _GROK_EVAL_PROMPT, GrokEvalCard,
     _noop_async, _log_draft_comparison,
 )
 from app.models.content_request import ContentRequest
@@ -3028,113 +3028,144 @@ class TestColumnAndContradictionSync:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-class TestGrokDraftPrompt:
-    """Grok 경쟁 초안 시스템 프롬프트 규칙 검증."""
+class TestGrokEvalPrompt:
+    """Grok X 감각 심사관 프롬프트 규칙 검증."""
 
     def test_grok_prompt_exists(self):
-        """_GROK_DRAFT_PROMPT가 존재하고 비어있지 않음."""
-        assert _GROK_DRAFT_PROMPT
-        assert len(_GROK_DRAFT_PROMPT) > 100
+        """_GROK_EVAL_PROMPT가 존재하고 비어있지 않음."""
+        assert _GROK_EVAL_PROMPT
+        assert len(_GROK_EVAL_PROMPT) > 100
 
-    def test_grok_persona_is_x_editor(self):
-        """Grok 페르소나가 X 에디터."""
-        assert "X 에디터" in _GROK_DRAFT_PROMPT
+    def test_grok_persona_is_editor(self):
+        """Grok 페르소나가 편집자."""
+        assert "편집자" in _GROK_EVAL_PROMPT
 
-    def test_grok_persona_differs_from_openai(self):
-        """Grok 페르소나가 OpenAI 페르소나(증권사 출신 해설자)와 다름."""
-        assert "증권사 출신" not in _GROK_DRAFT_PROMPT
+    def test_grok_persona_not_writer(self):
+        """Grok 페르소나가 작성자가 아님."""
+        role_section = _GROK_EVAL_PROMPT.split("━━━ 역할 ━━━")[1].split("━━━")[0]
+        assert "초안 작성자" not in role_section
+        assert "작가" not in role_section
 
-    def test_grok_bans_title_copy(self):
-        """기사 제목 복붙/재진술 금지."""
-        assert "기사 제목 복붙" in _GROK_DRAFT_PROMPT or "제목 복붙" in _GROK_DRAFT_PROMPT
+    def test_grok_role_is_judgment(self):
+        """글을 다시 쓰지 않고 판정하는 역할."""
+        assert "판정" in _GROK_EVAL_PROMPT
+        assert "다시 쓰는 것이 아니라" in _GROK_EVAL_PROMPT
 
-    def test_grok_bans_column_structure(self):
-        """칼럼/사설체 금지."""
-        assert "칼럼/사설" in _GROK_DRAFT_PROMPT
+    def test_grok_has_headline_clone_field(self):
+        """headline_clone 판정 기준 존재."""
+        assert "headline_clone" in _GROK_EVAL_PROMPT
+        assert "재진술" in _GROK_EVAL_PROMPT
 
-    def test_grok_bans_moonjeneun(self):
-        """'문제는 ~것이다' 금지."""
-        assert "문제는 ~것이다" in _GROK_DRAFT_PROMPT
+    def test_grok_has_too_safe_field(self):
+        """too_safe 판정 기준 존재."""
+        assert "too_safe" in _GROK_EVAL_PROMPT
+        assert "평균문" in _GROK_EVAL_PROMPT
 
-    def test_grok_bans_unsupported_claims(self):
-        """근거 없는 일반론 금지."""
-        assert "근거 없는 일반론 금지" in _GROK_DRAFT_PROMPT
+    def test_grok_has_new_angle_missing_field(self):
+        """new_angle_missing 판정 기준 존재."""
+        assert "new_angle_missing" in _GROK_EVAL_PROMPT
 
-    def test_grok_bans_caution_override(self):
-        """검증 결과보다 강한 주장 금지."""
-        assert "검증 결과" in _GROK_DRAFT_PROMPT
-        assert "강한 주장 금지" in _GROK_DRAFT_PROMPT
+    def test_grok_has_x_hook_score(self):
+        """x_hook_score 1~5 점수 체계 존재."""
+        assert "x_hook_score" in _GROK_EVAL_PROMPT
+        assert "1~5" in _GROK_EVAL_PROMPT or "1-5" in _GROK_EVAL_PROMPT
 
-    def test_grok_requires_fact_first(self):
-        """첫 문장에 구체 팩트 요구."""
-        assert "구체 팩트" in _GROK_DRAFT_PROMPT
-        assert "첫 문장" in _GROK_DRAFT_PROMPT
+    def test_grok_has_problem_field(self):
+        """problem 필드 존재."""
+        assert "problem" in _GROK_EVAL_PROMPT
 
-    def test_grok_3_sentence_structure(self):
-        """3문장 구조 존재."""
-        assert "3문장" in _GROK_DRAFT_PROMPT
+    def test_grok_has_fix_direction_field(self):
+        """fix_direction 필드 존재."""
+        assert "fix_direction" in _GROK_EVAL_PROMPT
 
-    def test_grok_bans_report_start(self):
-        """'~보도가 나왔다' 시작 금지."""
-        assert "보도가 나왔다" in _GROK_DRAFT_PROMPT
+    def test_grok_bans_full_rewrite(self):
+        """전체 리라이트 금지."""
+        assert "다시 쓰지 마라" in _GROK_EVAL_PROMPT
 
-    def test_grok_bans_forecast_endings(self):
-        """전망문 금지."""
-        assert "추이를 봐야 한다" in _GROK_DRAFT_PROMPT
+    def test_grok_bans_new_facts(self):
+        """새 사실/수치 추가 금지."""
+        assert "새 사실" in _GROK_EVAL_PROMPT
 
     def test_grok_output_json_format(self):
-        """JSON 출력 형식 명시."""
-        assert "final_post" in _GROK_DRAFT_PROMPT
-        assert "final_short" in _GROK_DRAFT_PROMPT
+        """JSON 출력 형식에 6개 필드 모두 명시."""
+        for field in ["headline_clone", "too_safe", "new_angle_missing",
+                       "x_hook_score", "problem", "fix_direction"]:
+            assert field in _GROK_EVAL_PROMPT, f"출력 필드 '{field}' 누락"
 
-    def test_grok_bans_commentary_judgment(self):
-        """논평/비난/자격 판정 금지."""
-        assert "논평" in _GROK_DRAFT_PROMPT and "판정 금지" in _GROK_DRAFT_PROMPT
-
-    def test_grok_bans_contradiction(self):
-        """기사 사실과 모순되는 단정 금지."""
-        assert "모순되는 단정 금지" in _GROK_DRAFT_PROMPT
+    def test_grok_score_descriptions(self):
+        """점수별 설명 존재."""
+        assert "기사 제목 복붙" in _GROK_EVAL_PROMPT  # score 1 설명
+        assert "반드시 읽게 됨" in _GROK_EVAL_PROMPT    # score 5 설명
 
 
-class TestClaudeDraftComparisonRules:
-    """Claude 초안 비교 통합 규칙 검증."""
+class TestGrokEvalCard:
+    """GrokEvalCard 데이터클래스 검증."""
 
-    def test_claude_has_comparison_section(self):
-        """초안 비교 통합 규칙 섹션이 존재."""
-        assert "초안 비교 통합 규칙" in _CLAUDE_REVIEW_PROMPT
+    def test_eval_card_defaults(self):
+        """기본값 확인."""
+        card = GrokEvalCard()
+        assert card.headline_clone is False
+        assert card.too_safe is False
+        assert card.new_angle_missing is False
+        assert card.x_hook_score == 3
+        assert card.problem == ""
+        assert card.fix_direction == ""
 
-    def test_claude_pick_base_draft(self):
-        """기반 초안 선택 규칙이 존재."""
-        assert "기반 초안" in _CLAUDE_REVIEW_PROMPT
+    def test_eval_card_with_values(self):
+        """값 설정 확인."""
+        card = GrokEvalCard(
+            headline_clone=True,
+            too_safe=True,
+            new_angle_missing=False,
+            x_hook_score=2,
+            problem="첫 문장이 기사 제목 복붙",
+            fix_direction="구체 숫자로 시작하라",
+        )
+        assert card.headline_clone is True
+        assert card.x_hook_score == 2
+        assert "복붙" in card.problem
 
-    def test_claude_no_averaging(self):
-        """평균문 금지 규칙이 존재."""
+
+class TestClaudeGrokEvalRules:
+    """Claude 프롬프트의 Grok 평가 활용 규칙 검증."""
+
+    def test_claude_has_eval_section(self):
+        """Grok 평가 활용 규칙 섹션 존재."""
+        assert "Grok 평가 활용 규칙" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_headline_clone_rule(self):
+        """headline_clone=true 시 첫 문장 재작성 지시."""
+        assert "headline_clone=true" in _CLAUDE_REVIEW_PROMPT
+        assert "첫 문장을 다시 써라" in _CLAUDE_REVIEW_PROMPT
+
+    def test_claude_too_safe_rule(self):
+        """too_safe=true 시 평균문 회피 지시."""
+        assert "too_safe=true" in _CLAUDE_REVIEW_PROMPT
         assert "평균문" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_no_stitching(self):
-        """이어붙이기 금지 규칙이 존재."""
-        assert "이어붙여" in _CLAUDE_REVIEW_PROMPT or "늘리지 마라" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_new_angle_rule(self):
+        """new_angle_missing=true 시 해석 좁히기 지시."""
+        assert "new_angle_missing=true" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_absorb_limit(self):
-        """다른 초안에서 흡수 가능 범위가 제한됨."""
-        p = _CLAUDE_REVIEW_PROMPT
-        assert "표현 1개" in p or "해석 축 1개만" in p
+    def test_claude_low_score_rule(self):
+        """x_hook_score 1~2 시 첫 문장 강화 지시."""
+        assert "x_hook_score 1~2" in _CLAUDE_REVIEW_PROMPT or "1~2" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_single_voice(self):
-        """최종 문체가 하나여야 한다는 규칙 존재."""
-        assert "한 사람이 처음부터 끝까지" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_high_score_rule(self):
+        """x_hook_score 4~5 시 첫 문장 유지 지시."""
+        assert "x_hook_score 4~5" in _CLAUDE_REVIEW_PROMPT or "4~5" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_scroll_stop_priority(self):
-        """스크롤 멈추는 힘 우선 검토 규칙 존재."""
-        assert "스크롤 멈추는" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_no_copy_grok(self):
+        """Grok 문장 그대로 베끼기 금지."""
+        assert "베끼지 마라" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_single_draft_fallback(self):
-        """초안 1개일 때 기존 동작 유지 규칙 존재."""
-        assert "1개만 있으면 기존과 동일" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_no_eval_no_change(self):
+        """평가 없을 때 기존 동작 유지."""
+        assert "없으면 기존과 동일" in _CLAUDE_REVIEW_PROMPT
 
-    def test_claude_role_mentions_two_drafts(self):
-        """역할 설명에 초안 2개 가능성 언급."""
-        assert "초안이 2개" in _CLAUDE_REVIEW_PROMPT or "2개(OpenAI" in _CLAUDE_REVIEW_PROMPT
+    def test_claude_no_new_facts_from_grok(self):
+        """Grok 평가와 무관하게 새 사실 추가 금지."""
+        assert "원문에 없는 건" in _CLAUDE_REVIEW_PROMPT
 
 
 class TestNoopAsync:
@@ -3150,12 +3181,11 @@ class TestNoopAsync:
 class TestLogDraftComparison:
     """_log_draft_comparison 로깅 함수 테스트."""
 
-    def test_log_with_all_drafts(self):
-        """OpenAI + Grok + Gemini 모두 있을 때 정상 동작."""
+    def test_log_with_all_components(self):
+        """OpenAI + GrokEval + Gemini 모두 있을 때 정상 동작."""
         oa = FinalPost(final_post="OpenAI 첫 줄", final_short="짧은 버전")
-        gk = FinalPost(final_post="Grok 첫 줄", final_short="짧은 버전")
+        gk = GrokEvalCard(x_hook_score=3, too_safe=True, problem="평균문")
         gm = GeminiOpinionCard(first_line_suggestion="Gemini 제안")
-        # 예외 없이 호출되면 성공
         _log_draft_comparison(oa, gk, gm)
 
     def test_log_with_grok_none(self):
@@ -3170,94 +3200,27 @@ class TestLogDraftComparison:
 
 
 class TestGrokPromptSync:
-    """Grok 프롬프트와 다른 프롬프트 간 핵심 규칙 동기화 검증."""
+    """Grok/OpenAI/Claude 프롬프트 간 핵심 규칙 동기화 검증."""
 
-    def test_all_three_ban_column_structure(self):
-        """OpenAI/Grok/Claude 3개 프롬프트 모두 칼럼/사설 금지."""
+    def test_openai_and_claude_ban_column_structure(self):
+        """OpenAI/Claude 프롬프트 모두 칼럼/사설 금지."""
         assert "칼럼" in _FINALIZE_PROMPT_KO
-        assert "칼럼" in _GROK_DRAFT_PROMPT
         assert "칼럼" in _CLAUDE_REVIEW_PROMPT
 
-    def test_all_three_ban_moonjeneun(self):
-        """3개 프롬프트 모두 '문제는 ~것이다' 금지."""
+    def test_openai_and_claude_ban_moonjeneun(self):
+        """OpenAI/Claude 프롬프트 모두 '문제는 ~것이다' 금지."""
         assert "문제는 ~것이다" in _FINALIZE_PROMPT_KO
-        assert "문제는 ~것이다" in _GROK_DRAFT_PROMPT
         assert "문제는 ~것이다" in _CLAUDE_REVIEW_PROMPT
 
-    def test_all_three_ban_unsupported(self):
-        """3개 프롬프트 모두 근거 없는 일반론 금지."""
+    def test_openai_and_claude_ban_unsupported(self):
+        """OpenAI/Claude 프롬프트 모두 근거 없는 일반론 금지."""
         assert "근거 없는 일반론" in _FINALIZE_PROMPT_KO
-        assert "근거 없는 일반론 금지" in _GROK_DRAFT_PROMPT
         assert "근거 없는 일반론" in _CLAUDE_REVIEW_PROMPT
 
-    def test_grok_and_openai_have_3sentence(self):
-        """Grok과 OpenAI 모두 3문장 구조."""
-        assert "3문장" in _FINALIZE_PROMPT_KO
-        assert "3문장" in _GROK_DRAFT_PROMPT
-
-
-class TestGrokToneRegisterSplit:
-    """Grok 톤 레지스터 분리 검증 — Phase 3 톤 차별화."""
-
-    def test_grok_persona_is_fact_curator(self):
-        """Grok 페르소나가 '팩트 큐레이터' 스타일 (팩트 먼저 던지기)."""
-        assert "팩트 1개를 먼저 던지고" in _GROK_DRAFT_PROMPT
-
-    def test_grok_persona_no_analyst_label(self):
-        """Grok 역할 섹션에 '해설자'/'해설 계정 운영자' 없음."""
-        # 역할 섹션만 검사 (before/after 예시의 '분석가' 제외)
-        role_section = _GROK_DRAFT_PROMPT.split("━━━ 역할 ━━━")[1].split("━━━")[0]
-        assert "해설자" not in role_section
-        assert "해설 계정 운영자" not in role_section
-
-    def test_grok_has_fact_first_rule(self):
-        """첫 문장 구체 팩트 선행 규칙 존재."""
-        assert "첫 문장은 구체 팩트" in _GROK_DRAFT_PROMPT
-
-    def test_grok_bans_interpretation_start(self):
-        """해석/판단/의견으로 시작 금지 명시."""
-        assert "해석·판단·의견으로 시작하면 실패" in _GROK_DRAFT_PROMPT
-
-    def test_grok_has_banned_openers(self):
-        """금지 출발 패턴 리스트 존재."""
-        for pat in ["핵심은", "문제는", "주목할 점은", "중요한 건"]:
-            assert pat in _GROK_DRAFT_PROMPT, f"금지 출발 '{pat}' 누락"
-
-    def test_grok_has_allowed_openers(self):
-        """허용 출발 예시 존재."""
-        for pat in ["롯데건설이", "BIS 출신이", "취업자 수가"]:
-            assert pat in _GROK_DRAFT_PROMPT, f"허용 출발 '{pat}' 누락"
-
-    def test_grok_has_before_after_examples(self):
-        """분석가 vs X 문장 before/after 예시가 3쌍 이상."""
-        bad_count = _GROK_DRAFT_PROMPT.count("❌ 분석가:")
-        good_count = _GROK_DRAFT_PROMPT.count("✅ X 문장:")
-        assert bad_count >= 3, f"분석가 예시 {bad_count}개 < 3"
-        assert good_count >= 3, f"X 문장 예시 {good_count}개 < 3"
-        assert bad_count == good_count, "before/after 쌍이 불일치"
-
-    def test_grok_explains_core_difference(self):
-        """핵심 차이 설명 존재 (팩트 먼저, 해석 뒤)."""
-        assert "팩트가 먼저" in _GROK_DRAFT_PROMPT
-        assert "해석이 뒤" in _GROK_DRAFT_PROMPT
-
-    def test_grok_bloomberg_sensibility(self):
-        """블룸버그 헤드라인 감각 언급."""
-        assert "블룸버그" in _GROK_DRAFT_PROMPT
-
-    def test_grok_why_line_uses_fact_start(self):
-        """WHY 문장 설명이 '구체 팩트로 시작'."""
-        # 3문장 구조의 1문장(WHY) 설명 확인
-        assert "구체 팩트로 시작" in _GROK_DRAFT_PROMPT
-
-    def test_grok_calls_it_fact_preceding_draft(self):
-        """Grok 초안을 '팩트 선행형'으로 명명."""
-        assert "팩트 선행형 초안" in _GROK_DRAFT_PROMPT
-
-    def test_grok_bans_weak_generalization(self):
-        """'피할 수 없다' '일으킬 수 있다' 약한 일반화 금지."""
-        assert "피할 수 없다" in _GROK_DRAFT_PROMPT
-        assert "일으킬 수 있다" in _GROK_DRAFT_PROMPT
+    def test_grok_eval_detects_safe_patterns(self):
+        """Grok 평가 프롬프트가 평균문/안전문 감지 기준을 가짐."""
+        assert "평균문" in _GROK_EVAL_PROMPT
+        assert "안전" in _GROK_EVAL_PROMPT
 
 
 class TestWeakPatternNewAdditions:

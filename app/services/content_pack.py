@@ -1817,17 +1817,21 @@ async def _noop_async() -> None:
 
 def _log_draft_comparison(
     openai_draft: FinalPost,
-    grok_draft: Optional[FinalPost],
+    grok_eval: Optional["GrokEvalCard"],
     gemini_opinion: Optional["GeminiOpinionCard"],
 ) -> None:
-    """OpenAI/Grok/Gemini 3단 비교 로깅."""
+    """OpenAI 초안 + Grok 평가 + Gemini 의견 로깅."""
     oa_first = openai_draft.final_post.split("\n")[0][:60] if openai_draft.final_post else "없음"
-    gk_first = grok_draft.final_post.split("\n")[0][:60] if grok_draft and grok_draft.final_post else "없음"
+    gk_info = (
+        f"score={grok_eval.x_hook_score} safe={grok_eval.too_safe} "
+        f"problem=\"{grok_eval.problem[:40]}\""
+        if grok_eval else "없음"
+    )
     gm_first = gemini_opinion.first_line_suggestion[:60] if gemini_opinion and gemini_opinion.first_line_suggestion else "없음"
 
     logger.info(
-        f"[초안비교] OpenAI첫줄=\"{oa_first}\" | "
-        f"Grok첫줄=\"{gk_first}\" | "
+        f"[초안+평가] OpenAI첫줄=\"{oa_first}\" | "
+        f"Grok평가={gk_info} | "
         f"Gemini제안=\"{gm_first}\""
     )
 
@@ -1906,12 +1910,12 @@ async def generate_final_post(
                 f"short={len(result.final_short)}자"
             )
 
-            # Phase 3: Grok 경쟁 초안 + Phase 2: Gemini 의견카드 — 병렬 호출
+            # Phase 3: Grok 평가 + Phase 2: Gemini 의견카드 — 병렬 호출
             # Gemini 조건부 판정은 OpenAI 초안 기준
             should_gemini = _should_invoke_extended_review(card, result)
 
             grok_result, gemini_opinion = await asyncio.gather(
-                _grok_draft(card, source_text, selected_hook=selected_hook),
+                _grok_eval(result, card, selected_hook=selected_hook),
                 _gemini_opinion_card(
                     card, result, selected_hook=selected_hook
                 ) if should_gemini else _noop_async(),
@@ -1920,7 +1924,7 @@ async def generate_final_post(
 
             # 예외 처리 — 실패 시 None으로 폴백
             if isinstance(grok_result, Exception):
-                logger.warning(f"[Grok초안] 병렬 실행 오류: {grok_result}")
+                logger.warning(f"[Grok평가] 병렬 실행 오류: {grok_result}")
                 grok_result = None
             if isinstance(gemini_opinion, Exception):
                 logger.warning(f"[Gemini의견카드] 병렬 실행 오류: {gemini_opinion}")
@@ -1934,7 +1938,7 @@ async def generate_final_post(
                 card, result,
                 selected_hook=selected_hook,
                 gemini_opinion=gemini_opinion,
-                grok_draft=grok_result,
+                grok_eval=grok_result,
             )
             if reviewed:
                 logger.info(
@@ -2056,26 +2060,28 @@ _CLAUDE_REVIEW_PROMPT = """너는 X 게시글 "최종 통합 편집자"다.
 
 ━━━ 역할 ━━━
 
-초안이 2개(OpenAI 안정형 + Grok 반응형) 또는 1개 제공된다.
-너는 최종 게시 가능 수준으로 통합/리라이트하라.
+OpenAI 초안 1개가 제공된다.
+Grok X 감각 평가가 함께 올 수 있다.
+너는 최종 게시 가능 수준으로 리라이트하라.
 Perplexity 검증 결과와 cautions를 반영해서 사실 상한선을 넘지 않게 하라.
 
 너는 "감수자"가 아니라 "최종 책임자"다.
 초안이 이미 좋으면 그대로 내보내도 되지만,
 부족하면 반드시 고쳐서 "바로 올릴 수 있는 수준"으로 만들어라.
 
-━━━ 초안 비교 통합 규칙 (CRITICAL — 초안 2개일 때) ━━━
+━━━ Grok 평가 활용 규칙 (CRITICAL — 평가가 있을 때) ━━━
 
-1. 먼저 초안 A와 B 중 하나를 "기반 초안"으로 선택하라.
-   - 더 읽히는 첫 문장을 가진 쪽을 우선 검토
-   - 안정성보다 "스크롤 멈추는 힘"이 더 중요하다
-2. 최종 글은 기반 초안의 구조와 리듬을 유지해야 한다.
-3. 다른 초안에서는 첫 문장, 표현 1개, 또는 해석 축 1개만 흡수할 수 있다.
-4. 두 초안을 절반씩 섞어 평균문을 만들지 마라.
-5. 두 초안의 문장을 이어붙여 4~5문장으로 늘리지 마라.
-6. 최종 글은 한 사람이 처음부터 끝까지 쓴 것처럼 읽혀야 한다.
-7. 둘 다 별로면 새로 쓰되, 새 사실 추가는 금지한다.
-8. 초안이 1개만 있으면 기존과 동일하게 처리.
+Grok 평가는 "X에서 이 글이 왜 안 먹히는지"에 대한 참고 판정이다.
+
+1. headline_clone=true → 첫 문장을 다시 써라. 기사 제목과 구조·표현이 달라야 한다.
+2. too_safe=true → 평균문 종결형("중요하다" "리스크다" "우려다")을 피하고
+   더 구체적 진입점(숫자, 고유명사, 조건)으로 고쳐라.
+3. new_angle_missing=true → 기사 정리 대신 "왜 지금 중요한가"를 더 좁혀라.
+4. x_hook_score 1~2 → 첫 문장 힘을 높여라. 팩트나 대비로 시작.
+5. x_hook_score 4~5 → 첫 문장은 유지. 나머지만 다듬어라.
+6. fix_direction은 방향 참고만. Grok의 문장을 그대로 베끼지 마라.
+7. Grok 평가가 없으면 기존과 동일하게 처리.
+8. 새 사실 추가 금지. Grok이 뭐라 하든 원문에 없는 건 못 넣는다.
 
 ━━━ 문체 모델 ━━━
 
@@ -2205,115 +2211,100 @@ OpenAI가 작성한 1차 초안(final_post, final_short)을 읽고,
 }"""
 
 
-# ─── Phase 3: Grok 경쟁 초안 ────────────────────────────────────────────────
+# ─── Phase 3: Grok X 감각 심사 ──────────────────────────────────────────────
 
-_GROK_DRAFT_PROMPT = """너는 X 게시글 "경쟁 초안 작성자"다.
+@dataclass
+class GrokEvalCard:
+    """Grok X 감각 평가 카드."""
+    headline_clone: bool = False
+    too_safe: bool = False
+    new_angle_missing: bool = False
+    x_hook_score: int = 3
+    problem: str = ""
+    fix_direction: str = ""
+
+_GROK_EVAL_PROMPT = """너는 X 게시글 "X 감각 심사관"이다.
 
 ━━━ 역할 ━━━
 
-너는 팔로워 5만의 X 에디터다.
-블룸버그 헤드라인 감각과 한국 커뮤니티의 즉각적 반응 포인트를 둘 다 안다.
-뉴스를 길게 설명하지 않는다.
-구체 팩트 1개를 먼저 던지고, 왜 중요한지 한 줄로 좁힌다.
-기사 요약문, 리포트 문체, 칼럼체를 쓰지 않는다.
+너는 X에서 한국 이슈 글을 매일 보는 편집자다.
+기사 요약문, 평균문, 안전한 해설문을 바로 알아본다.
+네 역할은 글을 다시 쓰는 것이 아니라,
+이 글이 왜 약한지와 어디를 고치면 되는지를 짧게 판정하는 것이다.
 
-다른 AI가 작성한 "안정형 초안"이 이미 있다.
-너는 그것과 문장 출발 방식이 완전히 다른 "팩트 선행형 초안"을 써라.
-과장·낚시·선정은 금지다.
+━━━ 판정 기준 ━━━
 
-━━━ 첫 문장 규칙 (CRITICAL) ━━━
+1. headline_clone (true/false)
+   첫 문장이 기사 제목/요약을 재진술하면 true.
+   고유명사+사건은 공유해도 되지만, 구조와 표현이 제목과 같으면 clone이다.
 
-첫 문장은 구체 팩트(숫자, 고유명사, 날짜, 실제 사건)로 시작하라.
-해석·판단·의견으로 시작하면 실패다.
+2. too_safe (true/false)
+   "중요하다" "리스크다" "우려가 커진다" "영향을 미칠 수 있다" 식
+   평균문·안전문으로 끝나면 true.
 
-❌ 금지 출발: "핵심은" "문제는" "주목할 점은" "중요한 건" "~라는 점이다"
-✅ 허용 출발: "롯데건설이" "BIS 출신이" "취업자 수가" "기본급 30개월치"
+3. new_angle_missing (true/false)
+   기사 내용을 정리만 했고 새로운 해석 축이 없으면 true.
+   "왜 지금 중요한가" "누가 손해/이득인가" "뭘 보면 알 수 있나" 중
+   하나도 없으면 true.
 
-━━━ 분석가 문장 vs X 문장 — 차이를 익혀라 ━━━
+4. x_hook_score (1~5)
+   첫 문장만 보고 점수:
+   1 = 기사 제목 복붙 수준
+   2 = 요약문
+   3 = 보통
+   4 = 눈이 멈춤
+   5 = 반드시 읽게 됨
 
-❌ 분석가: "건설업 희망퇴직이 구조조정이 아니라 생존 모드 전환이라는 점이 핵심이다"
-✅ X 문장: "대형 건설사 5곳이 동시에 희망퇴직을 열었다. 구조조정이 아니라 생존 모드다"
+5. problem
+   이 글이 왜 X에서 안 먹히는지 한 줄.
 
-❌ 분석가: "한국 경제에 구조적 변화를 일으킬 수 있다"
-✅ X 문장: "건설 취업자 200만. 여기서 10%만 흔들려도 내수 직격이다"
-
-❌ 분석가: "이 인사는 통화정책의 방향성을 결정할 중요한 변수다"
-✅ X 문장: "BIS 출신이 한은 총재 후보? 금리보다 구조개혁 신호로 읽힌다"
-
-핵심 차이: X 문장은 팩트가 먼저, 해석이 뒤에 온다.
-
-━━━ 3문장 구조 ━━━
-
-1문장(WHY): 구체 팩트로 시작. 스크롤 멈추는 첫 줄. 기사 요약 금지.
-2문장(WHAT): 확인된 사실 1개 + 해석 연결. 나열 금지.
-3문장(SO WHAT): 진짜 변수 1개. 전망문·훈계문 금지.
-
-3문장이 기본. 짧을수록 좋다.
+6. fix_direction
+   어떻게 고치면 되는지 한 줄. 방향만. 전체 리라이트 금지.
 
 ━━━ 절대 금지 ━━━
 
-- 기사 제목 복붙/재진술 금지
-- "~라는 보도가 나왔다" "~것으로 전해졌다"로 시작 금지
-- "문제는 ~것이다" "핵심이다" "본질은 ~" 칼럼/사설 구조 금지
-- "추이를 봐야 한다" "주목해야 한다" "영향을 미칠 수 있다" 전망문 금지
-- "피할 수 없다" "일으킬 수 있다" 약한 일반화 금지
-- 근거 없는 일반론 금지 ("역사적으로~", "~전략이다", "~낳기 쉽다")
-- 검증 결과(cautions)보다 강한 주장 금지
-- 새 사실/수치 추가 금지 (원문에 없는 것)
-- 논평/비난/자격 판정 금지
-- 기사 사실과 모순되는 단정 금지
-
-━━━ 마지막 문장 ━━━
-
-조건형/대비형만 허용:
-  ✓ "갈림길은 시행 시점이다"
-  ✓ "시장이 보는 건 발언이 아니라 실행이다"
-
-전망문/훈계문/안전문/요약문/기자마감 전부 금지.
+- 글 전체를 다시 쓰지 마라
+- 대안 문장을 3줄 이상 쓰지 마라
+- 새 사실/수치를 추가하지 마라
 
 ━━━ 출력 ━━━
-한국어 JSON만 출력:
+JSON만 출력:
 {
-  "final_post": "반응형 완성본",
-  "final_short": "독립형 짧은 버전"
+  "headline_clone": true/false,
+  "too_safe": true/false,
+  "new_angle_missing": true/false,
+  "x_hook_score": 1-5,
+  "problem": "한 줄",
+  "fix_direction": "한 줄"
 }"""
 
 
-async def _grok_draft(
-    card: CandidateCard, source_text: str = "", *, selected_hook: str = ""
-) -> Optional[FinalPost]:
-    """Grok으로 경쟁 초안 생성. 실패 시 None (파이프라인 중단 없음)."""
+async def _grok_eval(
+    draft: FinalPost, card: CandidateCard, *, selected_hook: str = ""
+) -> Optional[GrokEvalCard]:
+    """Grok으로 X 감각 평가 카드 생성. 실패 시 None (파이프라인 중단 없음)."""
     from app.config import settings
 
     if not settings.has_grok:
         return None
 
     user_prompt = (
-        f"━━━ 입력 ━━━\n"
+        f"━━━ 평가 대상 초안 ━━━\n"
+        f"final_post: {draft.final_post}\n"
+        f"final_short: {draft.final_short}\n\n"
+        f"━━━ 기사 정보 ━━━\n"
         f"선택된 훅: {selected_hook}\n"
-        f"certainty_level: {card.certainty_level}\n\n"
-        f"핵심 팩트:\n"
+        f"certainty_level: {card.certainty_level}\n"
     )
-    for i, fact in enumerate(card.key_facts, 1):
-        user_prompt += f"  {i}. {fact}\n"
-
-    if card.cautions:
-        user_prompt += (
-            "\n⚠️ 통제 조건 (이 범위를 넘지 마라):\n"
-        )
-        for c in card.cautions:
-            user_prompt += f"  - {c}\n"
-
-    if source_text:
-        user_prompt += f"\n원문 참고:\n{source_text[:1500]}\n"
+    if card.key_facts:
+        user_prompt += "핵심 팩트:\n"
+        for i, fact in enumerate(card.key_facts, 1):
+            user_prompt += f"  {i}. {fact}\n"
 
     user_prompt += (
         "\n━━━ 지시 ━━━\n"
-        "위 훅 방향과 팩트로 X용 게시글 JSON을 생성하라.\n"
-        "- 짧고 강하게. 3문장 이내.\n"
-        "- 첫 줄에서 왜 중요한가를 바로 보여줘라.\n"
-        "- 기사 제목 재진술 금지.\n"
-        "한국어로."
+        "위 초안을 X 감각으로 평가하고 JSON을 반환하라.\n"
+        "글을 다시 쓰지 마라. 판정만 하라.\n"
     )
 
     try:
@@ -2328,10 +2319,10 @@ async def _grok_draft(
                 json={
                     "model": "grok-3-mini-fast",
                     "messages": [
-                        {"role": "system", "content": _GROK_DRAFT_PROMPT},
+                        {"role": "system", "content": _GROK_EVAL_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "temperature": 0.75,
+                    "temperature": 0.5,
                 },
             )
             r.raise_for_status()
@@ -2341,12 +2332,12 @@ async def _grok_draft(
                 f"[API-COST] grok grok-3-mini-fast "
                 f"in={usage.get('prompt_tokens', '?')} "
                 f"out={usage.get('completion_tokens', '?')} "
-                f"caller=GrokDraft"
+                f"caller=GrokEval"
             )
             try:
                 from app.services.api_cost_tracker import record_usage
                 record_usage(
-                    "grok", "grok-3-mini-fast", "GrokDraft",
+                    "grok", "grok-3-mini-fast", "GrokEval",
                     usage.get("prompt_tokens", 0),
                     usage.get("completion_tokens", 0),
                 )
@@ -2354,19 +2345,32 @@ async def _grok_draft(
                 pass
 
             raw_text = data["choices"][0]["message"]["content"]
-            result = _parse_final_post(raw_text)
-            if result and result.final_post:
-                logger.info(
-                    f"[Grok초안] 생성 완료: post={len(result.final_post)}자, "
-                    f"short={len(result.final_short)}자"
-                )
-                return result
+            # JSON 파싱
+            clean = raw_text.strip()
+            if clean.startswith("```"):
+                clean = re.sub(r"^```(?:json)?\s*", "", clean)
+                clean = re.sub(r"\s*```$", "", clean)
+            parsed = json.loads(clean)
 
-            logger.warning("[Grok초안] 파싱 실패")
-            return None
+            eval_card = GrokEvalCard(
+                headline_clone=bool(parsed.get("headline_clone", False)),
+                too_safe=bool(parsed.get("too_safe", False)),
+                new_angle_missing=bool(parsed.get("new_angle_missing", False)),
+                x_hook_score=int(parsed.get("x_hook_score", 3)),
+                problem=str(parsed.get("problem", "")),
+                fix_direction=str(parsed.get("fix_direction", "")),
+            )
+            logger.info(
+                f"[Grok평가] score={eval_card.x_hook_score} "
+                f"headline_clone={eval_card.headline_clone} "
+                f"too_safe={eval_card.too_safe} "
+                f"new_angle={eval_card.new_angle_missing} "
+                f"problem=\"{eval_card.problem[:50]}\""
+            )
+            return eval_card
 
     except Exception as e:
-        logger.warning(f"[Grok초안] 호출 실패: {e}")
+        logger.warning(f"[Grok평가] 호출 실패: {e}")
         return None
 
 
@@ -2534,7 +2538,7 @@ async def _claude_review_final(
     *,
     selected_hook: str = "",
     gemini_opinion: Optional[GeminiOpinionCard] = None,
-    grok_draft: Optional[FinalPost] = None,
+    grok_eval: Optional["GrokEvalCard"] = None,
 ) -> Optional[FinalPost]:
     """Anthropic Claude 최종 통합. 실패 시 None (OpenAI 결과로 폴백)."""
     from app.config import settings
@@ -2543,17 +2547,21 @@ async def _claude_review_final(
         return None
 
     user_prompt = (
-        f"━━━ 초안 A (OpenAI — 안정형) ━━━\n"
+        f"━━━ 초안 (OpenAI) ━━━\n"
         f"final_post: {draft.final_post}\n"
         f"final_short: {draft.final_short}\n\n"
     )
 
-    # Phase 3: Grok 경쟁 초안이 있으면 초안 B로 추가
-    if grok_draft:
+    # Phase 3: Grok 평가 카드가 있으면 추가
+    if grok_eval:
         user_prompt += (
-            f"━━━ 초안 B (Grok — 반응형) ━━━\n"
-            f"final_post: {grok_draft.final_post}\n"
-            f"final_short: {grok_draft.final_short}\n\n"
+            f"━━━ Grok X 감각 평가 ━━━\n"
+            f"headline_clone: {grok_eval.headline_clone}\n"
+            f"too_safe: {grok_eval.too_safe}\n"
+            f"new_angle_missing: {grok_eval.new_angle_missing}\n"
+            f"x_hook_score: {grok_eval.x_hook_score}/5\n"
+            f"problem: {grok_eval.problem}\n"
+            f"fix_direction: {grok_eval.fix_direction}\n\n"
         )
 
     user_prompt += (
