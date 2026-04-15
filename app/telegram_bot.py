@@ -1703,10 +1703,28 @@ async def _handle_thesis_select_callback(
         _first_preview = trim_display(_first_line, 60)
 
         # 기사 라우터 mode 라벨 (EXPLAIN/JUDGMENT/VERIFY)
+        # card 가 dict 로 들어와도 안전하게 처리. 예외 시 logger 에 원인 기록.
         try:
-            from app.services.content_pack import route_article_mode, mode_label
-            _mode_label = mode_label(route_article_mode(card))
-        except Exception:
+            from app.services.content_pack import (
+                route_article_mode, mode_label as _mode_label_fn,
+            )
+            if isinstance(card, dict):
+                _cert = card.get("certainty_level", "미확인") or "미확인"
+                class _Tmp:
+                    pass
+                _tmp = _Tmp()
+                _tmp.certainty_level = _cert
+                _mode = route_article_mode(_tmp)
+            else:
+                _mode = route_article_mode(card)
+            _mode_label = _mode_label_fn(_mode)
+            logger.info(
+                f"[ArticleMode/display] certainty="
+                f"{getattr(card, 'certainty_level', None) if not isinstance(card, dict) else card.get('certainty_level')} "
+                f"→ {_mode}"
+            )
+        except Exception as _e:
+            logger.warning(f"[ArticleMode/display] 라벨 생성 실패: {_e!r}")
             _mode_label = ""
 
         result_text = (
