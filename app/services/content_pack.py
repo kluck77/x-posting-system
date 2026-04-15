@@ -1391,18 +1391,56 @@ _ARTICLE_MODES = frozenset({MODE_EXPLAIN, MODE_JUDGMENT, MODE_VERIFY})
 
 
 def route_article_mode(card: "CandidateCard") -> str:
-    """certainty_level → article mode.
+    """certainty_level + 구조/태그 조합으로 article mode 를 결정한다.
 
-    확정   → EXPLAIN
-    상충   → JUDGMENT
-    미확인 / 그 외 → VERIFY (보수 기본값)
+    1단계: certainty_level 기반 base mode
+      확정   → EXPLAIN
+      상충   → JUDGMENT
+      그 외  → VERIFY (보수 기본값)
+
+    2단계: 강등 규칙 — 사용자가 링크만 대충 던져도 안전한 쪽으로
+           자동 분기하도록 아래 신호가 보이면 한 단계 낮춘다.
+      (a) cautions 3개 이상  → VERIFY 로 최대 강등
+          (팩트체크가 여러 경고를 달았다 = 해석 리스크 큼)
+      (b) topic_tags 에 약한 신호 단어 포함 → 최소 JUDGMENT
+          ("단독/루머/미확인/관측/추정/주장/소문/전망")
+      (c) key_facts 2개 이하 → 최소 JUDGMENT (근거 얕음)
+
+    강등은 일방향(EXPLAIN → JUDGMENT → VERIFY). 상향 없음.
+    사용자 입력 품질에 기대지 않고 시스템이 먼저 보수적으로 판정한다.
     """
     c = getattr(card, "certainty_level", "미확인") or "미확인"
     if c == "확정":
-        return MODE_EXPLAIN
-    if c == "상충":
+        base = MODE_EXPLAIN
+    elif c == "상충":
+        base = MODE_JUDGMENT
+    else:
+        base = MODE_VERIFY
+
+    cautions = getattr(card, "cautions", None) or []
+    key_facts = getattr(card, "key_facts", None) or []
+    topic_tags = getattr(card, "topic_tags", None) or []
+
+    # (a) 경고가 많으면 곧바로 VERIFY (제일 강한 강등)
+    if len(cautions) >= 3:
+        return MODE_VERIFY
+
+    # (b) 약한 신호 태그
+    _WEAK_TAG_WORDS = (
+        "단독", "루머", "미확인", "관측", "추정", "주장", "소문", "전망",
+    )
+    has_weak_tag = any(
+        isinstance(t, str) and any(w in t for w in _WEAK_TAG_WORDS)
+        for t in topic_tags
+    )
+    if has_weak_tag and base == MODE_EXPLAIN:
         return MODE_JUDGMENT
-    return MODE_VERIFY
+
+    # (c) 근거 얕음
+    if len(key_facts) <= 2 and base == MODE_EXPLAIN:
+        return MODE_JUDGMENT
+
+    return base
 
 
 # mode별 한 줄 라벨 (로그/텔레그램 표시용)

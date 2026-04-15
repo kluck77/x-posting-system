@@ -4341,14 +4341,16 @@ class TestTelegramRetryExhaustedLabel:
 
 
 class TestArticleModeRouter:
-    """certainty_level → article mode 매핑."""
+    """certainty_level + 구조/태그 조합 → article mode 매핑."""
 
+    # ── 기본 매핑 (정상 조건: 팩트 3개, 경고 없음, 약한 태그 없음) ──
     def test_high_confidence_routes_to_explain(self):
         from app.services.content_pack import (
             route_article_mode, MODE_EXPLAIN,
         )
         card = CandidateCard(
-            key_facts=["팩트"], certainty_level="확정",
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="확정",
         )
         assert route_article_mode(card) == MODE_EXPLAIN
 
@@ -4357,7 +4359,8 @@ class TestArticleModeRouter:
             route_article_mode, MODE_JUDGMENT,
         )
         card = CandidateCard(
-            key_facts=["팩트"], certainty_level="상충",
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="상충",
         )
         assert route_article_mode(card) == MODE_JUDGMENT
 
@@ -4366,7 +4369,8 @@ class TestArticleModeRouter:
             route_article_mode, MODE_VERIFY,
         )
         card = CandidateCard(
-            key_facts=["팩트"], certainty_level="미확인",
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="미확인",
         )
         assert route_article_mode(card) == MODE_VERIFY
 
@@ -4376,7 +4380,8 @@ class TestArticleModeRouter:
             route_article_mode, MODE_VERIFY,
         )
         card = CandidateCard(
-            key_facts=["팩트"], certainty_level="",
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="",
         )
         assert route_article_mode(card) == MODE_VERIFY
 
@@ -4387,6 +4392,65 @@ class TestArticleModeRouter:
         assert "EXPLAIN" in mode_label(MODE_EXPLAIN)
         assert "JUDGMENT" in mode_label(MODE_JUDGMENT)
         assert "VERIFY" in mode_label(MODE_VERIFY)
+
+    # ── 강등 규칙 (팩트체크 결과 + 구조/태그 조합) ──
+    def test_many_cautions_demote_to_verify(self):
+        """cautions 3개 이상이면 확정이어도 VERIFY로 최대 강등."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="확정",
+            cautions=["출처 단일", "시점 불명", "원문 미확인"],
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_weak_tag_demotes_explain_to_judgment(self):
+        """약한 신호 태그(루머/단독/관측/추정)면 EXPLAIN → JUDGMENT."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_JUDGMENT,
+        )
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="확정",
+            topic_tags=["경제", "루머성"],
+        )
+        assert route_article_mode(card) == MODE_JUDGMENT
+
+    def test_shallow_evidence_demotes_explain_to_judgment(self):
+        """key_facts 2개 이하면 근거 얕음 → EXPLAIN → JUDGMENT."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_JUDGMENT,
+        )
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2"],
+            certainty_level="확정",
+        )
+        assert route_article_mode(card) == MODE_JUDGMENT
+
+    def test_unverified_with_weak_tag_stays_verify(self):
+        """이미 VERIFY면 강등 규칙과 무관하게 VERIFY 유지 (상향 없음)."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["팩트1"],
+            certainty_level="미확인",
+            topic_tags=["단독보도"],
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_judgment_base_not_upgraded_by_full_facts(self):
+        """상충 base 는 팩트가 풍부해도 EXPLAIN 으로 상향되지 않는다."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_JUDGMENT,
+        )
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3", "팩트4"],
+            certainty_level="상충",
+        )
+        assert route_article_mode(card) == MODE_JUDGMENT
 
 
 class TestModeSlotInstructions:
@@ -4478,7 +4542,11 @@ class TestFinalizeUserPromptModeInjection:
     @pytest.fixture
     def card_high(self):
         return CandidateCard(
-            key_facts=["확정 팩트 — 정부가 공식 발표"],
+            key_facts=[
+                "확정 팩트 — 정부가 공식 발표",
+                "확정 팩트 — 관련 법령 공포",
+                "확정 팩트 — 시행일 명시",
+            ],
             hook_candidates=["확정 훅"],
             thesis_cards=[ThesisCard(
                 thesis="확정 해석축",
