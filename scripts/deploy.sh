@@ -52,7 +52,8 @@ echo ""
 
 echo "=== [5/5] 30초 Conflict 관찰 ==="
 sleep 30
-CONFLICT_COUNT=$(journalctl -u "$SERVICE" --since "35 sec ago" --no-pager | grep -c "Conflict:")
+# grep -c 는 매치 0 일 때 exit 1 을 반환하므로 set -e 하에서 죽지 않도록 || true
+CONFLICT_COUNT=$(journalctl -u "$SERVICE" --since "35 sec ago" --no-pager | grep -c "Conflict:" || true)
 echo "Conflict 카운트: $CONFLICT_COUNT"
 
 if [ "$CONFLICT_COUNT" -eq 0 ]; then
