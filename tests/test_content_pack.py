@@ -5242,6 +5242,260 @@ class TestVerifyFirstLineDualBranch:
         assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
 
 
+class TestReaderRewardLayer:
+    """
+    PR 9 — Reader Reward Layer.
+
+    final_post / final_short 의 마지막 문장에서 SAVE / SHARE / FOLLOW
+    독자 보상 시그널을 감지. 둘 다 없으면 NO_READER_REWARD 경고 (WARN-only).
+    VERIFY 템플릿 끝줄은 이미 FOLLOW 계열이라 회귀 없음.
+    """
+
+    # ─── 1. _detect_reward_type 단위 테스트 ─────────────────────────────
+    def test_detect_save_marker_strong_beats_follow(self):
+        """'답은 다음 CPI가 기준이다' — SAVE 강 마커가 FOLLOW 신호를 이긴다."""
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("답은 다음 CPI가 기준이다.") == "SAVE"
+
+    def test_detect_save_input_timing(self):
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("결국 먼저 맞는 건 공장이다.") == "SAVE"
+        assert _detect_reward_type("핵심은 발표가 아니라 입금 시점이다.") == "SAVE"
+
+    def test_detect_follow_verify_template(self):
+        """VERIFY 템플릿 A/B/C 예시 끝줄이 전부 FOLLOW 로 잡혀야 함."""
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("특사 파견이 공개되면 검증 가능.") == "FOLLOW"
+        assert _detect_reward_type("특사 파견이 포착되면 대화 채널이 살아 있다.") == "FOLLOW"
+        assert _detect_reward_type("이틀 내 공식 접촉이 없으면 수사에 가깝다.") == "FOLLOW"
+        assert _detect_reward_type("통상적 통행이 이어지면 상징에 그쳤다.") == "FOLLOW"
+
+    def test_detect_follow_question_form(self):
+        """'관건은 ~느냐다' 류 질문형 FOLLOW."""
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("관건은 반도체까지 확대되느냐다.") == "FOLLOW"
+
+    def test_detect_share_source_priority(self):
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("말보다 숫자가 먼저다.") == "SHARE"
+        assert _detect_reward_type("출처가 안 나오면 이 숫자는 그냥 SNS 주장이다.") == "SHARE"
+
+    def test_detect_none_closed_analyst(self):
+        """'결국 이것이 기준이다' — 보상 키워드 없이 기준이다 로 닫힘."""
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("결국 이것이 기준이다.") is None
+        assert _detect_reward_type("이는 구조적 의미가 있다.") is None
+        assert _detect_reward_type("이번 결과가 판별 포인트다.") is None
+
+    # ─── 2. _validate_last_line_reward 우선순위 ─────────────────────────
+    def test_post_reward_alone_no_warn(self):
+        """final_post 에 reward 있으면 final_short 비어도 경고 없음."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "X가 발표됐다. 답은 다음 CPI다.",
+            "",
+        )
+        assert rt == "SAVE"
+        assert warn is None
+
+    def test_short_reward_fills_gap_no_warn(self):
+        """final_post 에 reward 없어도 final_short 에 있으면 경고 없음."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "정부가 조치를 발표했다. 시행은 다음 달이다.",
+            "답은 다음 공식 집계다.",
+        )
+        assert rt == "SAVE"
+        assert warn is None
+
+    def test_both_missing_warns(self):
+        """post 와 short 둘 다 reward 없으면 NO_READER_REWARD 경고."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "정부가 조치를 발표했다. 이번 결과가 중요한 대목이다.",
+            "정부 조치가 시행됐다.",
+        )
+        assert rt is None
+        assert warn is not None
+        assert "독자 보상" in warn
+
+    def test_kijun_ida_with_save_marker_ok(self):
+        """'답은 다음 CPI가 기준이다' — SAVE marker 있으므로 경고 없음."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "지표가 엇갈린다. 답은 다음 CPI가 기준이다.",
+            "",
+        )
+        assert rt == "SAVE"
+        assert warn is None
+
+    def test_kijun_ida_without_reward_warns(self):
+        """'결국 이것이 기준이다' — SAVE marker 없으므로 경고."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "지표가 엇갈린다. 결국 이것이 기준이다.",
+            "",
+        )
+        assert rt is None
+        assert warn is not None
+        assert "기준이다" in warn
+
+    # ─── 3. _validate_final_post 와이어링 ────────────────────────────────
+    def test_explain_save_ending_no_gate(self):
+        """EXPLAIN 마감 — '답은 다음 CPI다' SAVE 문장 → NO_READER_REWARD 없음."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "강남3구 하락은 규제 작동 신호다.\n"
+            "중저가가 버티는 구조는 따로다.\n"
+            "답은 다음 CPI다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "답은 다음 CPI다.", "확정"
+        )
+        assert "NO_READER_REWARD" not in gate_fails
+
+    def test_judgment_follow_ending_no_gate(self):
+        """JUDGMENT — '다음 발표가 나오면 갈린다' FOLLOW → 경고 없음."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "지표가 갈린다.\n"
+            "A측과 B측 근거가 충돌한다.\n"
+            "다음 공식 발표가 나오면 어느 쪽인지 갈린다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "상충")
+        assert "NO_READER_REWARD" not in gate_fails
+
+    def test_verify_template_b_no_gate(self):
+        """VERIFY 템플릿 B 예시 — FOLLOW 계열 끝줄 → 경고 없음."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 발언이 아니라 접촉 확인이다.\n"
+            "공식 접촉 기록은 현재까지 없다.\n"
+            "특사 파견이 포착되면 대화 채널이 살아 있다."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "주장 한 줄. 특사 파견이 공개되면 검증 가능.", "미확인"
+        )
+        assert "NO_READER_REWARD" not in gate_fails
+
+    def test_closed_analyst_ending_warns(self):
+        """닫힌 분석가 마감 — '구조적 의미가 있다' → NO_READER_REWARD 경고."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "정부가 새 정책을 공개했다.\n"
+            "시장은 조심스럽게 반응했다.\n"
+            "이번 조치는 구조적 의미가 있다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "정부 조치 발표.", "확정"
+        )
+        # "구조적 의미가 있다" 자체는 DEAD_ENDING 도 발동하지만 NO_READER_REWARD
+        # 가 반드시 같이 찍혀야 한다.
+        assert "NO_READER_REWARD" in gate_fails
+
+    def test_no_reward_is_warn_not_strong(self):
+        """NO_READER_REWARD 는 _STRONG_FAIL_TAGS 에 없어야 한다."""
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert "NO_READER_REWARD" not in _STRONG_FAIL_TAGS
+
+    # ─── 4. FinalPost.reward_type 주입 ───────────────────────────────────
+    def test_final_post_reward_type_field_save(self):
+        from app.services.content_pack import _parse_final_post
+        import json
+        raw = json.dumps({
+            "final_post": (
+                "지표가 엇갈린다. 관측이 나뉜다. 답은 다음 CPI다."
+            ),
+            "final_short": "답은 다음 CPI다.",
+        })
+        fp = _parse_final_post(raw, certainty_level="확정", mode="EXPLAIN")
+        assert fp is not None
+        assert fp.reward_type == "SAVE"
+
+    def test_final_post_reward_type_field_follow(self):
+        from app.services.content_pack import _parse_final_post
+        import json
+        raw = json.dumps({
+            "final_post": (
+                "트럼프 측이 대화 의향을 밝혔다.\n"
+                "그러나 실제 접촉은 아직 확인되지 않았다.\n"
+                "특사 파견이 공개되면 검증 가능."
+            ),
+            "final_short": "대화 의향 밝혔다. 접촉은 확인되지 않았다.",
+        })
+        fp = _parse_final_post(raw, certainty_level="미확인", mode="VERIFY")
+        assert fp is not None
+        assert fp.reward_type == "FOLLOW"
+
+    def test_final_post_reward_type_field_none_when_closed(self):
+        from app.services.content_pack import _parse_final_post
+        import json
+        raw = json.dumps({
+            "final_post": (
+                "정부가 발표했다. 반응이 엇갈렸다. 결국 이것이 기준이다."
+            ),
+            "final_short": "정부가 발표했다.",
+        })
+        fp = _parse_final_post(raw, certainty_level="확정", mode="EXPLAIN")
+        assert fp is not None
+        assert fp.reward_type is None
+
+    def test_final_post_reward_type_default_none(self):
+        """FinalPost() 기본값 reward_type=None."""
+        from app.services.content_pack import FinalPost
+        fp = FinalPost()
+        assert fp.reward_type is None
+
+    # ─── 5. final_short 요약 vs 추적 포인트 ────────────────────────────
+    def test_short_summary_only_warns(self):
+        """final_short 가 단순 요약('정부가 발표했다') 이면 reward 없음."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "정부가 새 정책을 발표했다. 시행은 다음 달이다. 현장은 조용하다.",
+            "정부가 새 정책을 발표했다.",
+        )
+        assert rt is None
+        assert warn is not None
+
+    def test_short_with_tracking_point_ok(self):
+        """'주장 + 확인 포인트' 구조면 reward 검출."""
+        from app.services.content_pack import _validate_last_line_reward
+        rt, warn = _validate_last_line_reward(
+            "정부가 발표했다. 반응이 엇갈린다. 결과는 미확정.",
+            "정부가 발표했다. 다음 발표가 나오면 진짜가 드러난다.",
+        )
+        assert rt == "FOLLOW"
+        assert warn is None
+
+    # ─── 6. PR 4~8 회귀 없음 ───────────────────────────────────────────
+    def test_verify_strong_gates_intact(self):
+        """VERIFY 강게이트 (LOW_CONFIDENCE_OVERREACH) 회귀 없음."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "A측이 발언했다.\n"
+            "이번 조치는 구조적 의미를 갖는 변화다.\n"
+            "공식 발표가 나오면 확인 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "상충")
+        # PR 6 기존 강게이트는 그대로 동작
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_banned_endings_new_additions(self):
+        """PR 9 에서 _BANNED_ENDINGS 에 추가된 4개 회귀."""
+        from app.services.content_pack import _BANNED_ENDINGS
+        for phrase in (
+            "판별 포인트다",
+            "결정한다",
+            "의미가 있다",
+            "중요한 대목이다",
+        ):
+            assert phrase in _BANNED_ENDINGS, f"{phrase} 누락"
+        # "기준이다" 는 전역 banned 에 넣지 말 것
+        assert "기준이다" not in _BANNED_ENDINGS, (
+            "'기준이다' 는 전역 banned 가 아니라 reward 조건부 경고"
+        )
+
+
 class TestVerifySentenceCap:
     """VERIFY / 저신뢰 본문은 최대 3문장."""
 

@@ -1297,6 +1297,10 @@ class FinalPost:
     final_post: str = ""       # 완성본
     final_short: str = ""      # 짧은 버전
     gate_fails: list = field(default_factory=list)  # 게이트 실패 태그
+    # PR 9 — Reader Reward Layer
+    # 마지막 문장에서 감지된 독자 보상 유형. UI 노출 X, 로그/테스트 전용.
+    # 값: "SAVE" (저장 가치) / "SHARE" (공유 가치) / "FOLLOW" (팔로우 가치) / None.
+    reward_type: Optional[str] = None
 
 
 # ─── 1차: 후보 카드 시스템 프롬프트 ──────────────────────────────────────────
@@ -2481,7 +2485,23 @@ async def _rewrite_opener_only(
         final_post=post_v,
         final_short=short_v,
         gate_fails=gate_fails,
+        reward_type=_resolve_reward_type(post_v, short_v),
     )
+
+
+def _resolve_reward_type(post: str, short: str) -> Optional[str]:
+    """FinalPost.reward_type 계산 — post 마지막 문장 우선, short 보조.
+
+    _validate_last_line_reward 가 경고 판정에만 쓰이므로,
+    reward_type 필드 주입은 이 헬퍼로 분리해 재사용한다.
+    """
+    last_sent = _extract_last_sentence(post)
+    rt = _detect_reward_type(last_sent)
+    if rt is not None:
+        return rt
+    if short:
+        return _detect_reward_type(short)
+    return None
 
 
 async def generate_final_post(
@@ -2709,12 +2729,13 @@ async def generate_final_post(
                 "— 텔레그램에 '게시 전 수동 확인 필수' 경고 전달"
             )
 
-    # PR 8: mode 를 최종 요약 로그에 포함. 운영 grep 에서 mode 분포 +
-    # gate_fails 분포를 한 줄로 얻을 수 있도록 한다 (로그 포인트 1곳 추가 금지,
-    # 기존 라인 확장만).
+    # PR 8/9: mode / reward_type 을 최종 요약 로그에 포함. 운영 grep 에서
+    # mode / reward / gate_fails 분포를 한 줄로 얻을 수 있다 (로그 포인트
+    # 추가 금지, 기존 라인 확장만).
     logger.info(
         f"최종 마감 완료: mode={mode} "
         f"certainty={card.certainty_level} "
+        f"reward={final.reward_type} "
         f"post={len(final.final_post)}자, "
         f"short={len(final.final_short)}자, gate_fails={final.gate_fails}"
     )
@@ -4136,7 +4157,205 @@ _BANNED_ENDINGS = [
     "패러다임 변화다",
     "구조적 의미를 갖는다",
     "의미를 갖는다",
+    # PR 9 — 닫힌 분석가 마감 추가 (DEAD_ENDING strong gate).
+    # "기준이다" 는 여기에 넣지 않는다 — SAVE 보상문("답은 다음 CPI가 기준이다")
+    # 과 겹쳐 false positive 를 유발한다. "기준이다" 는 _validate_last_line_reward
+    # 에서 reward 시그널 유무에 따라 조건부 처리한다.
+    "판별 포인트다",
+    "결정한다",
+    "의미가 있다",
+    "중요한 대목이다",
 ]
+
+
+# ─── PR 9: Reader Reward Layer ────────────────────────────────────────────
+#
+# 독자 보상 시그널 = 마지막 문장에서 "왜 저장/공유/팔로우해야 하는지"가 드러
+# 나는 표현. 결정론 키워드 매칭으로 3유형 중 하나로 태깅한다.
+#
+# - SAVE   : 앞으로 비슷한 사안을 판단할 때 참조할 프레임/기준점
+# - SHARE  : 간명한 한 줄로 바로 나눌 수 있는 단언
+# - FOLLOW : 후속 데이터/발표 시 다시 돌아올 이유 (검증 조건 포함)
+#
+# VERIFY 템플릿 A/B/C 예시 끝줄("검증 가능" / "살아 있다" / "수사에 가깝다"
+# / "그쳤다")은 전부 FOLLOW 계열로 이미 잡힘 → VERIFY 안전성 훼손 없음.
+_REWARD_FOLLOW_PATTERNS = [
+    "이 나오면",
+    "이 공개되면",
+    "이 포착되면",
+    "가 나오면",
+    "가 공개되면",
+    "가 포착되면",
+    "이 이어지면",
+    "가 이어지면",
+    "가 드러난다",
+    "진짜가 드러난다",
+    "후속 데이터",
+    "후속 발표",
+    "다음 발표",
+    "다음 공식",
+    "다음 CPI",
+    "다음 지표",
+    "다음 집계",
+    "다음 숫자",
+    "추적",
+    "검증 가능",
+    "확인 가능",
+    # 질문형 FOLLOW — "~느냐/는지/될지" 로 닫는 후속 관측 질문.
+    # 관건은 ~느냐다 계열은 SAVE marker + FOLLOW closure 겸용이지만
+    # 여기선 FOLLOW 로 태깅 (다음 지켜볼 질문이 더 강한 축).
+    "느냐다",
+    "는지다",
+    "될지다",
+    "느냐에",
+    "는지에",
+    # VERIFY 템플릿 B/C 예시 끝줄 — FOLLOW 로 태깅
+    "살아 있다",
+    "수사에 가깝다",
+    "그쳤다",
+    "얼 수 있다",
+    # 조건부 결과 ("X면 Y 줄어든다/늘어난다/오른다/떨어진다/바뀐다")
+    "면 줄어든다",
+    "면 늘어난다",
+    "면 오른다",
+    "면 떨어진다",
+    "면 바뀐다",
+    "면 갈린다",
+    "면 맞는",
+]
+
+# SAVE 강한 마커 — 문장에 있으면 FOLLOW 신호와 겹쳐도 SAVE 우선.
+# "답은 다음 CPI가 기준이다" 처럼 SAVE marker + FOLLOW 소재 공존 시
+# 독자 의도가 '기준점 저장' 쪽이므로 SAVE 태깅이 맞다.
+_REWARD_SAVE_STRONG_PATTERNS = [
+    "답은 ",
+    "결국 먼저 ",
+    "먼저 봐야 할 건",
+    "먼저 맞는 건",
+    "먼저 움직",
+    "입금 시점",
+    "입금이 먼저",
+]
+
+# SAVE 약한 마커 — FOLLOW 와 겹치면 FOLLOW 우선.
+_REWARD_SAVE_WEAK_PATTERNS = [
+    "핵심은 ",
+    "진짜 ",
+]
+
+_REWARD_SHARE_PATTERNS = [
+    "말보다 숫자가",
+    "말보다 출처가",
+    "주장보다 출처",
+    "주장보다 원본",
+    "발표보다 원본",
+    "발표보다 데이터",
+    "보다 숫자가 먼저",
+    "보다 출처가 먼저",
+    "그냥 SNS 주장",
+    "그냥 주장이다",
+    "출처가 안 나오면",
+    "원본 데이터가 먼저",
+]
+
+# 마지막 문장 전용 — 닫힌 분석가 마감 phrase. reward 시그널 없이 이걸로 끝나면
+# NO_READER_REWARD (WARN-only) 를 강하게 찍는다. "기준이다" 도 여기 포함:
+# reward 키워드가 같은 문장에 있으면 허용, 없으면 경고.
+_CLOSED_ANALYST_LAST_LINE = [
+    "기준이다",
+    "변수다",
+    "핵심 변수다",
+    "파장이다",
+    "대목이다",
+    "쟁점이다",
+]
+
+
+def _extract_last_sentence(text: str) -> str:
+    """post 에서 마지막 문장만 뽑는다. 마침표/줄바꿈 기준."""
+    if not text:
+        return ""
+    t = text.strip().rstrip(".!?")
+    # 줄바꿈과 마침표 둘 다 splitter 로 취급
+    normalized = t.replace("\n", ".")
+    parts = [p.strip() for p in normalized.split(".") if p.strip()]
+    if not parts:
+        return ""
+    return parts[-1]
+
+
+def _detect_reward_type(text: str) -> Optional[str]:
+    """
+    텍스트에서 독자 보상 시그널을 찾아 'SAVE'/'SHARE'/'FOLLOW'/None 반환.
+
+    결정론. AI 호출 없음. 체크 순서:
+      1. SAVE 강한 마커 ("답은 ", "결국 먼저 " 등) — 최우선
+         → "답은 다음 CPI가 기준이다" 처럼 FOLLOW 와 겹쳐도 SAVE.
+      2. FOLLOW 시그널 (VERIFY 템플릿 포함해 가장 일반적)
+      3. SAVE 약한 마커 ("핵심은 ", "진짜 ")
+      4. SHARE 시그널
+    """
+    if not text:
+        return None
+    for pat in _REWARD_SAVE_STRONG_PATTERNS:
+        if pat in text:
+            return "SAVE"
+    for pat in _REWARD_FOLLOW_PATTERNS:
+        if pat in text:
+            return "FOLLOW"
+    for pat in _REWARD_SAVE_WEAK_PATTERNS:
+        if pat in text:
+            return "SAVE"
+    for pat in _REWARD_SHARE_PATTERNS:
+        if pat in text:
+            return "SHARE"
+    return None
+
+
+def _validate_last_line_reward(
+    post: str,
+    short: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    PR 9 — 마지막 줄 독자 보상 검사.
+
+    판정 우선순위 (사용자 지시):
+      1. final_post 마지막 문장 → reward_type 잡히면 그걸로 확정.
+      2. final_post 에 reward 없을 때만 final_short 보조로 본다.
+      3. 둘 다 reward 없을 때만 NO_READER_REWARD 경고 발생.
+
+    반환: (reward_type, warn_reason)
+      reward_type : "SAVE"|"SHARE"|"FOLLOW"|None
+      warn_reason : None 또는 NO_READER_REWARD 사유 문자열
+
+    주의: 경고는 WARN-only. _STRONG_FAIL_TAGS 에 넣지 말 것. 재생성 루프
+    유발 금지.
+    """
+    if not post:
+        return None, None
+
+    last_sent = _extract_last_sentence(post)
+
+    # 1차: post 마지막 문장
+    reward = _detect_reward_type(last_sent)
+    if reward is not None:
+        return reward, None
+
+    # 2차 (보조): short 전체
+    if short:
+        reward_s = _detect_reward_type(short)
+        if reward_s is not None:
+            return reward_s, None
+
+    # 3차: closed analyst last-line 이면 강한 사유 부여, 아니면 일반 사유
+    last_clean = last_sent.rstrip(".!?").rstrip()
+    for pat in _CLOSED_ANALYST_LAST_LINE:
+        if last_clean.endswith(pat):
+            return None, (
+                f"마지막 문장 '{pat}' — 독자 보상(SAVE/SHARE/FOLLOW) 시그널 없음"
+            )
+
+    return None, "마지막 문장에 독자 보상(SAVE/SHARE/FOLLOW) 시그널 없음"
 
 # 근거 없는 일반론 의견 패턴 (칼럼체/보고서체 — 원칙 C)
 _OPINION_PATTERNS = [
@@ -4588,6 +4807,16 @@ def _validate_final_post(
     if first_sentence and short_first and first_sentence == short_first:
         warnings.append("final_short 첫 문장이 final_post와 동일")
 
+    # PR 9 — Reader Reward Layer: 마지막 문장 독자 보상 검사.
+    # post 마지막 문장에 SAVE/SHARE/FOLLOW 시그널이 있으면 통과,
+    # 없으면 short 를 보조로 본다. 둘 다 없을 때만 NO_READER_REWARD 경고.
+    # WARN-only — _STRONG_FAIL_TAGS 에 포함시키지 않는다 (재생성 루프 금지).
+    _, _reward_warn = _validate_last_line_reward(post, short)
+    if _reward_warn:
+        warnings.append(_reward_warn)
+        if "NO_READER_REWARD" not in gate_fails:
+            gate_fails.append("NO_READER_REWARD")
+
     return post, short, warnings, gate_fails
 
 
@@ -4622,7 +4851,12 @@ def _parse_final_post(
         for w in warnings:
             logger.warning(f"[마감검증] {w}")
 
-        return FinalPost(final_post=post, final_short=short, gate_fails=gate_fails)
+        return FinalPost(
+            final_post=post,
+            final_short=short,
+            gate_fails=gate_fails,
+            reward_type=_resolve_reward_type(post, short),
+        )
     except Exception as e:
         logger.warning(f"FinalPost 파싱 오류: {e}")
         return None
