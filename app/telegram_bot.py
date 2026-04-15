@@ -1677,7 +1677,7 @@ async def _handle_thesis_select_callback(
         source_text = context.user_data.get(CANDIDATE_SOURCE_KEY, "")
         result = await asyncio.wait_for(
             generate_final_post(card, thesis_index, source_text),
-            timeout=60,
+            timeout=180,
         )
 
         clear_progress_callback()
@@ -1778,7 +1778,7 @@ async def _handle_thesis_select_callback(
 
     except asyncio.TimeoutError:
         clear_progress_callback()
-        await msg.edit_text("⏱ <b>마감 시간 초과</b> (60초)\n\n다시 시도해주세요.", parse_mode="HTML")
+        await msg.edit_text("⏱ <b>마감 시간 초과</b> (180초)\n\n다시 시도해주세요.", parse_mode="HTML")
     except Exception as e:
         clear_progress_callback()
         logger.error(f"최종 마감 오류: {e}", exc_info=True)
