@@ -4847,6 +4847,31 @@ class TestVerifyModeInstruction:
         # 않았다' 만
         assert "아직 확인되지 않았다" in s
 
+    def test_verify_finalize_bans_closed_tail_after_conditional(self):
+        """'~이 나오면 ~라는 뜻이다' 같은 조건부 + 닫힌 판정 조합 차단 명시."""
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        # endswith 금지어가 지시문에 명시됨
+        for tok in ("뜻이다", "신호다", "의미한다", "확인이다"):
+            assert tok in s, f"VERIFY 마감 금지 토큰 누락: {tok}"
+        # 허용 예시 (동사 원형 마감)
+        assert "살아 있다" in s or "가깝다" in s or "그쳤다" in s
+
+
+class TestDeadEndingRetryHintClosedTokens:
+    """DEAD_ENDING 재생성 힌트가 닫힌 판정 토큰을 명시한다."""
+
+    def test_retry_hint_lists_closed_verdict_tokens(self):
+        from app.services.content_pack import _build_retry_instruction
+        hint = _build_retry_instruction(["DEAD_ENDING"])
+        # 실패 샘플 재현 방지: '~이 나오면 ~뜻이다' 조합 차단 명시
+        for tok in ("뜻이다", "신호다", "의미한다"):
+            assert tok in hint, f"재생성 힌트에 닫힌 토큰 누락: {tok}"
+        # 뒤에 붙이지 말라는 메타 지시
+        assert "붙이지" in hint or "endswith" in hint
+
 
 class TestFinalizeUserPromptModeInjection:
     """generate_final_post 실행 시 user_prompt 안에 mode 라벨이 주입된다."""
