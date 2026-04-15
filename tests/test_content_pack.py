@@ -4406,17 +4406,22 @@ class TestArticleModeRouter:
         )
         assert route_article_mode(card) == MODE_VERIFY
 
-    def test_weak_tag_demotes_explain_to_judgment(self):
-        """약한 신호 태그(루머/단독/관측/추정)면 EXPLAIN → JUDGMENT."""
+    def test_weak_tag_demotes_explain_to_verify(self):
+        """약한 신호 태그(루머/단독/관측/추정)는 PR 4 classifier 가
+        UNVERIFIED_CLAIM 으로 잡아 VERIFY 까지 내린다.
+
+        (PR 4 이전엔 JUDGMENT 였으나, 같은 성질 기사의 일관성을 위해
+        보수적으로 VERIFY 로 통일.)
+        """
         from app.services.content_pack import (
-            route_article_mode, MODE_JUDGMENT,
+            route_article_mode, MODE_VERIFY,
         )
         card = CandidateCard(
-            key_facts=["팩트1", "팩트2", "팩트3"],
+            key_facts=["팩트1", "팩트2", "팩3"],
             certainty_level="확정",
             topic_tags=["경제", "루머성"],
         )
-        assert route_article_mode(card) == MODE_JUDGMENT
+        assert route_article_mode(card) == MODE_VERIFY
 
     def test_shallow_evidence_demotes_explain_to_judgment(self):
         """key_facts 2개 이하면 근거 얕음 → EXPLAIN → JUDGMENT."""
@@ -4451,6 +4456,286 @@ class TestArticleModeRouter:
             certainty_level="상충",
         )
         assert route_article_mode(card) == MODE_JUDGMENT
+
+
+class TestArticleTypeClassifier:
+    """PR 4: rule-first article type classifier.
+
+    AI 호출 없이 source_type / source_url / certainty_level / cautions /
+    risk_flags / topic_tags / key_facts 조합으로 기사 성질을 분류한다.
+    """
+
+    def test_all_article_types_registered(self):
+        from app.services.content_pack import (
+            _ARTICLE_TYPES,
+            TYPE_STRAIGHT_NEWS, TYPE_CONFLICTING_REPORT, TYPE_UNVERIFIED_CLAIM,
+            TYPE_OPINION_COLUMN, TYPE_COMMUNITY_SCREENSHOT, TYPE_MARKET_MOVING_NEWS,
+        )
+        for t in (
+            TYPE_STRAIGHT_NEWS, TYPE_CONFLICTING_REPORT, TYPE_UNVERIFIED_CLAIM,
+            TYPE_OPINION_COLUMN, TYPE_COMMUNITY_SCREENSHOT, TYPE_MARKET_MOVING_NEWS,
+        ):
+            assert t in _ARTICLE_TYPES
+
+    # ── 1. COMMUNITY_SCREENSHOT ──
+    def test_community_screenshot_from_source_type(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_COMMUNITY_SCREENSHOT,
+        )
+        card = CandidateCard(source_type="community_screenshot",
+                             certainty_level="확정")
+        assert classify_article_type(card) == TYPE_COMMUNITY_SCREENSHOT
+
+    def test_community_screenshot_from_url(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_COMMUNITY_SCREENSHOT,
+        )
+        card = CandidateCard(
+            source_url="https://www.dcinside.com/board/something",
+            certainty_level="확정",
+        )
+        assert classify_article_type(card) == TYPE_COMMUNITY_SCREENSHOT
+
+    def test_community_screenshot_from_tag(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_COMMUNITY_SCREENSHOT,
+        )
+        card = CandidateCard(
+            topic_tags=["커뮤니티 스크린샷", "정치"],
+            certainty_level="확정",
+        )
+        assert classify_article_type(card) == TYPE_COMMUNITY_SCREENSHOT
+
+    # ── 2. OPINION_COLUMN ──
+    def test_opinion_column_from_url_slug(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_OPINION_COLUMN,
+        )
+        card = CandidateCard(
+            source_url="https://news.example.com/column/2026/04/15/view",
+            certainty_level="확정",
+            key_facts=["f1", "f2", "f3"],
+        )
+        assert classify_article_type(card) == TYPE_OPINION_COLUMN
+
+    def test_opinion_column_from_source_type(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_OPINION_COLUMN,
+        )
+        card = CandidateCard(source_type="opinion",
+                             certainty_level="확정",
+                             key_facts=["f1", "f2", "f3"])
+        assert classify_article_type(card) == TYPE_OPINION_COLUMN
+
+    # ── 3. UNVERIFIED_CLAIM ──
+    def test_unverified_claim_by_certainty(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_UNVERIFIED_CLAIM,
+        )
+        card = CandidateCard(
+            certainty_level="미확인",
+            key_facts=["f1", "f2", "f3"],
+        )
+        assert classify_article_type(card) == TYPE_UNVERIFIED_CLAIM
+
+    def test_unverified_claim_by_cautions_text(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_UNVERIFIED_CLAIM,
+        )
+        card = CandidateCard(
+            certainty_level="확정",
+            cautions=["출처 미검증"],
+            key_facts=["f1", "f2", "f3"],
+        )
+        assert classify_article_type(card) == TYPE_UNVERIFIED_CLAIM
+
+    def test_unverified_claim_by_weak_tag(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_UNVERIFIED_CLAIM,
+        )
+        card = CandidateCard(
+            certainty_level="확정",
+            topic_tags=["경제", "단독보도"],
+            key_facts=["f1", "f2", "f3"],
+        )
+        assert classify_article_type(card) == TYPE_UNVERIFIED_CLAIM
+
+    # ── 4. CONFLICTING_REPORT ──
+    def test_conflicting_report_by_certainty(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_CONFLICTING_REPORT,
+        )
+        card = CandidateCard(
+            certainty_level="상충",
+            key_facts=["f1", "f2", "f3"],
+        )
+        assert classify_article_type(card) == TYPE_CONFLICTING_REPORT
+
+    # ── 5. MARKET_MOVING_NEWS ──
+    def test_market_moving_by_tag(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_MARKET_MOVING_NEWS,
+        )
+        card = CandidateCard(
+            certainty_level="확정",
+            topic_tags=["증시", "코스피"],
+            key_facts=["f1", "f2", "f3"],
+        )
+        assert classify_article_type(card) == TYPE_MARKET_MOVING_NEWS
+
+    def test_market_moving_by_key_facts(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_MARKET_MOVING_NEWS,
+        )
+        card = CandidateCard(
+            certainty_level="확정",
+            key_facts=["원/달러 환율 1400원 돌파", "CPI 상승", "국채금리 반등"],
+        )
+        assert classify_article_type(card) == TYPE_MARKET_MOVING_NEWS
+
+    # ── 6. STRAIGHT_NEWS (fallback) ──
+    def test_straight_news_fallback(self):
+        from app.services.content_pack import (
+            classify_article_type, TYPE_STRAIGHT_NEWS,
+        )
+        card = CandidateCard(
+            certainty_level="확정",
+            source_url="https://news.example.com/article/123",
+            source_type="news_link",
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            topic_tags=["정책"],
+        )
+        assert classify_article_type(card) == TYPE_STRAIGHT_NEWS
+
+    # ── 7. 예외 시 보수 fallback ──
+    def test_classifier_exception_fallback_to_straight_news(self):
+        """카드가 깨진 상태여도 STRAIGHT_NEWS 반환 (강등 없음)."""
+        from app.services.content_pack import (
+            classify_article_type, TYPE_STRAIGHT_NEWS,
+        )
+
+        class BrokenCard:
+            def __getattr__(self, name):
+                raise RuntimeError("broken field access")
+
+        assert classify_article_type(BrokenCard()) == TYPE_STRAIGHT_NEWS
+
+
+class TestRouteArticleModeWithClassifier:
+    """PR 4: route_article_mode 가 classifier 결과로 추가 강등한다.
+
+    규칙:
+      COMMUNITY_SCREENSHOT / OPINION_COLUMN / UNVERIFIED_CLAIM → VERIFY
+      CONFLICTING_REPORT + base EXPLAIN → JUDGMENT
+      STRAIGHT_NEWS / MARKET_MOVING_NEWS → base 유지
+    """
+
+    def test_community_screenshot_forces_verify(self):
+        """certainty=확정 이어도 커뮤니티 스크린샷이면 VERIFY 로 내린다."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["f1", "f2", "f3"],
+            certainty_level="확정",
+            source_url="https://www.ruliweb.com/community/board/300143/read/123",
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_opinion_url_slug_forces_verify(self):
+        """칼럼/사설 URL 이면 certainty 무관하게 VERIFY."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["f1", "f2", "f3"],
+            certainty_level="확정",
+            source_url="https://news.example.com/opinion/2026/view/12345",
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_low_certainty_or_weak_tag_forces_verify(self):
+        """certainty 미확인 이면 UNVERIFIED_CLAIM → VERIFY."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["f1", "f2", "f3"],
+            certainty_level="미확인",
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_conflicting_report_with_explain_base_demotes_to_judgment(self):
+        """certainty 확정 + risk_flags 에 '엇갈린 보도' → JUDGMENT 강등."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_JUDGMENT,
+        )
+        # 본 케이스를 위해 certainty='확정' 이지만 risk_flags 에 conflict 신호
+        card = CandidateCard(
+            key_facts=["f1", "f2", "f3"],
+            certainty_level="확정",
+            risk_flags=["양측 주장이 엇갈린다 — 보도 반박"],
+        )
+        assert route_article_mode(card) == MODE_JUDGMENT
+
+    def test_straight_news_keeps_base_mode(self):
+        """정상 STRAIGHT_NEWS 는 base mode 유지."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_EXPLAIN,
+        )
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="확정",
+            source_url="https://news.example.com/article/123",
+            topic_tags=["정책"],
+        )
+        assert route_article_mode(card) == MODE_EXPLAIN
+
+    def test_market_moving_keeps_base_mode(self):
+        """시장 반응 기사도 classifier 가 강등하지 않는다."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_EXPLAIN,
+        )
+        card = CandidateCard(
+            key_facts=["원/달러 환율 1400원 돌파", "코스피 급락", "국채금리 반등"],
+            certainty_level="확정",
+            topic_tags=["증시", "환율"],
+        )
+        assert route_article_mode(card) == MODE_EXPLAIN
+
+    def test_classifier_never_upgrades(self):
+        """classifier 결과로 VERIFY → EXPLAIN 같은 상향은 없다."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        # STRAIGHT_NEWS 로 분류되지만 base 가 VERIFY 이므로 상향 없음
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="미확인",  # base=VERIFY
+            source_url="https://news.example.com/article/123",
+            topic_tags=["정책"],
+        )
+        # UNVERIFIED_CLAIM 으로 분류되고 VERIFY 로 demote (이미 VERIFY 라 no-op)
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_route_logs_article_type(self, caplog):
+        """route_article_mode 는 [ArticleType] 로그를 남긴다."""
+        import logging
+        from app.services.content_pack import route_article_mode
+        card = CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            certainty_level="확정",
+            source_url="https://news.example.com/opinion/view/123",
+        )
+        with caplog.at_level(logging.INFO, logger="app.services.article_router"):
+            route_article_mode(card)
+        # 로그에 필요한 4개 필드 모두 포함
+        log_text = "\n".join(r.message for r in caplog.records)
+        assert "[ArticleType]" in log_text
+        assert "type=OPINION_COLUMN" in log_text
+        assert "certainty=확정" in log_text
+        assert "base=EXPLAIN" in log_text
+        assert "final=VERIFY" in log_text
 
 
 class TestModeSlotInstructions:

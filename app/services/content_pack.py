@@ -1387,6 +1387,15 @@ from app.services.article_router import (  # noqa: F401  (re-export)
     mode_label,
     _build_mode_slot_instruction,
     _build_mode_finalize_instruction,
+    # PR 4: rule-first article type classifier
+    TYPE_STRAIGHT_NEWS,
+    TYPE_CONFLICTING_REPORT,
+    TYPE_UNVERIFIED_CLAIM,
+    TYPE_OPINION_COLUMN,
+    TYPE_COMMUNITY_SCREENSHOT,
+    TYPE_MARKET_MOVING_NEWS,
+    _ARTICLE_TYPES,
+    classify_article_type,
 )
 
 

@@ -1,18 +1,19 @@
 """기사 라우터 — article mode router.
 
-content_pack.py 에서 분리. 이번 PR 은 **코드 이동만** 한다.
-외부 호출자(tests, telegram_bot)는 content_pack.py 의 re-export 를 통해
-기존 `from app.services.content_pack import ...` 경로를 그대로 쓴다.
-
-다음 PR 에서 이 파일에 classifier / decide_mode 를 추가할 것이다.
+content_pack.py 에서 분리. PR 1 은 코드 이동만, PR 4 (이번) 는
+rule-first article_type classifier 를 추가해서 Perplexity
+certainty_level 하나에 의존하던 mode 분기를 보수적으로 일관화한다.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.services.content_pack import CandidateCard
+
+logger = logging.getLogger(__name__)
 
 
 # ─── 기사 라우터 ─────────────────────────────────────────────────────────────
@@ -31,6 +32,203 @@ MODE_JUDGMENT = "JUDGMENT"
 MODE_VERIFY = "VERIFY"
 
 _ARTICLE_MODES = frozenset({MODE_EXPLAIN, MODE_JUDGMENT, MODE_VERIFY})
+
+
+# ─── Article Type Classifier (PR 4) ─────────────────────────────────────────
+#
+# 이전까지 mode 분기는 Perplexity 가 판정한 certainty_level + cautions 개수 +
+# topic_tags 약신호 만으로 이뤄졌다. 문제: 같은 성질 기사가 certainty_level
+# 흔들림에 따라 한 번은 VERIFY, 한 번은 EXPLAIN 으로 들어간다.
+#
+# 이번 PR 은 AI 호출 없이 source_type / source_url / cautions / risk_flags
+# / topic_tags 를 조합해 기사 성질 자체를 먼저 분류한 뒤, 그 결과로 기존
+# base_mode 를 **한 단계만 강등** 한다. 상향은 없다.
+#
+# 우선순위 (첫 매치가 이긴다):
+#   1. COMMUNITY_SCREENSHOT → 항상 VERIFY
+#   2. OPINION_COLUMN       → 항상 VERIFY
+#   3. UNVERIFIED_CLAIM     → 항상 VERIFY
+#   4. CONFLICTING_REPORT   → EXPLAIN 이면 JUDGMENT 로 강등
+#   5. MARKET_MOVING_NEWS   → base 유지 (라벨만)
+#   6. STRAIGHT_NEWS        → base 유지 (fallback)
+
+TYPE_STRAIGHT_NEWS = "STRAIGHT_NEWS"
+TYPE_CONFLICTING_REPORT = "CONFLICTING_REPORT"
+TYPE_UNVERIFIED_CLAIM = "UNVERIFIED_CLAIM"
+TYPE_OPINION_COLUMN = "OPINION_COLUMN"
+TYPE_COMMUNITY_SCREENSHOT = "COMMUNITY_SCREENSHOT"
+TYPE_MARKET_MOVING_NEWS = "MARKET_MOVING_NEWS"
+
+_ARTICLE_TYPES = frozenset({
+    TYPE_STRAIGHT_NEWS,
+    TYPE_CONFLICTING_REPORT,
+    TYPE_UNVERIFIED_CLAIM,
+    TYPE_OPINION_COLUMN,
+    TYPE_COMMUNITY_SCREENSHOT,
+    TYPE_MARKET_MOVING_NEWS,
+})
+
+# 한국 커뮤니티 도메인 (스크린샷/캡처성)
+_COMMUNITY_DOMAIN_HINTS = (
+    "dcinside.com", "ruliweb.com", "ppomppu.co.kr", "theqoo.net",
+    "fmkorea.com", "ilbe.com", "clien.net", "bobaedream.co.kr",
+    "mlbpark", "instiz.net", "nate.com/talk", "pann.nate.com",
+    "todayhumor", "82cook.com", "humoruniv", "cafe.naver.com",
+    "cafe.daum.net", "reddit.com", "x.com/", "twitter.com/",
+)
+
+_COMMUNITY_TAG_HINTS = (
+    "스크린샷", "캡처", "커뮤니티", "게시물", "짤", "짤방", "썰",
+)
+
+# 사설/칼럼 slug + 태그
+_OPINION_URL_SLUGS = (
+    "/column", "/opinion", "/editorial", "/view/", "/perspective",
+    "/voice", "/essay", "/commentary", "사설", "칼럼",
+)
+
+_OPINION_TAG_HINTS = (
+    "사설", "칼럼", "오피니언", "논평", "기고", "시론",
+)
+
+_OPINION_SOURCE_TYPES = frozenset({"column", "opinion", "editorial"})
+
+# 미확인/단독/루머 신호
+_UNVERIFIED_TEXT_HINTS = (
+    "출처 미검증", "출처미검증", "미검증", "확인 실패", "확인실패",
+    "추가 확인 필요", "single-sourced", "단독 보도", "unverified",
+    "unconfirmed", "rumor", "루머", "소문",
+)
+
+_UNVERIFIED_TAG_HINTS = (
+    "단독", "루머", "미확인", "관측", "추정", "주장", "소문", "전망",
+)
+
+# 상충/엇갈린 보도 신호
+_CONFLICT_TEXT_HINTS = (
+    "상충", "엇갈리", "엇갈린", "conflicting", "conflict",
+    "반박", "부인", "뒤집",
+)
+
+# 시장 반응 기사 (금융/거시)
+_MARKET_KEYWORD_HINTS = (
+    "증시", "코스피", "코스닥", "나스닥", "다우", "s&p", "환율",
+    "원/달러", "달러", "원화", "금리", "국채", "채권",
+    "cpi", "gdp", "ppi", "소비자물가", "생산자물가", "기준금리",
+    "주가", "주식", "실적", "영업이익", "매출", "수출", "수입",
+    "원유", "유가", "금값", "비트코인", "암호화폐",
+)
+
+
+def _lower_list(items) -> list[str]:
+    """리스트/None 을 소문자 문자열 리스트로 평탄화. 비문자열은 skip."""
+    if not items:
+        return []
+    out = []
+    for x in items:
+        if isinstance(x, str):
+            out.append(x.lower())
+    return out
+
+
+def _any_hit(haystack_lower: str, needles: tuple) -> bool:
+    return any(n.lower() in haystack_lower for n in needles)
+
+
+def _any_tag_hit(tags_lower: list[str], needles: tuple) -> bool:
+    for t in tags_lower:
+        for n in needles:
+            if n.lower() in t:
+                return True
+    return False
+
+
+def classify_article_type(card: "CandidateCard") -> str:
+    """기사 성질 분류기 — AI 호출 없이 source/tags/cautions/flags 조합.
+
+    우선순위 첫 매치 승. 예외 시 보수적으로 STRAIGHT_NEWS 반환
+    (=강등 없음). 상향 분류 불가.
+    """
+    try:
+        source_type = (getattr(card, "source_type", "") or "").lower()
+        source_url = (getattr(card, "source_url", "") or "").lower()
+        certainty = getattr(card, "certainty_level", "미확인") or "미확인"
+
+        cautions_lower = _lower_list(getattr(card, "cautions", None))
+        risk_flags_lower = _lower_list(getattr(card, "risk_flags", None))
+        topic_tags_lower = _lower_list(getattr(card, "topic_tags", None))
+        key_facts_lower = _lower_list(getattr(card, "key_facts", None))
+
+        # 본문/플래그 결합 텍스트 (hint 매칭용)
+        combined_flags = " ".join(cautions_lower + risk_flags_lower)
+
+        # 1. COMMUNITY_SCREENSHOT
+        if "community" in source_type or "screenshot" in source_type \
+                or "image" in source_type:
+            return TYPE_COMMUNITY_SCREENSHOT
+        if source_url and _any_hit(source_url, _COMMUNITY_DOMAIN_HINTS):
+            return TYPE_COMMUNITY_SCREENSHOT
+        if _any_tag_hit(topic_tags_lower, _COMMUNITY_TAG_HINTS):
+            return TYPE_COMMUNITY_SCREENSHOT
+
+        # 2. OPINION_COLUMN
+        if source_type in _OPINION_SOURCE_TYPES:
+            return TYPE_OPINION_COLUMN
+        if source_url and _any_hit(source_url, _OPINION_URL_SLUGS):
+            return TYPE_OPINION_COLUMN
+        if _any_tag_hit(topic_tags_lower, _OPINION_TAG_HINTS):
+            return TYPE_OPINION_COLUMN
+
+        # 3. UNVERIFIED_CLAIM
+        #    (a) certainty 미확인
+        #    (b) cautions/risk_flags 에 미검증 계열 문구
+        #    (c) cautions 3개 이상 (기존 route 강등 규칙과 같은 기준)
+        #    (d) topic_tags 약신호
+        if certainty == "미확인":
+            return TYPE_UNVERIFIED_CLAIM
+        if _any_hit(combined_flags, _UNVERIFIED_TEXT_HINTS):
+            return TYPE_UNVERIFIED_CLAIM
+        if len(cautions_lower) >= 3:
+            return TYPE_UNVERIFIED_CLAIM
+        if _any_tag_hit(topic_tags_lower, _UNVERIFIED_TAG_HINTS):
+            return TYPE_UNVERIFIED_CLAIM
+
+        # 4. CONFLICTING_REPORT
+        if certainty == "상충":
+            return TYPE_CONFLICTING_REPORT
+        if _any_hit(combined_flags, _CONFLICT_TEXT_HINTS):
+            return TYPE_CONFLICTING_REPORT
+
+        # 5. MARKET_MOVING_NEWS — 태그/팩트에 시장 키워드 존재
+        if _any_tag_hit(topic_tags_lower, _MARKET_KEYWORD_HINTS) \
+                or _any_tag_hit(key_facts_lower, _MARKET_KEYWORD_HINTS):
+            return TYPE_MARKET_MOVING_NEWS
+
+        # 6. STRAIGHT_NEWS (fallback)
+        return TYPE_STRAIGHT_NEWS
+    except Exception as e:  # noqa: BLE001
+        # 예외 시 보수적으로 STRAIGHT_NEWS → 강등 없음
+        logger.warning(f"[ArticleType] classifier error, fallback: {e}")
+        return TYPE_STRAIGHT_NEWS
+
+
+def _apply_type_demotion(base_mode: str, article_type: str) -> str:
+    """article_type 기반 mode 강등. 상향 없음. 일방향 EXPLAIN→JUDGMENT→VERIFY.
+
+    규칙:
+      COMMUNITY_SCREENSHOT / OPINION_COLUMN / UNVERIFIED_CLAIM → VERIFY 고정
+      CONFLICTING_REPORT + EXPLAIN → JUDGMENT (상충은 JUDGMENT 가 적절)
+      STRAIGHT_NEWS / MARKET_MOVING_NEWS → base 유지
+    """
+    if article_type in (
+        TYPE_COMMUNITY_SCREENSHOT,
+        TYPE_OPINION_COLUMN,
+        TYPE_UNVERIFIED_CLAIM,
+    ):
+        return MODE_VERIFY
+    if article_type == TYPE_CONFLICTING_REPORT and base_mode == MODE_EXPLAIN:
+        return MODE_JUDGMENT
+    return base_mode
 
 
 def route_article_mode(card: "CandidateCard") -> str:
@@ -64,11 +262,18 @@ def route_article_mode(card: "CandidateCard") -> str:
     key_facts = getattr(card, "key_facts", None) or []
     topic_tags = getattr(card, "topic_tags", None) or []
 
-    # (a) 경고가 많으면 곧바로 VERIFY (제일 강한 강등)
-    if len(cautions) >= 3:
-        return MODE_VERIFY
+    # ── 1단계: 기존 legacy 강등 (팩트체크 신호 기반) ──────────────────────
+    #
+    # 조기 return 하지 않고 base_after_legacy 에 축적. 반드시 classifier /
+    # 로깅 단계까지 흘러간 뒤 반환한다 (PR 4 로그 일관성을 위해).
 
-    # (b) 약한 신호 태그
+    base_after_legacy = base
+
+    # (a) 경고가 많으면 VERIFY 로 최대 강등
+    if len(cautions) >= 3:
+        base_after_legacy = MODE_VERIFY
+
+    # (b) 약한 신호 태그 — 최소 JUDGMENT
     _WEAK_TAG_WORDS = (
         "단독", "루머", "미확인", "관측", "추정", "주장", "소문", "전망",
     )
@@ -76,14 +281,26 @@ def route_article_mode(card: "CandidateCard") -> str:
         isinstance(t, str) and any(w in t for w in _WEAK_TAG_WORDS)
         for t in topic_tags
     )
-    if has_weak_tag and base == MODE_EXPLAIN:
-        return MODE_JUDGMENT
+    if has_weak_tag and base_after_legacy == MODE_EXPLAIN:
+        base_after_legacy = MODE_JUDGMENT
 
-    # (c) 근거 얕음
-    if len(key_facts) <= 2 and base == MODE_EXPLAIN:
-        return MODE_JUDGMENT
+    # (c) 근거 얕음 — 최소 JUDGMENT
+    if len(key_facts) <= 2 and base_after_legacy == MODE_EXPLAIN:
+        base_after_legacy = MODE_JUDGMENT
 
-    return base
+    # ── 2단계: PR 4 — article_type classifier 기반 최종 강등 ──────────
+    #
+    # 같은 성질 기사가 certainty_level 흔들림에 따라 mode 가 튀는 문제를
+    # 보수적 강등으로 일관화. 상향은 절대 없음.
+    article_type = classify_article_type(card)
+    final_mode = _apply_type_demotion(base_after_legacy, article_type)
+
+    logger.info(
+        "[ArticleType] type=%s certainty=%s base=%s final=%s",
+        article_type, c, base_after_legacy, final_mode,
+    )
+
+    return final_mode
 
 
 # mode별 한 줄 라벨 (로그/텔레그램 표시용)
