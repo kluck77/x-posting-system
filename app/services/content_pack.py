@@ -2709,8 +2709,13 @@ async def generate_final_post(
                 "— 텔레그램에 '게시 전 수동 확인 필수' 경고 전달"
             )
 
+    # PR 8: mode 를 최종 요약 로그에 포함. 운영 grep 에서 mode 분포 +
+    # gate_fails 분포를 한 줄로 얻을 수 있도록 한다 (로그 포인트 1곳 추가 금지,
+    # 기존 라인 확장만).
     logger.info(
-        f"최종 마감 완료: post={len(final.final_post)}자, "
+        f"최종 마감 완료: mode={mode} "
+        f"certainty={card.certainty_level} "
+        f"post={len(final.final_post)}자, "
         f"short={len(final.final_short)}자, gate_fails={final.gate_fails}"
     )
 
@@ -2836,7 +2841,10 @@ _VERIFY_OVERREACH_PATTERNS = [
     "제3국 실질 채널",
     "실질적 대화 채널",
     "대화 채널로 이어",
-    "대화 채널이 살아",
+    # NOTE (PR 8): "대화 채널이 살아" 는 VERIFY 템플릿 B 예시
+    # ("특사 파견이 포착되면 대화 채널이 살아 있다") 와 충돌해 false positive
+    # 를 일으켜 제거했다. 진짜 위험한 확장형 표현은 "대화 채널로 이어" 가
+    # 여전히 잡는다. 단정형 "살아 있다" 만으로는 외교 시나리오 확장이 아님.
     "외교 채널 복원",
     "외교 채널을 복원",
     "협상 의제 연동",

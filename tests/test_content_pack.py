@@ -5144,6 +5144,51 @@ class TestVerifyOverreachGate:
         _, _, _, gate_fails = _validate_final_post(post, "", "확정")
         assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
 
+    # ── PR 8: "대화 채널이 살아" false positive 제거 회귀 테스트 ─────────
+    def test_verify_allows_contact_confirm_channel(self):
+        """
+        PR 8 — VERIFY 템플릿 B 예시 ("특사 파견이 포착되면 대화 채널이
+        살아 있다") 는 '확인 조건부 단정' 이지 외교 시나리오 확장이 아니다.
+        저신뢰 기사에서 단독으로 나와도 LOW_CONFIDENCE_OVERREACH 가 찍히면
+        안 된다.
+        """
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "공식 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 포착되면 대화 채널이 살아 있다."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails, (
+            f"'대화 채널이 살아 있다' 단독은 게이트 통과해야 함: {gate_fails}"
+        )
+
+    def test_verify_still_gates_channel_expansion(self):
+        """
+        PR 8 — '~로 이어질지' 계열 (확장형) 은 계속 차단해야 한다.
+        false positive 제거 후에도 진짜 위험 표현은 살아있어야 한다.
+        """
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "발언만으로는 판단 어렵다.\n"
+            "실제 대화 채널로 이어질지가 관건이다.\n"
+            "특사 파견이 확인되면 검증 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "미확인")
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails, (
+            f"'대화 채널로 이어' 계열은 계속 차단되어야 함: {gate_fails}"
+        )
+
+    def test_verify_overreach_pattern_removed_channel_alive(self):
+        """PR 8 — '대화 채널이 살아' 패턴이 리스트에서 빠졌는지 직접 확인."""
+        from app.services.content_pack import _VERIFY_OVERREACH_PATTERNS
+        assert "대화 채널이 살아" not in _VERIFY_OVERREACH_PATTERNS, (
+            "'대화 채널이 살아' 는 VERIFY 템플릿 B 예시와 충돌하므로 제거됨"
+        )
+        # 확장형은 여전히 남아있어야 한다
+        assert "대화 채널로 이어" in _VERIFY_OVERREACH_PATTERNS
+
 
 class TestVerifyFirstLineDualBranch:
     """VERIFY 첫 문장은 1문장 1주장만. A인지 B인지 수사 금지."""
