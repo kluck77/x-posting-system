@@ -2497,6 +2497,156 @@ class TestSendCandidateCardMessages:
         assert "지금 봐야 할 포인트" not in texts_joined
 
 
+class TestCandidateCardCompactionPR7:
+    """PR 7 — 기본 카드는 mode 별 단일 축 노출. '고르는 화면'으로 압축."""
+
+    def _make_card(self, certainty: str) -> "CandidateCard":
+        return CandidateCard(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            hook_candidates=["훅A", "훅B", "훅C"],
+            thesis_cards=[
+                ThesisCard(
+                    thesis=f"해석 슬롯 {i} — 비교용 한 줄 해석 문장이다",
+                    why_not_summary="긴장점 문장",
+                    reader_stake="독자 영향 문장",
+                    opener="첫 문장 초안",
+                    judgment_coord=f"판단 좌표 슬롯 {i}",
+                    verification_signal=f"판별 신호 슬롯 {i}",
+                )
+                for i in range(3)
+            ],
+            certainty_level=certainty,
+            topic_tags=["태그"],
+        )
+
+    def test_verify_card_shows_only_verification_signal(self):
+        """VERIFY (미확인) 기본 카드: 판별 신호만 노출, 판단 좌표 비노출."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card("미확인"))
+        slot_msgs = [m for m in msgs if m["hook_index"] is not None]
+        assert len(slot_msgs) == 3
+        for m in slot_msgs:
+            assert "판별 신호" in m["text"], \
+                f"VERIFY 기본카드에 판별 신호 없음:\n{m['text']}"
+            assert "판단 좌표" not in m["text"], \
+                f"VERIFY 기본카드에 판단 좌표가 노출됨:\n{m['text']}"
+
+    def test_explain_card_shows_only_judgment_coord(self):
+        """EXPLAIN (확정) 기본 카드: 판단 좌표만 노출, 판별 신호 비노출."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card("확정"))
+        slot_msgs = [m for m in msgs if m["hook_index"] is not None]
+        for m in slot_msgs:
+            assert "판단 좌표" in m["text"], \
+                f"EXPLAIN 기본카드에 판단 좌표 없음:\n{m['text']}"
+            assert "판별 신호" not in m["text"], \
+                f"EXPLAIN 기본카드에 판별 신호가 노출됨:\n{m['text']}"
+
+    def test_judgment_card_shows_only_judgment_coord(self):
+        """JUDGMENT (상충) 기본 카드: 판단 좌표만 노출."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card("상충"))
+        slot_msgs = [m for m in msgs if m["hook_index"] is not None]
+        for m in slot_msgs:
+            assert "판단 좌표" in m["text"]
+            assert "판별 신호" not in m["text"]
+
+    def test_compact_card_drops_tension_and_reader_stake(self):
+        """기본 카드에는 긴장점/독자 영향/첫 문장 초안/핵심 팩트 없음."""
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card("미확인"))
+        slot_msgs = [m for m in msgs if m["hook_index"] is not None]
+        for m in slot_msgs:
+            assert "긴장점" not in m["text"]
+            assert "독자 영향" not in m["text"]
+            assert "첫 문장 초안" not in m["text"]
+            assert "핵심 팩트" not in m["text"]
+
+    def test_compact_card_thesis_trimmed_55(self):
+        """해석 길이가 55자 안팎으로 trim (해석 prefix 포함, … 말줄임 포함)."""
+        from app.services.telegram_service import send_candidate_card_messages
+        card = self._make_card("확정")
+        card.thesis_cards[0].thesis = (
+            "이 해석은 매우 길어서 반드시 55자 하드 캡에서 잘려야 한다 — "
+            "그래야 비교 카드 역할을 한다. 길게 이어지면 안 된다."
+        )
+        msgs = send_candidate_card_messages(card)
+        slot0 = [m for m in msgs if m["hook_index"] == 0][0]
+        # "해석: " prefix 뒤 본문을 찾는다
+        interpret_line = [ln for ln in slot0["text"].split("\n")
+                          if ln.startswith("해석:")][0]
+        body = interpret_line[len("해석: "):]
+        # trim_display 는 55자 limit 을 넘으면 55자에 … 를 붙인다.
+        # 정확한 길이 체크: 원문 > 55 → 잘림 확인.
+        assert len(body) <= 60, f"해석 본문 과길이: {len(body)}자"
+        assert "…" in body or len(body) <= 55
+
+    def test_compact_card_axis_trimmed_35(self):
+        """단일 축(판단 좌표/판별 신호) 35자 하드 캡."""
+        from app.services.telegram_service import send_candidate_card_messages
+        card = self._make_card("확정")
+        card.thesis_cards[0].judgment_coord = (
+            "이 판단 좌표는 반드시 35자 캡에 걸려야 한다 — 기본 카드는 읽기 아닌 비교용"
+        )
+        msgs = send_candidate_card_messages(card)
+        slot0 = [m for m in msgs if m["hook_index"] == 0][0]
+        coord_line = [ln for ln in slot0["text"].split("\n")
+                      if "판단 좌표" in ln][0]
+        # prefix 제거 후 본문만
+        body = coord_line.split("판단 좌표:", 1)[1].strip()
+        assert len(body) <= 40, f"판단 좌표 본문 과길이: {len(body)}자"
+        assert "…" in body or len(body) <= 35
+
+    def test_compact_card_visible_line_count(self):
+        """한 슬롯 메시지의 시각적 라인 ≤ 5 (제목 + 빈줄 + 해석 + 빈줄 + 축).
+
+        추정 해석 배지가 붙을 수 있으므로 상한 7로 방어. 기존 카드는 7~8 라인.
+        """
+        from app.services.telegram_service import send_candidate_card_messages
+        msgs = send_candidate_card_messages(self._make_card("확정"))
+        slot_msgs = [m for m in msgs if m["hook_index"] is not None]
+        for m in slot_msgs:
+            line_count = len(m["text"].split("\n"))
+            assert line_count <= 5, \
+                f"슬롯 기본 카드 라인 수 초과 ({line_count} > 5):\n{m['text']}"
+
+    def test_detail_view_still_has_full_info(self):
+        """'자세히 보기' 상세 카드에는 긴장점/독자영향/좌표/신호/초안/팩트 모두 유지."""
+        from app.services.telegram_service import format_slot_detail
+        card = self._make_card("미확인")
+        detail = format_slot_detail(card, 0)
+        assert "긴장점" in detail
+        assert "독자 영향" in detail
+        assert "판단 좌표" in detail
+        assert "판별 신호" in detail
+        assert "첫 문장 초안" in detail
+        assert "핵심 팩트" in detail
+
+    def test_speculative_badge_only_on_verify(self):
+        """추정 해석 배지는 저신뢰(VERIFY/JUDGMENT) 에서만 노출."""
+        from app.services.telegram_service import send_candidate_card_messages
+        # VERIFY + 본심/노림수 포함 → 배지
+        card_low = self._make_card("미확인")
+        card_low.thesis_cards[0].thesis = "진짜 본심은 이것이다"
+        msgs_low = send_candidate_card_messages(card_low)
+        slot0_low = [m for m in msgs_low if m["hook_index"] == 0][0]
+        assert "추정 해석 주의" in slot0_low["text"]
+
+        # EXPLAIN (확정) → 배지 없음 (추정 패턴 있어도 저신뢰 아님)
+        card_high = self._make_card("확정")
+        card_high.thesis_cards[0].thesis = "진짜 본심은 이것이다"
+        msgs_high = send_candidate_card_messages(card_high)
+        slot0_high = [m for m in msgs_high if m["hook_index"] == 0][0]
+        assert "추정 해석 주의" not in slot0_high["text"]
+
+    def test_compact_card_count_preserved(self):
+        """압축 후에도 메시지 수는 개요 1 + 슬롯 3 = 4 유지."""
+        from app.services.telegram_service import send_candidate_card_messages
+        for cert in ("확정", "미확인", "상충"):
+            msgs = send_candidate_card_messages(self._make_card(cert))
+            assert len(msgs) == 4, f"{cert} 카드 메시지 수 변경됨: {len(msgs)}"
+
+
 # ─── 국제 뉴스 한국 관점 강화 테스트 ─────────────────────────────────────────
 
 

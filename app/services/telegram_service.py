@@ -680,6 +680,14 @@ def send_candidate_card_messages(card) -> list[dict]:
     """
     CandidateCard를 텔레그램 전송용 메시지 목록으로 변환합니다.
 
+    PR 7 — 기본 카드는 "읽는 화면" 이 아니라 "고르는 화면" 으로 압축:
+      · 해석 55자 하드 캡
+      · mode 별로 축 하나만 노출:
+          EXPLAIN / JUDGMENT → 🧭 판단 좌표 (35자)
+          VERIFY             → 🔍 판별 신호 (35자)
+      · 긴장점 / 독자 영향 / 첫 문장 초안 / 핵심 팩트 → 전부 '자세히 보기'로
+        이동 (format_slot_detail)
+
     Returns:
         [{"text": str, "hook_index": int | None}, ...]
         hook_index: None = 참조용(버튼 없음), 0~2 = 훅 후보(선택 버튼 있음)
@@ -706,6 +714,22 @@ def send_candidate_card_messages(card) -> list[dict]:
     _slot_names = ["무엇이 바뀌나", "왜 뉴스 이상이냐", "다음 판가름"]
     _is_low_confidence = card.certainty_level in ("미확인", "상충")
 
+    # PR 7 — mode 결정 (EXPLAIN / JUDGMENT / VERIFY)
+    # 기본 카드의 어떤 축을 노출할지 결정.
+    # route_article_mode 가 실패해도 카드 렌더링은 멈추지 않도록 방어적으로.
+    try:
+        from app.services.article_router import (
+            route_article_mode, MODE_VERIFY,
+        )
+        _mode = route_article_mode(card)
+    except Exception as _e:  # noqa: BLE001
+        logger.warning(f"[CandidateCard] mode 결정 실패, VERIFY 폴백: {_e!r}")
+        _mode = "VERIFY"
+        try:
+            from app.services.article_router import MODE_VERIFY  # noqa: F401
+        except Exception:
+            pass
+
     def _trim(text: str, limit: int) -> str:
         """기본 카드용 문장 자르기 — 모듈 레벨 trim_display 델리게이트."""
         return trim_display(text, limit)
@@ -713,7 +737,7 @@ def send_candidate_card_messages(card) -> list[dict]:
     if card.thesis_cards:
         for i, tc in enumerate(card.thesis_cards[:3]):
             slot_name = _slot_names[i] if i < 3 else f"슬롯 {i + 1}"
-            # 추정 해석 경고 배지
+            # 추정 해석 경고 배지 (VERIFY/저신뢰에서만)
             spec_badge = ""
             if _is_low_confidence:
                 _spec_patterns = [
@@ -725,16 +749,24 @@ def send_candidate_card_messages(card) -> list[dict]:
                 if any(p in combined for p in _spec_patterns):
                     spec_badge = "\n⚠️ <i>추정 해석 주의</i>"
 
-            # 압축형 (비교용 한 줄 카드): 제목 → 빈 줄 → 해석 → 빈 줄 → 좌표 → 빈 줄 → 신호
-            # 각 항목 45~70자 — 길면 '자세히 보기'로 넘김
+            # PR 7 압축형: 제목 + 해석 1줄 + mode 축 1줄
+            # = 체감 2줄. 비교 스캔 최적화. 나머지 정보는 '자세히' 에서.
             lines = [f"🎯 <b>{slot_name}</b>", ""]
-            lines.append(f"해석: {_trim(tc.thesis, 70)}")
-            if getattr(tc, "judgment_coord", ""):
-                lines.append("")
-                lines.append(f"🧭 판단 좌표: {_trim(tc.judgment_coord, 55)}")
-            if getattr(tc, "verification_signal", ""):
-                lines.append("")
-                lines.append(f"🔍 판별 신호: {_trim(tc.verification_signal, 55)}")
+            lines.append(f"해석: {_trim(tc.thesis, 55)}")
+
+            # mode 별 단일 축 노출
+            if _mode == "VERIFY":
+                sig = getattr(tc, "verification_signal", "")
+                if sig:
+                    lines.append("")
+                    lines.append(f"🔍 판별 신호: {_trim(sig, 35)}")
+            else:
+                # EXPLAIN / JUDGMENT → 판단 좌표
+                coord = getattr(tc, "judgment_coord", "")
+                if coord:
+                    lines.append("")
+                    lines.append(f"🧭 판단 좌표: {_trim(coord, 35)}")
+
             if spec_badge:
                 lines.append(spec_badge)
 
