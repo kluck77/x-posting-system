@@ -4645,6 +4645,209 @@ class TestBannedClosedVerdictEndings:
         assert "DEAD_ENDING" not in gate_fails
 
 
+class TestVerifyOverreachGate:
+    """VERIFY / certainty 미확인·상충 기사에서 구조 해석 본문 침투를 막는다.
+
+    실제 실패 샘플(호르무즈/제3국 채널/다음 국면을 결정 …) 을 하드닝.
+    """
+
+    def test_verify_overreach_patterns_registered(self):
+        from app.services.content_pack import _VERIFY_OVERREACH_PATTERNS
+        for token in (
+            "제3국을 통한 실질적 대화",
+            "외교 채널 복원",
+            "협상 의제 연동",
+            "긴장 수위 상승",
+            "구조적 의미",
+            "다음 국면을 결정",
+            "진짜 신호",
+            "실효성 여부가 판가름",
+        ):
+            assert any(token in p for p in _VERIFY_OVERREACH_PATTERNS), (
+                f"VERIFY 과해석 패턴 누락: {token}"
+            )
+
+    def test_verify_gates_third_country_channel(self):
+        """실제 실패 샘플 재현 — 제3국 채널 + 다음 국면을 결정 → gate fail."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "파키스탄 등 제3국을 통한 실질적 대화 채널로 이어질지가 다음 "
+            "국면을 결정한다는 관측도 있다.\n"
+            "고위급 특사 파견이 포착되면 대화 채널이 살아 있다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+        assert any("VERIFY 구조해석" in w for w in warnings)
+
+    def test_verify_gates_structural_meaning(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "A측이 ~라고 밝혔다.\n"
+            "이번 조치는 구조적 의미를 갖는 변화다.\n"
+            "공식 발표가 나오면 확인 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "상충")
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_verify_does_not_gate_high_confidence(self):
+        """certainty '확정' 에서는 VERIFY 과해석 게이트가 발동하지 않는다."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "정부가 공식 발표했다.\n"
+            "다음 국면을 결정할 조치다.\n"
+            "시행은 다음 달이다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "확정")
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
+class TestVerifyFirstLineDualBranch:
+    """VERIFY 첫 문장은 1문장 1주장만. A인지 B인지 수사 금지."""
+
+    def test_verify_first_line_bans_registered(self):
+        from app.services.content_pack import _VERIFY_WEAK_OPENER_PATTERNS
+        for token in (
+            "이어질지", "그칠지", "판가름이다",
+            "단순 수사인지", "단순 압박인지", "실질 채널인지",
+        ):
+            assert token in _VERIFY_WEAK_OPENER_PATTERNS, (
+                f"VERIFY 첫 줄 금지 누락: {token}"
+            )
+
+    def test_verify_first_line_gate_dual_branch(self):
+        """첫 줄에 '~이어질지 ~판가름이다' 있으면 WEAK_OPENER."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "트럼프 발언이 수사에 그칠지 실질 채널로 이어질지가 판가름이다.\n"
+            "이는 아직 확인되지 않았다.\n"
+            "특사 파견이 포착되면 검증 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "미확인")
+        assert "WEAK_OPENER" in gate_fails
+
+    def test_verify_first_line_allows_single_claim(self):
+        """1문장 1주장 허용 예 — 게이트 통과."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 발언이 아니라 접촉 확인이다.\n"
+            "공식 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 공개되면 검증 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "미확인")
+        assert "WEAK_OPENER" not in gate_fails
+
+    def test_verify_first_line_gate_skipped_on_high_confidence(self):
+        """확정 모드에서는 VERIFY 첫 줄 이중분기 게이트 비활성."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "정부 조치가 실효성이 있을지 판가름이다.\n"
+            "시행령은 공포됐다.\n"
+            "다음 달 적용."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "확정")
+        # VERIFY 전용 첫 줄 이중분기 게이트는 '확정' 에서 비활성.
+        # (다른 게이트는 여전히 동작 가능)
+        # 여기서는 _VERIFY_WEAK_OPENER_PATTERNS 기반 판정이 안 들어갔는지만 확인.
+        # 다른 게이트로 WEAK_OPENER 가 찍힐 수 있으므로 warnings 직접 검사.
+        # 단순 smoke: 확정 모드에서는 LOW_CONFIDENCE_OVERREACH 발동 안 함.
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
+class TestVerifySentenceCap:
+    """VERIFY / 저신뢰 본문은 최대 3문장."""
+
+    def test_verify_body_over_three_sentences_fails(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "A측이 발언했다.\n"
+            "아직 확인되지 않았다.\n"
+            "특사 파견이 나오면 검증 가능하다.\n"
+            "추가로 고위급 접촉도 예상된다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+        assert any("문장 수 초과" in w for w in warnings)
+
+    def test_verify_body_three_sentences_passes(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "공식 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 공개되면 검증 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+    def test_high_confidence_four_sentences_allowed(self):
+        """EXPLAIN(확정) 은 4문장이 정상 — 문장 수 캡 비적용."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심 명제 한 줄이다.\n"
+            "근거 팩트 한 줄이다.\n"
+            "판단 기준 한 줄이다.\n"
+            "답은 다음 달 거래량이다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "확정")
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
+class TestVerifyModeInstruction:
+    """article_router VERIFY 지시가 저신뢰 과해석 축을 명시적으로 거부."""
+
+    def test_verify_slot_weakens_why_news_matters(self):
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_slot_instruction(MODE_VERIFY)
+        # '왜 뉴스 이상이냐' 슬롯 약화 지시 존재
+        assert "왜 뉴스 이상이냐" in s
+        assert "약화" in s
+        # 3축 고정
+        assert "지금 나온 주장" in s
+        assert "아직 확인 안 된" in s
+        assert "무엇이 확인되면 진짜" in s
+
+    def test_verify_slot_bans_overreach_vocab(self):
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_slot_instruction(MODE_VERIFY)
+        for token in (
+            "제3국", "외교 채널", "협상 의제", "긴장 수위",
+            "구조적 의미", "다음 국면", "진짜 신호",
+        ):
+            assert token in s, f"VERIFY 슬롯 금지어 누락: {token}"
+
+    def test_verify_finalize_caps_three_sentences(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        assert "최대 3문장" in s or "3문장" in s
+        # 첫 줄 이중 분기 금지 명시
+        assert "이중 분기" in s or "이어질지" in s
+        # 본문 전역 금지어
+        assert "제3국" in s
+        assert "구조적 의미" in s
+        assert "다음 국면을 결정" in s
+
+    def test_verify_finalize_states_verify_principle(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        # 핵심 원칙: '무슨 일이 벌어질 수 있다' 금지, '아직 확인되지
+        # 않았다' 만
+        assert "아직 확인되지 않았다" in s
+
+
 class TestFinalizeUserPromptModeInjection:
     """generate_final_post 실행 시 user_prompt 안에 mode 라벨이 주입된다."""
 

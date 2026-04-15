@@ -2163,8 +2163,11 @@ def _build_retry_instruction(gate_fails: list) -> str:
         )
     if "LOW_CONFIDENCE_OVERREACH" in gate_fails:
         hints.append(
-            "저신뢰 기사: 정치적 계산/숨은 의도/노림수/본심 등 동기 "
-            "추정 전부 제거. 확인 가능한 신호 중심으로만 써라."
+            "저신뢰(VERIFY) 기사: 정치적 계산/숨은 의도/노림수/본심 등 동기 "
+            "추정, 그리고 '제3국 채널/외교 채널 복원/협상 의제 연동/긴장 "
+            "수위 상승/구조적 의미/다음 국면을 결정/진짜 신호' 같은 구조 "
+            "해석 확장 전부 제거. 최대 3문장: ①지금 나온 말 ②아직 확인 "
+            "안 된 것 ③무엇이 나오면 진짜인지. 그 이상 쓰지 마라."
         )
     if not hints:
         return ""
@@ -2456,6 +2459,52 @@ _SPECULATIVE_MOTIVE_PATTERNS = [
     "의도가 깔려", "의도로 읽힌다", "의도로 풀이",
     "노린 것", "겨냥한 것", "포석", "밑그림",
     "정략적", "승부수", "도박",
+]
+
+
+# ─── VERIFY 모드 / 저신뢰 기사 전용 과해석 차단 ─────────────────────────────
+#
+# VERIFY / certainty 미확인·상충 기사에서 나오면 1개만 보여도 게이트 실패.
+# "무슨 일이 벌어질 수 있다"가 아니라 "무엇이 아직 확인되지 않았다"만 남긴다.
+# _SPECULATIVE_MOTIVE_PATTERNS 는 '동기 추정' 축, 이 리스트는 '구조 해석/
+# 외교 시나리오 확장' 축. 두 축은 분리해서 운영한다.
+_VERIFY_OVERREACH_PATTERNS = [
+    "제3국을 통한 실질적 대화",
+    "실질적 대화 채널",
+    "대화 채널로 이어",
+    "대화 채널이 살아",
+    "외교 채널 복원",
+    "외교 채널을 복원",
+    "협상 의제 연동",
+    "협상 의제와 직접적으로 연동",
+    "협상 의제'와 직접적으로 연동",
+    "긴장 수위 상승",
+    "긴장 수위를 한 단계 높이",
+    "긴장 수위가 한 단계",
+    "구조적 의미",
+    "구조적으로 의미",
+    "실효성 여부가 판가름",
+    "다음 국면을 결정",
+    "다음 국면이 결정",
+    "국제질서 재편",
+    "질서 재편",
+    "진짜 신호",
+    "진짜 신호는",
+]
+
+
+# VERIFY 첫 문장 금지 — 1문장 1주장만 허용
+# "A인지 B인지 C가 결정한다" 식 이중 분기 수사 금지.
+_VERIFY_WEAK_OPENER_PATTERNS = [
+    "이어질지",          # "~이어질지 ~그칠지"
+    "그칠지",            # "~에 그칠지가 ~"
+    "판가름이다",        # "~가 판가름이다"
+    "판가름한다",
+    "을 결정한다",       # "A인지 B인지 ~을 결정한다"
+    "를 결정한다",
+    "단순 수사인지",
+    "단순 압박인지",
+    "실질 채널인지",
 ]
 
 
@@ -4069,7 +4118,49 @@ def _validate_final_post(
             warnings.append(
                 f"저신뢰 과해석 본문 침투 ({len(motive_hits)}개): {motive_hits[:3]}"
             )
-            gate_fails.append("LOW_CONFIDENCE_OVERREACH")
+            if "LOW_CONFIDENCE_OVERREACH" not in gate_fails:
+                gate_fails.append("LOW_CONFIDENCE_OVERREACH")
+
+        # VERIFY 과해석 — 구조 해석 / 외교 시나리오 확장 / 채널 단정 축
+        # 1개 등장만으로도 실패. "무슨 일이 벌어질 수 있다" 금지.
+        overreach_hits = [
+            p for p in _VERIFY_OVERREACH_PATTERNS if p in post
+        ]
+        if len(overreach_hits) >= 1:
+            warnings.append(
+                f"VERIFY 구조해석 본문 침투 ({len(overreach_hits)}개): "
+                f"{overreach_hits[:3]}"
+            )
+            if "LOW_CONFIDENCE_OVERREACH" not in gate_fails:
+                gate_fails.append("LOW_CONFIDENCE_OVERREACH")
+
+        # VERIFY 첫 줄: 1문장 1주장만. "A인지 B인지 C가 결정한다" 금지.
+        if first_line and "WEAK_OPENER" not in gate_fails:
+            first_sent = first_line.split(".")[0] if "." in first_line else first_line
+            verify_opener_hits = [
+                p for p in _VERIFY_WEAK_OPENER_PATTERNS if p in first_sent
+            ]
+            if verify_opener_hits:
+                warnings.append(
+                    f"VERIFY 첫 문장 이중분기 수사: {verify_opener_hits[:2]}"
+                )
+                gate_fails.append("WEAK_OPENER")
+
+        # VERIFY 본문 문장 수 하드 캡 — 최대 3문장.
+        # 구조 해석을 더 얹으려면 문장 수가 늘 수밖에 없으므로 구조적으로 차단.
+        post_sentences = [
+            s.strip()
+            for s in post.replace("\n", " ").split(".")
+            if s.strip()
+        ]
+        if len(post_sentences) > 3:
+            warnings.append(
+                f"VERIFY 본문 문장 수 초과 ({len(post_sentences)}문장) — "
+                "최대 3문장 (지금 나온 말 / 아직 확인 안 된 것 / "
+                "무엇이 나오면 진짜인지)"
+            )
+            if "LOW_CONFIDENCE_OVERREACH" not in gate_fails:
+                gate_fails.append("LOW_CONFIDENCE_OVERREACH")
 
     # final_short가 final_post 첫 문장과 동일한지 체크
     first_sentence = post.split(".")[0].split("\n")[0].strip()
