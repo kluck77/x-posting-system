@@ -2228,6 +2228,122 @@ JSON 1개:
 """
 
 
+# ─── 첫 줄 점수화 (PR 5) ────────────────────────────────────────────────────
+#
+# opener rewrite 는 "생성만 된다고 끝"이 아니다. 첫 줄 품질을 결정론적
+# 규칙으로 점수화해서 임계 미달이면 한 번 더 돌리고, 그래도 미달이면
+# full regen 으로 폴백한다. AI 호출 없이 길이/패턴/키워드만 본다.
+
+# 변화 / 손익 / 판정선 / 충돌 — 첫 줄이 "센" 축으로 시작했다는 신호
+_STRONG_OPENER_WORDS = (
+    # 변화
+    "바뀐", "바꿨", "전환", "뒤집혔", "뒤집었", "철회", "끊겼", "끊었",
+    # 손익/숫자 체감
+    "손실", "이익", "수익", "적자", "흑자", "영업익", "영업손실",
+    # 판정선/갈림
+    "기준은", "판단은", "갈린다", "갈림", "분기점", "관문은",
+    # 충돌/맞섬
+    "맞섰", "충돌", "반발", "거부", "결렬",
+    # 단언형 핵심
+    "핵심은", "포인트는", "쟁점은", "관건은",
+)
+
+# 첫 줄 점수 임계값 — 이 미만이면 재시도
+_OPENER_MIN_SCORE = 60
+# opener rewrite 최대 시도 횟수 (PR 5: 1→2)
+_OPENER_REWRITE_MAX_ATTEMPTS = 2
+
+
+def _score_opener(
+    new_opener: str,
+    *,
+    mode: Optional[str] = None,
+    certainty_level: Optional[str] = None,
+) -> int:
+    """첫 줄 품질 점수 (0~100). AI 호출 없음. 결정론.
+
+    규칙 (출발 50, 60 통과, 0~100 clamp):
+      - 빈 문자열            → 0 (즉시 폐기)
+      - 60자 초과            → 0 (하드 캡)
+      - 45자 이하            → +15
+      - 46~55자              → +5
+      - 배경 시작어(이후/보도된/전해진/알려진/보도한) in head[:20] → -30
+      - 판가름/이중분기(이어질지/그칠지/판가름) → -25
+      - 기사 재서술(_FACT_NARRATION_STARTS)         → -20
+      - VERIFY/저신뢰 + _VERIFY_OVERREACH_PATTERNS   → -35
+      - VERIFY/저신뢰 + _VERIFY_WEAK_OPENER_PATTERNS → -25
+      - _STRONG_OPENER_WORDS 등장 1개+               → +10
+      - 금지 마감(_BANNED_ENDINGS) 로 끝남           → -20
+
+    출발점: 50점. 통과 임계값: 60점 (_OPENER_MIN_SCORE).
+    """
+    if not new_opener:
+        return 0
+    s = new_opener.strip()
+    if not s:
+        return 0
+
+    # 마침표/물음표/느낌표 제거한 본문 길이로 본다 (하드캡 60자)
+    length = len(s.rstrip(".!?"))
+    if length > 60:
+        return 0
+
+    score = 50
+
+    # 길이 가점
+    if length <= 45:
+        score += 15
+    elif length <= 55:
+        score += 5
+
+    # 배경 시작어 — head 20자 안에 있으면 감점
+    head = s[:20]
+    _background_starts = ("이후 ", "보도한 ", "보도된 ", "전해진 ", "알려진 ")
+    for bg in _background_starts:
+        if bg in head:
+            score -= 30
+            break
+
+    # 판가름/이중분기 수사 감점 (VERIFY 아니어도 밋밋함)
+    for pat in ("이어질지", "그칠지", "판가름"):
+        if pat in s:
+            score -= 25
+            break
+
+    # 기사 재서술 패턴 감점
+    for pat in _FACT_NARRATION_STARTS:
+        if pat in s:
+            score -= 20
+            break
+
+    # VERIFY / 저신뢰 — 구조 해석·이중분기 수사는 더 큰 감점
+    low_conf = certainty_level in ("미확인", "상충") or mode == MODE_VERIFY
+    if low_conf:
+        for pat in _VERIFY_OVERREACH_PATTERNS:
+            if pat in s:
+                score -= 35
+                break
+        for pat in _VERIFY_WEAK_OPENER_PATTERNS:
+            if pat in s:
+                score -= 25
+                break
+
+    # 강한 키워드 가점 (변화/손익/판정선/충돌)
+    for pat in _STRONG_OPENER_WORDS:
+        if pat in s:
+            score += 10
+            break
+
+    # 금지 마감 끝맺음 감점
+    stripped_end = s.rstrip(".!?").rstrip()
+    for banned in _BANNED_ENDINGS:
+        if stripped_end.endswith(banned):
+            score -= 20
+            break
+
+    return max(0, min(100, score))
+
+
 def _splice_opener(post: str, new_opener: str) -> str:
     """post 의 첫 문장을 new_opener 로 교체. 본문은 유지."""
     if not post or not new_opener:
@@ -2329,11 +2445,20 @@ async def _rewrite_opener_only(
         logger.warning("[opener재작성] new_opener 비어있음")
         return None
 
-    # 60자 하드 캡 (마침표 제외 길이)
-    opener_len = len(new_opener.rstrip("."))
-    if opener_len > 60:
+    # 점수화 (PR 5): 60자 하드 캡 + 배경어/판가름/재서술/VERIFY 금지어 + 강한 키워드
+    score = _score_opener(
+        new_opener,
+        mode=mode,
+        certainty_level=card.certainty_level,
+    )
+    opener_len = len(new_opener.rstrip(".!?"))
+    logger.info(
+        f"[opener점수] '{new_opener}' len={opener_len}자 score={score} "
+        f"threshold={_OPENER_MIN_SCORE}"
+    )
+    if score < _OPENER_MIN_SCORE:
         logger.warning(
-            f"[opener재작성] 60자 초과 ({opener_len}자) — 폐기"
+            f"[opener재작성] score {score} < {_OPENER_MIN_SCORE} — 폐기"
         )
         return None
 
@@ -2506,9 +2631,22 @@ async def generate_final_post(
             logger.warning(
                 "[품질게이트] WEAK_OPENER 단독 잔존 — 첫 줄 rewrite 경로"
             )
-            rewritten = await _rewrite_opener_only(
-                card, final, selected_hook=selected_hook, mode=mode
-            )
+            # PR 5: 점수 미달 시 최대 _OPENER_REWRITE_MAX_ATTEMPTS (=2) 회 재시도.
+            # 모두 폐기되면 full regen 으로 폴백 (이 if/else 밖으로는 빠지지
+            # 않고 여기서 마저 처리).
+            rewritten = None
+            for attempt in range(1, _OPENER_REWRITE_MAX_ATTEMPTS + 1):
+                logger.info(
+                    f"[opener재작성] 시도 {attempt}/"
+                    f"{_OPENER_REWRITE_MAX_ATTEMPTS}"
+                )
+                candidate = await _rewrite_opener_only(
+                    card, final, selected_hook=selected_hook, mode=mode
+                )
+                if candidate is not None:
+                    rewritten = candidate
+                    break
+
             if rewritten is not None:
                 before = _count_strong_fails(final.gate_fails)
                 after = _count_strong_fails(rewritten.gate_fails)
@@ -2520,7 +2658,26 @@ async def generate_final_post(
                 if after <= before:
                     final = rewritten
             else:
-                logger.warning("[opener재작성] 실패 — 1차 결과 유지")
+                # 2회 시도 모두 점수 미달/파싱 실패 → full regen 폴백
+                logger.warning(
+                    f"[opener재작성] {_OPENER_REWRITE_MAX_ATTEMPTS}회 시도 "
+                    "모두 폐기 — full regen 폴백"
+                )
+                retry_extra = _build_retry_instruction(final.gate_fails)
+                retried, retried_grok = await _run_cycle(retry_extra)
+                if retried is not None:
+                    before = _count_strong_fails(final.gate_fails)
+                    after = _count_strong_fails(retried.gate_fails)
+                    logger.info(
+                        f"[재생성-폴백] 강한 실패 개수: {before} → {after} "
+                        f"(1차: {final.gate_fails}, "
+                        f"재생성: {retried.gate_fails})"
+                    )
+                    if after <= before:
+                        final = retried
+                        grok_result = retried_grok
+                else:
+                    logger.warning("[재생성-폴백] AI 응답 실패 — 1차 결과 유지")
         else:
             logger.warning(
                 f"[품질게이트] Claude 보정 후 강한 실패 잔존: "

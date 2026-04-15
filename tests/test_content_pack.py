@@ -5882,3 +5882,335 @@ class TestClassifierLogSamples:
         # 3개 mode 모두 최소 한 번 이상 샘플에 등장해야 한다
         modes_seen = {m for _, _, m in results}
         assert {"EXPLAIN", "JUDGMENT", "VERIFY"} <= modes_seen
+
+
+# ─── PR 5: Opener 점수 함수 + 2회 재시도 + full regen 폴백 ─────────────────
+
+
+class TestScoreOpener:
+    """_score_opener: 첫 줄 품질을 결정론적 규칙으로 0~100 점수화."""
+
+    def test_empty_string_is_zero(self):
+        from app.services.content_pack import _score_opener
+        assert _score_opener("") == 0
+        assert _score_opener("   ") == 0
+
+    def test_over_60_chars_is_zero_hard_cap(self):
+        from app.services.content_pack import _score_opener
+        long_opener = (
+            "아주 긴 설명형 문장으로 길게 늘어놓는 첫 줄이 60자를 "
+            "훌쩍 넘도록 계속 쓰이고 있어 통과할 수 없는 긴 오프너"
+        )
+        assert len(long_opener) > 60
+        assert _score_opener(long_opener) == 0
+
+    def test_short_clean_opener_passes_threshold(self):
+        """45자 이하 + 감점 없음 → 50+15 = 65점 (>= 60)."""
+        from app.services.content_pack import _score_opener, _OPENER_MIN_SCORE
+        score = _score_opener("미국이 처음 보상안을 꺼냈다")
+        assert score >= _OPENER_MIN_SCORE
+        assert score == 65
+
+    def test_strong_keyword_bonus(self):
+        """강한 키워드('핵심은') 가점."""
+        from app.services.content_pack import _score_opener
+        plain = _score_opener("새 규제가 시행된다")  # ≤45 → 65
+        bonus = _score_opener("핵심은 시행일 변경이다")  # ≤45 + strong → 75
+        assert bonus > plain
+        assert bonus == 75
+
+    def test_background_start_penalty(self):
+        """배경 시작어 '이후 '는 감점 30."""
+        from app.services.content_pack import _score_opener, _OPENER_MIN_SCORE
+        score = _score_opener("이후 보도된 한국 정부 발표가 나왔다")
+        # 50 + 15(len≤45) - 30(배경) = 35
+        assert score < _OPENER_MIN_SCORE
+        assert score <= 40
+
+    def test_bifurcation_penalty(self):
+        """'이어질지 / 그칠지 / 판가름' 감점."""
+        from app.services.content_pack import _score_opener, _OPENER_MIN_SCORE
+        s1 = _score_opener("이번 회담이 이어질지 그칠지가 갈림이다")
+        # 50 +15 -25(이어질지) +10(갈림) = 50 → 미달
+        assert s1 < _OPENER_MIN_SCORE
+
+    def test_fact_narration_penalty(self):
+        """기사 재서술 패턴 감점."""
+        from app.services.content_pack import _score_opener, _OPENER_MIN_SCORE
+        score = _score_opener("한국은행이 금리 인하를 결정했다고 밝혔다")
+        # 50 +15 -20(다고 밝혔다) = 45
+        assert score < _OPENER_MIN_SCORE
+
+    def test_verify_overreach_heavy_penalty(self):
+        """VERIFY/저신뢰에서 구조 해석 금지어 -35."""
+        from app.services.content_pack import _score_opener, MODE_VERIFY
+        score = _score_opener(
+            "외교 채널 복원이 최근 포인트다",
+            mode=MODE_VERIFY,
+            certainty_level="미확인",
+        )
+        # 50 +15(≤45) -35(외교 채널 복원) = 30, < 60 미달
+        assert score < 60
+        assert score == 30
+
+    def test_verify_weak_opener_bifurcation_penalty(self):
+        """VERIFY + '이어질지/그칠지' 복합 감점."""
+        from app.services.content_pack import _score_opener, MODE_VERIFY
+        s = _score_opener(
+            "단순 수사인지 실질 채널인지 갈림이다",
+            mode=MODE_VERIFY,
+            certainty_level="미확인",
+        )
+        # 50 +15(len<=45) -25(이어질지 패턴 아님, 판가름 아님,
+        # 실제로는 _VERIFY_WEAK_OPENER_PATTERNS 에 '단순 수사인지', '실질 채널인지'
+        # 매칭) -25 +10(갈림) = 25
+        assert s < 60
+
+    def test_banned_ending_penalty(self):
+        """금지 마감('관건이다') 으로 끝나면 감점."""
+        from app.services.content_pack import _score_opener, _OPENER_MIN_SCORE
+        score = _score_opener("다음 발표가 관건이다")
+        # 50 +15 -20(금지 마감) +10(관건은? 매칭 안 됨, _STRONG_OPENER_WORDS 에
+        # '관건은'으로 등록되어 있으므로 '관건이다'는 매칭 안 됨) = 45
+        assert score < _OPENER_MIN_SCORE
+
+    def test_length_tier_45_vs_55(self):
+        """≤45 +15, 46~55 +5, 56~60 +0."""
+        from app.services.content_pack import _score_opener
+        s45 = _score_opener("가" * 45)  # 50+15 = 65
+        s50 = _score_opener("가" * 50)  # 50+5 = 55
+        s58 = _score_opener("가" * 58)  # 50+0 = 50
+        assert s45 == 65
+        assert s50 == 55
+        assert s58 == 50
+
+
+class TestOpenerRewriteScoreThreshold:
+    """_rewrite_opener_only 가 _score_opener 임계값으로 거부·통과."""
+
+    def _make_card(self):
+        return CandidateCard(
+            key_facts=["팩트"],
+            hook_candidates=["훅"],
+            thesis_cards=[ThesisCard(
+                thesis="해석", why_not_summary="긴장",
+                reader_stake="영향", opener="훅",
+                judgment_coord="판단 좌표",
+                verification_signal="판별 신호",
+            )],
+            certainty_level="확정",
+        )
+
+    def _make_draft(self):
+        return FinalPost(
+            final_post=(
+                "이후 보도된 긴 배경 설명형 첫 줄이 게이트에 걸렸다.\n"
+                "두 번째 문장.\n"
+                "세 번째 판별 신호."
+            ),
+            final_short="짧은 버전.",
+            gate_fails=["WEAK_OPENER"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_low_score_opener_rejected(self, monkeypatch):
+        """배경어 시작 new_opener (score < 60) → None 반환."""
+        from app.services.content_pack import _rewrite_opener_only
+
+        async def fake_call(*a, **kw):
+            # "이후 보도된" 시작 → -30점, total ~35점
+            return json.dumps({"new_opener": "이후 보도된 새 발표가 나왔다"})
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+        result = await _rewrite_opener_only(
+            self._make_card(), self._make_draft(), selected_hook="훅",
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_high_score_opener_accepted(self, monkeypatch):
+        """깨끗한 짧은 opener (score ≥ 60) → 반영."""
+        from app.services.content_pack import _rewrite_opener_only
+
+        async def fake_call(*a, **kw):
+            return json.dumps({"new_opener": "핵심은 시행일 변경이다"})
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+        result = await _rewrite_opener_only(
+            self._make_card(), self._make_draft(), selected_hook="훅",
+        )
+        assert result is not None
+        assert result.final_post.startswith("핵심은 시행일 변경이다")
+
+
+class TestOpenerRewriteTwoAttemptsThenFullRegen:
+    """PR 5: 2회 opener 시도 → 둘 다 폐기 시 full regen 폴백."""
+
+    @pytest.fixture
+    def _card(self):
+        return CandidateCard(
+            key_facts=["팩트1", "팩트2"],
+            hook_candidates=["훅"],
+            thesis_cards=[ThesisCard(
+                thesis="해석", why_not_summary="긴장",
+                reader_stake="영향", opener="훅",
+                judgment_coord="판단 좌표",
+                verification_signal="판별 신호",
+            )],
+            certainty_level="확정",
+        )
+
+    @pytest.mark.asyncio
+    async def test_first_attempt_low_score_second_high_score(
+        self, monkeypatch, _card,
+    ):
+        """1차 opener 점수 미달 → 2차 opener 통과 → rewrite 성공."""
+        from app.services import content_pack as cp
+
+        # 호출 시퀀스:
+        # call 1: 초안 생성 (WEAK_OPENER) — 1차 cycle
+        # call 2: opener rewrite 시도 1 (low score — 배경어)
+        # call 3: opener rewrite 시도 2 (high score — 깨끗한 opener)
+        responses = [
+            json.dumps({
+                "final_post": (
+                    "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                    "두 번째 정상 문장.\n"
+                    "세 번째 판별 신호."
+                ),
+                "final_short": "짧은 버전.",
+            }),
+            json.dumps({"new_opener": "이후 보도된 배경어 시작 문장이다"}),
+            json.dumps({"new_opener": "핵심은 시행일 변경이다"}),
+        ]
+        call_counter = {"idx": 0}
+
+        async def fake_call(system_prompt, user_prompt, *, temperature=0.7, **kw):
+            idx = call_counter["idx"]
+            call_counter["idx"] += 1
+            return responses[idx] if idx < len(responses) else None
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(*a, **kw):
+            return None
+
+        monkeypatch.setattr(cp, "_call_ai_with_prompt", fake_call)
+        monkeypatch.setattr(cp, "_grok_eval", fake_grok)
+        monkeypatch.setattr(cp, "_claude_review_final", fake_claude)
+
+        result = await cp.generate_final_post(_card, 0, "")
+
+        # 총 3회: 1차 cycle + opener 시도 2회
+        assert call_counter["idx"] == 3
+        # 최종 첫 줄이 2차 시도 opener 로 교체됐어야 한다
+        assert result.final_post.startswith("핵심은 시행일 변경이다")
+
+    @pytest.mark.asyncio
+    async def test_both_attempts_low_score_falls_back_to_full_regen(
+        self, monkeypatch, _card,
+    ):
+        """2회 모두 점수 미달 → full regen 폴백 경로 발동."""
+        from app.services import content_pack as cp
+
+        # 호출 시퀀스:
+        # call 1: 초안 (WEAK_OPENER 트리거)
+        # call 2: opener rewrite 시도 1 (low score)
+        # call 3: opener rewrite 시도 2 (low score)
+        # call 4: full regen cycle (OpenAI 호출)
+        responses = [
+            json.dumps({
+                "final_post": (
+                    "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                    "두 번째 정상 문장.\n"
+                    "세 번째 판별 신호."
+                ),
+                "final_short": "짧은 버전.",
+            }),
+            json.dumps({"new_opener": "이후 보도된 배경형 1"}),
+            json.dumps({"new_opener": "이후 보도된 배경형 2"}),
+            json.dumps({
+                "final_post": (
+                    "핵심은 시행일 변경이다.\n"
+                    "두 번째 정상 문장.\n"
+                    "6월 발표가 나오면 확정."
+                ),
+                "final_short": "짧은 버전.",
+            }),
+        ]
+        call_counter = {"idx": 0}
+
+        async def fake_call(system_prompt, user_prompt, *, temperature=0.7, **kw):
+            idx = call_counter["idx"]
+            call_counter["idx"] += 1
+            return responses[idx] if idx < len(responses) else None
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(*a, **kw):
+            return None
+
+        monkeypatch.setattr(cp, "_call_ai_with_prompt", fake_call)
+        monkeypatch.setattr(cp, "_grok_eval", fake_grok)
+        monkeypatch.setattr(cp, "_claude_review_final", fake_claude)
+
+        result = await cp.generate_final_post(_card, 0, "")
+
+        # 1차 cycle + opener 2회 + full regen 1회 = 4회
+        assert call_counter["idx"] == 4
+        # full regen 결과가 채택되어야 한다
+        assert result.final_post.startswith("핵심은 시행일 변경이다")
+        # WEAK_OPENER 해소
+        assert "WEAK_OPENER" not in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_body_preserved_across_opener_rewrite(
+        self, monkeypatch, _card,
+    ):
+        """opener rewrite 이후에도 본문 2~3 문장이 바뀌지 않는다."""
+        from app.services import content_pack as cp
+
+        body_second = "아주 특별한 두 번째 문장 표식 XYZ123"
+        body_third = "세 번째 판별 신호 표식 판별"
+
+        responses = [
+            json.dumps({
+                "final_post": (
+                    f"이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                    f"{body_second}.\n"
+                    f"{body_third}."
+                ),
+                "final_short": "짧은 버전.",
+            }),
+            json.dumps({"new_opener": "핵심은 시행일 변경이다"}),
+        ]
+        idx = {"v": 0}
+
+        async def fake_call(system_prompt, user_prompt, *, temperature=0.7, **kw):
+            v = idx["v"]
+            idx["v"] += 1
+            return responses[v] if v < len(responses) else None
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(*a, **kw):
+            return None
+
+        monkeypatch.setattr(cp, "_call_ai_with_prompt", fake_call)
+        monkeypatch.setattr(cp, "_grok_eval", fake_grok)
+        monkeypatch.setattr(cp, "_claude_review_final", fake_claude)
+
+        result = await cp.generate_final_post(_card, 0, "")
+
+        # 본문 표식이 그대로 남아야 한다
+        assert body_second in result.final_post
+        assert body_third in result.final_post
+        # 첫 줄은 교체됨
+        assert result.final_post.startswith("핵심은 시행일 변경이다")
