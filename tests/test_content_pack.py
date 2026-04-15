@@ -5151,6 +5151,252 @@ class TestVerifyModeInstruction:
         assert "살아 있다" in s or "가깝다" in s or "그쳤다" in s
 
 
+class TestVerifyOverreachPR6Extended:
+    """PR 6 — VERIFY 출력 스키마 축소: 신규 금지 어휘 6개 + body-wide 이중분기."""
+
+    def test_new_overreach_tokens_registered(self):
+        """신규 6개 금지 어휘가 OVERREACH 리스트에 등록되어 있다."""
+        from app.services.content_pack import _VERIFY_OVERREACH_PATTERNS
+        for token in (
+            "패러다임", "상징적 의미", "본심", "노림수",
+            "를 시사한다", "라는 뜻이다", "제3국 실질 채널",
+        ):
+            assert any(token in p for p in _VERIFY_OVERREACH_PATTERNS), (
+                f"PR 6 신규 VERIFY 금지 어휘 누락: {token}"
+            )
+
+    def test_paradigm_triggers_gate(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "A측이 발언했다.\n"
+            "이번 조치는 패러다임 변화의 신호다.\n"
+            "공식 확인은 없다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "주장. 확인 안 됨.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+        assert any("VERIFY 구조해석" in w for w in warnings)
+
+    def test_symbolic_meaning_triggers_gate(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "이번 발언의 상징적 의미가 크다.\n"
+            "공식 발표는 없다."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "주장. 확인 안 됨.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_signal_verb_triggers_gate(self):
+        """'~를 시사한다' 본문 등장 → gate."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "이번 발언은 구조 변화를 시사한다.\n"
+            "공식 확인은 없다."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "주장. 확인 안 됨.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_closed_conditional_tail_triggers_gate(self):
+        """'~라는 뜻이다' 본문 등장 → gate."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "특사 파견이 없으면 수사라는 뜻이다.\n"
+            "공식 확인은 없다."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "주장. 확인 안 됨.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_body_wide_dual_branch_triggers_gate(self):
+        """본문 2~3문장에 숨어들어온 이중분기 수사도 차단.
+
+        기존 _VERIFY_WEAK_OPENER_PATTERNS 는 첫 줄만 검사. PR 6 에서
+        _VERIFY_OVERREACH_PATTERNS 에 '이어질지/그칠지/판가름' 을 추가해
+        본문 전역에서도 잡는다.
+        """
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 발언 확인이다.\n"
+            "수사에 그칠지 실질로 이어질지가 판가름이다.\n"
+            "공식 발표는 없다."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "주장. 확인 안 됨.", "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+
+    def test_high_confidence_unaffected_by_new_tokens(self):
+        """확정 모드에서는 신규 금지 어휘 gate 발동 안 함 (회귀 방지)."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "정부가 공식 발표했다.\n"
+            "이번 조치는 패러다임 변화다.\n"
+            "시행은 다음 달이다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "", "확정")
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
+class TestVerifyShortSentenceCap:
+    """PR 6 — VERIFY / 저신뢰 final_short 는 최대 2문장."""
+
+    def test_verify_short_three_sentences_fails(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "공식 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 공개되면 검증 가능."
+        )
+        short = (
+            "핵심은 접촉 확인이다. "
+            "공식 접촉은 없다. "
+            "특사 파견이 공개되면 검증 가능이다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, short, "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" in gate_fails
+        assert any("짧은 버전 문장 수 초과" in w for w in warnings)
+
+    def test_verify_short_two_sentences_passes(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "공식 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 공개되면 검증 가능."
+        )
+        short = "핵심은 접촉 확인이다. 특사 파견이 공개되면 검증 가능."
+        _, _, _, gate_fails = _validate_final_post(
+            post, short, "미확인"
+        )
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+    def test_high_confidence_short_cap_disabled(self):
+        """확정(EXPLAIN) 모드에서는 short 2문장 캡 비활성 (회귀 방지)."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심 명제다.\n"
+            "근거 팩트다.\n"
+            "판단 기준이다.\n"
+            "답은 다음 달 거래량이다."
+        )
+        short = (
+            "강남3구부터 꺾였다. "
+            "규제가 먼저 고가 주택 심리를 눌렀다. "
+            "문제는 중저가까지 번지느냐다."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, short, "확정")
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
+class TestVerifyFinalizeTemplatesPR6:
+    """PR 6 — VERIFY finalize 가 3문장 템플릿 A/B/C 를 강제한다."""
+
+    def test_finalize_includes_three_templates(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        # 템플릿 A/B/C 라벨 존재
+        assert "템플릿 A" in s, "VERIFY 템플릿 A 누락"
+        assert "템플릿 B" in s, "VERIFY 템플릿 B 누락"
+        assert "템플릿 C" in s, "VERIFY 템플릿 C 누락"
+
+    def test_finalize_declares_verifier_not_explainer(self):
+        """VERIFY 는 설명문이 아니라 검증문이라는 원칙을 명시."""
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        assert "검증문" in s or "검증 조건만" in s
+        assert "아직 단정하면 안 되는가" in s or "아직 확인되지 않았다" in s
+
+    def test_finalize_caps_final_short_two_sentences(self):
+        """VERIFY 지시문이 final_short 2문장 규칙을 명시한다."""
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        assert "최대 2문장" in s
+        # 구조 힌트 (주장 + 확인 포인트)
+        assert "주장" in s and "확인 포인트" in s
+
+    def test_finalize_bans_pr6_new_tokens(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        for tok in (
+            "패러다임", "상징적 의미", "본심", "노림수",
+            "시사한다", "뜻이다",
+        ):
+            assert tok in s, f"VERIFY finalize 에 신규 금지 토큰 누락: {tok}"
+
+    def test_slot_instruction_bans_pr6_new_tokens(self):
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_slot_instruction(MODE_VERIFY)
+        for tok in (
+            "패러다임", "상징적 의미", "본심", "노림수",
+            "제3국 실질 채널",
+        ):
+            assert tok in s, f"VERIFY slot 에 신규 금지 토큰 누락: {tok}"
+
+    def test_slot_instruction_frames_as_verification(self):
+        """슬롯 지시가 '왜 아직 단정하면 안 되는가' 프레임으로 전환."""
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_slot_instruction(MODE_VERIFY)
+        assert "아직 단정하면 안 되는가" in s or "검증문" in s
+
+
+class TestVerifyNoRegressionOnOtherModes:
+    """PR 6 — EXPLAIN/JUDGMENT 지시/게이트 회귀 없음."""
+
+    def test_explain_instruction_unchanged_structure(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        # EXPLAIN 4문장 구조 유지
+        assert "MODE: EXPLAIN" in s
+        assert "4문장" in s
+        assert "왜 그 순서로" in s
+
+    def test_judgment_instruction_unchanged(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_JUDGMENT,
+        )
+        s = _build_mode_finalize_instruction(MODE_JUDGMENT)
+        assert "MODE: JUDGMENT" in s
+        assert "3문장" in s
+        assert "엇갈리는 신호" in s
+
+    def test_explain_body_long_not_gated(self):
+        """EXPLAIN(확정) 4~5문장 정상 — PR 6 신규 gate 가 영향 없음."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "강남3구부터 거래량이 꺾였다.\n"
+            "규제가 먼저 고가 주택 심리를 눌렀다.\n"
+            "문제는 중저가까지 번지느냐다.\n"
+            "답은 다음 달 거래량이다."
+        )
+        short = "강남3구부터 꺾였다. 문제는 중저가까지 번지느냐다."
+        _, _, _, gate_fails = _validate_final_post(post, short, "확정")
+        assert "LOW_CONFIDENCE_OVERREACH" not in gate_fails
+
+
 class TestDeadEndingRetryHintClosedTokens:
     """DEAD_ENDING 재생성 힌트가 닫힌 판정 토큰을 명시한다."""
 

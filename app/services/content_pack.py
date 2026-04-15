@@ -2833,6 +2833,7 @@ _SPECULATIVE_MOTIVE_PATTERNS = [
 # 외교 시나리오 확장' 축. 두 축은 분리해서 운영한다.
 _VERIFY_OVERREACH_PATTERNS = [
     "제3국을 통한 실질적 대화",
+    "제3국 실질 채널",
     "실질적 대화 채널",
     "대화 채널로 이어",
     "대화 채널이 살아",
@@ -2853,6 +2854,26 @@ _VERIFY_OVERREACH_PATTERNS = [
     "질서 재편",
     "진짜 신호",
     "진짜 신호는",
+    # PR 6 — VERIFY 출력 스키마 축소 (설명문→검증문)
+    # 이 계열은 "장기 해석 / 의도 추정 / 상징 해석 / 단정형 마감"
+    # 을 본문에 다시 끌고 들어오는 통로였다. 본문 1개 등장만으로도
+    # LOW_CONFIDENCE_OVERREACH. 저신뢰 기사는 '아직 확인 안 됨'만
+    # 남기고 나머지는 전부 죽인다.
+    "패러다임",
+    "상징적 의미",
+    "상징적으로 의미",
+    "본심",
+    "노림수",
+    "를 시사한다",
+    "을 시사한다",
+    "라는 뜻이다",
+    "이라는 뜻이다",
+    # VERIFY 본문 전역에서도 이중분기 수사 차단
+    # (_VERIFY_WEAK_OPENER_PATTERNS 는 첫 줄만 검사 → 본문 2~3문장에
+    #  다시 들어오는 경로를 막는다)
+    "이어질지",
+    "그칠지",
+    "판가름",
 ]
 
 
@@ -4534,6 +4555,24 @@ def _validate_final_post(
             )
             if "LOW_CONFIDENCE_OVERREACH" not in gate_fails:
                 gate_fails.append("LOW_CONFIDENCE_OVERREACH")
+
+        # PR 6 — VERIFY 짧은 버전 하드 캡 — 최대 2문장.
+        # 저신뢰 기사 요약에 해설문이 다시 기어 들어오는 걸 구조적으로 차단.
+        # 허용 구조: '주장 1' + '확인 포인트 1'.
+        if short:
+            short_sentences = [
+                s.strip()
+                for s in short.replace("\n", " ").split(".")
+                if s.strip()
+            ]
+            if len(short_sentences) > 2:
+                warnings.append(
+                    f"VERIFY 짧은 버전 문장 수 초과 "
+                    f"({len(short_sentences)}문장) — 최대 2문장 "
+                    "(주장 1 + 확인 포인트 1)"
+                )
+                if "LOW_CONFIDENCE_OVERREACH" not in gate_fails:
+                    gate_fails.append("LOW_CONFIDENCE_OVERREACH")
 
     # final_short가 final_post 첫 문장과 동일한지 체크
     first_sentence = post.split(".")[0].split("\n")[0].strip()
