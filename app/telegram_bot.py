@@ -1702,9 +1702,17 @@ async def _handle_thesis_select_callback(
         _first_line = _post_clean.split("\n")[0] if _post_clean else ""
         _first_preview = trim_display(_first_line, 60)
 
+        # 기사 라우터 mode 라벨 (EXPLAIN/JUDGMENT/VERIFY)
+        try:
+            from app.services.content_pack import route_article_mode, mode_label
+            _mode_label = mode_label(route_article_mode(card))
+        except Exception:
+            _mode_label = ""
+
         result_text = (
-            f"✅ <b>최종 마감 완료</b>\n\n"
-            f"🎯 <b>선택된 슬롯</b>\n"
+            f"✅ <b>최종 마감 완료</b>\n"
+            + (f"<i>{_mode_label}</i>\n\n" if _mode_label else "\n")
+            + f"🎯 <b>선택된 슬롯</b>\n"
             f"해석축: {thesis_text}\n\n"
             f"📌 <b>첫 줄:</b> {_first_preview}\n\n"
             f"{'─' * 24}\n\n"

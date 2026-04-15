@@ -4335,3 +4335,298 @@ class TestTelegramRetryExhaustedLabel:
         assert '"RETRY_EXHAUSTED"' in text
         assert "재생성 1회 실패" in text
         assert "게시 전 수동 확인 필수" in text
+
+
+# ─── 기사 라우터 (EXPLAIN / JUDGMENT / VERIFY) ──────────────────────────────
+
+
+class TestArticleModeRouter:
+    """certainty_level → article mode 매핑."""
+
+    def test_high_confidence_routes_to_explain(self):
+        from app.services.content_pack import (
+            route_article_mode, MODE_EXPLAIN,
+        )
+        card = CandidateCard(
+            key_facts=["팩트"], certainty_level="확정",
+        )
+        assert route_article_mode(card) == MODE_EXPLAIN
+
+    def test_conflicting_signals_routes_to_judgment(self):
+        from app.services.content_pack import (
+            route_article_mode, MODE_JUDGMENT,
+        )
+        card = CandidateCard(
+            key_facts=["팩트"], certainty_level="상충",
+        )
+        assert route_article_mode(card) == MODE_JUDGMENT
+
+    def test_unverified_routes_to_verify(self):
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["팩트"], certainty_level="미확인",
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_unknown_certainty_defaults_to_verify(self):
+        """안전장치: 예상 밖 값이면 가장 보수적인 VERIFY."""
+        from app.services.content_pack import (
+            route_article_mode, MODE_VERIFY,
+        )
+        card = CandidateCard(
+            key_facts=["팩트"], certainty_level="",
+        )
+        assert route_article_mode(card) == MODE_VERIFY
+
+    def test_mode_label_shape(self):
+        from app.services.content_pack import (
+            mode_label, MODE_EXPLAIN, MODE_JUDGMENT, MODE_VERIFY,
+        )
+        assert "EXPLAIN" in mode_label(MODE_EXPLAIN)
+        assert "JUDGMENT" in mode_label(MODE_JUDGMENT)
+        assert "VERIFY" in mode_label(MODE_VERIFY)
+
+
+class TestModeSlotInstructions:
+    """Gemini 슬롯 생성 user_prompt에 mode별 프레임 지시가 들어간다."""
+
+    def test_explain_slot_instruction_has_three_axes(self):
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_slot_instruction(MODE_EXPLAIN)
+        assert "EXPLAIN" in s
+        assert "무엇이 바뀌나" in s
+        assert "왜 뉴스 이상이냐" in s
+        assert "다음 판가름" in s
+
+    def test_judgment_slot_instruction_downtones_meaning_axis(self):
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_JUDGMENT,
+        )
+        s = _build_mode_slot_instruction(MODE_JUDGMENT)
+        assert "JUDGMENT" in s
+        assert "무엇이 바뀌나" in s
+        assert "다음 판가름" in s
+        # JUDGMENT에서는 의미 해석 톤을 약하게
+        assert ("짧게" in s) or ("짧게만" in s)
+
+    def test_verify_slot_instruction_blocks_long_term_reading(self):
+        from app.services.content_pack import (
+            _build_mode_slot_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_slot_instruction(MODE_VERIFY)
+        assert "VERIFY" in s
+        # 새 슬롯 3축
+        assert "지금 나온 주장" in s
+        assert "아직 확인" in s
+        assert "확인되면" in s or "검증 신호" in s
+        # 장기 해석 금지 키워드 포함
+        for banned in ("정치적 계산", "숨은 의도", "노림수", "체제 양보"):
+            assert banned in s, f"VERIFY 금지어 누락: {banned}"
+
+
+class TestModeFinalizeInstructions:
+    """Finalize user_prompt의 '지시' 블록이 mode별로 다르게 조립된다."""
+
+    def test_explain_uses_four_sentence_structure(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        assert "MODE: EXPLAIN" in s
+        assert "4문장" in s
+        # 4단 구조가 그대로 노출
+        for kw in ("핵심 명제", "근거 팩트", "판단 기준", "판별 신호"):
+            assert kw in s, f"EXPLAIN 문장 가이드 누락: {kw}"
+
+    def test_judgment_uses_three_sentence_structure(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_JUDGMENT,
+        )
+        s = _build_mode_finalize_instruction(MODE_JUDGMENT)
+        assert "MODE: JUDGMENT" in s
+        assert "3문장" in s
+        for kw in ("지금 핵심", "엇갈리는 신호", "확인 포인트"):
+            assert kw in s, f"JUDGMENT 문장 가이드 누락: {kw}"
+        # 장기 구조 해석 억제
+        assert "구조적 전환" in s or "체제 재편" in s
+
+    def test_verify_blocks_long_term_and_motive(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        assert "MODE: VERIFY" in s
+        assert "3문장" in s
+        # 새 3단 구조
+        for kw in ("현재 나온 주장", "아직 확인 안 된 점", "다음 확인 신호"):
+            assert kw in s, f"VERIFY 문장 가이드 누락: {kw}"
+        # 장기/의도 해석 금지어
+        for banned in (
+            "정치적 계산", "숨은 의도", "본심", "노림수",
+            "체제 양보", "질서 재편", "구조적 변화",
+        ):
+            assert banned in s, f"VERIFY 금지어 누락: {banned}"
+
+
+class TestFinalizeUserPromptModeInjection:
+    """generate_final_post 실행 시 user_prompt 안에 mode 라벨이 주입된다."""
+
+    @pytest.fixture
+    def card_high(self):
+        return CandidateCard(
+            key_facts=["확정 팩트 — 정부가 공식 발표"],
+            hook_candidates=["확정 훅"],
+            thesis_cards=[ThesisCard(
+                thesis="확정 해석축",
+                why_not_summary="긴장점",
+                reader_stake="독자 영향",
+                opener="오프너",
+                judgment_coord="판단 좌표",
+                verification_signal="판별 신호",
+            )],
+            tensions=["tension1"],
+            cautions=["caution1"],
+            certainty_level="확정",
+        )
+
+    @pytest.fixture
+    def card_low(self):
+        return CandidateCard(
+            key_facts=["미확인 단독 주장"],
+            hook_candidates=["훅"],
+            thesis_cards=[ThesisCard(
+                thesis="해석",
+                why_not_summary="긴장",
+                reader_stake="영향",
+                opener="오프너",
+            )],
+            cautions=["출처 미검증"],
+            certainty_level="미확인",
+        )
+
+    def _capture_user_prompt(self, monkeypatch):
+        """_call_ai_with_prompt 를 가로채 user_prompt 캡처."""
+        captured = {"user_prompt": None}
+
+        async def fake_call(system_prompt, user_prompt, temperature=0.9, **kw):
+            captured["user_prompt"] = user_prompt
+            # 유효 JSON 반환 — 게이트 통과시켜 1회만 호출되게
+            return json.dumps({
+                "final_post": (
+                    "핵심 명제 한 줄이다.\n"
+                    "근거 팩트 한 줄 있다.\n"
+                    "판단 좌표 녹아 있다.\n"
+                    "새 발표가 6월 전에 나오면 확정이고 안 나오면 선언이다."
+                ),
+                "final_short": "짧은 버전 한 줄.",
+            })
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(*a, **kw):
+            return None
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+        monkeypatch.setattr(
+            "app.services.content_pack._grok_eval", fake_grok
+        )
+        monkeypatch.setattr(
+            "app.services.content_pack._claude_review_final", fake_claude
+        )
+        return captured
+
+    @pytest.mark.asyncio
+    async def test_explain_mode_injected_for_high_confidence(
+        self, monkeypatch, card_high,
+    ):
+        from app.services.content_pack import generate_final_post
+        cap = self._capture_user_prompt(monkeypatch)
+        await generate_final_post(card_high, 0, "")
+        up = cap["user_prompt"]
+        assert up is not None
+        assert "ARTICLE_MODE: EXPLAIN" in up
+        assert "MODE: EXPLAIN" in up
+        # EXPLAIN에는 VERIFY 전용 표현이 없어야 한다
+        assert "MODE: VERIFY" not in up
+        assert "MODE: JUDGMENT" not in up
+
+    @pytest.mark.asyncio
+    async def test_verify_mode_injected_for_low_confidence(
+        self, monkeypatch, card_low,
+    ):
+        from app.services.content_pack import generate_final_post
+        cap = self._capture_user_prompt(monkeypatch)
+        await generate_final_post(card_low, 0, "")
+        up = cap["user_prompt"]
+        assert up is not None
+        assert "ARTICLE_MODE: VERIFY" in up
+        assert "MODE: VERIFY" in up
+        # VERIFY 기사에는 EXPLAIN 4단 가이드가 들어가면 안 됨
+        assert "MODE: EXPLAIN" not in up
+        # VERIFY 금지어가 프롬프트에 들어가 있어야 함
+        assert "숨은 의도" in up or "노림수" in up
+        # Low confidence 경고도 유지
+        assert "LOW CONFIDENCE" in up
+
+
+class TestGeminiThesisCardsModeParam:
+    """_gemini_generate_thesis_cards 가 mode 파라미터를 받아 user_prompt에 주입."""
+
+    @pytest.mark.asyncio
+    async def test_mode_parameter_reaches_user_prompt(self, monkeypatch):
+        """Gemini 호출 직전의 user_prompt에 mode별 슬롯 지시가 포함된다."""
+        from app.services import content_pack as cp
+
+        # has_gemini True 로 고정
+        class _FakeSettings:
+            has_gemini = True
+            gemini_api_key = "KEY"
+        monkeypatch.setattr(
+            "app.config.settings", _FakeSettings, raising=False,
+        )
+
+        captured = {"body": None}
+
+        class _FakeResp:
+            status_code = 200
+            text = ""
+            def json(self):
+                return {
+                    "candidates": [{
+                        "content": {"parts": [{"text": "{\"thesis_cards\": [], \"tensions\": []}"}]}
+                    }],
+                    "usageMetadata": {},
+                }
+
+        class _FakeClient:
+            def __init__(self, *a, **kw): pass
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def post(self, url, params=None, headers=None, json=None):
+                captured["body"] = json
+                return _FakeResp()
+
+        import httpx as _httpx
+        monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+
+        await cp._gemini_generate_thesis_cards(
+            key_facts=["팩트1"],
+            source_text="원문",
+            topic_tags=["tag"],
+            cautions=["caution"],
+            mode=cp.MODE_VERIFY,
+        )
+
+        body = captured["body"]
+        assert body is not None
+        up = body["contents"][0]["parts"][0]["text"]
+        assert "VERIFY" in up
+        assert "지금 나온 주장" in up
+        assert "숨은 의도" in up
