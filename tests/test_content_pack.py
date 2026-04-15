@@ -4536,6 +4536,115 @@ class TestModeFinalizeInstructions:
             assert banned in s, f"VERIFY 금지어 누락: {banned}"
 
 
+class TestExplainDepthInstruction:
+    """95점 목표 — EXPLAIN 마감 지시가 구조 + 이해관계 + 열린 마감을 요구한다."""
+
+    def test_explain_requires_structure_hint(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        # 구조 설명 요구
+        assert "구조" in s
+        # '왜 그 순서로 움직이는지' 요구 문구
+        assert "왜 그 순서로" in s
+
+    def test_explain_requires_stakeholder_axis(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        # 이해관계 축 요구
+        assert "이해관계" in s
+        # 이해관계 후보군 예시
+        assert "유리/불리" in s or "먼저 유리" in s
+
+    def test_explain_requires_open_ending_templates(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        # 열린 마감 A/B 템플릿
+        assert "판정 기준형" in s
+        assert "이해관계형" in s
+        # 예시 표현 최소 1개
+        assert "답은" in s or "먼저 맞는" in s
+
+    def test_explain_explicitly_bans_closed_verdict_endings(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        for banned in ("신호다", "확인이다", "의미한다", "맞다",
+                       "보여준다", "시사한다"):
+            assert banned in s, f"EXPLAIN 닫힌 마감 금지어 누락: {banned}"
+
+    def test_explain_short_version_instruction(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        # 짧은 버전: 요약 금지, 구조/이해관계 한 줄
+        assert "final_short" in s
+        assert "요약 금지" in s
+
+    def test_explain_keeps_old_four_sentence_keywords(self):
+        """후방호환 — 기존 4문장 구조 키워드는 유지된다."""
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        for kw in ("핵심 명제", "근거 팩트", "판단 기준", "판별 신호", "4문장"):
+            assert kw in s, f"EXPLAIN 기존 키워드 손실: {kw}"
+
+
+class TestBannedClosedVerdictEndings:
+    """95점 목표 — _BANNED_ENDINGS 에 닫힌 판정 마감이 포함된다."""
+
+    def test_banned_endings_include_closed_verdict_tokens(self):
+        from app.services.content_pack import _BANNED_ENDINGS
+        for token in ("신호다", "의미한다", "의미다", "확인이다",
+                      "뜻이다", "맞다", "패러다임 변화다",
+                      "구조적 의미를 갖는다", "의미를 갖는다"):
+            assert token in _BANNED_ENDINGS, f"금지 마감 누락: {token}"
+
+    def test_validate_final_post_gates_closed_verdict(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "강남3구 하락은 단순 조정이 아니다.\n"
+            "규제와 금리가 투자 구조를 바꾼다는 신호다."
+        )
+        short = "투자 구조 변화의 신호다."
+        _, _, warnings, gate_fails = _validate_final_post(post, short, "확정")
+        # 닫힌 마감 '신호다' 는 DEAD_ENDING 게이트로 잡혀야 한다
+        assert "DEAD_ENDING" in gate_fails
+        assert any("신호다" in w for w in warnings)
+
+    def test_validate_final_post_gates_confirmation_verdict(self):
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "정책이 작동하고 있다.\n"
+            "양극화가 고착됐다는 확인이다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(post, "", "확정")
+        assert "DEAD_ENDING" in gate_fails
+
+    def test_validate_allows_closed_word_mid_sentence(self):
+        """닫힌 단어가 문장 중간에 오면 허용 (endswith 검사).
+
+        예: '답은 거래량이다' 처럼 열린 마감은 '맞다'/'신호다' 를
+        문장 중간에 써도 통과해야 한다.
+        """
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "강남3구 하락은 규제 작동 신호다. 그러나 중저가가 버티는 구조는 따로다.\n"
+            "답은 다음 달 거래량이다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(post, "", "확정")
+        # endswith('신호다') 가 False 이므로 DEAD_ENDING 트리거 안 됨
+        assert "DEAD_ENDING" not in gate_fails
+
+
 class TestFinalizeUserPromptModeInjection:
     """generate_final_post 실행 시 user_prompt 안에 mode 라벨이 주입된다."""
 
