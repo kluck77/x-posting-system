@@ -2194,6 +2194,171 @@ def _build_retry_instruction(gate_fails: list) -> str:
     )
 
 
+# ─── 첫 줄 전용 rewrite 엔진 ─────────────────────────────────────────────────
+#
+# WEAK_OPENER 단독 실패(본문 다른 게이트는 통과)인 경우, 본문 전체를 다시
+# 만들지 않고 첫 문장만 AI 로 교체한다. 이유:
+#   1. 본문 전체 재생성은 판단 좌표/판별 신호를 재뽑기 때문에 논지 드리프트
+#      위험이 있다.
+#   2. WEAK_OPENER 는 사실상 "첫 문장이 너무 길거나 배경 설명" 문제라
+#      전체 재생성까지 할 이유가 없다.
+#   3. 토큰/지연 절감.
+#
+# 스플라이싱 규칙: 원본 post 의 첫 문장(마침표 기준)만 잘라내고 new_opener
+# 로 교체. 뒷부분(본문)은 한 글자도 건드리지 않는다. 교체 후 다시 전체
+# 검증을 돌려 다른 게이트가 새로 뜨면 호출자가 판단한다.
+
+_OPENER_REWRITE_PROMPT_KO = """너는 "첫 문장만 다시 쓰는" 편집자다.
+
+━━━ 절대 규칙 ━━━
+1) 본문은 건드리지 마라. 너는 "첫 문장 한 줄" 만 낸다.
+2) 새 사실 추가 금지. 본문에 이미 있는 주장을 한 줄로 압축만.
+3) 선택된 해석 슬롯 / 판단 좌표 / 판별 신호는 바꾸지 마라. 표현만 직선화.
+4) 길이: 45자 권장, 60자 초과 금지. 반드시 60자 안.
+5) 금지 시작어: "~이후", "~보도한", "~보도된", "~전해진", "~알려진".
+6) 금지 구조: "A인지 B인지 ~가 결정한다" 같은 이중 분기 수사.
+7) 금지 마감: "관건이다/변수다/확인이 필요하다" 류로 첫 줄이 끝나면 안 됨.
+8) VERIFY 기사라면 구조 해석("~라는 뜻이다", "진짜 신호", "국면을 결정",
+   "채널이 살아 있다") 전부 금지. "지금 나온 주장" 한 줄로만.
+
+━━━ 출력 ━━━
+JSON 1개:
+{"new_opener": "새 첫 문장 한 줄 (60자 이내, 마침표 포함 가능)"}
+다른 필드, 설명, 마크다운 금지. JSON 만.
+"""
+
+
+def _splice_opener(post: str, new_opener: str) -> str:
+    """post 의 첫 문장을 new_opener 로 교체. 본문은 유지."""
+    if not post or not new_opener:
+        return post
+    new_opener = new_opener.strip()
+    # 마침표가 없으면 붙인다
+    if new_opener and new_opener[-1] not in ".!?":
+        new_opener = new_opener + "."
+    # 원본의 첫 문장을 제거 (마침표 또는 줄바꿈 기준)
+    stripped = post.lstrip()
+    leading_ws = post[: len(post) - len(stripped)]
+    # 첫 마침표 또는 줄바꿈까지가 첫 문장
+    first_end = None
+    for i, ch in enumerate(stripped):
+        if ch == "." or ch == "\n":
+            first_end = i + 1
+            break
+    if first_end is None:
+        # 문장 구분이 없으면 통째로 교체
+        return leading_ws + new_opener
+    rest = stripped[first_end:]
+    # rest 선두 공백/개행 정리
+    rest = rest.lstrip(" \t")
+    if rest and not rest.startswith("\n"):
+        rest = " " + rest
+    return leading_ws + new_opener + rest
+
+
+async def _rewrite_opener_only(
+    card: "CandidateCard",
+    draft: FinalPost,
+    *,
+    selected_hook: str = "",
+    mode: Optional[str] = None,
+) -> Optional[FinalPost]:
+    """첫 문장만 AI 로 재작성. 실패 시 None 반환.
+
+    WEAK_OPENER 가 유일한 강한 실패 태그일 때만 호출되도록 설계.
+    본문은 한 글자도 바꾸지 않는다.
+    """
+    selected_thesis: Optional[ThesisCard] = None
+    if card.thesis_cards:
+        for tc in card.thesis_cards:
+            if tc.opener == selected_hook:
+                selected_thesis = tc
+                break
+        if not selected_thesis and card.thesis_cards:
+            hook_idx = (
+                card.hook_candidates.index(selected_hook)
+                if selected_hook in card.hook_candidates
+                else 0
+            )
+            if hook_idx < len(card.thesis_cards):
+                selected_thesis = card.thesis_cards[hook_idx]
+
+    user_prompt = "━━━ 현재 초안 ━━━\n"
+    user_prompt += f"final_post (첫 문장만 바꿀 거다): {draft.final_post}\n\n"
+    if selected_thesis:
+        user_prompt += (
+            "━━━ 선택된 해석 슬롯 (바꾸지 마라) ━━━\n"
+            f"thesis: {selected_thesis.thesis}\n"
+            f"reader_stake: {selected_thesis.reader_stake}\n"
+        )
+        if selected_thesis.judgment_coord:
+            user_prompt += f"판단 좌표: {selected_thesis.judgment_coord}\n"
+        if selected_thesis.verification_signal:
+            user_prompt += f"판별 신호: {selected_thesis.verification_signal}\n"
+        user_prompt += "\n"
+    if mode:
+        user_prompt += f"ARTICLE_MODE: {mode}\n"
+    user_prompt += (
+        f"certainty_level: {card.certainty_level}\n\n"
+        "위 초안의 첫 문장이 길거나 배경 설명으로 시작해 걸렸다. "
+        "본문은 그대로 두고 첫 문장만 핵심 명제 한 줄로 다시 써라. "
+        "JSON 한 개만 출력."
+    )
+
+    raw = await _call_ai_with_prompt(
+        _OPENER_REWRITE_PROMPT_KO, user_prompt, temperature=0.5
+    )
+    if not raw:
+        logger.warning("[opener재작성] AI 응답 실패")
+        return None
+
+    try:
+        text = raw.strip()
+        if "```" in text:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end > start:
+                text = text[start:end]
+        data = json.loads(text)
+        new_opener = str(data.get("new_opener", "")).strip()
+    except Exception as e:
+        logger.warning(f"[opener재작성] JSON 파싱 실패: {e}")
+        return None
+
+    if not new_opener:
+        logger.warning("[opener재작성] new_opener 비어있음")
+        return None
+
+    # 60자 하드 캡 (마침표 제외 길이)
+    opener_len = len(new_opener.rstrip("."))
+    if opener_len > 60:
+        logger.warning(
+            f"[opener재작성] 60자 초과 ({opener_len}자) — 폐기"
+        )
+        return None
+
+    new_post = _splice_opener(draft.final_post, new_opener)
+
+    # 재검증: 바뀐 post 로 전체 게이트 다시 확인
+    post_v, short_v, warnings, gate_fails = _validate_final_post(
+        new_post, draft.final_short,
+        certainty_level=card.certainty_level,
+        mode=mode,
+    )
+    for w in warnings:
+        logger.info(f"[opener재작성-검증] {w}")
+    logger.info(
+        f"[opener재작성] 성공: '{new_opener}' "
+        f"(before_gate_fails={draft.gate_fails}, "
+        f"after_gate_fails={gate_fails})"
+    )
+    return FinalPost(
+        final_post=post_v,
+        final_short=short_v,
+        gate_fails=gate_fails,
+    )
+
+
 async def generate_final_post(
     card: CandidateCard,
     hook_index: int,
@@ -2289,7 +2454,9 @@ async def generate_final_post(
         )
         if not _raw:
             return None, None
-        _result = _parse_final_post(_raw, certainty_level=card.certainty_level)
+        _result = _parse_final_post(
+            _raw, certainty_level=card.certainty_level, mode=mode
+        )
         if not _result:
             return None, None
 
@@ -2314,6 +2481,7 @@ async def generate_final_post(
             gemini_opinion=None,
             grok_eval=_grok,
             gate_fails=_gate_1st,
+            mode=mode,
         )
         _final = _reviewed if _reviewed else _result
         return _final, _grok
@@ -2330,26 +2498,50 @@ async def generate_final_post(
 
     # ── 강한 실패 잔존 시 자동 재생성 1회 ──
     if _has_strong_fail(final.gate_fails):
-        logger.warning(
-            f"[품질게이트] Claude 보정 후 강한 실패 잔존: {final.gate_fails} "
-            "→ 자동 재생성 1회 시도"
-        )
-        retry_extra = _build_retry_instruction(final.gate_fails)
-        retried, retried_grok = await _run_cycle(retry_extra)
-
-        if retried is not None:
-            before = _count_strong_fails(final.gate_fails)
-            after = _count_strong_fails(retried.gate_fails)
-            logger.info(
-                f"[재생성] 강한 실패 개수: {before} → {after} "
-                f"(1차: {final.gate_fails}, 재생성: {retried.gate_fails})"
+        strong_only = [t for t in final.gate_fails if t in _STRONG_FAIL_TAGS]
+        # 첫 줄 전용 rewrite 경로:
+        #   WEAK_OPENER 가 유일한 강한 실패 태그면 본문 전체 재생성 대신
+        #   첫 문장만 교체한다. 판단 좌표/판별 신호 드리프트 방지.
+        if strong_only == ["WEAK_OPENER"]:
+            logger.warning(
+                "[품질게이트] WEAK_OPENER 단독 잔존 — 첫 줄 rewrite 경로"
             )
-            # 재생성이 같거나 나으면 채택 (동률은 최신 버전 우선 — 표현 직선화 효과)
-            if after <= before:
-                final = retried
-                grok_result = retried_grok
+            rewritten = await _rewrite_opener_only(
+                card, final, selected_hook=selected_hook, mode=mode
+            )
+            if rewritten is not None:
+                before = _count_strong_fails(final.gate_fails)
+                after = _count_strong_fails(rewritten.gate_fails)
+                logger.info(
+                    f"[opener재작성] 강한 실패 개수: {before} → {after} "
+                    f"(1차: {final.gate_fails}, "
+                    f"재작성: {rewritten.gate_fails})"
+                )
+                if after <= before:
+                    final = rewritten
+            else:
+                logger.warning("[opener재작성] 실패 — 1차 결과 유지")
         else:
-            logger.warning("[재생성] AI 응답 실패 — 1차 결과 유지")
+            logger.warning(
+                f"[품질게이트] Claude 보정 후 강한 실패 잔존: "
+                f"{final.gate_fails} → 자동 재생성 1회 시도"
+            )
+            retry_extra = _build_retry_instruction(final.gate_fails)
+            retried, retried_grok = await _run_cycle(retry_extra)
+
+            if retried is not None:
+                before = _count_strong_fails(final.gate_fails)
+                after = _count_strong_fails(retried.gate_fails)
+                logger.info(
+                    f"[재생성] 강한 실패 개수: {before} → {after} "
+                    f"(1차: {final.gate_fails}, 재생성: {retried.gate_fails})"
+                )
+                # 재생성이 같거나 나으면 채택 (동률은 최신 버전 우선 — 표현 직선화 효과)
+                if after <= before:
+                    final = retried
+                    grok_result = retried_grok
+            else:
+                logger.warning("[재생성] AI 응답 실패 — 1차 결과 유지")
 
         # 재생성 후에도 강한 실패가 남아 있으면 수동 확인 경고 강화
         if _has_strong_fail(final.gate_fails):
@@ -3266,6 +3458,7 @@ async def _claude_review_final(
     gemini_opinion: Optional[GeminiOpinionCard] = None,
     grok_eval: Optional["GrokEvalCard"] = None,
     gate_fails: Optional[list] = None,
+    mode: Optional[str] = None,
 ) -> Optional[FinalPost]:
     """Anthropic Claude 최종 통합. 실패 시 None (OpenAI 결과로 폴백)."""
     from app.config import settings
@@ -3462,7 +3655,7 @@ async def _claude_review_final(
 
             raw = data["content"][0]["text"]
             result = _parse_final_post(
-                raw, certainty_level=card.certainty_level
+                raw, certainty_level=card.certainty_level, mode=mode
             )
             if result and result.final_post:
                 return result
@@ -3994,7 +4187,10 @@ def _run_all_validations(
 
 
 def _validate_final_post(
-    post: str, short: str, certainty_level: Optional[str] = None
+    post: str,
+    short: str,
+    certainty_level: Optional[str] = None,
+    mode: Optional[str] = None,
 ) -> tuple[str, str, list[str], list[str]]:
     """마감 결과 검증 및 자동 보정. (post, short, warnings, gate_fails) 반환.
 
@@ -4004,6 +4200,8 @@ def _validate_final_post(
       - BRIEFING_SMELL: 브리핑 장황 표현 2개+
       - OPINION_LEAK: 근거 없는 일반론 2개+ (기준 완화: 1→2)
       - COMPLEX_SENTENCE: 문장 구조 복잡 (쉼표/접속사 과다)
+        · VERIFY mode: 1개부터 게이트 (브리핑체 복잡문 차단)
+        · EXPLAIN / JUDGMENT: 2개부터 게이트 (경고까지만)
       - STRUCTURE_COLUMN: 요약→의견→관건 3단 사설체 구조
       - LOW_CONFIDENCE_OVERREACH: certainty 미확인/상충인데
         _SPECULATIVE_MOTIVE_PATTERNS가 본문에 2개 이상 침투
@@ -4069,7 +4267,11 @@ def _validate_final_post(
             complex_hits += 1
     if complex_hits >= 1:
         warnings.append(f"복잡한 문장 {complex_hits}개 (쉼표/접속사 과다)")
-        if complex_hits >= 2:
+        # VERIFY 모드: 1개부터 게이트 (브리핑체 복잡문 전면 차단)
+        # EXPLAIN / JUDGMENT: 기존대로 2개 이상에서만 게이트
+        if mode == MODE_VERIFY and complex_hits >= 1:
+            gate_fails.append("COMPLEX_SENTENCE")
+        elif complex_hits >= 2:
             gate_fails.append("COMPLEX_SENTENCE")
 
     # 금지 마무리 패턴 감지
@@ -4186,11 +4388,15 @@ def _validate_final_post(
 
 
 def _parse_final_post(
-    raw: str, certainty_level: Optional[str] = None
+    raw: str,
+    certainty_level: Optional[str] = None,
+    mode: Optional[str] = None,
 ) -> Optional[FinalPost]:
     """AI 응답 JSON → FinalPost. 검증 포함.
 
     certainty_level이 주어지면 LOW_CONFIDENCE_OVERREACH 게이트를 활성화.
+    mode(VERIFY/EXPLAIN/JUDGMENT)가 주어지면 mode별 게이트 강도를 적용
+    (VERIFY 는 COMPLEX_SENTENCE 1개부터 게이트).
     """
     try:
         text = raw.strip()
@@ -4207,7 +4413,7 @@ def _parse_final_post(
 
         # 검증 및 자동 보정
         post, short, warnings, gate_fails = _validate_final_post(
-            post, short, certainty_level=certainty_level
+            post, short, certainty_level=certainty_level, mode=mode
         )
         for w in warnings:
             logger.warning(f"[마감검증] {w}")

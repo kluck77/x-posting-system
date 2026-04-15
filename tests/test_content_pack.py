@@ -4185,24 +4185,30 @@ class TestGenerateFinalPostRetry:
 
     @pytest.mark.asyncio
     async def test_weak_opener_retry_succeeds(self, monkeypatch, card):
-        """WEAK_OPENER (60자 초과 첫 문장) → 재생성에서 압축되면 통과."""
+        """WEAK_OPENER (60자 초과 첫 문장) → 첫 줄 rewrite 경로로 통과.
+
+        PR: WEAK_OPENER 단독 실패는 본문 전체 재생성 대신 opener 만 교체한다.
+        2차 호출은 _rewrite_opener_only 로 향하며 `{new_opener}` JSON 을 돌려준다.
+        """
         from app.services.content_pack import generate_final_post
 
         bad = json.dumps({
             "final_post": "미국 행정부의 대이란 협상 기조가 과거의 강경 일변도에서 조건부 접근 방식으로 전환되는 조짐이 드러나고 있다.\n근거 한 줄.\n사찰 수용이 답이다.",
             "final_short": "짧은 버전.",
         })
-        good = json.dumps({
-            "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 답이다.",
-            "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
-        })
+        # 2차 호출은 opener rewrite — `{new_opener}` 형식
+        good = json.dumps({"new_opener": "미국이 처음 보상안을 꺼냈다"})
         calls = self._setup_mocks(monkeypatch, [bad, good])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 2, "1차 + 재생성 1회 = 총 2회 호출"
+        assert calls["count"] == 2, "1차 cycle + opener rewrite 1회 = 총 2회 호출"
         assert "WEAK_OPENER" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
+        # rewrite 로 첫 줄이 교체됐어야 한다 — 본문은 유지
+        assert result.final_post.startswith("미국이 처음 보상안을 꺼냈다")
+        assert "근거 한 줄" in result.final_post
+        assert "사찰 수용이 답이다" in result.final_post
 
     @pytest.mark.asyncio
     async def test_dead_ending_retry_still_fails_marks_exhausted(
@@ -5320,3 +5326,559 @@ class TestGeminiThesisCardsModeParam:
         assert "VERIFY" in up
         assert "지금 나온 주장" in up
         assert "숨은 의도" in up
+
+
+# ─── VERIFY 전용 복잡문 게이트 (1개부터) ──────────────────────────────────────
+#
+# EXPLAIN / JUDGMENT 은 기존대로 복잡문 2개부터 게이트 (경고까지만).
+# VERIFY 모드는 브리핑체 복잡문을 구조적으로 차단해야 하므로 1개부터 게이트.
+
+
+class TestVerifyComplexSentenceGate:
+    """VERIFY 모드: 복잡문 1개부터 COMPLEX_SENTENCE gate fail."""
+
+    def test_verify_single_complex_sentence_fails_gate(self):
+        """VERIFY + 복잡문 1개 → COMPLEX_SENTENCE 게이트 실패."""
+        from app.services.content_pack import _validate_final_post, MODE_VERIFY
+        # 쉼표 3개 — complex_hits=1
+        post = (
+            "현재 나온 주장은 A, B, C, D 네 축으로 정리된다.\n"
+            "아직 확인 안 됐다.\n"
+            "특사 파견이 나오면 확정."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.",
+            certainty_level="미확인",
+            mode=MODE_VERIFY,
+        )
+        assert "COMPLEX_SENTENCE" in gate_fails
+
+    def test_verify_three_simple_sentences_passes_complex_gate(self):
+        """VERIFY + 단문 3문장 → COMPLEX_SENTENCE 통과."""
+        from app.services.content_pack import _validate_final_post, MODE_VERIFY
+        post = (
+            "핵심은 접촉 확인이다.\n"
+            "공식 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 공개되면 검증 가능."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.",
+            certainty_level="미확인",
+            mode=MODE_VERIFY,
+        )
+        assert "COMPLEX_SENTENCE" not in gate_fails
+
+    def test_explain_single_complex_sentence_warn_only(self):
+        """EXPLAIN + 복잡문 1개 → 경고만, 게이트 통과 (기존 동작 유지)."""
+        from app.services.content_pack import (
+            _validate_final_post, MODE_EXPLAIN,
+        )
+        post = (
+            "핵심 명제는 A, B, C, D 네 축이다.\n"
+            "근거 팩트 한 줄.\n"
+            "판단 좌표 한 줄.\n"
+            "6월까지 새 발표가 나오면 확정이고 안 나오면 선언이다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.",
+            certainty_level="확정",
+            mode=MODE_EXPLAIN,
+        )
+        # EXPLAIN 은 복잡문 1개에서 경고만 — 게이트는 통과해야 한다
+        assert "COMPLEX_SENTENCE" not in gate_fails
+        assert any("복잡한 문장" in w for w in warnings)
+
+    def test_judgment_single_complex_sentence_warn_only(self):
+        """JUDGMENT + 복잡문 1개 → 경고만, 게이트 통과 (기존 동작 유지)."""
+        from app.services.content_pack import (
+            _validate_final_post, MODE_JUDGMENT,
+        )
+        post = (
+            "엇갈리는 주장은 A, B, C, D 네 축에서 갈린다.\n"
+            "다른 축에서는 반대 해석이 나온다.\n"
+            "다음 발표가 갈림길이다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.",
+            certainty_level="상충",
+            mode=MODE_JUDGMENT,
+        )
+        assert "COMPLEX_SENTENCE" not in gate_fails
+        assert any("복잡한 문장" in w for w in warnings)
+
+    def test_non_verify_two_complex_sentences_still_gated(self):
+        """EXPLAIN + 복잡문 2개 → 기존대로 게이트 실패 (하위 호환)."""
+        from app.services.content_pack import (
+            _validate_final_post, MODE_EXPLAIN,
+        )
+        post = (
+            "핵심 명제는 A, B, C, D 네 축이다.\n"
+            "근거는 P, Q, R, S 네 축이다.\n"
+            "판단 좌표 한 줄.\n"
+            "6월 발표가 나오면 확정."
+        )
+        _, _, _, gate_fails = _validate_final_post(
+            post, "짧은 버전.",
+            certainty_level="확정",
+            mode=MODE_EXPLAIN,
+        )
+        assert "COMPLEX_SENTENCE" in gate_fails
+
+    def test_verify_no_mode_param_uses_legacy_threshold(self):
+        """mode 인자 없이 호출 시 기존 threshold(≥2) 유지 — 기존 호출부 보호."""
+        from app.services.content_pack import _validate_final_post
+        post = (
+            "핵심은 A, B, C, D 네 축이다.\n"
+            "한 줄 추가.\n"
+            "결론 한 줄."
+        )
+        _, _, _, gate_fails = _validate_final_post(post, "짧은 버전.")
+        # mode 없이 호출되면 복잡문 1개로는 게이트 발동 안 함
+        assert "COMPLEX_SENTENCE" not in gate_fails
+
+
+# ─── 첫 줄 전용 rewrite 엔진 ─────────────────────────────────────────────────
+
+
+class TestSpliceOpener:
+    """_splice_opener: post 의 첫 문장만 new_opener 로 교체."""
+
+    def test_splice_replaces_first_sentence(self):
+        from app.services.content_pack import _splice_opener
+        post = "원래 첫 줄이 길다. 두 번째 문장이다. 세 번째다."
+        out = _splice_opener(post, "새 핵심 명제다")
+        assert out.startswith("새 핵심 명제다.")
+        assert "두 번째 문장이다." in out
+        assert "세 번째다." in out
+        # 원래 첫 문장은 제거돼야 함
+        assert "원래 첫 줄이 길다" not in out
+
+    def test_splice_preserves_body_sentences(self):
+        from app.services.content_pack import _splice_opener
+        post = (
+            "첫 문장 A.\n"
+            "두 번째 B.\n"
+            "세 번째 C."
+        )
+        out = _splice_opener(post, "완전히 다른 첫 줄")
+        assert "두 번째 B." in out
+        assert "세 번째 C." in out
+        assert "첫 문장 A" not in out
+
+    def test_splice_adds_period_if_missing(self):
+        from app.services.content_pack import _splice_opener
+        out = _splice_opener("원래 A. 본문 B.", "마침표 없는 새 오프너")
+        assert out.startswith("마침표 없는 새 오프너.")
+
+    def test_splice_empty_opener_returns_original(self):
+        from app.services.content_pack import _splice_opener
+        post = "원래 문장."
+        assert _splice_opener(post, "") == post
+        assert _splice_opener("", "새 오프너") == ""
+
+
+class TestRewriteOpenerOnly:
+    """_rewrite_opener_only: AI 호출로 첫 문장만 교체."""
+
+    def _make_card(self):
+        return CandidateCard(
+            key_facts=["확정 팩트"],
+            hook_candidates=["훅"],
+            thesis_cards=[ThesisCard(
+                thesis="해석 슬롯",
+                why_not_summary="긴장점",
+                reader_stake="독자 영향",
+                opener="훅",
+                judgment_coord="판단 좌표",
+                verification_signal="판별 신호",
+            )],
+            certainty_level="확정",
+        )
+
+    def _make_draft(self):
+        return FinalPost(
+            final_post=(
+                "이후 보도된 긴 배경 설명형 첫 줄 한 문장이 게이트에서 걸렸다.\n"
+                "두 번째 문장은 정상.\n"
+                "세 번째 판별 신호."
+            ),
+            final_short="짧은 버전.",
+            gate_fails=["WEAK_OPENER"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_success_replaces_first_sentence(self, monkeypatch):
+        from app.services.content_pack import (
+            _rewrite_opener_only, MODE_EXPLAIN,
+        )
+
+        async def fake_call(system_prompt, user_prompt, temperature=0.5, **kw):
+            return json.dumps({"new_opener": "새 핵심 명제 한 줄이다"})
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+
+        result = await _rewrite_opener_only(
+            self._make_card(), self._make_draft(),
+            selected_hook="훅", mode=MODE_EXPLAIN,
+        )
+        assert result is not None
+        assert result.final_post.startswith("새 핵심 명제 한 줄이다")
+        # 본문 유지 확인
+        assert "두 번째 문장은 정상" in result.final_post
+        assert "세 번째 판별 신호" in result.final_post
+        # WEAK_OPENER 게이트 해소됐는지
+        assert "WEAK_OPENER" not in result.gate_fails
+
+    @pytest.mark.asyncio
+    async def test_rewrite_ai_none_returns_none(self, monkeypatch):
+        from app.services.content_pack import _rewrite_opener_only
+
+        async def fake_call(*a, **kw):
+            return None
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+        result = await _rewrite_opener_only(
+            self._make_card(), self._make_draft(), selected_hook="훅",
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_rewrite_over_60_chars_rejected(self, monkeypatch):
+        """60자 초과 new_opener 는 폐기."""
+        from app.services.content_pack import _rewrite_opener_only
+
+        too_long = (
+            "아주 긴 설명형 문장으로 길게 늘어놓는 첫 줄이 60자를 "
+            "훌쩍 넘도록 계속 쓰이고 있어 도저히 통과할 수 없는 아주 길고 긴 오프너"
+        )
+        assert len(too_long) > 60
+
+        async def fake_call(*a, **kw):
+            return json.dumps({"new_opener": too_long})
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+        result = await _rewrite_opener_only(
+            self._make_card(), self._make_draft(), selected_hook="훅",
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_rewrite_json_parse_error_returns_none(self, monkeypatch):
+        from app.services.content_pack import _rewrite_opener_only
+
+        async def fake_call(*a, **kw):
+            return "이건 JSON 이 아니다"
+
+        monkeypatch.setattr(
+            "app.services.content_pack._call_ai_with_prompt", fake_call
+        )
+        result = await _rewrite_opener_only(
+            self._make_card(), self._make_draft(), selected_hook="훅",
+        )
+        assert result is None
+
+
+class TestOpenerRewritePathInGenerateFinalPost:
+    """generate_final_post: WEAK_OPENER 단독 실패 시 opener 경로를 탄다."""
+
+    @pytest.fixture
+    def _card(self):
+        return CandidateCard(
+            key_facts=["팩트1", "팩트2"],
+            hook_candidates=["훅"],
+            thesis_cards=[ThesisCard(
+                thesis="해석", why_not_summary="긴장",
+                reader_stake="영향", opener="훅",
+                judgment_coord="판단 좌표",
+                verification_signal="판별 신호",
+            )],
+            certainty_level="확정",
+        )
+
+    @pytest.mark.asyncio
+    async def test_weak_opener_alone_triggers_opener_rewrite_not_full_regen(
+        self, monkeypatch, _card,
+    ):
+        """
+        1차 cycle 이 WEAK_OPENER 하나만 반환할 때,
+        _rewrite_opener_only 가 호출되고 _run_cycle 이 2회째 호출되지 않는다.
+        """
+        from app.services import content_pack as cp
+
+        call_counter = {"cycle": 0, "rewrite": 0}
+
+        # _call_ai_with_prompt: 항상 WEAK_OPENER 걸리는 긴 첫 줄 반환
+        async def fake_call(system_prompt, user_prompt, temperature=0.9, **kw):
+            call_counter["cycle"] += 1
+            return json.dumps({
+                "final_post": (
+                    "이후 보도된 한참 긴 배경 설명형 첫 줄이 쭉 이어지는 "
+                    "초안이다 매우 길게.\n"
+                    "두 번째 정상 문장.\n"
+                    "세 번째 판별 신호."
+                ),
+                "final_short": "짧은 버전.",
+            })
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(*a, **kw):
+            # Claude 보정 실패 → OpenAI 초안 그대로 사용
+            return None
+
+        async def fake_rewrite(card, draft, *, selected_hook="", mode=None):
+            call_counter["rewrite"] += 1
+            return cp.FinalPost(
+                final_post=(
+                    "새 핵심 명제 한 줄이다.\n"
+                    "두 번째 정상 문장.\n"
+                    "세 번째 판별 신호."
+                ),
+                final_short=draft.final_short,
+                gate_fails=[],
+            )
+
+        monkeypatch.setattr(cp, "_call_ai_with_prompt", fake_call)
+        monkeypatch.setattr(cp, "_grok_eval", fake_grok)
+        monkeypatch.setattr(cp, "_claude_review_final", fake_claude)
+        monkeypatch.setattr(cp, "_rewrite_opener_only", fake_rewrite)
+
+        result = await cp.generate_final_post(_card, 0, "")
+
+        # opener rewrite 경로가 타야 한다
+        assert call_counter["rewrite"] == 1
+        # 1차 cycle 1회만, 2차 full regenerate 호출 금지
+        assert call_counter["cycle"] == 1
+        # rewrite 이후 결과가 반영됐는지
+        assert result.final_post.startswith("새 핵심 명제 한 줄이다")
+
+    @pytest.mark.asyncio
+    async def test_weak_opener_plus_other_fail_takes_full_regen(
+        self, monkeypatch, _card,
+    ):
+        """WEAK_OPENER + 다른 태그 동시 실패 → opener rewrite 말고 full regen 경로."""
+        from app.services import content_pack as cp
+
+        call_counter = {"cycle": 0, "rewrite": 0}
+
+        async def fake_call(system_prompt, user_prompt, temperature=0.9, **kw):
+            call_counter["cycle"] += 1
+            # WEAK_OPENER + DEAD_ENDING 을 모두 트리거하는 초안
+            # 1차/2차 모두 동일 반환해도 호출만 확인하면 됨
+            return json.dumps({
+                "final_post": (
+                    "이후 보도된 배경 설명형 긴 첫 줄이 쭉 이어진다.\n"
+                    "두 번째 문장.\n"
+                    "마지막은 관건이다"
+                ),
+                "final_short": "짧은 버전.",
+            })
+
+        async def fake_grok(*a, **kw):
+            return None
+
+        async def fake_claude(*a, **kw):
+            return None
+
+        async def fake_rewrite(*a, **kw):
+            call_counter["rewrite"] += 1
+            return None
+
+        monkeypatch.setattr(cp, "_call_ai_with_prompt", fake_call)
+        monkeypatch.setattr(cp, "_grok_eval", fake_grok)
+        monkeypatch.setattr(cp, "_claude_review_final", fake_claude)
+        monkeypatch.setattr(cp, "_rewrite_opener_only", fake_rewrite)
+
+        await cp.generate_final_post(_card, 0, "")
+
+        # full regen 경로 → _run_cycle 2회 호출
+        assert call_counter["cycle"] == 2
+        # opener rewrite 경로 호출 안 됨
+        assert call_counter["rewrite"] == 0
+
+
+# ─── 분류기 로그 샘플 10개 ─────────────────────────────────────────────────────
+
+
+class TestClassifierLogSamples:
+    """PR 4 분류기가 10개 샘플에 대해 결정적 type + final_mode 를 낸다.
+
+    기자가 캡쳐한 로그("[ArticleType] type=... final=...") 가 CI 위에서
+    재현되는지 확인한다. 같은 성질 기사는 항상 같은 mode 로 간다.
+    """
+
+    _SAMPLES = [
+        # 1. 정석 경제 확정 보도 → STRAIGHT_NEWS + EXPLAIN
+        dict(
+            name="S1_straight_news_explain",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/1",
+                certainty_level="확정",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["경제"],
+            ),
+            expect_type="STRAIGHT_NEWS",
+            expect_mode="EXPLAIN",
+        ),
+        # 2. 상충 보도 → CONFLICTING_REPORT + JUDGMENT
+        dict(
+            name="S2_conflicting_report_judgment",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/2",
+                certainty_level="상충",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["정치"],
+            ),
+            expect_type="CONFLICTING_REPORT",
+            expect_mode="JUDGMENT",
+        ),
+        # 3. 미확인 단독 → UNVERIFIED_CLAIM + VERIFY
+        dict(
+            name="S3_unverified_claim_verify",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/3",
+                certainty_level="미확인",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["외교"],
+            ),
+            expect_type="UNVERIFIED_CLAIM",
+            expect_mode="VERIFY",
+        ),
+        # 4. 오피니언 컬럼 URL → OPINION_COLUMN + VERIFY
+        dict(
+            name="S4_opinion_column_verify",
+            card=dict(
+                source_url="https://news.example.com/column/2026/04/opinion",
+                certainty_level="확정",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["칼럼"],
+            ),
+            expect_type="OPINION_COLUMN",
+            expect_mode="VERIFY",
+        ),
+        # 5. 커뮤니티 스크린샷 → COMMUNITY_SCREENSHOT + VERIFY
+        dict(
+            name="S5_community_screenshot_verify",
+            card=dict(
+                source_url="https://www.dcinside.com/board/xxx",
+                certainty_level="확정",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["정치"],
+            ),
+            expect_type="COMMUNITY_SCREENSHOT",
+            expect_mode="VERIFY",
+        ),
+        # 6. 시장 급변 보도 (주가/시세) → MARKET_MOVING_NEWS + EXPLAIN
+        dict(
+            name="S6_market_moving_explain",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/6",
+                certainty_level="확정",
+                key_facts=["삼성전자 장중 7.3% 급락", "거래대금 2조원", "환율 1420원"],
+                topic_tags=["증시", "경제"],
+            ),
+            expect_type="MARKET_MOVING_NEWS",
+            expect_mode="EXPLAIN",
+        ),
+        # 7. 단독 태그 → UNVERIFIED_CLAIM + VERIFY (단독은 미확인으로 보수 강등)
+        dict(
+            name="S7_solo_scoop_verify",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/7",
+                certainty_level="미확인",
+                key_facts=["팩트1", "팩트2"],
+                topic_tags=["단독"],
+            ),
+            expect_type="UNVERIFIED_CLAIM",
+            expect_mode="VERIFY",
+        ),
+        # 8. reddit 캡처성 URL → COMMUNITY_SCREENSHOT + VERIFY
+        dict(
+            name="S8_reddit_community_verify",
+            card=dict(
+                source_url="https://www.reddit.com/r/news/comments/abc",
+                certainty_level="확정",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["해외", "커뮤니티"],
+            ),
+            expect_type="COMMUNITY_SCREENSHOT",
+            expect_mode="VERIFY",
+        ),
+        # 9. 근거 얕은 확정 (key_facts ≤ 2) → EXPLAIN→JUDGMENT (legacy demotion)
+        dict(
+            name="S9_thin_facts_judgment",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/9",
+                certainty_level="확정",
+                key_facts=["팩트1", "팩트2"],  # ≤ 2 → 최소 JUDGMENT
+                topic_tags=["경제"],
+            ),
+            expect_type="STRAIGHT_NEWS",
+            expect_mode="JUDGMENT",
+        ),
+        # 10. 약신호 topic_tag → EXPLAIN→JUDGMENT (legacy weak_tag demotion)
+        dict(
+            name="S10_weak_tag_verify",
+            card=dict(
+                source_url="https://www.yna.co.kr/news/10",
+                certainty_level="확정",
+                key_facts=["팩트1", "팩트2", "팩트3"],
+                topic_tags=["루머", "정치"],  # '루머' → weak_tag
+            ),
+            # weak_tag 은 classify 쪽에서 UNVERIFIED_CLAIM 로 밀어 VERIFY 가 됨
+            expect_type="UNVERIFIED_CLAIM",
+            expect_mode="VERIFY",
+        ),
+    ]
+
+    def test_ten_samples_classify_deterministically(self, caplog):
+        """10개 샘플 classify + route → 결정적 결과 + 로그 출력."""
+        import logging
+        from app.services.content_pack import (
+            classify_article_type, route_article_mode,
+        )
+
+        caplog.set_level(logging.INFO, logger="app.services.article_router")
+
+        results = []
+        for s in self._SAMPLES:
+            card = CandidateCard(**s["card"])
+            t = classify_article_type(card)
+            m = route_article_mode(card)
+            results.append((s["name"], t, m))
+            assert t == s["expect_type"], (
+                f"{s['name']}: type 불일치 — got={t} expect={s['expect_type']}"
+            )
+            assert m == s["expect_mode"], (
+                f"{s['name']}: mode 불일치 — got={m} expect={s['expect_mode']}"
+            )
+
+        # 로그에 [ArticleType] line 이 10개 샘플 모두에 대해 남아야 한다
+        article_type_logs = [
+            r for r in caplog.records if "[ArticleType]" in r.getMessage()
+        ]
+        # route_article_mode 1회 호출당 최소 1개 로그 (error 제외)
+        assert len(article_type_logs) >= 10, (
+            f"[ArticleType] 로그가 10개 미만: {len(article_type_logs)}개"
+        )
+
+        # 6개 type 모두 최소 한 번 이상 샘플에 등장해야 한다 (분류기 커버리지)
+        types_seen = {t for _, t, _ in results}
+        for expected_type in (
+            "STRAIGHT_NEWS", "CONFLICTING_REPORT", "UNVERIFIED_CLAIM",
+            "OPINION_COLUMN", "COMMUNITY_SCREENSHOT", "MARKET_MOVING_NEWS",
+        ):
+            assert expected_type in types_seen, (
+                f"샘플이 {expected_type} 를 커버하지 않음"
+            )
+
+        # 3개 mode 모두 최소 한 번 이상 샘플에 등장해야 한다
+        modes_seen = {m for _, _, m in results}
+        assert {"EXPLAIN", "JUDGMENT", "VERIFY"} <= modes_seen
