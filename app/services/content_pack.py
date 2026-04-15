@@ -1908,23 +1908,52 @@ async def _gemini_generate_thesis_cards(
             "https://generativelanguage.googleapis.com/v1beta"
             "/models/gemini-2.5-flash:generateContent"
         )
+        # 재시도: 일시적 서버 에러(5xx) / rate limit(429) 만 최대 3회.
+        # 파싱/인증 실패는 재시도 의미 없어 바로 except 로 빠져 fallback.
+        _RETRY_STATUSES = {429, 500, 502, 503, 504}
+        _MAX_ATTEMPTS = 3
+        _BACKOFFS = [1.0, 3.0, 7.0]  # 1s → 3s → 7s
         async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(
-                url,
-                params={"key": settings.gemini_api_key},
-                headers={"Content-Type": "application/json"},
-                json={
-                    "system_instruction": {
-                        "parts": [{"text": _GEMINI_THESIS_PROMPT}],
-                    },
-                    "contents": [
-                        {"parts": [{"text": user_prompt}]},
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.9,
-                    },
-                },
-            )
+            r = None
+            for attempt in range(_MAX_ATTEMPTS):
+                try:
+                    r = await client.post(
+                        url,
+                        params={"key": settings.gemini_api_key},
+                        headers={"Content-Type": "application/json"},
+                        json={
+                            "system_instruction": {
+                                "parts": [{"text": _GEMINI_THESIS_PROMPT}],
+                            },
+                            "contents": [
+                                {"parts": [{"text": user_prompt}]},
+                            ],
+                            "generationConfig": {
+                                "temperature": 0.9,
+                            },
+                        },
+                    )
+                except httpx.RequestError as _net_err:
+                    # 네트워크 레벨 에러(DNS/connect/timeout 등) — 재시도 대상
+                    if attempt < _MAX_ATTEMPTS - 1:
+                        logger.warning(
+                            f"[GeminiThesis] 시도 {attempt + 1}/{_MAX_ATTEMPTS} "
+                            f"네트워크 에러({type(_net_err).__name__}) — "
+                            f"{_BACKOFFS[attempt]}s 후 재시도"
+                        )
+                        await asyncio.sleep(_BACKOFFS[attempt])
+                        continue
+                    raise
+                if r.status_code in _RETRY_STATUSES and attempt < _MAX_ATTEMPTS - 1:
+                    logger.warning(
+                        f"[GeminiThesis] 시도 {attempt + 1}/{_MAX_ATTEMPTS} "
+                        f"API {r.status_code} — {_BACKOFFS[attempt]}s 후 재시도"
+                    )
+                    await asyncio.sleep(_BACKOFFS[attempt])
+                    continue
+                break  # 성공 or 재시도 불가한 오류
+            if r is None:
+                raise RuntimeError("[GeminiThesis] 요청 전송 실패")
             if r.status_code >= 400:
                 body = r.text
                 if settings.gemini_api_key:
