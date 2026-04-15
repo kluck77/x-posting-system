@@ -7,8 +7,9 @@
 #   bash scripts/deploy.sh claude/feature-xyz    # 임의 브랜치 배포
 #
 # 자동 수행:
-#   1) xdashboard.service 부활 감지 → 즉시 disable
-#      (같은 봇 토큰을 중복 polling → Telegram Conflict 방지)
+#   0) xdashboard.service 부활 감지 → 즉시 disable
+#   1) systemd 관리 밖 수동 run.py 프로세스 kill
+#      (누가 python run.py 를 손으로 띄워놨을 때 자동 청소)
 #   2) git pull (지정 브랜치)
 #   3) systemctl restart x-posting-bot
 #   4) 5초 대기 후 서비스 상태 확인
@@ -16,8 +17,8 @@
 #
 # 실패 처리:
 #   - Conflict 가 30초 안에 1회라도 뜨면 exit 1
-#   - 이 경우 다른 머신 또는 수동 프로세스가 같은 봇 토큰으로
-#     polling 중일 가능성. pgrep -af python.*run\.py 로 추적.
+#   - 이 경우 다른 머신(로컬 노트북, 다른 서버)이 같은 봇 토큰으로
+#     polling 중일 가능성. BotFather /revoke 로 토큰 재발급 필요.
 
 set -e
 
@@ -28,7 +29,7 @@ SERVICE="x-posting-bot"
 
 cd "$REPO_DIR"
 
-echo "=== [1/5] xdashboard 부활 체크 ==="
+echo "=== [0/6] xdashboard 부활 체크 ==="
 if systemctl is-enabled xdashboard.service 2>/dev/null | grep -q enabled; then
     echo "⚠️  xdashboard 다시 활성화됨 → 즉시 disable"
     systemctl disable --now xdashboard.service
@@ -37,34 +38,58 @@ else
 fi
 echo ""
 
-echo "=== [2/5] git pull ($BRANCH) ==="
+echo "=== [1/6] systemd 밖 수동 run.py 정리 ==="
+# systemd 가 관리하는 MainPID 외의 모든 python run.py 프로세스를 kill
+# (누가 서버 들어와서 python run.py 손으로 띄워둔 상황 자동 청소)
+MAIN_PID=$(systemctl show "$SERVICE" -p MainPID --value 2>/dev/null || echo 0)
+ROGUE=$(pgrep -f "python.*run\.py" 2>/dev/null | grep -v "^${MAIN_PID}$" || true)
+if [ -n "$ROGUE" ]; then
+    echo "⚠️  systemd 밖 수동 프로세스 감지 → kill:"
+    echo "$ROGUE" | while read -r pid; do
+        ps -o pid,lstart,cmd -p "$pid" 2>/dev/null || true
+    done
+    echo "$ROGUE" | xargs -r kill 2>/dev/null || true
+    sleep 2
+    # 여전히 살아있으면 -9
+    STILL=$(pgrep -f "python.*run\.py" 2>/dev/null | grep -v "^${MAIN_PID}$" || true)
+    if [ -n "$STILL" ]; then
+        echo "   → SIGTERM 무시됨, SIGKILL 로 강제 종료"
+        echo "$STILL" | xargs -r kill -9 2>/dev/null || true
+        sleep 1
+    fi
+    echo "   정리 완료"
+else
+    echo "OK (systemd MainPID=$MAIN_PID 외 수동 프로세스 없음)"
+fi
+echo ""
+
+echo "=== [2/6] git pull ($BRANCH) ==="
 git pull origin "$BRANCH"
 echo ""
 
-echo "=== [3/5] 서비스 재시작 ==="
+echo "=== [3/6] 서비스 재시작 ==="
 systemctl restart "$SERVICE"
 sleep 5
 echo ""
 
-echo "=== [4/5] 서비스 상태 ==="
+echo "=== [4/6] 서비스 상태 ==="
 systemctl status "$SERVICE" --no-pager | head -8
 echo ""
 
-echo "=== [5/5] 30초 Conflict 관찰 ==="
+echo "=== [5/6] 30초 Conflict 관찰 ==="
 sleep 30
 # grep -c 는 매치 0 일 때 exit 1 을 반환하므로 set -e 하에서 죽지 않도록 || true
 CONFLICT_COUNT=$(journalctl -u "$SERVICE" --since "35 sec ago" --no-pager | grep -c "Conflict:" || true)
 echo "Conflict 카운트: $CONFLICT_COUNT"
+echo ""
 
+echo "=== [6/6] 최종 판정 ==="
 if [ "$CONFLICT_COUNT" -eq 0 ]; then
-    echo ""
     echo "✅ 배포 성공"
     exit 0
 else
-    echo ""
     echo "🚨 Conflict 발생 — 다른 봇 인스턴스 추적 필요"
-    echo "    pgrep -af 'python.*run\\.py' 로 이 서버 프로세스 확인"
-    echo "    ss -tnp | grep 149.154 로 Telegram API 연결 확인"
-    echo "    계속되면 BotFather /revoke 로 토큰 재발급"
+    echo "    이 서버 내부는 [1/6] 에서 정리됨 → 외부 머신 가능성"
+    echo "    → BotFather /revoke 로 토큰 재발급 후 .env 갱신 + 재배포"
     exit 1
 fi
