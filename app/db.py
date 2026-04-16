@@ -271,10 +271,31 @@ def _ensure_eval_records_table():
                 "CREATE INDEX IF NOT EXISTS idx_eval_type_created "
                 "ON eval_records (record_type, created_at)"
             ))
+            # PR 33: routing_queue 테이블
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS routing_queue ("
+                "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "  routing_type TEXT NOT NULL,"
+                "  post_snapshot TEXT DEFAULT '',"
+                "  short_snapshot TEXT DEFAULT '',"
+                "  alert_score INTEGER DEFAULT 0,"
+                "  postability_score INTEGER DEFAULT 0,"
+                "  trust_score INTEGER DEFAULT 0,"
+                "  alert_routing TEXT DEFAULT '',"
+                "  postability_routing TEXT DEFAULT '',"
+                "  trust_routing TEXT DEFAULT '',"
+                "  dedup_key TEXT DEFAULT '',"
+                "  created_at TEXT NOT NULL"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_routing_type_created "
+                "ON routing_queue (routing_type, created_at)"
+            ))
             conn.commit()
-            logger.info("[migration] eval_records 테이블 확인 완료")
+            logger.info("[migration] eval_records + routing_queue 테이블 확인 완료")
     except Exception as e:
-        logger.warning(f"[migration] eval_records 생성 실패 (무시): {e}")
+        logger.warning(f"[migration] eval 테이블 생성 실패 (무시): {e}")
 
 
 def init_db():

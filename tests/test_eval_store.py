@@ -12,6 +12,8 @@ from app.services.eval_store import (
     load_recent_records,
     cleanup_old_records,
     RETENTION_DAYS, RETENTION_MAX_ROWS,
+    enqueue_routing, load_routing_queue, count_routing_queue,
+    _make_dedup_key,
     count_records,
     load_records_by_source,
     _ensure_table,
@@ -133,3 +135,58 @@ class TestTestingGuard:
         """conftest.py가 TESTING=1 설정했는지."""
         import os
         assert os.environ.get("TESTING") == "1"
+
+
+class TestRoutingQueue:
+    """PR 33 — routing_queue 적재 + 조회 + dedup."""
+
+    def test_enqueue_and_load(self, db):
+        """적재 → 조회."""
+        scores = {"alert_score": 80, "postability_score": 75,
+                  "trust_score": 70, "alert_routing": "IMMEDIATE",
+                  "postability_routing": "PUBLISH_READY",
+                  "trust_routing": "HIGH_TRUST"}
+        ok = enqueue_routing(db, "IMMEDIATE", scores,
+                             post_snapshot="삼성전자 HBM 매출 2조원 돌파.")
+        assert ok is True
+        assert count_routing_queue(db, "IMMEDIATE") == 1
+        items = load_routing_queue(db, "IMMEDIATE")
+        assert items[0]["alert_score"] == 80
+        assert items[0]["post_snapshot"] == "삼성전자 HBM 매출 2조원 돌파."
+
+    def test_dedup_blocks_duplicate(self, db):
+        """동일 post + 동일 routing_type → 1시간 내 중복 차단."""
+        scores = {"alert_score": 50}
+        ok1 = enqueue_routing(db, "DAY_DIGEST", scores, post_snapshot="같은 기사")
+        ok2 = enqueue_routing(db, "DAY_DIGEST", scores, post_snapshot="같은 기사")
+        assert ok1 is True
+        assert ok2 is False  # dedup
+        assert count_routing_queue(db, "DAY_DIGEST") == 1
+
+    def test_different_routing_type_allowed(self, db):
+        """같은 post라도 다른 routing_type은 허용."""
+        scores = {"alert_score": 50}
+        enqueue_routing(db, "DAY_DIGEST", scores, post_snapshot="기사A")
+        ok = enqueue_routing(db, "TOP10_5AM", scores, post_snapshot="기사A")
+        assert ok is True
+        assert count_routing_queue(db, "DAY_DIGEST") == 1
+        assert count_routing_queue(db, "TOP10_5AM") == 1
+
+    def test_different_post_allowed(self, db):
+        """다른 post는 같은 routing_type에서도 허용."""
+        scores = {"alert_score": 50}
+        enqueue_routing(db, "WEEKLY_POOL", scores, post_snapshot="기사A")
+        ok = enqueue_routing(db, "WEEKLY_POOL", scores, post_snapshot="기사B 완전 다른 내용")
+        assert ok is True
+        assert count_routing_queue(db, "WEEKLY_POOL") == 2
+
+    def test_dedup_key_deterministic(self):
+        """같은 입력 → 같은 키."""
+        k1 = _make_dedup_key("삼성전자 HBM 매출")
+        k2 = _make_dedup_key("삼성전자 HBM 매출")
+        assert k1 == k2
+
+    def test_empty_queue(self, db):
+        """빈 큐 조회 크래시 없음."""
+        assert load_routing_queue(db, "IMMEDIATE") == []
+        assert count_routing_queue(db, "IMMEDIATE") == 0

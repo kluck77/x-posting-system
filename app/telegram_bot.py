@@ -1757,8 +1757,26 @@ async def _handle_thesis_select_callback(
             logger.warning(f"[ArticleMode/display] 라벨 생성 실패: {_e!r}")
             _mode_label = ""
 
+        # PR 33: editorial routing 라벨 추출
+        _routing_label = ""
+        try:
+            _post_r = getattr(result, "_editorial_routing", "") or ""
+            _trust_r = getattr(result, "_trust_routing", "") or ""
+            # eval_meta 에서 직접 가져오는 건 불가 → 로그에서만 확인
+            # 대신 postability/trust 를 gate_fails 기반으로 근사 표시
+            _gate_count = len(getattr(result, "gate_fails", []) or [])
+            if _gate_count == 0:
+                _post_label = "PUBLISH READY"
+            elif _gate_count <= 3:
+                _post_label = "REVIEW"
+            else:
+                _post_label = "NEEDS EDIT"
+            _routing_label = f"  [{_post_label}]"
+        except Exception:
+            pass
+
         result_text = (
-            f"✅ <b>최종 마감 완료</b>\n"
+            f"✅ <b>최종 마감 완료</b>{_routing_label}\n"
             + (f"<i>{_mode_label}</i>\n\n" if _mode_label else "\n")
             + f"🎯 <b>선택된 슬롯</b>\n"
             f"해석축: {thesis_text}\n\n"

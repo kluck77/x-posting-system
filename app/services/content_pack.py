@@ -3134,6 +3134,20 @@ async def generate_final_post(
     # PR 26/29: 온라인 eval 버퍼에 적재 + DB 영속화
     _feed_online_eval(_eval_meta, db=db)
 
+    # PR 33: editorial routing → routing_queue 적재
+    if db is not None:
+        try:
+            from app.services.eval_store import enqueue_routing
+            enqueue_routing(
+                db,
+                routing_type=_editorial["alert_routing"],
+                editorial_scores=_editorial,
+                post_snapshot=final.final_post[:500],
+                short_snapshot=final.final_short[:200],
+            )
+        except Exception:
+            pass  # fail-open
+
     # PR 15 — Learning Dataset 레코드 (outcome 미판정 상태로 기록)
     _learn_record = _build_learning_record(
         final, card, mode, _source_missing
