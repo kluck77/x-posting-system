@@ -10740,3 +10740,90 @@ class TestEvalStoreSmoke:
         finally:
             _initialized_dbs.discard(id(conn))
             conn.close()
+
+
+# ── PR 30: db 자동 획득 + eval_store migration + canary smoke ──
+
+
+class TestDbAutoAcquire:
+    """PR 30 — generate_final_post db=None 시 자동 획득."""
+
+    def test_db_auto_acquire_in_signature(self):
+        """db 파라미터 기본값 None 유지."""
+        import inspect
+        from app.services.content_pack import generate_final_post
+        sig = inspect.signature(generate_final_post)
+        assert sig.parameters["db"].default is None
+
+    def test_eval_meta_persisted_with_auto_db(self):
+        """db=None이어도 인메모리 버퍼에는 적재."""
+        _reset_online_eval()
+        meta = {"mode": "EXPLAIN", "reward_type": "SAVE",
+                "market_angle_type": "COST", "strong_fail_count": 0,
+                "unresolved_count": 0, "gate_fails": []}
+        _feed_online_eval(meta)
+        s = _get_online_eval_summary()
+        assert s["total"] >= 1
+
+
+class TestEvalStoreMigration:
+    """PR 30 — eval_store migration 편입 확인."""
+
+    def test_ensure_table_creates_eval_records(self):
+        """_ensure_table로 eval_records 테이블 생성."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            from app.services.eval_store import _ensure_table
+            _ensure_table(conn)
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='eval_records'"
+            ).fetchone()
+            assert row is not None
+            assert row[0] == "eval_records"
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()
+
+    def test_full_write_read_cycle(self):
+        """저장 → 카운트 → 조회 전체 사이클."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            save_eval_record(conn, "eval_meta", {"mode": "VERIFY"})
+            assert count_records(conn, "eval_meta") == 1
+
+            from app.services.output_meta import _build_gold_eval_record
+            rec = _build_gold_eval_record("테스트 본문.", "짧은.", "EXPLAIN",
+                                          quality="GOOD", reasons=["MORE_FINDABLE"])
+            save_eval_record(conn, "gold_eval", rec, source_id="canary_src")
+            assert count_records(conn, "gold_eval") == 1
+
+            from app.services.output_meta import _build_pairwise_review_record
+            pw = _build_pairwise_review_record(
+                "A안.", "A짧은.", "B안.", "B짧은.", "EXPLAIN",
+                verdict="A_BETTER", reasons=["MORE_FINDABLE"], source_id="canary_src")
+            save_eval_record(conn, "pairwise_review", pw, source_id="canary_src")
+            assert count_records(conn, "pairwise_review") == 1
+
+            from app.services.eval_store import load_records_by_source
+            by_src = load_records_by_source(conn, "canary_src")
+            assert len(by_src) == 2
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()
+
+    def test_source_missing_path(self):
+        """source_text 없는 기사 — eval_meta 정상 저장."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            meta = {"mode": "VERIFY", "reward_type": None,
+                    "market_angle_type": "NONE",
+                    "strong_fail_count": 0, "unresolved_count": 3,
+                    "gate_fails": ["UNRESOLVED_READER_QUESTION"],
+                    "source_missing_reason": "MISSING_SOURCE_TEXT"}
+            ok = save_eval_record(conn, "eval_meta", meta)
+            assert ok is True
+            loaded = load_recent_records(conn, "eval_meta")
+            assert loaded[0]["source_missing_reason"] == "MISSING_SOURCE_TEXT"
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()

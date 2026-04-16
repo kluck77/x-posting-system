@@ -251,6 +251,32 @@ def _run_schema_migrations():
                 logger.debug(f"[migration] 이미 존재: {m['column']}")
 
 
+def _ensure_eval_records_table():
+    """
+    PR 30 — eval_records 테이블 생성 (eval_store.py 용).
+    ORM 모델 없이 raw DDL 로 관리. init_db() 시 자동 실행.
+    """
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS eval_records ("
+                "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "  record_type TEXT NOT NULL,"
+                "  source_id TEXT DEFAULT '',"
+                "  payload TEXT NOT NULL,"
+                "  created_at TEXT NOT NULL"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_eval_type_created "
+                "ON eval_records (record_type, created_at)"
+            ))
+            conn.commit()
+            logger.info("[migration] eval_records 테이블 확인 완료")
+    except Exception as e:
+        logger.warning(f"[migration] eval_records 생성 실패 (무시): {e}")
+
+
 def init_db():
     """
     데이터베이스 테이블을 생성합니다.
@@ -261,4 +287,5 @@ def init_db():
     import app.models.dedup  # noqa: F401 — 테이블 등록 (dedup + candidate pool)
     Base.metadata.create_all(bind=engine)
     _run_schema_migrations()
+    _ensure_eval_records_table()  # PR 30
     logger.info("데이터베이스 테이블 초기화 완료")

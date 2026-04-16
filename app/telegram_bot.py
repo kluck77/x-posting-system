@@ -1692,6 +1692,13 @@ async def _handle_thesis_select_callback(
         clear_progress_callback()
         await msg.delete()
 
+        # PR 30: gold/pairwise 커맨드용 결과 저장
+        context.user_data["last_final_result"] = result
+        history = context.user_data.setdefault("final_result_history", [])
+        history.append(result)
+        if len(history) > 5:
+            history.pop(0)
+
         # ── 최종 결과: 압축형 ──
         # 선택된 슬롯 설명은 50자 안쪽 우선 — 의미 보존형 압축
         if selected_thesis:
@@ -3566,6 +3573,95 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def gold_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/gold <GOOD|BAD|BORDERLINE> <reason1,reason2> [note]
+    마지막으로 생성된 final_post 에 대해 gold eval 라벨 저장.
+    """
+    from app.db import get_db
+    from app.services.output_meta import _build_gold_eval_record
+    from app.services.eval_store import save_eval_record
+
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "사용법: /gold <GOOD|BAD|BORDERLINE> <reason1,reason2> [note]\n"
+            "예: /gold GOOD MORE_FINDABLE,BETTER_REWARD 검색어 좋음"
+        )
+        return
+
+    quality = args[0].upper()
+    reasons = [r.strip() for r in args[1].split(",") if r.strip()]
+    note = " ".join(args[2:]) if len(args) > 2 else ""
+
+    # 마지막 생성 결과에서 post/short 가져오기
+    last_result = context.user_data.get("last_final_result")
+    if not last_result:
+        await update.message.reply_text("⚠️ 최근 생성 결과 없음. /pack → 슬롯 선택 후 다시 시도.")
+        return
+
+    post = getattr(last_result, "final_post", "")
+    short = getattr(last_result, "final_short", "")
+
+    record = _build_gold_eval_record(
+        post, short, "EXPLAIN",
+        quality=quality, reasons=reasons, evaluator_note=note,
+    )
+
+    db = get_db()
+    try:
+        ok = save_eval_record(db, "gold_eval", record)
+        if ok:
+            await update.message.reply_text(f"✅ Gold Eval 저장: {quality}")
+        else:
+            await update.message.reply_text("❌ 저장 실패")
+    finally:
+        db.close()
+
+
+async def pairwise_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/pairwise <A_BETTER|B_BETTER|TIE> <reason1> [note]
+    직전 2개 생성 결과를 A/B로 비교 판정.
+    """
+    from app.db import get_db
+    from app.services.output_meta import _build_pairwise_review_record
+    from app.services.eval_store import save_eval_record
+
+    args = context.args or []
+    if len(args) < 1:
+        await update.message.reply_text(
+            "사용법: /pairwise <A_BETTER|B_BETTER|TIE> [reason1,reason2] [note]\n"
+            "예: /pairwise A_BETTER MORE_FINDABLE A안이 검색 잘 됨"
+        )
+        return
+
+    verdict = args[0].upper()
+    reasons = [r.strip() for r in args[1].split(",") if r.strip()] if len(args) > 1 else []
+    note = " ".join(args[2:]) if len(args) > 2 else ""
+
+    history = context.user_data.get("final_result_history", [])
+    if len(history) < 2:
+        await update.message.reply_text("⚠️ 비교할 2개 결과 필요. 슬롯 선택 2회 후 다시 시도.")
+        return
+
+    a, b = history[-2], history[-1]
+    record = _build_pairwise_review_record(
+        getattr(a, "final_post", ""), getattr(a, "final_short", ""),
+        getattr(b, "final_post", ""), getattr(b, "final_short", ""),
+        "EXPLAIN",
+        verdict=verdict, reasons=reasons, evaluator_note=note,
+    )
+
+    db = get_db()
+    try:
+        ok = save_eval_record(db, "pairwise_review", record)
+        if ok:
+            await update.message.reply_text(f"✅ Pairwise Review 저장: {verdict}")
+        else:
+            await update.message.reply_text("❌ 저장 실패")
+    finally:
+        db.close()
+
+
 async def newsletter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /newsletter — 뉴스레터/리드자석 운영 루틴.
@@ -4349,6 +4445,9 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("lead", lead_command))
     app.add_handler(CommandHandler("email", email_command))
     app.add_handler(CommandHandler("newsletter", newsletter_command))
+    # PR 30: Gold Eval + Pairwise Review 텔레그램 커맨드
+    app.add_handler(CommandHandler("gold", gold_command))
+    app.add_handler(CommandHandler("pairwise", pairwise_command))
 
     # 콜백 (모든 인라인 버튼)
     app.add_handler(CallbackQueryHandler(callback_handler))

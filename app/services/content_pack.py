@@ -2711,8 +2711,16 @@ async def generate_final_post(
 ) -> FinalPost:
     """
     CandidateCard + 선택된 훅 → FinalPost (2차 마감).
-    PR 29: db 파라미터 추가 — eval_store 영속화용 (옵션, fail-open).
+    PR 29: db 파라미터 추가 — eval_store 영속화용.
+    PR 30: db=None 시 자동 획득 (fail-open).
     """
+    # PR 30: db 미주입 시 자동 획득 — 어떤 진입점에서든 영속화 보장
+    if db is None:
+        try:
+            from app.db import get_db
+            db = get_db()
+        except Exception:
+            pass  # fail-open: DB 없어도 파이프라인은 계속
     if hook_index < 0 or hook_index >= len(card.hook_candidates):
         hook_index = 0
     selected_hook = card.hook_candidates[hook_index]
