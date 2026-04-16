@@ -2809,6 +2809,10 @@ async def generate_final_post(
     for vw in v_warnings:
         logger.warning(f"[7대검증] {vw}")
 
+    # PR 12 Layer E — 평가/학습 루프: 구조화 메타 로그
+    _eval_meta = _build_evaluation_meta(final, card, mode, _source_missing)
+    logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
+
     return final
 
 
@@ -5334,6 +5338,52 @@ def _validate_final_post(
             gate_fails.append(_ms_tag)
 
     return post, short, warnings, gate_fails
+
+
+# ─── PR 12 Layer E: Evaluation / Learning Loop ───────────────────────────
+#
+# 운영 데이터셋 구축용 구조화 메타데이터.
+# generate_final_post 종료 시 JSON 로그로 출력.
+# 나중에 평가셋으로 뽑을 수 있는 구조를 여기서 만든다.
+
+def _build_evaluation_meta(
+    final: "FinalPost",
+    card: "CandidateCard",
+    mode: str,
+    source_missing: Optional[str],
+) -> dict:
+    """
+    PR 12 Layer E — dataset export 용 구조화 메타데이터 빌드.
+
+    반환 dict 필드:
+      mode, certainty, reward_type, market_angle_type,
+      resolved_count, unresolved_count, source_missing_reason,
+      gate_fails, strong_fail_count, warn_tag_count,
+      post_length, short_length, question_count,
+      topic_tags, has_thesis
+    """
+    strong = sum(
+        1 for t in (final.gate_fails or []) if t in _STRONG_FAIL_TAGS
+    )
+    warn_only = len(final.gate_fails or []) - strong
+
+    return {
+        "mode": mode,
+        "certainty": card.certainty_level,
+        "reward_type": final.reward_type,
+        "market_angle_type": final.market_angle_type,
+        "resolved_count": final.resolved_count,
+        "unresolved_count": final.unresolved_count,
+        "question_count": len(final.reader_questions),
+        "source_missing_reason": source_missing,
+        "gate_fails": list(final.gate_fails or []),
+        "strong_fail_count": strong,
+        "warn_tag_count": warn_only,
+        "post_length": len(final.final_post),
+        "short_length": len(final.final_short),
+        "topic_tags": list(card.topic_tags) if card.topic_tags else [],
+        "has_thesis": bool(card.thesis_cards),
+    }
 
 
 def _parse_final_post(

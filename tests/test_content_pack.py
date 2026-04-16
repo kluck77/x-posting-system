@@ -53,6 +53,8 @@ from app.services.content_pack import (
     # PR 12 Layer D: Market/Stake v2
     _detect_market_angle_type, _validate_market_stake,
     _MARKET_ANGLE_PATTERNS, _MARKET_ANGLE_VALID_TYPES,
+    # PR 12 Layer E: Evaluation Loop
+    _build_evaluation_meta,
 )
 from app.models.content_request import ContentRequest
 
@@ -8090,3 +8092,191 @@ class TestMarketStakeLayerV2:
             "특사 파견이 공개되면 확인 가능."
         )
         assert _detect_market_angle_type(post, "VERIFY") == "CHECKPOINT"
+
+
+# ─── PR 12 Layer E: Evaluation / Learning Loop ──────────────────────────
+
+class TestEvaluationLoop:
+    """PR 12 Layer E — 구조화 메타데이터 빌드 + 필드 검증."""
+
+    def _make_card(self, **kwargs):
+        defaults = dict(
+            key_facts=["삼성전자 노조가 5월 파업 예고"],
+            hook_candidates=["삼성전자 파업"],
+            thesis_cards=[ThesisCard(
+                thesis="파업 현실화 시 반도체 공급망 영향",
+                reader_stake="반도체 가격 영향",
+            )],
+            certainty_level="확정",
+            topic_tags=["경제", "산업"],
+        )
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    def _make_final(self, **kwargs):
+        defaults = dict(
+            final_post="삼성전자 파업이 현실화되면 원가가 먼저 오른다.",
+            final_short="파업 시 원가 상승.",
+            gate_fails=[],
+            reward_type="SAVE",
+            market_angle_type="COST",
+            reader_questions=[
+                ReaderQuestion(question="Q1", category="SOURCE", status="RESOLVED"),
+                ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED"),
+                ReaderQuestion(question="Q3", category="IMPACT", status="RESOLVED"),
+                ReaderQuestion(question="Q4", category="CHECKPOINT", status="RESOLVED"),
+            ],
+            resolved_count=3,
+            unresolved_count=1,
+            source_missing_reason=None,
+        )
+        defaults.update(kwargs)
+        return FinalPost(**defaults)
+
+    # ─── 기본 구조 검증 ──────────────────────────────────────────────
+
+    def test_meta_returns_dict(self):
+        """_build_evaluation_meta → dict 반환."""
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert isinstance(meta, dict)
+
+    def test_meta_has_all_required_fields(self):
+        """필수 필드 15개 존재."""
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        required = [
+            "mode", "certainty", "reward_type", "market_angle_type",
+            "resolved_count", "unresolved_count", "question_count",
+            "source_missing_reason", "gate_fails", "strong_fail_count",
+            "warn_tag_count", "post_length", "short_length",
+            "topic_tags", "has_thesis",
+        ]
+        for field in required:
+            assert field in meta, f"필드 누락: {field}"
+
+    # ─── 값 정확성 ──────────────────────────────────────────────────
+
+    def test_meta_mode(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["mode"] == "EXPLAIN"
+
+    def test_meta_certainty(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["certainty"] == "확정"
+
+    def test_meta_reward_type(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["reward_type"] == "SAVE"
+
+    def test_meta_market_angle(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["market_angle_type"] == "COST"
+
+    def test_meta_question_counts(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["resolved_count"] == 3
+        assert meta["unresolved_count"] == 1
+        assert meta["question_count"] == 4
+
+    def test_meta_source_missing(self):
+        meta = _build_evaluation_meta(
+            self._make_final(source_missing_reason="MISSING_SOURCE_TEXT"),
+            self._make_card(), "EXPLAIN", "MISSING_SOURCE_TEXT",
+        )
+        assert meta["source_missing_reason"] == "MISSING_SOURCE_TEXT"
+
+    def test_meta_source_normal(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["source_missing_reason"] is None
+
+    def test_meta_gate_fails_empty(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["gate_fails"] == []
+        assert meta["strong_fail_count"] == 0
+        assert meta["warn_tag_count"] == 0
+
+    def test_meta_gate_fails_mixed(self):
+        """강한 실패 + 약한 실패 → 각각 카운트."""
+        final = self._make_final(
+            gate_fails=["WEAK_OPENER", "NO_READER_REWARD", "LOW_FINDABILITY"]
+        )
+        meta = _build_evaluation_meta(final, self._make_card(), "EXPLAIN", None)
+        assert meta["strong_fail_count"] == 1  # WEAK_OPENER
+        assert meta["warn_tag_count"] == 2     # NO_READER_REWARD + LOW_FINDABILITY
+
+    def test_meta_post_lengths(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["post_length"] > 0
+        assert meta["short_length"] > 0
+
+    def test_meta_topic_tags(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert "경제" in meta["topic_tags"]
+        assert "산업" in meta["topic_tags"]
+
+    def test_meta_has_thesis_true(self):
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "EXPLAIN", None,
+        )
+        assert meta["has_thesis"] is True
+
+    def test_meta_has_thesis_false(self):
+        card = self._make_card(thesis_cards=[])
+        meta = _build_evaluation_meta(
+            self._make_final(), card, "EXPLAIN", None,
+        )
+        assert meta["has_thesis"] is False
+
+    # ─── JSON 직렬화 호환 ────────────────────────────────────────────
+
+    def test_meta_json_serializable(self):
+        """메타데이터가 JSON 직렬화 가능."""
+        import json
+        meta = _build_evaluation_meta(
+            self._make_final(), self._make_card(), "VERIFY", "SOURCE_TEXT_TOO_SHORT",
+        )
+        serialized = json.dumps(meta, ensure_ascii=False)
+        assert isinstance(serialized, str)
+        parsed = json.loads(serialized)
+        assert parsed["mode"] == "VERIFY"
+
+    # ─── VERIFY 시나리오 ─────────────────────────────────────────────
+
+    def test_meta_verify_scenario(self):
+        """VERIFY 기사 → 전체 메타 구조 정상."""
+        card = self._make_card(certainty_level="미확인")
+        final = self._make_final(
+            market_angle_type="CHECKPOINT",
+            reward_type="FOLLOW",
+            resolved_count=1,
+            unresolved_count=3,
+            gate_fails=["UNRESOLVED_READER_QUESTION"],
+        )
+        meta = _build_evaluation_meta(final, card, "VERIFY", None)
+        assert meta["mode"] == "VERIFY"
+        assert meta["certainty"] == "미확인"
+        assert meta["market_angle_type"] == "CHECKPOINT"
+        assert meta["reward_type"] == "FOLLOW"
+        assert meta["strong_fail_count"] == 0
+        assert meta["warn_tag_count"] == 1
