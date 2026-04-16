@@ -15,6 +15,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from sqlalchemy import text
+
 from app.config import settings
 from app.db import get_db
 
@@ -573,7 +575,7 @@ def _get_health() -> dict:
         db_ok = False
         try:
             db = get_db()
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             db_ok = True
             db.close()
         except Exception:
