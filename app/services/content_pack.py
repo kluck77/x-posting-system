@@ -1325,15 +1325,22 @@ class FinalPost:
     # PR 15 — Learning Dataset Layer
     # Claude 리뷰 수정 여부. 로그/dataset 전용.
     claude_review_changed: bool = False
+    # PR 20 — Distribution Packaging Layer
+    # 메인 + 공유형 + 후속 답글 3종 패키지. 로그/UI 전용.
+    dist_share_line: str = ""     # 공유 최적화 1줄
+    dist_follow_up: str = ""      # 후속 추적용 답글 1줄
 
 
 @dataclass
 class ReaderQuestion:
-    """PR 11/12 — 독자 핵심 질문 1개. 카테고리별 생성 + source 대조."""
+    """PR 11/12/16 — 독자 핵심 질문 1개. 카테고리별 생성 + source 대조."""
     question: str = ""
     category: str = ""        # "SOURCE" | "SCOPE" | "IMPACT" | "CHECKPOINT"
     status: str = "UNRESOLVED"  # "RESOLVED" | "UNRESOLVED"
     evidence: str = ""         # 해결 시 근거 요약
+    # PR 16 — Evidence Snippet Layer
+    evidence_snippet: str = ""   # 해결 근거 원문 스니펫 (최대 50자)
+    evidence_source: str = ""    # "SOURCE_TEXT" | "EXTERNAL" | ""
 
 
 # ─── 1차: 후보 카드 시스템 프롬프트 ──────────────────────────────────────────
@@ -2258,6 +2265,34 @@ def _select_best_draft(
     return drafts[best_idx], best_idx + 1, scores
 
 
+# ── PR 19: Cost-Aware Routing Layer ──
+
+
+def _decide_draft_count(
+    mode: str,
+    source_missing: Optional[str],
+    primary_source_type: Optional[str],
+    unresolved_count: int,
+) -> int:
+    """
+    PR 19 — 조건부 draft_count 결정.
+
+    비용 절감: 품질 보장이 어려운 상황에서는 draft 1개로 충분하고,
+    품질 향상 여지가 큰 상황에서만 2개 생성.
+
+    규칙:
+      1. VERIFY + source_missing  → 1 (소스 없으면 2개 돌려봐야 비슷)
+      2. unresolved_count >= 3    → 1 (근거 부족이면 draft 차이 작음)
+      3. EXPLAIN + primary_source → 2 (확정 기사 + 강한 출처 = 비교 가치)
+      4. 기본                     → 2
+    """
+    if mode == "VERIFY" and source_missing:
+        return 1
+    if unresolved_count >= 3:
+        return 1
+    return 2
+
+
 def _build_retry_instruction(gate_fails: list) -> str:
     """남은 강한 실패 태그별 재생성 지시문. 논지 유지 + 표현 직선화."""
     hints = []
@@ -2814,8 +2849,14 @@ async def generate_final_post(
 
         return _final, _grok
 
+    # ── PR 19: Cost-Aware draft_count 결정 ──
+    _draft_count = _decide_draft_count(
+        mode, _source_missing, _primary_source_type, _rq_unresolved
+    )
+    logger.info(f"[CostRouting] draft_count={_draft_count}")
+
     # ── 1차 실행 ──
-    final, grok_result = await _run_cycle()
+    final, grok_result = await _run_cycle(draft_count=_draft_count)
 
     if final is None:
         logger.warning("최종 마감 AI 응답 실패 — 빈 결과 반환")
@@ -2970,6 +3011,15 @@ async def generate_final_post(
     logger.info(
         f"[LearnRecord] {json.dumps(_learn_record, ensure_ascii=False)}"
     )
+
+    # PR 20 — Distribution Package: 3종 패키지 추출
+    _share, _followup = _build_distribution_package(final, mode)
+    final.dist_share_line = _share
+    final.dist_follow_up = _followup
+    if _share or _followup:
+        logger.info(
+            f"[DistPkg] share={len(_share)}자 follow_up={len(_followup)}자"
+        )
 
     return final
 
@@ -4615,6 +4665,57 @@ _FINDABILITY_ANCHOR_RE = re.compile(
 )
 
 
+# ── PR 17: Entity Alias / Query Expansion Layer ──
+# 정식 명칭이 아니어도 findability anchor 로 인정.
+# key=alias, value=정식 명칭 (KNOWN_ENTITIES 에 있는 것).
+# 양방향: "코인게코"→"CoinGecko" 와 "CoinGecko"→"코인게코" 모두 등록 가능.
+_ENTITY_ALIAS_MAP: dict[str, str] = {
+    # 기업/브랜드 약칭
+    "삼성전자": "삼성",
+    "삼성SDI": "삼성",
+    "현대차": "현대",
+    "현대자동차": "현대",
+    "기아차": "기아",
+    "포스코홀딩스": "포스코",
+    "카카오뱅크": "카카오",
+    "카카오페이": "카카오",
+    "네이버웹툰": "네이버",
+    "라인": "네이버",
+    "롯데케미칼": "롯데",
+    "한화에어로스페이스": "한화",
+    "두산에너빌리티": "두산",
+    "신한금융": "신한",
+    "하나금융": "하나",
+    "우리금융": "우리",
+    "토스뱅크": "토스",
+    # 기관 약칭/영문
+    "NTS": "국세청",
+    "한은": "한국은행",
+    "BOK": "한국은행",
+    "금융감독원": "금감원",
+    "FSS": "금감원",
+    "기획재정부": "기재부",
+    "MOEF": "기재부",
+    "산업통상자원부": "산자부",
+    "관세청": "관세청",
+    "KCS": "관세청",
+    # 데이터/플랫폼
+    "코인게코": "CoinGecko",
+    "CoinGecko": "코인게코",
+    "코인마켓캡": "CoinMarketCap",
+    "CoinMarketCap": "코인마켓캡",
+    "CMC": "CoinMarketCap",
+    # 정책/제도 약칭
+    "토허제": "토지거래허가구역",
+    "토지거래허가구역": "토허제",
+    "DSR": "총부채원리금상환비율",
+    "LTV": "주택담보대출비율",
+    # 국가 약칭
+    "UAE": "아랍에미리트",
+    "EU": "유럽연합",
+}
+
+
 def _extract_first_two_sentences(text: str) -> str:
     """post 에서 첫 2문장만 뽑는다. 줄바꿈/마침표 기준."""
     if not text:
@@ -4625,7 +4726,11 @@ def _extract_first_two_sentences(text: str) -> str:
 
 
 def _count_findability_anchors(text: str) -> int:
-    """텍스트에서 검색 가능한 구체 앵커(숫자/약어/고유명사) 수를 센다."""
+    """텍스트에서 검색 가능한 구체 앵커(숫자/약어/고유명사) 수를 센다.
+
+    PR 17: alias 사전도 anchor 로 인정 — alias 키가 텍스트에 있으면
+    정식 명칭을 anchor set 에 추가.
+    """
     if not text:
         return 0
     anchors: set = set()
@@ -4634,6 +4739,10 @@ def _count_findability_anchors(text: str) -> int:
     for ent in _FINDABILITY_KNOWN_ENTITIES:
         if ent in text:
             anchors.add(ent)
+    # PR 17: alias 매칭
+    for alias, canonical in _ENTITY_ALIAS_MAP.items():
+        if alias in text:
+            anchors.add(canonical)
     return len(anchors)
 
 
@@ -4900,6 +5009,8 @@ def _resolve_questions_from_external(
             # 1차 출처가 감지되면 SOURCE 질문은 해결 가능
             q.status = "RESOLVED"
             q.evidence = f"외부 1차 출처 감지: {primary_source_type}"
+            q.evidence_snippet = primary_source_type
+            q.evidence_source = "EXTERNAL"
 
         elif q.category == "SCOPE" and primary_source_type in (
             "REPORT", "DISCLOSURE", "DATA_SOURCE",
@@ -4908,6 +5019,8 @@ def _resolve_questions_from_external(
             if evidence_count >= 2:
                 q.status = "RESOLVED"
                 q.evidence = f"외부 데이터 출처 감지: {primary_source_type}"
+                q.evidence_snippet = f"{primary_source_type}×{evidence_count}"
+                q.evidence_source = "EXTERNAL"
 
         elif q.category == "CHECKPOINT" and primary_source_type in (
             "GOVERNMENT", "DISCLOSURE",
@@ -4916,6 +5029,8 @@ def _resolve_questions_from_external(
             if evidence_count >= 2:
                 q.status = "RESOLVED"
                 q.evidence = f"외부 공식 일정 출처 감지: {primary_source_type}"
+                q.evidence_snippet = f"{primary_source_type}×{evidence_count}"
+                q.evidence_source = "EXTERNAL"
 
     return questions
 
@@ -5092,23 +5207,33 @@ def _resolve_questions_from_source(
 
     for q in questions:
         if q.category == "SOURCE":
-            if _SOURCE_CITATION_RE.search(source_text):
+            m = _SOURCE_CITATION_RE.search(source_text)
+            if m:
                 q.status = "RESOLVED"
                 q.evidence = "원문 출처 인용 존재"
+                q.evidence_snippet = m.group()[:50]
+                q.evidence_source = "SOURCE_TEXT"
         elif q.category == "SCOPE":
-            if _SCOPE_NUMBER_RE.search(source_text):
+            m = _SCOPE_NUMBER_RE.search(source_text)
+            if m:
                 q.status = "RESOLVED"
                 q.evidence = "원문 구체 수치 존재"
+                q.evidence_snippet = m.group()[:50]
+                q.evidence_source = "SOURCE_TEXT"
         elif q.category == "IMPACT":
             hits = [p for p in _IMPACT_MARKER_PATTERNS if p in source_text]
             if len(hits) >= 2:
                 q.status = "RESOLVED"
                 q.evidence = "원문 시점/대상 특정"
+                q.evidence_snippet = ", ".join(hits[:3])[:50]
+                q.evidence_source = "SOURCE_TEXT"
         elif q.category == "CHECKPOINT":
             hits = [p for p in _CHECKPOINT_EVIDENCE_PATTERNS if p in source_text]
             if len(hits) >= 1:
                 q.status = "RESOLVED"
                 q.evidence = "원문 검증 시점/조건 특정"
+                q.evidence_snippet = hits[0][:50]
+                q.evidence_source = "SOURCE_TEXT"
     return questions
 
 
@@ -5725,6 +5850,50 @@ OUTCOME_DISCARDED = "DISCARDED"   # 폐기
 
 _VALID_OUTCOMES = frozenset({OUTCOME_ADOPTED, OUTCOME_MODIFIED, OUTCOME_DISCARDED})
 
+# ── PR 18: Human Outcome Capture Layer — 수정 사유 표준화 ──
+# 운영자가 MODIFIED 판정 시 붙이는 사유 코드.
+# 자유 텍스트도 허용하되, 이 enum은 빈도 분석/필터에 사용.
+
+MOD_REASON_ABSTRACT = "ABSTRACT"                 # 추상적 표현
+MOD_REASON_NO_MARKET = "NO_MARKET_STAKE"         # 시장/생활 반영 부재
+MOD_REASON_UNRESOLVED = "UNRESOLVED_QUESTION"    # 핵심 질문 미해결
+MOD_REASON_WEAK_HOOK = "WEAK_HOOK"               # 훅/첫 문장 약함
+MOD_REASON_LOW_FIND = "LOW_FINDABILITY"          # 검색 가능 명사 부족
+MOD_REASON_SUMMARY = "TOO_SUMMARY_LIKE"          # 요약체/칼럼체
+MOD_REASON_OTHER = "OTHER"                       # 기타
+
+_VALID_MOD_REASONS = frozenset({
+    MOD_REASON_ABSTRACT, MOD_REASON_NO_MARKET, MOD_REASON_UNRESOLVED,
+    MOD_REASON_WEAK_HOOK, MOD_REASON_LOW_FIND, MOD_REASON_SUMMARY,
+    MOD_REASON_OTHER,
+})
+
+
+def _validate_learning_label(
+    outcome: str,
+    modification_reason: str = "",
+) -> list[str]:
+    """
+    PR 18 — outcome + modification_reason 유효성 검증.
+
+    반환: 경고 메시지 리스트 (빈 리스트 = 통과).
+    """
+    warnings: list[str] = []
+    if outcome and outcome not in _VALID_OUTCOMES:
+        warnings.append(f"알 수 없는 outcome: {outcome}")
+    if outcome == OUTCOME_MODIFIED and not modification_reason:
+        warnings.append("MODIFIED 판정에 modification_reason 누락")
+    if (
+        modification_reason
+        and modification_reason not in _VALID_MOD_REASONS
+        and not modification_reason.startswith("OTHER:")
+    ):
+        warnings.append(
+            f"비표준 modification_reason: {modification_reason} "
+            f"(표준: {sorted(_VALID_MOD_REASONS)})"
+        )
+    return warnings
+
 
 def _build_learning_record(
     final: "FinalPost",
@@ -5771,6 +5940,77 @@ def _build_learning_record(
     record["modification_reason"] = modification_reason
 
     return record
+
+
+# ── PR 20: Distribution Packaging Layer ──
+#
+# 하나의 FinalPost 에서 3종 패키지를 규칙 기반으로 추출:
+#   1. 메인 포스트  → final_post (이미 존재)
+#   2. 공유형 짧은 문장 → dist_share_line
+#   3. 후속 추적용 답글 → dist_follow_up
+
+# 후속 답글 추출 신호: FOLLOW 보상의 마지막 문장이 "~면/~냐/~나오면" 등
+# 조건 분기 형태이면 그대로 후속 답글로 사용.
+_FOLLOW_UP_SIGNALS = [
+    "나오면", "안 나오면", "되면", "된다면", "갈린다",
+    "확정이다", "확정.", "확인이다", "이다.",
+    "이냐다.", "느냐다.", "드러난다.",
+]
+
+
+def _build_distribution_package(
+    final: "FinalPost",
+    mode: str,
+) -> tuple[str, str]:
+    """
+    PR 20 — 메인 포스트에서 공유형 + 후속 답글 추출.
+
+    규칙 기반. AI 호출 없음.
+
+    공유형 (dist_share_line):
+      - final_short 이 있으면 그대로 사용
+      - 없으면 final_post 첫 문장
+
+    후속 답글 (dist_follow_up):
+      - final_post 마지막 문장이 조건 분기 형태면 사용
+      - 아니면 final_short 과 다른 마지막 문장 사용
+      - 마지막 수단: 빈 문자열
+
+    반환: (share_line, follow_up)
+    """
+    post = final.final_post or ""
+    short = final.final_short or ""
+
+    # ── share_line ──
+    share_line = short if short else ""
+    if not share_line and post:
+        first = post.split("\n")[0].strip()
+        share_line = first.split(".")[0].strip() if first else ""
+
+    # ── follow_up ──
+    follow_up = ""
+    if post:
+        lines = [ln.strip() for ln in post.split("\n") if ln.strip()]
+        if lines:
+            last_line = lines[-1]
+            # 마지막 줄에서 마지막 문장 추출
+            sents = [s.strip() for s in last_line.split(".") if s.strip()]
+            last_sent = sents[-1] if sents else last_line
+
+            # FOLLOW_UP_SIGNALS 에 해당하면 후속 답글로 채택
+            for sig in _FOLLOW_UP_SIGNALS:
+                if last_sent.endswith(sig) or last_line.endswith(sig):
+                    follow_up = last_sent
+                    break
+
+            # 신호 미감지 + 2줄 이상이면 마지막 줄 자체를 답글로
+            if not follow_up and len(lines) >= 2:
+                candidate = lines[-1]
+                # share_line 과 겹치지 않으면 사용
+                if candidate != share_line:
+                    follow_up = candidate
+
+    return share_line, follow_up
 
 
 def _parse_final_post(

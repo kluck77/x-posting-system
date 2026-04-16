@@ -65,6 +65,17 @@ from app.services.content_pack import (
     _build_learning_record,
     OUTCOME_ADOPTED, OUTCOME_MODIFIED, OUTCOME_DISCARDED,
     _VALID_OUTCOMES,
+    # PR 17: Entity Alias Layer
+    _ENTITY_ALIAS_MAP,
+    # PR 18: Human Outcome Capture Layer
+    _validate_learning_label,
+    MOD_REASON_ABSTRACT, MOD_REASON_NO_MARKET, MOD_REASON_UNRESOLVED,
+    MOD_REASON_WEAK_HOOK, MOD_REASON_LOW_FIND, MOD_REASON_SUMMARY,
+    MOD_REASON_OTHER, _VALID_MOD_REASONS,
+    # PR 19: Cost-Aware Routing Layer
+    _decide_draft_count,
+    # PR 20: Distribution Packaging Layer
+    _build_distribution_package, _FOLLOW_UP_SIGNALS,
 )
 from app.models.content_request import ContentRequest
 
@@ -4375,13 +4386,13 @@ class TestGenerateFinalPostRetry:
             "final_post": "미국 행정부의 대이란 협상 기조가 과거의 강경 일변도에서 조건부 접근 방식으로 전환되는 조짐이 드러나고 있다.\n근거 한 줄.\n사찰 수용이 답이다.",
             "final_short": "짧은 버전.",
         })
-        # 3차 호출은 opener rewrite — `{new_opener}` 형식
+        # PR 19: source_text="" → unresolved≥3 → draft_count=1
         good = json.dumps({"new_opener": "미국이 처음 보상안을 꺼냈다"})
-        calls = self._setup_mocks(monkeypatch, [bad, bad, good])
+        calls = self._setup_mocks(monkeypatch, [bad, good])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 3, "draft×2 + opener rewrite 1회 = 총 3회"
+        assert calls["count"] == 2, "draft×1 + opener rewrite 1회 = 총 2회"
         assert "WEAK_OPENER" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
         # rewrite 로 첫 줄이 교체됐어야 한다 — 본문은 유지
@@ -4395,7 +4406,7 @@ class TestGenerateFinalPostRetry:
     ):
         """DEAD_ENDING → 재생성 후에도 실패 → RETRY_EXHAUSTED 마커.
 
-        PR 14: draft_count=2 초기 + draft_count=1 재생성 = 총 3회.
+        PR 19: source_text="" → draft_count=1 → 초기 1 + 재생성 1 = 총 2회.
         """
         from app.services.content_pack import generate_final_post
 
@@ -4407,11 +4418,11 @@ class TestGenerateFinalPostRetry:
             "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n결국 이것이 변수다.",
             "final_short": "짧은 버전.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad1, bad1, bad2])
+        calls = self._setup_mocks(monkeypatch, [bad1, bad2])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 3
+        assert calls["count"] == 2
         assert "DEAD_ENDING" in result.gate_fails
         assert "RETRY_EXHAUSTED" in result.gate_fails
 
@@ -4419,7 +4430,7 @@ class TestGenerateFinalPostRetry:
     async def test_structure_column_retry_succeeds(self, monkeypatch, card):
         """STRUCTURE_COLUMN (요약→의견→관건) → 재생성에서 구조 변경 성공.
 
-        PR 14: draft×2 초기 + draft×1 재생성 = 총 3회.
+        PR 19: source_text="" → draft_count=1 → 초기 1 + 재생성 1 = 총 2회.
         """
         from app.services.content_pack import (
             generate_final_post,
@@ -4436,11 +4447,11 @@ class TestGenerateFinalPostRetry:
             "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 나오면 확정.",
             "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad, bad, good])
+        calls = self._setup_mocks(monkeypatch, [bad, good])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 3
+        assert calls["count"] == 2
         assert "STRUCTURE_COLUMN" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
 
@@ -4450,7 +4461,7 @@ class TestGenerateFinalPostRetry:
     ):
         """LOW_CONFIDENCE_OVERREACH → 재생성에서 동기 추정 제거 성공.
 
-        PR 14: draft×2 초기 + draft×1 재생성 = 총 3회.
+        PR 19: VERIFY+source_missing → draft_count=1 → 초기 1 + 재생성 1 = 총 2회.
         """
         from app.services.content_pack import CandidateCard, ThesisCard, generate_final_post
 
@@ -4469,11 +4480,11 @@ class TestGenerateFinalPostRetry:
             "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 나오면 확정.",
             "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad, bad, good])
+        calls = self._setup_mocks(monkeypatch, [bad, good])
 
         result = await generate_final_post(low_card, 0, "")
 
-        assert calls["count"] == 3
+        assert calls["count"] == 2
         assert "LOW_CONFIDENCE_OVERREACH" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
 
@@ -4481,7 +4492,7 @@ class TestGenerateFinalPostRetry:
     async def test_soft_fail_only_no_retry(self, monkeypatch, card):
         """소프트 실패만 있으면 재생성하지 않고 1회로 종료.
 
-        PR 14: draft×2 = 총 2회 호출, 재생성 없음.
+        PR 19: source_text="" → draft_count=1 → 1회 호출, 재생성 없음.
         """
         from app.services.content_pack import generate_final_post
 
@@ -4490,12 +4501,12 @@ class TestGenerateFinalPostRetry:
             "final_post": "지금 핵심은 재회담이다.\n추이를 봐야 한다. 영향을 미칠 수 있다.\n사찰 수용이 나오면 확정.",
             "final_short": "짧은 버전.",
         })
-        calls = self._setup_mocks(monkeypatch, [only_soft, only_soft])
+        calls = self._setup_mocks(monkeypatch, [only_soft])
 
         result = await generate_final_post(card, 0, "")
 
-        # 재생성 트리거 안 됨 — draft×2 = 총 2회 호출
-        assert calls["count"] == 2
+        # 재생성 트리거 안 됨 — draft×1 = 총 1회 호출
+        assert calls["count"] == 1
         assert "RETRY_EXHAUSTED" not in result.gate_fails
         # BRIEFING_SMELL 은 그대로 유지 (경고만)
         assert "BRIEFING_SMELL" in result.gate_fails
@@ -4504,7 +4515,7 @@ class TestGenerateFinalPostRetry:
     async def test_retry_never_loops_twice(self, monkeypatch, card):
         """재생성은 최대 1회 — 두 번 연속 강한 실패여도 추가 호출 없음.
 
-        PR 14: draft×2 초기 + draft×1 재생성 = 총 3회. 4번째는 없어야.
+        PR 19: source_text="" → draft_count=1 → 초기 1 + 재생성 1 = 총 2회.
         """
         from app.services.content_pack import generate_final_post
 
@@ -4516,11 +4527,11 @@ class TestGenerateFinalPostRetry:
             "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n결국 변수다.",
             "final_short": "짧은 버전.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad1, bad1, bad2, "SHOULD_NOT_USE"])
+        calls = self._setup_mocks(monkeypatch, [bad1, bad2, "SHOULD_NOT_USE"])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 3, "무한 루프 금지 — draft×2 + retry×1 = 3회"
+        assert calls["count"] == 2, "무한 루프 금지 — draft×1 + retry×1 = 2회"
         assert "RETRY_EXHAUSTED" in result.gate_fails
 
 
@@ -6393,8 +6404,8 @@ class TestOpenerRewritePathInGenerateFinalPost:
 
         # opener rewrite 경로가 타야 한다
         assert call_counter["rewrite"] == 1
-        # PR 14: draft×2 = AI 2회, full regenerate 호출 금지
-        assert call_counter["cycle"] == 2
+        # PR 19: source_text="" → draft_count=1, full regenerate 호출 금지
+        assert call_counter["cycle"] == 1
         # rewrite 이후 결과가 반영됐는지
         assert result.final_post.startswith("새 핵심 명제 한 줄이다")
 
@@ -6437,8 +6448,8 @@ class TestOpenerRewritePathInGenerateFinalPost:
 
         await cp.generate_final_post(_card, 0, "")
 
-        # PR 14: full regen 경로 → draft×2 초기 + draft×1 재생성 = AI 3회
-        assert call_counter["cycle"] == 3
+        # PR 19: source_text="" → draft_count=1, full regen → 1+1=2회
+        assert call_counter["cycle"] == 2
         # opener rewrite 경로 호출 안 됨
         assert call_counter["rewrite"] == 0
 
@@ -6810,20 +6821,19 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         """1차 opener 점수 미달 → 2차 opener 통과 → rewrite 성공."""
         from app.services import content_pack as cp
 
-        # 호출 시퀀스 (PR 14: draft×2):
-        # call 1-2: 초안 생성 ×2 (WEAK_OPENER) — 1차 cycle draft_count=2
-        # call 3: opener rewrite 시도 1 (low score — 배경어)
-        # call 4: opener rewrite 시도 2 (high score — 깨끗한 opener)
-        bad_draft = json.dumps({
-            "final_post": (
-                "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
-                "두 번째 정상 문장.\n"
-                "세 번째 판별 신호."
-            ),
-            "final_short": "짧은 버전.",
-        })
+        # 호출 시퀀스 (PR 19: source_text="" → draft_count=1):
+        # call 1: 초안 생성 (WEAK_OPENER) — 1차 cycle
+        # call 2: opener rewrite 시도 1 (low score — 배경어)
+        # call 3: opener rewrite 시도 2 (high score — 깨끗한 opener)
         responses = [
-            bad_draft, bad_draft,
+            json.dumps({
+                "final_post": (
+                    "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                    "두 번째 정상 문장.\n"
+                    "세 번째 판별 신호."
+                ),
+                "final_short": "짧은 버전.",
+            }),
             json.dumps({"new_opener": "이후 보도된 배경어 시작 문장이다"}),
             json.dumps({"new_opener": "핵심은 시행일 변경이다"}),
         ]
@@ -6846,8 +6856,8 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
 
         result = await cp.generate_final_post(_card, 0, "")
 
-        # PR 14: 총 4회: draft×2 + opener 시도 2회
-        assert call_counter["idx"] == 4
+        # PR 19: 총 3회: draft×1 + opener 시도 2회
+        assert call_counter["idx"] == 3
         # 최종 첫 줄이 2차 시도 opener 로 교체됐어야 한다
         assert result.final_post.startswith("핵심은 시행일 변경이다")
 
@@ -6858,21 +6868,20 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         """2회 모두 점수 미달 → full regen 폴백 경로 발동."""
         from app.services import content_pack as cp
 
-        # 호출 시퀀스 (PR 14: draft×2):
-        # call 1-2: 초안 ×2 (WEAK_OPENER) — draft_count=2
-        # call 3: opener rewrite 시도 1 (low score)
-        # call 4: opener rewrite 시도 2 (low score)
-        # call 5: full regen cycle (draft_count=1)
-        bad_draft = json.dumps({
-            "final_post": (
-                "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
-                "두 번째 정상 문장.\n"
-                "세 번째 판별 신호."
-            ),
-            "final_short": "짧은 버전.",
-        })
+        # 호출 시퀀스 (PR 19: source_text="" → draft_count=1):
+        # call 1: 초안 (WEAK_OPENER 트리거)
+        # call 2: opener rewrite 시도 1 (low score)
+        # call 3: opener rewrite 시도 2 (low score)
+        # call 4: full regen cycle (draft_count=1)
         responses = [
-            bad_draft, bad_draft,
+            json.dumps({
+                "final_post": (
+                    "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                    "두 번째 정상 문장.\n"
+                    "세 번째 판별 신호."
+                ),
+                "final_short": "짧은 버전.",
+            }),
             json.dumps({"new_opener": "이후 보도된 배경형 1"}),
             json.dumps({"new_opener": "이후 보도된 배경형 2"}),
             json.dumps({
@@ -6903,8 +6912,8 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
 
         result = await cp.generate_final_post(_card, 0, "")
 
-        # PR 14: draft×2 + opener 2회 + full regen(draft×1) = 5회
-        assert call_counter["idx"] == 5
+        # PR 19: draft×1 + opener 2회 + full regen(draft×1) = 4회
+        assert call_counter["idx"] == 4
         # full regen 결과가 채택되어야 한다
         assert result.final_post.startswith("핵심은 시행일 변경이다")
         # WEAK_OPENER 해소
@@ -6920,17 +6929,16 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         body_second = "아주 특별한 두 번째 문장 표식 XYZ123"
         body_third = "세 번째 판별 신호 표식 판별"
 
-        bad_draft = json.dumps({
-            "final_post": (
-                f"이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
-                f"{body_second}.\n"
-                f"{body_third}."
-            ),
-            "final_short": "짧은 버전.",
-        })
-        # PR 14: draft×2 + opener rewrite 1회
+        # PR 19: source_text="" → draft_count=1 + opener rewrite 1회
         responses = [
-            bad_draft, bad_draft,
+            json.dumps({
+                "final_post": (
+                    f"이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                    f"{body_second}.\n"
+                    f"{body_third}."
+                ),
+                "final_short": "짧은 버전.",
+            }),
             json.dumps({"new_opener": "핵심은 시행일 변경이다"}),
         ]
         idx = {"v": 0}
@@ -9255,3 +9263,366 @@ class TestLearningDatasetLayer:
         # 원본 변경 없음
         record["draft_scores"].append(999)
         assert fp.draft_scores == [120, 95, 80]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 16: Evidence Snippet Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestEvidenceSnippetLayer:
+    """PR 16 — evidence_snippet / evidence_source 필드."""
+
+    def test_reader_question_snippet_defaults(self):
+        """기본값 빈 문자열."""
+        q = ReaderQuestion()
+        assert q.evidence_snippet == ""
+        assert q.evidence_source == ""
+
+    def test_source_resolve_sets_snippet(self):
+        """SOURCE 질문 해결 시 regex 매칭 스니펫 저장."""
+        q = ReaderQuestion(question="출처?", category="SOURCE")
+        qs = _resolve_questions_from_source(
+            [q], "한국은행에 따르면 2024년 3월 기준 CPI가 3.1% 상승했다."
+        )
+        assert qs[0].status == "RESOLVED"
+        assert qs[0].evidence_source == "SOURCE_TEXT"
+        assert len(qs[0].evidence_snippet) > 0
+        assert len(qs[0].evidence_snippet) <= 50
+
+    def test_scope_resolve_sets_snippet(self):
+        """SCOPE 질문 해결 시 수치 스니펫 저장."""
+        q = ReaderQuestion(question="규모?", category="SCOPE")
+        qs = _resolve_questions_from_source(
+            [q], "매출이 5조 3000억원으로 전년 대비 12% 증가했다."
+        )
+        assert qs[0].status == "RESOLVED"
+        assert qs[0].evidence_source == "SOURCE_TEXT"
+        assert qs[0].evidence_snippet  # 비어있지 않음
+
+    def test_impact_resolve_sets_snippet(self):
+        """IMPACT 질문 해결 시 매칭 패턴 조인."""
+        from app.services.content_pack import _IMPACT_MARKER_PATTERNS
+        # 2개 이상 패턴 필요
+        p1, p2 = _IMPACT_MARKER_PATTERNS[0], _IMPACT_MARKER_PATTERNS[1]
+        text = f"이 조치는 {p1}부터 시행되며 {p2}에 영향을 준다."
+        q = ReaderQuestion(question="영향?", category="IMPACT")
+        qs = _resolve_questions_from_source([q], text)
+        assert qs[0].status == "RESOLVED"
+        assert qs[0].evidence_source == "SOURCE_TEXT"
+        assert p1 in qs[0].evidence_snippet or p2 in qs[0].evidence_snippet
+
+    def test_checkpoint_resolve_sets_snippet(self):
+        """CHECKPOINT 질문 해결 시 첫 매칭 패턴."""
+        q = ReaderQuestion(question="확인?", category="CHECKPOINT")
+        qs = _resolve_questions_from_source(
+            [q], "다음 발표 예정일은 5월 21일이다."
+        )
+        assert qs[0].status == "RESOLVED"
+        assert qs[0].evidence_source == "SOURCE_TEXT"
+        assert qs[0].evidence_snippet
+
+    def test_external_resolve_sets_snippet(self):
+        """외부 evidence 해결 시 source=EXTERNAL."""
+        q = ReaderQuestion(question="출처?", category="SOURCE")
+        qs = _resolve_questions_from_external([q], "GOVERNMENT", 3)
+        assert qs[0].status == "RESOLVED"
+        assert qs[0].evidence_source == "EXTERNAL"
+        assert "GOVERNMENT" in qs[0].evidence_snippet
+
+    def test_external_scope_sets_snippet(self):
+        """SCOPE 외부 해결 시 type×count 형식."""
+        q = ReaderQuestion(question="규모?", category="SCOPE")
+        qs = _resolve_questions_from_external([q], "REPORT", 3)
+        assert qs[0].evidence_source == "EXTERNAL"
+        assert "REPORT×3" in qs[0].evidence_snippet
+
+    def test_unresolved_no_snippet(self):
+        """미해결 질문은 스니펫 없음."""
+        q = ReaderQuestion(question="출처?", category="SOURCE")
+        qs = _resolve_questions_from_source([q], "")
+        assert qs[0].status == "UNRESOLVED"
+        assert qs[0].evidence_snippet == ""
+        assert qs[0].evidence_source == ""
+
+    def test_snippet_max_50_chars(self):
+        """스니펫 50자 캡."""
+        q = ReaderQuestion(question="출처?", category="SOURCE")
+        # 아주 긴 출처 인용
+        text = "한국은행에 따르면 " + "가" * 200
+        qs = _resolve_questions_from_source([q], text)
+        if qs[0].status == "RESOLVED":
+            assert len(qs[0].evidence_snippet) <= 50
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 17: Entity Alias / Query Expansion Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestEntityAliasLayer:
+    """PR 17 — _ENTITY_ALIAS_MAP + findability alias 인정."""
+
+    def test_alias_map_not_empty(self):
+        """alias 사전에 항목이 있다."""
+        assert len(_ENTITY_ALIAS_MAP) >= 20
+
+    def test_alias_samsung_full(self):
+        """삼성전자 → 삼성."""
+        assert _ENTITY_ALIAS_MAP["삼성전자"] == "삼성"
+
+    def test_alias_bok(self):
+        """BOK → 한국은행."""
+        assert _ENTITY_ALIAS_MAP["BOK"] == "한국은행"
+
+    def test_alias_coingecko_bidirectional(self):
+        """CoinGecko ↔ 코인게코 양방향."""
+        assert "CoinGecko" in _ENTITY_ALIAS_MAP
+        assert "코인게코" in _ENTITY_ALIAS_MAP
+
+    def test_alias_tokheoje(self):
+        """토허제 → 토지거래허가구역."""
+        assert _ENTITY_ALIAS_MAP["토허제"] == "토지거래허가구역"
+
+    def test_findability_with_alias(self):
+        """alias가 anchor로 인정됨 → findability 통과."""
+        # "삼성전자"는 KNOWN_ENTITIES에 없지만 alias로 "삼성" 매핑
+        count, warn = _validate_findability(
+            "삼성전자가 5월 21일 실적을 발표한다."
+        )
+        assert count >= 2  # "삼성" (alias) + "5월 21일" (숫자) + "삼성전자" (alias)
+        assert warn is None
+
+    def test_findability_bok_alias(self):
+        """BOK alias → 한국은행 anchor."""
+        count = _count_findability_anchors("BOK가 기준금리를 3.5%로 동결했다.")
+        assert count >= 2  # BOK (regex 영문약어) + 한국은행 (alias) + 3.5 (숫자)
+
+    def test_findability_tokheoje(self):
+        """토허제 → 검색 가능."""
+        count = _count_findability_anchors("토허제 지정이 강남 3구에 확대됐다.")
+        # 토허제 → 토지거래허가구역 (alias), 강남 (known entity)
+        assert count >= 2
+
+    def test_alias_does_not_duplicate_known(self):
+        """이미 KNOWN_ENTITIES에 있는 것과 alias가 중복 카운트 안 됨."""
+        # "삼성"은 KNOWN_ENTITIES에 있고, "삼성전자"는 alias → 둘 다 "삼성"
+        count1 = _count_findability_anchors("삼성이 투자한다.")
+        count2 = _count_findability_anchors("삼성전자가 투자한다.")
+        # 삼성 = 1 anchor, 삼성전자 alias → 삼성 = 1 anchor (set 중복제거)
+        assert count1 == count2
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 18: Human Outcome Capture Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestHumanOutcomeCaptureLayer:
+    """PR 18 — modification reason 상수 + _validate_learning_label."""
+
+    def test_mod_reason_constants(self):
+        """7개 수정 사유 상수 정의."""
+        assert MOD_REASON_ABSTRACT == "ABSTRACT"
+        assert MOD_REASON_NO_MARKET == "NO_MARKET_STAKE"
+        assert MOD_REASON_UNRESOLVED == "UNRESOLVED_QUESTION"
+        assert MOD_REASON_WEAK_HOOK == "WEAK_HOOK"
+        assert MOD_REASON_LOW_FIND == "LOW_FINDABILITY"
+        assert MOD_REASON_SUMMARY == "TOO_SUMMARY_LIKE"
+        assert MOD_REASON_OTHER == "OTHER"
+
+    def test_valid_mod_reasons_set(self):
+        """_VALID_MOD_REASONS 에 7개 포함."""
+        assert len(_VALID_MOD_REASONS) == 7
+
+    def test_validate_adopted_ok(self):
+        """ADOPTED + 빈 reason → 통과."""
+        warns = _validate_learning_label(OUTCOME_ADOPTED)
+        assert warns == []
+
+    def test_validate_modified_needs_reason(self):
+        """MODIFIED + 빈 reason → 경고."""
+        warns = _validate_learning_label(OUTCOME_MODIFIED)
+        assert len(warns) == 1
+        assert "modification_reason 누락" in warns[0]
+
+    def test_validate_modified_with_reason(self):
+        """MODIFIED + 표준 reason → 통과."""
+        warns = _validate_learning_label(OUTCOME_MODIFIED, MOD_REASON_ABSTRACT)
+        assert warns == []
+
+    def test_validate_discarded_ok(self):
+        """DISCARDED → 통과."""
+        warns = _validate_learning_label(OUTCOME_DISCARDED)
+        assert warns == []
+
+    def test_validate_unknown_outcome(self):
+        """알 수 없는 outcome → 경고."""
+        warns = _validate_learning_label("UNKNOWN")
+        assert len(warns) >= 1
+        assert "알 수 없는 outcome" in warns[0]
+
+    def test_validate_nonstandard_reason_warns(self):
+        """비표준 reason → 경고."""
+        warns = _validate_learning_label(OUTCOME_MODIFIED, "CUSTOM_REASON")
+        assert any("비표준" in w for w in warns)
+
+    def test_validate_other_prefix_ok(self):
+        """OTHER: 접두사 자유 텍스트 → 통과."""
+        warns = _validate_learning_label(OUTCOME_MODIFIED, "OTHER:수동 편집")
+        assert not any("비표준" in w for w in warns)
+
+    def test_validate_empty_outcome_ok(self):
+        """빈 outcome (미판정) → 통과."""
+        warns = _validate_learning_label("")
+        assert warns == []
+
+    def test_learning_record_with_mod_reason(self):
+        """learning record 에 mod_reason 포함."""
+        fp = FinalPost(final_post="테스트", final_short="짧")
+        card = CandidateCard(key_facts=["팩트"], hook_candidates=["훅"])
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", None,
+            outcome=OUTCOME_MODIFIED,
+            modification_reason=MOD_REASON_ABSTRACT,
+        )
+        assert record["modification_reason"] == "ABSTRACT"
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 19: Cost-Aware Routing Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestCostAwareRoutingLayer:
+    """PR 19 — _decide_draft_count 조건부 라우팅."""
+
+    def test_verify_source_missing_returns_1(self):
+        """VERIFY + source_missing → 1."""
+        assert _decide_draft_count("VERIFY", "MISSING_SOURCE_TEXT", None, 0) == 1
+
+    def test_verify_source_ok_returns_2(self):
+        """VERIFY + source 있음 → 2."""
+        assert _decide_draft_count("VERIFY", None, None, 0) == 2
+
+    def test_high_unresolved_returns_1(self):
+        """unresolved ≥ 3 → 1."""
+        assert _decide_draft_count("EXPLAIN", None, "GOVERNMENT", 3) == 1
+        assert _decide_draft_count("EXPLAIN", None, None, 4) == 1
+
+    def test_explain_primary_source_returns_2(self):
+        """EXPLAIN + primary_source → 2."""
+        assert _decide_draft_count("EXPLAIN", None, "GOVERNMENT", 1) == 2
+
+    def test_judgment_default_returns_2(self):
+        """JUDGMENT 기본 → 2."""
+        assert _decide_draft_count("JUDGMENT", None, None, 0) == 2
+
+    def test_explain_no_source_returns_2(self):
+        """EXPLAIN + source 없음 → 기본 2."""
+        assert _decide_draft_count("EXPLAIN", None, None, 0) == 2
+
+    def test_verify_source_missing_trumps_unresolved(self):
+        """VERIFY + source_missing 가 unresolved 보다 먼저."""
+        assert _decide_draft_count("VERIFY", "MISSING_SOURCE_TEXT", None, 0) == 1
+
+    def test_unresolved_trumps_primary_source(self):
+        """unresolved ≥ 3 이 primary_source 보다 먼저."""
+        assert _decide_draft_count("EXPLAIN", None, "GOVERNMENT", 3) == 1
+
+    def test_boundary_unresolved_2_returns_2(self):
+        """unresolved = 2 → 아직 2."""
+        assert _decide_draft_count("EXPLAIN", None, None, 2) == 2
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 20: Distribution Packaging Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestDistributionPackagingLayer:
+    """PR 20 — _build_distribution_package 3종 패키지 추출."""
+
+    def test_share_line_from_short(self):
+        """final_short 이 있으면 share_line 으로 사용."""
+        fp = FinalPost(
+            final_post="메인 글 1줄.\n메인 글 2줄.\n답은 CPI다.",
+            final_short="짧은 버전 한 줄.",
+        )
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert share == "짧은 버전 한 줄."
+
+    def test_share_line_fallback_first_sentence(self):
+        """final_short 없으면 첫 문장."""
+        fp = FinalPost(
+            final_post="메인 글 첫 줄.\n메인 글 2줄.\n답은 CPI다.",
+            final_short="",
+        )
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert "메인 글 첫 줄" in share
+
+    def test_follow_up_from_signal(self):
+        """마지막 문장이 조건 분기면 follow_up."""
+        fp = FinalPost(
+            final_post="관세가 확대되면 원가가 오른다.\n5월 발표가 나오면 확정이다.",
+            final_short="짧은 버전.",
+        )
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert "나오면 확정이다" in follow
+
+    def test_follow_up_from_last_line(self):
+        """신호 없으면 마지막 줄 자체가 follow_up."""
+        fp = FinalPost(
+            final_post="관세가 확대된다.\n원가 상승 반영.\n다음은 5월 CPI 발표.",
+            final_short="짧은 버전.",
+        )
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert "5월 CPI" in follow
+
+    def test_follow_up_not_duplicate_share(self):
+        """follow_up 은 share_line 과 겹치지 않음."""
+        fp = FinalPost(
+            final_post="관세 확대 영향.\n후속 이벤트 예정.",
+            final_short="관세 확대 영향.",
+        )
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert share == "관세 확대 영향."
+        assert follow != share
+
+    def test_single_line_post(self):
+        """한 줄짜리 post → share 만, follow 없음."""
+        fp = FinalPost(
+            final_post="관세 확대 영향.",
+            final_short="",
+        )
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert "관세" in share
+        assert follow == ""
+
+    def test_empty_post(self):
+        """빈 post → 빈 패키지."""
+        fp = FinalPost(final_post="", final_short="")
+        share, follow = _build_distribution_package(fp, "EXPLAIN")
+        assert share == ""
+        assert follow == ""
+
+    def test_finalpost_dist_fields_default(self):
+        """FinalPost dist 필드 기본값."""
+        fp = FinalPost()
+        assert fp.dist_share_line == ""
+        assert fp.dist_follow_up == ""
+
+    def test_follow_up_signals(self):
+        """_FOLLOW_UP_SIGNALS 에 핵심 패턴 포함."""
+        assert "나오면" in _FOLLOW_UP_SIGNALS
+        assert "갈린다" in _FOLLOW_UP_SIGNALS
+        assert "확정이다" in _FOLLOW_UP_SIGNALS
+
+    def test_verify_mode_follow_up(self):
+        """VERIFY 기사의 조건 분기 패턴 감지."""
+        fp = FinalPost(
+            final_post="아직 확인 안 됐다.\n5월 참여율이 나오면 갈린다",
+            final_short="아직 확인 안 됨.",
+        )
+        share, follow = _build_distribution_package(fp, "VERIFY")
+        assert "갈린다" in follow
