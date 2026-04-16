@@ -4165,6 +4165,11 @@ _BANNED_ENDINGS = [
     "결정한다",
     "의미가 있다",
     "중요한 대목이다",
+    # PR 10 — 추상 마감 확장. "시사한다" standalone 은 "를 시사한다" 의 상위호환.
+    "시사한다",
+    "구조적 변화다",
+    "영향이 예상된다",
+    "관심이 필요하다",
 ]
 
 
@@ -4356,6 +4361,90 @@ def _validate_last_line_reward(
             )
 
     return None, "마지막 문장에 독자 보상(SAVE/SHARE/FOLLOW) 시그널 없음"
+
+
+# ─── PR 10: Findability Layer ─────────────────────────────────────────────
+#
+# 첫 2문장 안에 "검색 가능한 구체 앵커"(숫자/영문 약어/고유명사) 가 충분히
+# 있는지 휴리스틱으로 검사한다.  v1 은 WARN-only — _STRONG_FAIL_TAGS 미편입.
+#
+# 앵커 ≥ 2 → 통과,  1 → 경고만,  0 → LOW_FINDABILITY gate tag + 경고.
+
+_FINDABILITY_KNOWN_ENTITIES = [
+    # 한국 주요 기업/브랜드
+    "삼성", "현대", "기아", "포스코", "카카오", "네이버", "쿠팡", "롯데",
+    "한화", "두산", "신한", "하나", "우리", "토스",
+    # 한국 정부/기관
+    "국세청", "관세청", "금감원", "한국은행", "기재부", "산자부", "국방부",
+    "외교부", "통일부", "과기부", "교육부", "환경부", "법무부", "행안부",
+    "대통령", "국회", "여당", "야당", "헌법재판소", "대법원", "검찰",
+    # 국가
+    "미국", "중국", "일본", "러시아", "북한", "우크라이나", "이란",
+    "대만", "사우디", "인도", "독일", "영국", "프랑스", "호주",
+    # 한국 도시/지역
+    "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "제주",
+    "강남", "강북", "서초", "송파", "여의도", "판교",
+    # 주요 인물 (검색 빈도 높은)
+    "트럼프", "바이든", "시진핑", "푸틴", "젤렌스키", "윤석열", "이재명",
+]
+
+_FINDABILITY_ANCHOR_RE = re.compile(
+    r"\d[\d,.]*"              # 숫자 (날짜/금액/비율)
+    r"|[A-Z][A-Za-z0-9]{1,}"  # 영문 약어/티커 2자+ (CPI, GDP, KOSPI, SK)
+)
+
+
+def _extract_first_two_sentences(text: str) -> str:
+    """post 에서 첫 2문장만 뽑는다. 줄바꿈/마침표 기준."""
+    if not text:
+        return ""
+    normalized = text.replace("\n", ".")
+    parts = [p.strip() for p in normalized.split(".") if p.strip()]
+    return ". ".join(parts[:2])
+
+
+def _count_findability_anchors(text: str) -> int:
+    """텍스트에서 검색 가능한 구체 앵커(숫자/약어/고유명사) 수를 센다."""
+    if not text:
+        return 0
+    anchors: set = set()
+    for m in _FINDABILITY_ANCHOR_RE.finditer(text):
+        anchors.add(m.group())
+    for ent in _FINDABILITY_KNOWN_ENTITIES:
+        if ent in text:
+            anchors.add(ent)
+    return len(anchors)
+
+
+def _validate_findability(post: str) -> tuple[int, Optional[str]]:
+    """
+    PR 10 — 첫 2문장 Findability 검사.
+
+    반환: (anchor_count, warn_reason)
+      anchor_count : 감지된 구체 앵커 수
+      warn_reason  : None 이면 통과, 문자열이면 경고/게이트 사유
+
+    게이트 정책:
+      anchor ≥ 2 → 통과 (None)
+      anchor = 1 → 경고만 (gate tag 는 호출측에서 판단)
+      anchor = 0 → LOW_FINDABILITY 사유 반환
+    """
+    if not post:
+        return 0, None
+    head = _extract_first_two_sentences(post)
+    count = _count_findability_anchors(head)
+    if count >= 2:
+        return count, None
+    if count == 1:
+        return count, (
+            f"첫 2문장 검색 앵커 {count}개 — "
+            "고유명사/숫자/기관명/지표 최소 2개 권장"
+        )
+    return count, (
+        "첫 2문장에 검색 가능한 고유명사/숫자/기관명/지표 없음 — "
+        "추상명사만으로 시작"
+    )
+
 
 # 근거 없는 일반론 의견 패턴 (칼럼체/보고서체 — 원칙 C)
 _OPINION_PATTERNS = [
@@ -4816,6 +4905,15 @@ def _validate_final_post(
         warnings.append(_reward_warn)
         if "NO_READER_REWARD" not in gate_fails:
             gate_fails.append("NO_READER_REWARD")
+
+    # PR 10 — Findability Layer: 첫 2문장 검색 앵커 검사.
+    # anchor ≥ 2 통과, 1 경고만, 0 LOW_FINDABILITY gate tag.
+    # WARN-only — _STRONG_FAIL_TAGS 미편입 (재생성 루프 금지).
+    _anchor_count, _find_warn = _validate_findability(post)
+    if _find_warn:
+        warnings.append(_find_warn)
+        if _anchor_count == 0 and "LOW_FINDABILITY" not in gate_fails:
+            gate_fails.append("LOW_FINDABILITY")
 
     return post, short, warnings, gate_fails
 

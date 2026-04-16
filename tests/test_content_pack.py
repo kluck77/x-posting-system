@@ -37,6 +37,10 @@ from app.services.content_pack import (
     _validate_dead_patterns, _validate_structure_detection,
     _validate_reader_stake, _validate_grok_fail_tags_gating,
     _validate_thesis_preservation, _run_all_validations,
+    # PR 10: Findability Layer
+    _FINDABILITY_KNOWN_ENTITIES, _FINDABILITY_ANCHOR_RE,
+    _extract_first_two_sentences, _count_findability_anchors,
+    _validate_findability,
 )
 from app.models.content_request import ContentRequest
 
@@ -1766,7 +1770,7 @@ class TestValidateFinalPost:
 
     def test_clean_post_no_warnings(self):
         """깨끗한 게시글은 경고 없음."""
-        post = "관건은 이 관세가 반도체까지 확대되느냐다."
+        post = "관건은 미국 관세 25%가 반도체까지 확대되느냐다."
         short = "반도체 관세가 확대되면 삼성 마진이 줄어든다."
         _, _, warnings, _ = _validate_final_post(post, short)
         assert len(warnings) == 0
@@ -2840,7 +2844,7 @@ class TestValidationGate:
 
     def test_clean_post_no_warnings(self):
         """깨끗한 포스트는 경고 0개."""
-        post = "이 뉴스에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행령 여부다."
+        post = "미국 관세 발표에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행령 여부다."
         _, _, warnings, _ = _validate_final_post(post, "환율 1400원대, 변수는 시행령이다.")
         # 과장 표현도 없고 금지 마감도 없는 깨끗한 포스트
         assert len(warnings) == 0, f"경고 0개 예상, 실제: {warnings}"
@@ -6909,3 +6913,315 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         assert body_third in result.final_post
         # 첫 줄은 교체됨
         assert result.final_post.startswith("핵심은 시행일 변경이다")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PR 10 — Findability Layer + Market/Stake Layer
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestFindabilityLayer:
+    """
+    PR 10 — Findability Layer.
+
+    첫 2문장에 검색 가능한 고유명사/숫자/기관명/지표가 충분한지 검사.
+    LOW_FINDABILITY 는 WARN-only, _STRONG_FAIL_TAGS 미편입.
+    """
+
+    # ─── 1. _extract_first_two_sentences ─────────────────────────────────
+
+    def test_extract_two_sentences_normal(self):
+        text = "삼성전자 노조가 파업을 예고했다. 답은 실제 참여율이다. 후속 확인 필요."
+        result = _extract_first_two_sentences(text)
+        assert "삼성전자" in result
+        assert "참여율" in result
+        # 3번째 문장은 포함되지 않아야
+        assert "후속" not in result
+
+    def test_extract_two_sentences_newline(self):
+        text = "국세청이 8가지 지원책을 발표했다\n핵심은 신청 가능한 항목 수다"
+        result = _extract_first_two_sentences(text)
+        assert "국세청" in result
+        assert "신청" in result
+
+    def test_extract_empty(self):
+        assert _extract_first_two_sentences("") == ""
+        assert _extract_first_two_sentences("단문") == "단문"
+
+    # ─── 2. _count_findability_anchors ────────────────────────────────────
+
+    def test_count_anchors_samsung_date(self):
+        """삼성전자 + 5월 21일 → 앵커 3개 이상 (삼성, 5, 21)."""
+        text = "삼성전자 노조가 5월 21일부터 총파업을 예고했다"
+        count = _count_findability_anchors(text)
+        assert count >= 3
+
+    def test_count_anchors_nts_number(self):
+        """국세청 + 8가지 → 앵커 2개 이상."""
+        text = "국세청이 소상공인 세정지원 8가지를 발표했다"
+        count = _count_findability_anchors(text)
+        assert count >= 2
+
+    def test_count_anchors_coingecko(self):
+        """CoinGecko + 30% → 앵커 2개 이상."""
+        text = "한국 코인 거래 30%설은 아직 CoinGecko 원본이 없다"
+        count = _count_findability_anchors(text)
+        assert count >= 2
+
+    def test_count_anchors_cpi(self):
+        """CPI → 영문 약어 앵커 1개."""
+        text = "답은 다음 CPI가 기준이다"
+        count = _count_findability_anchors(text)
+        assert count >= 1
+
+    def test_count_anchors_pure_abstract(self):
+        """추상명사만 → 앵커 0."""
+        text = "정책 변화가 시장에 영향을 줄 수 있다"
+        count = _count_findability_anchors(text)
+        assert count == 0
+
+    def test_count_anchors_another_abstract(self):
+        """추상명사만 (구조 변화) → 앵커 0."""
+        text = "이번 구조 변화는 중요한 의미가 있다"
+        count = _count_findability_anchors(text)
+        assert count == 0
+
+    def test_count_anchors_known_entity_trump(self):
+        """트럼프 → 인물 고유명사 앵커 1개."""
+        text = "트럼프가 관세를 올렸다"
+        count = _count_findability_anchors(text)
+        assert count >= 1
+
+    def test_count_anchors_region(self):
+        """강남 → 지역명 앵커."""
+        text = "강남3구가 먼저 꺾였다"
+        count = _count_findability_anchors(text)
+        # 강남 + 3 = 2개
+        assert count >= 2
+
+    # ─── 3. _validate_findability ─────────────────────────────────────────
+
+    def test_findability_pass_with_2_anchors(self):
+        """고유명사 + 숫자 → 통과."""
+        post = "삼성전자 노조가 5월 21일부터 총파업을 예고했다.\n답은 실제 참여율이다."
+        count, warn = _validate_findability(post)
+        assert count >= 2
+        assert warn is None
+
+    def test_findability_warn_1_anchor(self):
+        """앵커 1개 → 경고만, gate tag 없음."""
+        post = "트럼프가 관세를 올렸다.\n시장 반응은 아직 미정이다."
+        count, warn = _validate_findability(post)
+        assert count >= 1
+        assert warn is not None
+        assert "권장" in warn
+
+    def test_findability_fail_0_anchors(self):
+        """앵커 0 → LOW_FINDABILITY 사유 반환."""
+        post = "정책 변화가 시장에 영향을 줄 수 있다.\n이번 구조 변화는 중요하다."
+        count, warn = _validate_findability(post)
+        assert count == 0
+        assert warn is not None
+        assert "추상명사" in warn
+
+    def test_findability_empty_post(self):
+        count, warn = _validate_findability("")
+        assert count == 0
+        assert warn is None
+
+    # ─── 4. _validate_final_post wiring ──────────────────────────────────
+
+    def test_validate_final_post_good_findability(self):
+        """구체 앵커 충분 → LOW_FINDABILITY 없음."""
+        post = "삼성전자 노조가 5월 21일부터 파업을 예고했다.\n답은 실제 참여율이다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "LOW_FINDABILITY" not in gate_fails
+
+    def test_validate_final_post_abstract_only(self):
+        """추상명사만 → LOW_FINDABILITY gate tag (WARN-only)."""
+        post = "정책 변화가 시장에 영향을 줄 수 있다.\n이번 구조 변화는 중요하다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "짧은 버전.")
+        assert "LOW_FINDABILITY" in gate_fails
+
+    def test_low_findability_not_in_strong_fail(self):
+        """LOW_FINDABILITY 는 _STRONG_FAIL_TAGS 에 없어야 한다."""
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert "LOW_FINDABILITY" not in _STRONG_FAIL_TAGS
+
+    # ─── 5. EXPLAIN 시장 반영 포인트 ─────────────────────────────────────
+
+    def test_explain_market_stake_post_pass(self):
+        """EXPLAIN — 시장 반영 포인트가 포함된 post 는 추가 경고 없음."""
+        post = (
+            "삼성전자 노조가 5월 21일부터 파업을 예고했다.\n"
+            "이게 맞으면 시장은 메모리 공급 부담부터 반영할 수 있다.\n"
+            "답은 실제 참여율이다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.", mode="EXPLAIN"
+        )
+        assert "LOW_FINDABILITY" not in gate_fails
+
+    # ─── 6. JUDGMENT 갈림 기준 ────────────────────────────────────────────
+
+    def test_judgment_divergence_post_pass(self):
+        """JUDGMENT — 갈림 기준이 있는 post 는 추가 경고 없음."""
+        post = (
+            "관세 25%를 놓고 산업부와 무역협회 해석이 갈린다.\n"
+            "산업부는 협상 카드, 무역협회는 실행 의지로 본다.\n"
+            "관건은 첫 공시다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.", mode="JUDGMENT"
+        )
+        assert "LOW_FINDABILITY" not in gate_fails
+
+    # ─── 7. VERIFY 확인 포인트 pass ──────────────────────────────────────
+
+    def test_verify_confirmation_point_pass(self):
+        """VERIFY — 확인 포인트만 남긴 post 통과."""
+        post = (
+            "트럼프 측이 대화 의향을 밝혔다.\n"
+            "실제 접촉은 아직 확인되지 않았다.\n"
+            "특사 파견이 공개되면 검증 가능."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.", certainty_level="미확인", mode="VERIFY"
+        )
+        assert "LOW_FINDABILITY" not in gate_fails
+
+    # ─── 8. VERIFY 예언형 문장 gate ──────────────────────────────────────
+
+    def test_verify_prophecy_banned_ending(self):
+        """VERIFY — '영향이 예상된다' 는 DEAD_ENDING."""
+        post = (
+            "트럼프 측이 관세 인상을 시사했다.\n"
+            "확인되지 않았다.\n"
+            "시장에 영향이 예상된다."
+        )
+        _, _, warnings, gate_fails = _validate_final_post(
+            post, "짧은 버전.", certainty_level="미확인", mode="VERIFY"
+        )
+        assert "DEAD_ENDING" in gate_fails
+
+    # ─── 9. Reader Reward Layer 회귀 없음 ────────────────────────────────
+
+    def test_reader_reward_still_works(self):
+        """PR 9 Reader Reward Layer 가 PR 10 이후에도 정상 동작."""
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("답은 다음 CPI가 기준이다.") == "SAVE"
+        assert _detect_reward_type("특사 파견이 공개되면 검증 가능.") == "FOLLOW"
+        assert _detect_reward_type("말보다 숫자가 먼저다.") == "SHARE"
+
+    # ─── 10. PR 4-9 strong fail 구조 회귀 ─────────────────────────────────
+
+    def test_strong_fail_tags_unchanged(self):
+        """_STRONG_FAIL_TAGS 는 여전히 4개만."""
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert _STRONG_FAIL_TAGS == frozenset({
+            "WEAK_OPENER", "DEAD_ENDING",
+            "STRUCTURE_COLUMN", "LOW_CONFIDENCE_OVERREACH",
+        })
+
+    # ─── 11. 신규 _BANNED_ENDINGS 작동 ──────────────────────────────────
+
+    def test_banned_ending_structural_change(self):
+        """PR 10 추가: '구조적 변화다' → DEAD_ENDING."""
+        post = "이번 조치는 구조적 변화다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "")
+        assert "DEAD_ENDING" in gate_fails
+
+    def test_banned_ending_impact_expected(self):
+        """PR 10 추가: '영향이 예상된다' → DEAD_ENDING."""
+        post = "수출 시장에 영향이 예상된다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "")
+        assert "DEAD_ENDING" in gate_fails
+
+    def test_banned_ending_attention_needed(self):
+        """PR 10 추가: '관심이 필요하다' → DEAD_ENDING."""
+        post = "향후 정책 변화에 관심이 필요하다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "")
+        assert "DEAD_ENDING" in gate_fails
+
+    def test_banned_ending_suggests_standalone(self):
+        """PR 10 추가: '시사한다' standalone → DEAD_ENDING."""
+        post = "이번 결과는 변화를 시사한다."
+        _, _, warnings, gate_fails = _validate_final_post(post, "")
+        assert "DEAD_ENDING" in gate_fails
+
+    # ─── 12. 앵커 사전 샘플 ──────────────────────────────────────────────
+
+    def test_anchor_known_entities_coverage(self):
+        """_FINDABILITY_KNOWN_ENTITIES 에 주요 기관/기업 포함."""
+        assert "삼성" in _FINDABILITY_KNOWN_ENTITIES
+        assert "국세청" in _FINDABILITY_KNOWN_ENTITIES
+        assert "트럼프" in _FINDABILITY_KNOWN_ENTITIES
+        assert "미국" in _FINDABILITY_KNOWN_ENTITIES
+        assert "강남" in _FINDABILITY_KNOWN_ENTITIES
+
+    def test_anchor_regex_matches_acronyms(self):
+        """_FINDABILITY_ANCHOR_RE 가 영문 약어를 잡는다."""
+        import re
+        assert _FINDABILITY_ANCHOR_RE.search("CPI") is not None
+        assert _FINDABILITY_ANCHOR_RE.search("GDP") is not None
+        assert _FINDABILITY_ANCHOR_RE.search("KOSPI") is not None
+        assert _FINDABILITY_ANCHOR_RE.search("SK") is not None
+
+    def test_anchor_regex_matches_numbers(self):
+        """_FINDABILITY_ANCHOR_RE 가 숫자를 잡는다."""
+        import re
+        assert _FINDABILITY_ANCHOR_RE.search("25%") is not None
+        assert _FINDABILITY_ANCHOR_RE.search("3,000억") is not None
+        assert _FINDABILITY_ANCHOR_RE.search("5월") is not None
+
+
+class TestMarketStakePromptRules:
+    """
+    PR 10 — article_router.py 에 삽입된
+    Findability + Market/Stake Layer 프롬프트 존재 확인.
+    """
+
+    def test_explain_findability_prompt(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        assert "Findability" in s
+        assert "Market/Stake" in s
+        assert "추상명사" in s
+        assert "고유명사" in s or "기관명" in s
+        assert "시장은 원가 부담" in s
+
+    def test_judgment_findability_prompt(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_JUDGMENT,
+        )
+        s = _build_mode_finalize_instruction(MODE_JUDGMENT)
+        assert "Findability" in s
+        assert "갈림 기준" in s
+        assert "관건은 첫 공시다" in s
+
+    def test_verify_findability_prompt(self):
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        assert "Findability" in s
+        assert "예언 금지" in s
+        assert "확인 포인트" in s
+
+    def test_verify_still_bans_prediction(self):
+        """VERIFY 에 '시장이 크게 반응할 것이다' 금지 포함."""
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_VERIFY,
+        )
+        s = _build_mode_finalize_instruction(MODE_VERIFY)
+        assert "시장이 크게 반응할 것이다" in s
+
+    def test_explain_bans_abstract_vague(self):
+        """EXPLAIN 에 '영향이 예상된다' 금지 포함."""
+        from app.services.content_pack import (
+            _build_mode_finalize_instruction, MODE_EXPLAIN,
+        )
+        s = _build_mode_finalize_instruction(MODE_EXPLAIN)
+        assert "영향이 예상된다" in s
