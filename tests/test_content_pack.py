@@ -79,6 +79,14 @@ from app.services.content_pack import (
     # PR 22: Duplicate / Similarity Guard + Search Surface
     _validate_output_similarity, _validate_search_surface,
     _extract_surface_keywords, _SIMILARITY_WARN_THRESHOLD,
+    # PR 23: Gold Eval + Pairwise Review
+    GOLD_QUALITY_GOOD, GOLD_QUALITY_BAD, GOLD_QUALITY_BORDERLINE,
+    _VALID_GOLD_QUALITIES, _VALID_GOLD_REASONS,
+    GOLD_REASON_FINDABLE, GOLD_REASON_MARKET, GOLD_REASON_OTHER,
+    _validate_gold_label, _build_gold_eval_record,
+    PAIRWISE_A_BETTER, PAIRWISE_B_BETTER, PAIRWISE_TIE,
+    _VALID_PAIRWISE_VERDICTS, _VALID_PAIRWISE_REASONS,
+    _validate_pairwise_label, _build_pairwise_review_record,
 )
 from app.models.content_request import ContentRequest
 
@@ -9755,3 +9763,169 @@ class TestSearchSurface:
         _, _, warnings, _ = _validate_final_post(post, short)
         surf_warns = [w for w in warnings if "핵심 검색어 없음" in w]
         assert len(surf_warns) >= 1
+
+
+# ── PR 23: Gold Eval + Pairwise Review Tests ──
+
+
+class TestGoldEval:
+    """PR 23 — Offline Gold Eval Layer."""
+
+    def test_valid_gold_qualities(self):
+        """GOOD/BAD/BORDERLINE 3가지만 허용."""
+        assert GOLD_QUALITY_GOOD in _VALID_GOLD_QUALITIES
+        assert GOLD_QUALITY_BAD in _VALID_GOLD_QUALITIES
+        assert GOLD_QUALITY_BORDERLINE in _VALID_GOLD_QUALITIES
+        assert len(_VALID_GOLD_QUALITIES) == 3
+
+    def test_valid_gold_reasons(self):
+        """6개 판정 근거 태그."""
+        assert len(_VALID_GOLD_REASONS) == 6
+        assert GOLD_REASON_FINDABLE in _VALID_GOLD_REASONS
+        assert GOLD_REASON_MARKET in _VALID_GOLD_REASONS
+        assert GOLD_REASON_OTHER in _VALID_GOLD_REASONS
+
+    def test_validate_gold_label_pass(self):
+        """정상 라벨 → 경고 없음."""
+        warns = _validate_gold_label("GOOD", ["MORE_FINDABLE", "BETTER_REWARD"])
+        assert warns == []
+
+    def test_validate_gold_label_unknown_quality(self):
+        """잘못된 quality → 경고."""
+        warns = _validate_gold_label("EXCELLENT", ["MORE_FINDABLE"])
+        assert any("알 수 없는 gold quality" in w for w in warns)
+
+    def test_validate_gold_label_no_reasons(self):
+        """reasons 누락 → 경고."""
+        warns = _validate_gold_label("GOOD", [])
+        assert any("reasons" in w and "누락" in w for w in warns)
+
+    def test_validate_gold_label_bad_reason(self):
+        """비표준 reason → 경고."""
+        warns = _validate_gold_label("BAD", ["INVALID_REASON"])
+        assert any("비표준 gold reason" in w for w in warns)
+
+    def test_validate_gold_label_other_prefix_ok(self):
+        """OTHER: 접두사 허용."""
+        warns = _validate_gold_label("GOOD", ["OTHER:커스텀사유"])
+        assert warns == []
+
+    def test_build_gold_eval_record_structure(self):
+        """빌드 결과 dict 필드 확인."""
+        rec = _build_gold_eval_record(
+            "삼성전자 HBM 매출 2조원 돌파. 역대 최고 실적.",
+            "삼성 HBM 역대 최고.",
+            "EXPLAIN",
+            quality="GOOD",
+            reasons=["MORE_FINDABLE", "BETTER_REWARD"],
+            evaluator_note="검색어 잘 박혀있음",
+        )
+        assert rec["record_type"] == "gold_eval"
+        assert rec["quality"] == "GOOD"
+        assert len(rec["reasons"]) == 2
+        assert rec["mode"] == "EXPLAIN"
+        assert rec["anchor_count"] >= 1
+        assert rec["post_length"] > 0
+        assert rec["post_snapshot"]
+        assert rec["evaluator_note"] == "검색어 잘 박혀있음"
+
+    def test_build_gold_eval_record_auto_metrics(self):
+        """자동 메트릭(reward, market) 계산 확인."""
+        rec = _build_gold_eval_record(
+            "한국은행 기준금리 동결. 다음 CPI가 나오면 갈린다.",
+            "한은 금리 동결.",
+            "VERIFY",
+        )
+        assert rec["reward_type"] == "FOLLOW"
+        assert rec["market_angle_type"] in ("CHECKPOINT", "NONE")
+
+    def test_build_gold_eval_empty_input(self):
+        """빈 입력 크래시 없음."""
+        rec = _build_gold_eval_record("", "", "EXPLAIN")
+        assert rec["post_length"] == 0
+        assert rec["record_type"] == "gold_eval"
+
+
+class TestPairwiseReview:
+    """PR 23 — Human Pairwise Review Layer."""
+
+    def test_valid_pairwise_verdicts(self):
+        """A_BETTER/B_BETTER/TIE 3가지만 허용."""
+        assert PAIRWISE_A_BETTER in _VALID_PAIRWISE_VERDICTS
+        assert PAIRWISE_B_BETTER in _VALID_PAIRWISE_VERDICTS
+        assert PAIRWISE_TIE in _VALID_PAIRWISE_VERDICTS
+        assert len(_VALID_PAIRWISE_VERDICTS) == 3
+
+    def test_pairwise_reasons_same_as_gold(self):
+        """pairwise reason 셋 = gold reason 셋."""
+        assert _VALID_PAIRWISE_REASONS == _VALID_GOLD_REASONS
+
+    def test_validate_pairwise_pass(self):
+        """정상 라벨 → 경고 없음."""
+        warns = _validate_pairwise_label("A_BETTER", ["MORE_FINDABLE"])
+        assert warns == []
+
+    def test_validate_pairwise_tie_no_reasons_ok(self):
+        """TIE일 때 reasons 없어도 경고 없음."""
+        warns = _validate_pairwise_label("TIE", [])
+        assert warns == []
+
+    def test_validate_pairwise_a_better_no_reasons(self):
+        """A_BETTER인데 reasons 없으면 경고."""
+        warns = _validate_pairwise_label("A_BETTER", [])
+        assert any("reasons 누락" in w for w in warns)
+
+    def test_validate_pairwise_unknown_verdict(self):
+        """잘못된 verdict → 경고."""
+        warns = _validate_pairwise_label("C_BETTER", ["MORE_FINDABLE"])
+        assert any("알 수 없는 pairwise verdict" in w for w in warns)
+
+    def test_validate_pairwise_no_verdict(self):
+        """verdict 빈 문자열 → 경고."""
+        warns = _validate_pairwise_label("", [])
+        assert any("verdict 누락" in w for w in warns)
+
+    def test_validate_pairwise_bad_reason(self):
+        """비표준 reason → 경고."""
+        warns = _validate_pairwise_label("B_BETTER", ["NOT_A_VALID_REASON"])
+        assert any("비표준 pairwise reason" in w for w in warns)
+
+    def test_build_pairwise_record_structure(self):
+        """빌드 결과 dict 필드 확인."""
+        rec = _build_pairwise_review_record(
+            "삼성전자 HBM 매출 2조원 돌파.",
+            "삼성 HBM 최고.",
+            "SK하이닉스 HBM 점유율 확대.",
+            "SK HBM 선두.",
+            "EXPLAIN",
+            verdict="A_BETTER",
+            reasons=["MORE_FINDABLE"],
+            evaluator_note="A안이 검색 잘 됨",
+        )
+        assert rec["record_type"] == "pairwise_review"
+        assert rec["verdict"] == "A_BETTER"
+        assert rec["reasons"] == ["MORE_FINDABLE"]
+        assert rec["a_post_length"] > 0
+        assert rec["b_post_length"] > 0
+        assert rec["a_post_snapshot"]
+        assert rec["b_post_snapshot"]
+        assert rec["evaluator_note"] == "A안이 검색 잘 됨"
+
+    def test_build_pairwise_auto_metrics(self):
+        """A/B 각각 자동 메트릭 계산."""
+        rec = _build_pairwise_review_record(
+            "한국은행 기준금리 동결. 다음 CPI가 나오면 갈린다.",
+            "한은 동결.",
+            "금리 동결 결정 나왔다.",
+            "금리 동결.",
+            "VERIFY",
+        )
+        assert rec["a_reward_type"] == "FOLLOW"
+        assert rec["b_reward_type"] is None or isinstance(rec["b_reward_type"], str)
+
+    def test_build_pairwise_empty_input(self):
+        """빈 입력 크래시 없음."""
+        rec = _build_pairwise_review_record("", "", "", "", "EXPLAIN")
+        assert rec["a_post_length"] == 0
+        assert rec["b_post_length"] == 0
+        assert rec["record_type"] == "pairwise_review"

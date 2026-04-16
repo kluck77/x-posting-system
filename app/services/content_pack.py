@@ -1486,6 +1486,15 @@ from app.services.output_meta import (  # noqa: F401  (re-export)
     _validate_search_surface,
     _extract_surface_keywords,
     _SIMILARITY_WARN_THRESHOLD,
+    # PR 23: Gold Eval + Pairwise Review
+    GOLD_QUALITY_GOOD, GOLD_QUALITY_BAD, GOLD_QUALITY_BORDERLINE,
+    _VALID_GOLD_QUALITIES, _VALID_GOLD_REASONS,
+    GOLD_REASON_FINDABLE, GOLD_REASON_MARKET, GOLD_REASON_REWARD,
+    GOLD_REASON_NOT_SUMMARY, GOLD_REASON_QUESTION, GOLD_REASON_OTHER,
+    _validate_gold_label, _build_gold_eval_record,
+    PAIRWISE_A_BETTER, PAIRWISE_B_BETTER, PAIRWISE_TIE,
+    _VALID_PAIRWISE_VERDICTS, _VALID_PAIRWISE_REASONS,
+    _validate_pairwise_label, _build_pairwise_review_record,
 )
 
 

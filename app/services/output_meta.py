@@ -751,3 +751,187 @@ def _validate_search_surface(
             )
 
     return warnings
+
+
+# ── PR 23: Offline Gold Eval Layer ──
+#
+# 운영자가 "좋은 글"/"나쁜 글" 기준 라벨을 붙여 품질 기준셋(gold set)을
+# 축적한다. _build_learning_record 의 출력 + 사람 판정을 포함하는 상위 구조.
+# DB 저장/UI 없이 dict 스키마만 정의. 호출자가 JSON 로그로 기록.
+
+GOLD_QUALITY_GOOD = "GOOD"
+GOLD_QUALITY_BAD = "BAD"
+GOLD_QUALITY_BORDERLINE = "BORDERLINE"
+
+_VALID_GOLD_QUALITIES = frozenset({
+    GOLD_QUALITY_GOOD, GOLD_QUALITY_BAD, GOLD_QUALITY_BORDERLINE,
+})
+
+# 품질 판정 근거 태그 — 복수 선택 가능
+GOLD_REASON_FINDABLE = "MORE_FINDABLE"
+GOLD_REASON_MARKET = "BETTER_MARKET_STAKE"
+GOLD_REASON_REWARD = "BETTER_REWARD"
+GOLD_REASON_NOT_SUMMARY = "LESS_SUMMARY_LIKE"
+GOLD_REASON_QUESTION = "BETTER_QUESTION_RESOLUTION"
+GOLD_REASON_OTHER = "OTHER"
+
+_VALID_GOLD_REASONS = frozenset({
+    GOLD_REASON_FINDABLE, GOLD_REASON_MARKET, GOLD_REASON_REWARD,
+    GOLD_REASON_NOT_SUMMARY, GOLD_REASON_QUESTION, GOLD_REASON_OTHER,
+})
+
+
+def _validate_gold_label(
+    quality: str,
+    reasons: list[str],
+) -> list[str]:
+    """
+    PR 23 — gold eval 라벨 유효성 검증.
+
+    반환: 경고 메시지 리스트 (빈 리스트 = 통과).
+    """
+    warnings: list[str] = []
+    if quality and quality not in _VALID_GOLD_QUALITIES:
+        warnings.append(f"알 수 없는 gold quality: {quality}")
+    if not reasons:
+        warnings.append("gold eval 판정 근거(reasons) 누락")
+    for r in reasons:
+        if r not in _VALID_GOLD_REASONS and not r.startswith("OTHER:"):
+            warnings.append(f"비표준 gold reason: {r}")
+    return warnings
+
+
+def _build_gold_eval_record(
+    post: str,
+    short: str,
+    mode: str,
+    *,
+    quality: str = "",
+    reasons: list[str] | None = None,
+    evaluator_note: str = "",
+) -> dict:
+    """
+    PR 23 — Offline Gold Eval 레코드 빌드.
+
+    단일 포스트에 대한 품질 기준셋 레코드.
+    _build_learning_record 와 별개로 독립 dict 를 반환한다.
+    호출자가 JSON 로그로 기록하거나 파일로 내보낸다.
+
+    AI 호출 없음. rule-first.
+    """
+    reasons = reasons or []
+    # 자동 계산 메트릭
+    anchor_count, _ = _validate_findability(post)
+    reward = _detect_reward_type(_extract_last_sentence(post))
+    market = _detect_market_angle_type(post, mode)
+
+    return {
+        "record_type": "gold_eval",
+        "quality": quality,
+        "reasons": list(reasons),
+        "evaluator_note": evaluator_note,
+        # 자동 메트릭 스냅샷 — 나중에 기준셋 비교용
+        "mode": mode,
+        "post_length": len(post),
+        "short_length": len(short),
+        "anchor_count": anchor_count,
+        "reward_type": reward,
+        "market_angle_type": market,
+        # 텍스트 스냅샷
+        "post_snapshot": post[:200],
+        "short_snapshot": short[:100],
+    }
+
+
+# ── PR 23: Human Pairwise Review Layer ──
+#
+# 동일 소스에서 생성된 2개 안(A/B)을 운영자가 비교 판정.
+# A_BETTER / B_BETTER / TIE + 선택 이유 태그.
+# UI 없이 dict 스키마만 정의. 호출자가 텔레그램 봇 등에서 호출.
+
+PAIRWISE_A_BETTER = "A_BETTER"
+PAIRWISE_B_BETTER = "B_BETTER"
+PAIRWISE_TIE = "TIE"
+
+_VALID_PAIRWISE_VERDICTS = frozenset({
+    PAIRWISE_A_BETTER, PAIRWISE_B_BETTER, PAIRWISE_TIE,
+})
+
+# 선택 이유 — _VALID_GOLD_REASONS 와 동일 셋 재사용
+_VALID_PAIRWISE_REASONS = _VALID_GOLD_REASONS
+
+
+def _validate_pairwise_label(
+    verdict: str,
+    reasons: list[str],
+) -> list[str]:
+    """
+    PR 23 — pairwise review 라벨 유효성 검증.
+
+    반환: 경고 메시지 리스트 (빈 리스트 = 통과).
+    """
+    warnings: list[str] = []
+    if verdict and verdict not in _VALID_PAIRWISE_VERDICTS:
+        warnings.append(f"알 수 없는 pairwise verdict: {verdict}")
+    if not verdict:
+        warnings.append("pairwise verdict 누락")
+    if verdict != PAIRWISE_TIE and not reasons:
+        warnings.append("A_BETTER/B_BETTER 판정에 reasons 누락")
+    for r in reasons:
+        if r not in _VALID_PAIRWISE_REASONS and not r.startswith("OTHER:"):
+            warnings.append(f"비표준 pairwise reason: {r}")
+    return warnings
+
+
+def _build_pairwise_review_record(
+    post_a: str,
+    short_a: str,
+    post_b: str,
+    short_b: str,
+    mode: str,
+    *,
+    verdict: str = "",
+    reasons: list[str] | None = None,
+    evaluator_note: str = "",
+) -> dict:
+    """
+    PR 23 — Human Pairwise Review 레코드 빌드.
+
+    동일 소스의 A안/B안 비교 판정 레코드.
+    AI 호출 없음. rule-first.
+    """
+    reasons = reasons or []
+
+    # A안 자동 메트릭
+    a_anchor, _ = _validate_findability(post_a)
+    a_reward = _detect_reward_type(_extract_last_sentence(post_a))
+    a_market = _detect_market_angle_type(post_a, mode)
+
+    # B안 자동 메트릭
+    b_anchor, _ = _validate_findability(post_b)
+    b_reward = _detect_reward_type(_extract_last_sentence(post_b))
+    b_market = _detect_market_angle_type(post_b, mode)
+
+    return {
+        "record_type": "pairwise_review",
+        "verdict": verdict,
+        "reasons": list(reasons),
+        "evaluator_note": evaluator_note,
+        "mode": mode,
+        # A안
+        "a_post_length": len(post_a),
+        "a_short_length": len(short_a),
+        "a_anchor_count": a_anchor,
+        "a_reward_type": a_reward,
+        "a_market_angle_type": a_market,
+        "a_post_snapshot": post_a[:200],
+        "a_short_snapshot": short_a[:100],
+        # B안
+        "b_post_length": len(post_b),
+        "b_short_length": len(short_b),
+        "b_anchor_count": b_anchor,
+        "b_reward_type": b_reward,
+        "b_market_angle_type": b_market,
+        "b_post_snapshot": post_b[:200],
+        "b_short_snapshot": short_b[:100],
+    }
