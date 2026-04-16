@@ -59,6 +59,8 @@ from app.services.content_pack import (
     _detect_primary_source, _resolve_questions_from_external,
     _PRIMARY_SOURCE_URL_PATTERNS, _PRIMARY_SOURCE_TEXT_PATTERNS,
     _PRIMARY_SOURCE_VALID_TYPES,
+    # PR 14: Draft Ranking Layer
+    _score_draft, _select_best_draft,
 )
 from app.models.content_request import ContentRequest
 
@@ -4360,7 +4362,8 @@ class TestGenerateFinalPostRetry:
         """WEAK_OPENER (60자 초과 첫 문장) → 첫 줄 rewrite 경로로 통과.
 
         PR: WEAK_OPENER 단독 실패는 본문 전체 재생성 대신 opener 만 교체한다.
-        2차 호출은 _rewrite_opener_only 로 향하며 `{new_opener}` JSON 을 돌려준다.
+        PR 14: draft_count=2 → 초안 2개 생성 후 최선 선택. 시퀀스 앞에
+        동일 bad 2개 배치.
         """
         from app.services.content_pack import generate_final_post
 
@@ -4368,13 +4371,13 @@ class TestGenerateFinalPostRetry:
             "final_post": "미국 행정부의 대이란 협상 기조가 과거의 강경 일변도에서 조건부 접근 방식으로 전환되는 조짐이 드러나고 있다.\n근거 한 줄.\n사찰 수용이 답이다.",
             "final_short": "짧은 버전.",
         })
-        # 2차 호출은 opener rewrite — `{new_opener}` 형식
+        # 3차 호출은 opener rewrite — `{new_opener}` 형식
         good = json.dumps({"new_opener": "미국이 처음 보상안을 꺼냈다"})
-        calls = self._setup_mocks(monkeypatch, [bad, good])
+        calls = self._setup_mocks(monkeypatch, [bad, bad, good])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 2, "1차 cycle + opener rewrite 1회 = 총 2회 호출"
+        assert calls["count"] == 3, "draft×2 + opener rewrite 1회 = 총 3회"
         assert "WEAK_OPENER" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
         # rewrite 로 첫 줄이 교체됐어야 한다 — 본문은 유지
@@ -4386,7 +4389,10 @@ class TestGenerateFinalPostRetry:
     async def test_dead_ending_retry_still_fails_marks_exhausted(
         self, monkeypatch, card
     ):
-        """DEAD_ENDING → 재생성 후에도 실패 → RETRY_EXHAUSTED 마커."""
+        """DEAD_ENDING → 재생성 후에도 실패 → RETRY_EXHAUSTED 마커.
+
+        PR 14: draft_count=2 초기 + draft_count=1 재생성 = 총 3회.
+        """
         from app.services.content_pack import generate_final_post
 
         bad1 = json.dumps({
@@ -4397,17 +4403,20 @@ class TestGenerateFinalPostRetry:
             "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n결국 이것이 변수다.",
             "final_short": "짧은 버전.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad1, bad2])
+        calls = self._setup_mocks(monkeypatch, [bad1, bad1, bad2])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 2
+        assert calls["count"] == 3
         assert "DEAD_ENDING" in result.gate_fails
         assert "RETRY_EXHAUSTED" in result.gate_fails
 
     @pytest.mark.asyncio
     async def test_structure_column_retry_succeeds(self, monkeypatch, card):
-        """STRUCTURE_COLUMN (요약→의견→관건) → 재생성에서 구조 변경 성공."""
+        """STRUCTURE_COLUMN (요약→의견→관건) → 재생성에서 구조 변경 성공.
+
+        PR 14: draft×2 초기 + draft×1 재생성 = 총 3회.
+        """
         from app.services.content_pack import (
             generate_final_post,
             _SUMMARY_OPINION_CRUX_PATTERNS,
@@ -4423,11 +4432,11 @@ class TestGenerateFinalPostRetry:
             "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 나오면 확정.",
             "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad, good])
+        calls = self._setup_mocks(monkeypatch, [bad, bad, good])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 2
+        assert calls["count"] == 3
         assert "STRUCTURE_COLUMN" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
 
@@ -4435,7 +4444,10 @@ class TestGenerateFinalPostRetry:
     async def test_low_confidence_overreach_retry_succeeds(
         self, monkeypatch, card
     ):
-        """LOW_CONFIDENCE_OVERREACH → 재생성에서 동기 추정 제거 성공."""
+        """LOW_CONFIDENCE_OVERREACH → 재생성에서 동기 추정 제거 성공.
+
+        PR 14: draft×2 초기 + draft×1 재생성 = 총 3회.
+        """
         from app.services.content_pack import CandidateCard, ThesisCard, generate_final_post
 
         low_card = CandidateCard(
@@ -4453,17 +4465,20 @@ class TestGenerateFinalPostRetry:
             "final_post": "미국이 처음 보상안을 꺼냈다.\n서울 48%.\n사찰 수용이 나오면 확정.",
             "final_short": "미국이 처음 보상안을 꺼냈다. 사찰 수용이 답이다.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad, good])
+        calls = self._setup_mocks(monkeypatch, [bad, bad, good])
 
         result = await generate_final_post(low_card, 0, "")
 
-        assert calls["count"] == 2
+        assert calls["count"] == 3
         assert "LOW_CONFIDENCE_OVERREACH" not in result.gate_fails
         assert "RETRY_EXHAUSTED" not in result.gate_fails
 
     @pytest.mark.asyncio
     async def test_soft_fail_only_no_retry(self, monkeypatch, card):
-        """소프트 실패만 있으면 재생성하지 않고 1회로 종료."""
+        """소프트 실패만 있으면 재생성하지 않고 1회로 종료.
+
+        PR 14: draft×2 = 총 2회 호출, 재생성 없음.
+        """
         from app.services.content_pack import generate_final_post
 
         # BRIEFING_SMELL만 걸리도록 _WEAK_PATTERNS 2개 이상 삽입
@@ -4471,19 +4486,22 @@ class TestGenerateFinalPostRetry:
             "final_post": "지금 핵심은 재회담이다.\n추이를 봐야 한다. 영향을 미칠 수 있다.\n사찰 수용이 나오면 확정.",
             "final_short": "짧은 버전.",
         })
-        calls = self._setup_mocks(monkeypatch, [only_soft])
+        calls = self._setup_mocks(monkeypatch, [only_soft, only_soft])
 
         result = await generate_final_post(card, 0, "")
 
-        # 재생성 트리거 안 됨 — 총 1회 호출
-        assert calls["count"] == 1
+        # 재생성 트리거 안 됨 — draft×2 = 총 2회 호출
+        assert calls["count"] == 2
         assert "RETRY_EXHAUSTED" not in result.gate_fails
         # BRIEFING_SMELL 은 그대로 유지 (경고만)
         assert "BRIEFING_SMELL" in result.gate_fails
 
     @pytest.mark.asyncio
     async def test_retry_never_loops_twice(self, monkeypatch, card):
-        """재생성은 최대 1회 — 두 번 연속 강한 실패여도 3회째 호출 없음."""
+        """재생성은 최대 1회 — 두 번 연속 강한 실패여도 추가 호출 없음.
+
+        PR 14: draft×2 초기 + draft×1 재생성 = 총 3회. 4번째는 없어야.
+        """
         from app.services.content_pack import generate_final_post
 
         bad1 = json.dumps({
@@ -4494,11 +4512,11 @@ class TestGenerateFinalPostRetry:
             "final_post": "지금 핵심은 재회담이다.\n근거 한 줄.\n결국 변수다.",
             "final_short": "짧은 버전.",
         })
-        calls = self._setup_mocks(monkeypatch, [bad1, bad2, "SHOULD_NOT_USE"])
+        calls = self._setup_mocks(monkeypatch, [bad1, bad1, bad2, "SHOULD_NOT_USE"])
 
         result = await generate_final_post(card, 0, "")
 
-        assert calls["count"] == 2, "무한 루프 금지 — 정확히 2회"
+        assert calls["count"] == 3, "무한 루프 금지 — draft×2 + retry×1 = 3회"
         assert "RETRY_EXHAUSTED" in result.gate_fails
 
 
@@ -6371,8 +6389,8 @@ class TestOpenerRewritePathInGenerateFinalPost:
 
         # opener rewrite 경로가 타야 한다
         assert call_counter["rewrite"] == 1
-        # 1차 cycle 1회만, 2차 full regenerate 호출 금지
-        assert call_counter["cycle"] == 1
+        # PR 14: draft×2 = AI 2회, full regenerate 호출 금지
+        assert call_counter["cycle"] == 2
         # rewrite 이후 결과가 반영됐는지
         assert result.final_post.startswith("새 핵심 명제 한 줄이다")
 
@@ -6415,8 +6433,8 @@ class TestOpenerRewritePathInGenerateFinalPost:
 
         await cp.generate_final_post(_card, 0, "")
 
-        # full regen 경로 → _run_cycle 2회 호출
-        assert call_counter["cycle"] == 2
+        # PR 14: full regen 경로 → draft×2 초기 + draft×1 재생성 = AI 3회
+        assert call_counter["cycle"] == 3
         # opener rewrite 경로 호출 안 됨
         assert call_counter["rewrite"] == 0
 
@@ -6788,19 +6806,20 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         """1차 opener 점수 미달 → 2차 opener 통과 → rewrite 성공."""
         from app.services import content_pack as cp
 
-        # 호출 시퀀스:
-        # call 1: 초안 생성 (WEAK_OPENER) — 1차 cycle
-        # call 2: opener rewrite 시도 1 (low score — 배경어)
-        # call 3: opener rewrite 시도 2 (high score — 깨끗한 opener)
+        # 호출 시퀀스 (PR 14: draft×2):
+        # call 1-2: 초안 생성 ×2 (WEAK_OPENER) — 1차 cycle draft_count=2
+        # call 3: opener rewrite 시도 1 (low score — 배경어)
+        # call 4: opener rewrite 시도 2 (high score — 깨끗한 opener)
+        bad_draft = json.dumps({
+            "final_post": (
+                "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                "두 번째 정상 문장.\n"
+                "세 번째 판별 신호."
+            ),
+            "final_short": "짧은 버전.",
+        })
         responses = [
-            json.dumps({
-                "final_post": (
-                    "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
-                    "두 번째 정상 문장.\n"
-                    "세 번째 판별 신호."
-                ),
-                "final_short": "짧은 버전.",
-            }),
+            bad_draft, bad_draft,
             json.dumps({"new_opener": "이후 보도된 배경어 시작 문장이다"}),
             json.dumps({"new_opener": "핵심은 시행일 변경이다"}),
         ]
@@ -6823,8 +6842,8 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
 
         result = await cp.generate_final_post(_card, 0, "")
 
-        # 총 3회: 1차 cycle + opener 시도 2회
-        assert call_counter["idx"] == 3
+        # PR 14: 총 4회: draft×2 + opener 시도 2회
+        assert call_counter["idx"] == 4
         # 최종 첫 줄이 2차 시도 opener 로 교체됐어야 한다
         assert result.final_post.startswith("핵심은 시행일 변경이다")
 
@@ -6835,20 +6854,21 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         """2회 모두 점수 미달 → full regen 폴백 경로 발동."""
         from app.services import content_pack as cp
 
-        # 호출 시퀀스:
-        # call 1: 초안 (WEAK_OPENER 트리거)
-        # call 2: opener rewrite 시도 1 (low score)
-        # call 3: opener rewrite 시도 2 (low score)
-        # call 4: full regen cycle (OpenAI 호출)
+        # 호출 시퀀스 (PR 14: draft×2):
+        # call 1-2: 초안 ×2 (WEAK_OPENER) — draft_count=2
+        # call 3: opener rewrite 시도 1 (low score)
+        # call 4: opener rewrite 시도 2 (low score)
+        # call 5: full regen cycle (draft_count=1)
+        bad_draft = json.dumps({
+            "final_post": (
+                "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                "두 번째 정상 문장.\n"
+                "세 번째 판별 신호."
+            ),
+            "final_short": "짧은 버전.",
+        })
         responses = [
-            json.dumps({
-                "final_post": (
-                    "이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
-                    "두 번째 정상 문장.\n"
-                    "세 번째 판별 신호."
-                ),
-                "final_short": "짧은 버전.",
-            }),
+            bad_draft, bad_draft,
             json.dumps({"new_opener": "이후 보도된 배경형 1"}),
             json.dumps({"new_opener": "이후 보도된 배경형 2"}),
             json.dumps({
@@ -6879,8 +6899,8 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
 
         result = await cp.generate_final_post(_card, 0, "")
 
-        # 1차 cycle + opener 2회 + full regen 1회 = 4회
-        assert call_counter["idx"] == 4
+        # PR 14: draft×2 + opener 2회 + full regen(draft×1) = 5회
+        assert call_counter["idx"] == 5
         # full regen 결과가 채택되어야 한다
         assert result.final_post.startswith("핵심은 시행일 변경이다")
         # WEAK_OPENER 해소
@@ -6896,15 +6916,17 @@ class TestOpenerRewriteTwoAttemptsThenFullRegen:
         body_second = "아주 특별한 두 번째 문장 표식 XYZ123"
         body_third = "세 번째 판별 신호 표식 판별"
 
+        bad_draft = json.dumps({
+            "final_post": (
+                f"이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
+                f"{body_second}.\n"
+                f"{body_third}."
+            ),
+            "final_short": "짧은 버전.",
+        })
+        # PR 14: draft×2 + opener rewrite 1회
         responses = [
-            json.dumps({
-                "final_post": (
-                    f"이후 보도된 긴 배경 설명형 첫 줄이 길게 쭉 이어진다.\n"
-                    f"{body_second}.\n"
-                    f"{body_third}."
-                ),
-                "final_short": "짧은 버전.",
-            }),
+            bad_draft, bad_draft,
             json.dumps({"new_opener": "핵심은 시행일 변경이다"}),
         ]
         idx = {"v": 0}
@@ -8603,3 +8625,341 @@ class TestExternalEvidenceLayer:
         )
         assert count >= 2
         assert warn is None
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 14: Draft Ranking Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestDraftRankingLayer:
+    """PR 14 — _score_draft / _select_best_draft 규칙 기반 초안 비교."""
+
+    # ── 헬퍼 ──
+
+    def _make_draft(
+        self,
+        post=(
+            "관세 25%가 반도체까지 확대되면 원가 상승이 먼저 반영된다.\n"
+            "삼성전자 파운드리 라인 원가 기준으로 웨이퍼당 12% 인상이 예고됐다.\n"
+            "답은 다음 CPI 발표에서 반도체 장비 가격이 반영되느냐다."
+        ),
+        short="관세 확대 시 원가 상승 선반영.",
+        gate_fails=None,
+        reward_type="SAVE",
+        market_angle_type="COST",
+    ):
+        return FinalPost(
+            final_post=post,
+            final_short=short,
+            gate_fails=gate_fails if gate_fails is not None else [],
+            reward_type=reward_type,
+            market_angle_type=market_angle_type,
+        )
+
+    # ── _score_draft 기본 ──
+
+    def test_score_clean_draft(self):
+        """게이트 통과 + reward + market → 높은 점수."""
+        d = self._make_draft()
+        score = _score_draft(d)
+        assert score >= 115, f"clean draft score too low: {score}"
+
+    def test_score_base_no_bonus(self):
+        """reward/market 없으면 base 100."""
+        d = self._make_draft(reward_type=None, market_angle_type=None)
+        score = _score_draft(d)
+        assert score == 100
+
+    def test_score_reward_bonus(self):
+        """reward_type 있으면 +10."""
+        d1 = self._make_draft(reward_type=None, market_angle_type=None)
+        d2 = self._make_draft(reward_type="SAVE", market_angle_type=None)
+        assert _score_draft(d2) - _score_draft(d1) == 10
+
+    def test_score_market_bonus(self):
+        """market_angle_type 있으면 +10."""
+        d1 = self._make_draft(reward_type=None, market_angle_type=None)
+        d2 = self._make_draft(reward_type=None, market_angle_type="COST")
+        assert _score_draft(d2) - _score_draft(d1) == 10
+
+    def test_score_market_none_no_bonus(self):
+        """market_angle_type='NONE'이면 보너스 없음."""
+        d = self._make_draft(reward_type=None, market_angle_type="NONE")
+        assert _score_draft(d) == 100
+
+    # ── 강한 실패 감점 ──
+
+    def test_score_one_strong_fail(self):
+        """강한 실패 1개 → −30."""
+        d = self._make_draft(
+            gate_fails=["WEAK_OPENER"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        assert _score_draft(d) == 70
+
+    def test_score_two_strong_fails(self):
+        """강한 실패 2개 → −60."""
+        d = self._make_draft(
+            gate_fails=["WEAK_OPENER", "DEAD_ENDING"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        assert _score_draft(d) == 40
+
+    def test_score_strong_plus_warn(self):
+        """강한 1개 + 경고 1개 → −30 −5 = −35."""
+        d = self._make_draft(
+            gate_fails=["WEAK_OPENER", "NO_READER_REWARD"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        assert _score_draft(d) == 65
+
+    # ── 경고 태그 감점 ──
+
+    def test_score_warn_tag_penalty(self):
+        """WARN-only 태그 → −5 each."""
+        d = self._make_draft(
+            gate_fails=["NO_READER_REWARD", "LOW_FINDABILITY"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        assert _score_draft(d) == 90
+
+    # ── 뻔한 표현 감점 ──
+
+    def test_score_weak_pattern_penalty(self):
+        """_WEAK_PATTERNS 매칭 → −3 each."""
+        d = self._make_draft(
+            post="추이를 봐야 한다. 변수다.",
+            reward_type=None,
+            market_angle_type=None,
+        )
+        score = _score_draft(d)
+        # "추이를 봐야 한다" + "변수다" = 2 hits → −6, plus short (<100) → −20
+        assert score < 100
+
+    def test_score_no_weak_patterns(self):
+        """뻔한 표현 없으면 감점 0."""
+        d = self._make_draft(
+            post="관세 25%가 반도체까지 확대되면 원가 상승이 먼저 반영된다." * 3,
+            reward_type=None,
+            market_angle_type=None,
+        )
+        score = _score_draft(d)
+        assert score == 100
+
+    # ── 길이 감점 ──
+
+    def test_score_too_short(self):
+        """100자 미만 → −20."""
+        d = self._make_draft(
+            post="짧은 글.",
+            reward_type=None,
+            market_angle_type=None,
+        )
+        score = _score_draft(d)
+        assert score <= 80
+
+    def test_score_too_long(self):
+        """800자 초과 → −10."""
+        d = self._make_draft(
+            post="가" * 801,
+            reward_type=None,
+            market_angle_type=None,
+        )
+        score = _score_draft(d)
+        assert score == 90
+
+    def test_score_normal_length(self):
+        """100~800자 → 길이 감점 없음."""
+        d = self._make_draft(
+            post="가" * 300,
+            reward_type=None,
+            market_angle_type=None,
+        )
+        score = _score_draft(d)
+        assert score == 100
+
+    # ── _select_best_draft ──
+
+    def test_select_best_from_two(self):
+        """두 후보 중 점수 높은 것 선택."""
+        d1 = self._make_draft(
+            gate_fails=["WEAK_OPENER"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        d2 = self._make_draft()  # clean, high score
+        best, rank, scores = _select_best_draft([d1, d2])
+        assert best is d2
+        assert rank == 2
+        assert len(scores) == 2
+        assert scores[1] > scores[0]
+
+    def test_select_best_first_wins_tie(self):
+        """동점이면 첫 번째 (최초 생성) 우선."""
+        d1 = self._make_draft()
+        d2 = self._make_draft()
+        best, rank, scores = _select_best_draft([d1, d2])
+        assert best is d1
+        assert rank == 1
+        assert scores[0] == scores[1]
+
+    def test_select_best_from_three(self):
+        """3개 후보 중 최고 선택."""
+        d1 = self._make_draft(gate_fails=["WEAK_OPENER"], reward_type=None, market_angle_type=None)
+        d2 = self._make_draft(gate_fails=["DEAD_ENDING"], reward_type="SAVE", market_angle_type=None)
+        d3 = self._make_draft()  # best
+        best, rank, scores = _select_best_draft([d1, d2, d3])
+        assert best is d3
+        assert rank == 3
+
+    def test_select_single_draft(self):
+        """후보 1개 → 그대로 반환."""
+        d = self._make_draft()
+        best, rank, scores = _select_best_draft([d])
+        assert best is d
+        assert rank == 1
+        assert len(scores) == 1
+
+    def test_select_empty_raises(self):
+        """빈 리스트 → ValueError."""
+        with pytest.raises(ValueError):
+            _select_best_draft([])
+
+    # ── 점수 순서 보장 ──
+
+    def test_strong_fail_worse_than_warn(self):
+        """강한 실패 초안이 경고만 있는 초안보다 항상 낮다 (동일 보너스 조건)."""
+        d_strong = self._make_draft(
+            gate_fails=["WEAK_OPENER"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        d_warn = self._make_draft(
+            gate_fails=["NO_READER_REWARD", "LOW_FINDABILITY"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        assert _score_draft(d_warn) > _score_draft(d_strong)
+
+    def test_reward_market_beats_bare(self):
+        """reward + market 보너스가 bare 100보다 높다."""
+        d_bare = self._make_draft(reward_type=None, market_angle_type=None)
+        d_bonus = self._make_draft(reward_type="SAVE", market_angle_type="COST")
+        assert _score_draft(d_bonus) > _score_draft(d_bare)
+
+    # ── FinalPost 메타 필드 기본값 ──
+
+    def test_finalpost_draft_defaults(self):
+        """FinalPost 기본값: count=1, rank=1, scores=[]."""
+        fp = FinalPost()
+        assert fp.draft_candidates_count == 1
+        assert fp.draft_selected_rank == 1
+        assert fp.draft_scores == []
+
+    def test_finalpost_draft_meta_roundtrip(self):
+        """draft 메타 필드 설정 → 읽기."""
+        fp = FinalPost(
+            final_post="테스트",
+            draft_candidates_count=3,
+            draft_selected_rank=2,
+            draft_scores=[85, 110, 95],
+        )
+        assert fp.draft_candidates_count == 3
+        assert fp.draft_selected_rank == 2
+        assert fp.draft_scores == [85, 110, 95]
+
+    # ── _build_evaluation_meta 연동 ──
+
+    def test_eval_meta_includes_draft_fields(self):
+        """EvalMeta 에 draft_candidates_count, draft_selected_rank 포함."""
+        fp = FinalPost(
+            final_post="관세 25% 확대 시 원가 상승 선반영.",
+            final_short="관세 확대 영향.",
+            draft_candidates_count=2,
+            draft_selected_rank=1,
+            draft_scores=[110, 95],
+        )
+        card = CandidateCard(
+            key_facts=["관세 25% 확대"],
+            hook_candidates=["관세 확대"],
+            certainty_level="확정",
+        )
+        meta = _build_evaluation_meta(fp, card, "EXPLAIN", None)
+        assert meta["draft_candidates_count"] == 2
+        assert meta["draft_selected_rank"] == 1
+
+    def test_eval_meta_draft_defaults(self):
+        """EvalMeta draft 필드 기본값 (단일 초안)."""
+        fp = FinalPost(final_post="테스트", final_short="짧")
+        card = CandidateCard(
+            key_facts=["팩트"],
+            hook_candidates=["훅"],
+        )
+        meta = _build_evaluation_meta(fp, card, "EXPLAIN", None)
+        assert meta["draft_candidates_count"] == 1
+        assert meta["draft_selected_rank"] == 1
+
+    # ── 복합 시나리오 ──
+
+    def test_ranking_picks_clean_over_dirty(self):
+        """강한 실패 + 뻔한 표현 초안 vs 클린 초안 → 클린 승."""
+        dirty = self._make_draft(
+            post="추이를 봐야 한다. 변수다. 영향이 커질 수 있다.",
+            gate_fails=["WEAK_OPENER", "DEAD_ENDING"],
+            reward_type=None,
+            market_angle_type=None,
+        )
+        clean = self._make_draft(
+            post="관세 25%가 반도체까지 확대되면 원가 상승이 먼저 반영된다.\n답은 다음 CPI가 기준이다.",
+            gate_fails=[],
+            reward_type="SAVE",
+            market_angle_type="COST",
+        )
+        best, rank, scores = _select_best_draft([dirty, clean])
+        assert best is clean
+        assert rank == 2
+        assert scores[1] - scores[0] >= 50  # 큰 점수 차이
+
+    def test_ranking_among_imperfect_drafts(self):
+        """불완전 초안 3개 중 가장 나은 것 채택."""
+        d1 = self._make_draft(
+            gate_fails=["WEAK_OPENER"],
+            reward_type="SAVE",
+            market_angle_type="COST",
+        )  # -30 +10 +10 = 90
+        d2 = self._make_draft(
+            gate_fails=["NO_READER_REWARD"],
+            reward_type=None,
+            market_angle_type="DEMAND",
+        )  # -5 +0 +10 = 105
+        d3 = self._make_draft(
+            gate_fails=["LOW_FINDABILITY"],
+            reward_type="FOLLOW",
+            market_angle_type=None,
+        )  # -5 +10 +0 = 105
+        best, rank, scores = _select_best_draft([d1, d2, d3])
+        # d2 and d3 tie at 105, d2 wins (first)
+        assert best is d2
+        assert rank == 2
+
+    def test_score_deterministic(self):
+        """같은 draft → 같은 점수."""
+        d = self._make_draft()
+        s1 = _score_draft(d)
+        s2 = _score_draft(d)
+        assert s1 == s2
+
+    def test_score_empty_post(self):
+        """빈 post → 길이 감점 적용."""
+        d = self._make_draft(
+            post="",
+            reward_type=None,
+            market_angle_type=None,
+        )
+        score = _score_draft(d)
+        assert score == 80  # 100 - 20 (too short)

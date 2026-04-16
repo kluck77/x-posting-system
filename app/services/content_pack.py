@@ -1317,6 +1317,11 @@ class FinalPost:
     used_primary_source: bool = False
     primary_source_type: Optional[str] = None
     external_evidence_count: int = 0
+    # PR 14 — Draft Ranking Layer
+    # 초안 후보 비교 메타. 로그/테스트 전용.
+    draft_candidates_count: int = 1   # 생성된 후보 수
+    draft_selected_rank: int = 1      # 채택된 후보 순위 (1-indexed)
+    draft_scores: list = field(default_factory=list)  # 후보별 점수
 
 
 @dataclass
@@ -2180,6 +2185,76 @@ def _count_strong_fails(tags: Optional[list]) -> int:
     return sum(1 for t in tags if t in _STRONG_FAIL_TAGS)
 
 
+# ── PR 14: Draft Ranking Layer — 규칙 기반 초안 점수 + 선택 ──
+
+
+def _score_draft(draft: "FinalPost") -> int:
+    """
+    PR 14 — 규칙 기반 초안 점수 산정. 높을수록 좋다.
+
+    AI 호출 없음. 기존 gate_fails / reward / market_angle / weak pattern
+    검출 결과를 종합 점수화.
+
+    가중치:
+      base              100
+      strong_fail       −30 each  (WEAK_OPENER, DEAD_ENDING 등)
+      warn_tag          −5  each  (NO_READER_REWARD, LOW_FINDABILITY 등)
+      weak_pattern hit  −3  each  (_WEAK_PATTERNS 매칭)
+      reward_type 존재  +10
+      market_angle 존재 +10
+      too_short (<100)  −20
+      too_long  (>800)  −10
+    """
+    score = 100
+
+    # 강한 실패 (치명적 품질 결함)
+    strong = _count_strong_fails(draft.gate_fails)
+    score -= strong * 30
+
+    # 경고 태그 (WARN-only)
+    weak_tags = len(draft.gate_fails or []) - strong
+    score -= weak_tags * 5
+
+    # 독자 보상 시그널 보너스
+    if draft.reward_type:
+        score += 10
+
+    # 시장/생활 반영 경로 보너스
+    if draft.market_angle_type and draft.market_angle_type != "NONE":
+        score += 10
+
+    # 뻔한 표현 감점
+    if draft.final_post:
+        weak_hits = sum(1 for p in _WEAK_PATTERNS if p in draft.final_post)
+        score -= weak_hits * 3
+
+    # 길이 감점
+    post_len = len(draft.final_post) if draft.final_post else 0
+    if post_len < 100:
+        score -= 20
+    elif post_len > 800:
+        score -= 10
+
+    return score
+
+
+def _select_best_draft(
+    drafts: list["FinalPost"],
+) -> tuple["FinalPost", int, list[int]]:
+    """
+    PR 14 — 후보 리스트에서 최고 점수 초안 선택.
+
+    Returns:
+        (best_draft, 1-indexed rank, all_scores)
+    동점이면 첫 번째(최초 생성) 우선.
+    """
+    if not drafts:
+        raise ValueError("drafts list is empty")
+    scores = [_score_draft(d) for d in drafts]
+    best_idx = max(range(len(scores)), key=lambda i: scores[i])
+    return drafts[best_idx], best_idx + 1, scores
+
+
 def _build_retry_instruction(gate_fails: list) -> str:
     """남은 강한 실패 태그별 재생성 지시문. 논지 유지 + 표현 직선화."""
     hints = []
@@ -2649,46 +2724,89 @@ async def generate_final_post(
     )
 
     # ─ 내부 1 사이클: OpenAI 조립 → Grok 평가 → Claude 보정 ─
-    # 강한 실패 재생성용으로 같은 흐름을 최대 2회 돌릴 수 있도록 추출.
-    async def _run_cycle(extra_instruction: str = ""):
-        """user_prompt + (옵션) 재생성 지시로 한 사이클 실행. (final, grok) 반환."""
+    # PR 14: draft_count >= 2 → 복수 초안 병렬 생성 → 점수 비교 → 최선만
+    # Grok + Claude 리뷰. 재생성 경로(retry)는 draft_count=1 으로 호출.
+    async def _run_cycle(
+        extra_instruction: str = "", draft_count: int = 2
+    ):
+        """user_prompt + 재생성 지시로 한 사이클 실행. (final, grok) 반환."""
         full_prompt = user_prompt + extra_instruction
+
+        # ── Phase 1: 초안 생성 ──
         await _notify_progress("openai")
-        _raw = await _call_ai_with_prompt(
-            _FINALIZE_PROMPT_KO, full_prompt, temperature=0.9
-        )
-        if not _raw:
-            return None, None
-        _result = _parse_final_post(
-            _raw, certainty_level=card.certainty_level, mode=mode
-        )
-        if not _result:
+        if draft_count >= 2:
+            async def _gen_one():
+                raw = await _call_ai_with_prompt(
+                    _FINALIZE_PROMPT_KO, full_prompt, temperature=0.9
+                )
+                if not raw:
+                    return None
+                return _parse_final_post(
+                    raw, certainty_level=card.certainty_level, mode=mode
+                )
+            _tasks = [_gen_one() for _ in range(draft_count)]
+            _results = await asyncio.gather(*_tasks)
+            _drafts = [r for r in _results if r is not None]
+        else:
+            _raw = await _call_ai_with_prompt(
+                _FINALIZE_PROMPT_KO, full_prompt, temperature=0.9
+            )
+            if not _raw:
+                return None, None
+            _parsed = _parse_final_post(
+                _raw, certainty_level=card.certainty_level, mode=mode
+            )
+            _drafts = [_parsed] if _parsed else []
+
+        if not _drafts:
             return None, None
 
+        # ── Phase 2: PR 14 Draft Ranking ──
+        if len(_drafts) >= 2:
+            _best, _rank, _scores = _select_best_draft(_drafts)
+            logger.info(
+                f"[DraftRanking] {len(_drafts)} candidates, "
+                f"scores={_scores}, selected=#{_rank}"
+            )
+        else:
+            _best = _drafts[0]
+            _rank = 1
+            _scores = [_score_draft(_drafts[0])]
+
+        _d_count = len(_drafts)
+
+        # ── Phase 3: Grok 평가 (최선 초안만) ──
         await _notify_progress("grok")
-        _grok = await _grok_eval(_result, card, selected_hook=selected_hook)
+        _grok = await _grok_eval(_best, card, selected_hook=selected_hook)
         if isinstance(_grok, Exception):
             logger.warning(f"[Grok평가] 실행 오류: {_grok}")
             _grok = None
 
-        _log_draft_comparison(_result, _grok, None)
+        _log_draft_comparison(_best, _grok, None)
 
-        _gate_1st = _result.gate_fails
+        _gate_1st = _best.gate_fails
         if _gate_1st:
             logger.warning(
                 f"[품질게이트] 초안 실패: {_gate_1st} → Claude 보정 강제"
             )
 
+        # ── Phase 4: Claude 보정 ──
         await _notify_progress("claude")
         _reviewed = await _claude_review_final(
-            card, _result,
+            card, _best,
             selected_hook=selected_hook,
             gemini_opinion=None,
             grok_eval=_grok,
             gate_fails=_gate_1st,
             mode=mode,
         )
-        _final = _reviewed if _reviewed else _result
+        _final = _reviewed if _reviewed else _best
+
+        # PR 14: 랭킹 메타데이터 주입
+        _final.draft_candidates_count = _d_count
+        _final.draft_selected_rank = _rank
+        _final.draft_scores = _scores
+
         return _final, _grok
 
     # ── 1차 실행 ──
@@ -2744,7 +2862,7 @@ async def generate_final_post(
                     "모두 폐기 — full regen 폴백"
                 )
                 retry_extra = _build_retry_instruction(final.gate_fails)
-                retried, retried_grok = await _run_cycle(retry_extra)
+                retried, retried_grok = await _run_cycle(retry_extra, draft_count=1)
                 if retried is not None:
                     before = _count_strong_fails(final.gate_fails)
                     after = _count_strong_fails(retried.gate_fails)
@@ -2764,7 +2882,7 @@ async def generate_final_post(
                 f"{final.gate_fails} → 자동 재생성 1회 시도"
             )
             retry_extra = _build_retry_instruction(final.gate_fails)
-            retried, retried_grok = await _run_cycle(retry_extra)
+            retried, retried_grok = await _run_cycle(retry_extra, draft_count=1)
 
             if retried is not None:
                 before = _count_strong_fails(final.gate_fails)
@@ -2818,6 +2936,8 @@ async def generate_final_post(
         f"market_angle={final.market_angle_type} "
         f"primary_source={_primary_source_type} "
         f"ext_evidence={_ext_evidence_count} "
+        f"drafts={final.draft_candidates_count} "
+        f"draft_rank={final.draft_selected_rank} "
         f"resolved={_rq_resolved}/{len(_reader_questions)} "
         f"source_missing={_source_missing} "
         f"post={len(final.final_post)}자, "
@@ -5542,12 +5662,13 @@ def _build_evaluation_meta(
     source_missing: Optional[str],
 ) -> dict:
     """
-    PR 12/13 Layer E — dataset export 용 구조화 메타데이터 빌드.
+    PR 12/13/14 Layer E — dataset export 용 구조화 메타데이터 빌드.
 
     반환 dict 필드:
       mode, certainty, reward_type, market_angle_type,
       resolved_count, unresolved_count, source_missing_reason,
       used_primary_source, primary_source_type, external_evidence_count,
+      draft_candidates_count, draft_selected_rank,
       gate_fails, strong_fail_count, warn_tag_count,
       post_length, short_length, question_count,
       topic_tags, has_thesis
@@ -5570,6 +5691,9 @@ def _build_evaluation_meta(
         "used_primary_source": final.used_primary_source,
         "primary_source_type": final.primary_source_type,
         "external_evidence_count": final.external_evidence_count,
+        # PR 14 — Draft Ranking
+        "draft_candidates_count": final.draft_candidates_count,
+        "draft_selected_rank": final.draft_selected_rank,
         "gate_fails": list(final.gate_fails or []),
         "strong_fail_count": strong,
         "warn_tag_count": warn_only,
