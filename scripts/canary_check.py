@@ -93,6 +93,18 @@ def check_live_ai():
         print("  [5/5] live_ai: SKIP (CANARY_LIVE=1 로 활성화)")
         return True
 
+    # API 키 존재 확인
+    from app.config import settings
+    keys = {
+        "OpenAI": settings.has_openai,
+        "Gemini": settings.has_gemini,
+    }
+    missing = [k for k, v in keys.items() if not v]
+    if missing:
+        print(f"  [5/5] live_ai: SKIP (API 키 없음: {', '.join(missing)})")
+        print(f"         .env에 OPENAI_API_KEY, GEMINI_API_KEY 설정 필요")
+        return True
+
     import asyncio
     from app.services.content_pack import generate_candidate_card
     from app.models.content_request import ContentRequest

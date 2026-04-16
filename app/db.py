@@ -288,4 +288,18 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _run_schema_migrations()
     _ensure_eval_records_table()  # PR 30
+    _cleanup_eval_records()  # PR 31
     logger.info("데이터베이스 테이블 초기화 완료")
+
+
+def _cleanup_eval_records():
+    """PR 31 — 앱 시작 시 eval_records 오래된 레코드 정리. fail-open."""
+    try:
+        db = get_db()
+        from app.services.eval_store import cleanup_old_records
+        deleted = cleanup_old_records(db)
+        if deleted > 0:
+            logger.info(f"[startup] eval_records cleanup: {deleted}건 삭제")
+        db.close()
+    except Exception as e:
+        logger.warning(f"[startup] eval_records cleanup 실패 (무시): {e}")
