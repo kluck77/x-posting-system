@@ -15,6 +15,32 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from app.services.content_pack import FinalPost, CandidateCard
 
+
+# ── PR 28: Tunable Thresholds ──
+#
+# 운영 데이터로 튜닝 가능한 상수. 코드 내 magic number 대신 여기서 관리.
+# 변경 시 이 블록만 수정.
+
+# Similarity Guard
+SIMILARITY_JACCARD_THRESHOLD = 0.70     # Jaccard ≥ 이 값이면 경고
+SIMILARITY_PREFIX_THRESHOLD = 0.80      # prefix overlap ≥ 이 값이면 경고
+SIMILARITY_NOUN_OVERLAP_THRESHOLD = 0.60  # 핵심 명사 중복 ≥ 이 값이면 경고
+
+# Search Surface
+SEARCH_SURFACE_MIN_KEYWORDS = 2         # post 핵심어 이 수 미만이면 검사 스킵
+
+# Online Eval Alerts
+ONLINE_EVAL_BUFFER_SIZE = 100           # FIFO 버퍼 크기
+ONLINE_EVAL_MIN_SAMPLE = 5             # 경고 발화 최소 샘플 수
+ONLINE_EVAL_REWARD_NONE_ALERT = 0.50   # reward None 비율 초과 시 경고
+ONLINE_EVAL_MARKET_NONE_ALERT = 0.50   # market NONE 비율 초과 시 경고
+ONLINE_EVAL_STRONG_FAIL_ALERT = 0.50   # avg strong_fail 초과 시 경고
+ONLINE_EVAL_UNRESOLVED_ALERT = 2.0     # avg unresolved 초과 시 경고
+
+# Findability
+FINDABILITY_PASS_THRESHOLD = 2          # anchor ≥ 이 수면 통과
+
+
 # ─── PR 9: Reader Reward Layer ────────────────────────────────────────────
 #
 # 독자 보상 시그널 = 마지막 문장에서 "왜 저장/공유/팔로우해야 하는지"가 드러
@@ -349,9 +375,9 @@ def _validate_findability(post: str) -> tuple[int, Optional[str]]:
         return 0, None
     head = _extract_first_two_sentences(post)
     count = _count_findability_anchors(head)
-    if count >= 2:
+    if count >= FINDABILITY_PASS_THRESHOLD:
         return count, None
-    if count == 1:
+    if count >= 1:
         return count, (
             f"첫 2문장 검색 앵커 {count}개 — "
             "고유명사/숫자/기관명/지표 최소 2개 권장"
@@ -583,7 +609,7 @@ def _build_distribution_package(
 #
 # WARN-only — _STRONG_FAIL_TAGS 미편입.
 
-_SIMILARITY_WARN_THRESHOLD = 0.70   # Jaccard ≥ 70% → 경고
+_SIMILARITY_WARN_THRESHOLD = SIMILARITY_JACCARD_THRESHOLD
 
 
 def _tokenize_ko(text: str) -> set[str]:
@@ -608,12 +634,86 @@ def _jaccard_similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
+def _prefix_overlap(a: str, b: str) -> float:
+    """두 텍스트의 prefix(첫 N자) 일치 비율 (0.0~1.0)."""
+    if not a or not b:
+        return 0.0
+    min_len = min(len(a), len(b))
+    if min_len == 0:
+        return 0.0
+    match = 0
+    for i in range(min_len):
+        if a[i] == b[i]:
+            match += 1
+        else:
+            break
+    return match / min_len
+
+
+# 한국어 핵심 명사 추출용 (2자+ 한글 토큰 중 조사/어미 제거 근사)
+_KO_JOSA_SUFFIXES = ("은", "는", "이", "가", "을", "를", "에", "의", "로", "와", "과",
+                      "도", "만", "까지", "부터", "에서", "으로", "라고", "이라")
+
+
+def _extract_nouns_ko(text: str) -> set[str]:
+    """한국어 텍스트에서 핵심 명사 근사 추출 (조사 제거)."""
+    tokens = _tokenize_ko(text)
+    nouns = set()
+    for tok in tokens:
+        cleaned = tok
+        for suf in _KO_JOSA_SUFFIXES:
+            if cleaned.endswith(suf) and len(cleaned) > len(suf) + 1:
+                cleaned = cleaned[:-len(suf)]
+                break
+        if len(cleaned) >= 2:
+            nouns.add(cleaned)
+    return nouns
+
+
+def _noun_overlap(a: str, b: str) -> float:
+    """두 텍스트의 핵심 명사 Jaccard 유사도."""
+    na = _extract_nouns_ko(a)
+    nb = _extract_nouns_ko(b)
+    if not na or not nb:
+        return 0.0
+    return len(na & nb) / len(na | nb)
+
+
 def _first_line(text: str) -> str:
     """텍스트의 첫 줄만 추출."""
     if not text:
         return ""
     lines = text.strip().splitlines()
     return lines[0].strip() if lines else ""
+
+
+def _check_pair_similarity(
+    a: str, b: str, label: str,
+) -> Optional[str]:
+    """
+    PR 28 — 두 텍스트 간 multi-signal 유사도 검사.
+
+    Jaccard / prefix overlap / noun overlap 3개 신호 중
+    하나라도 threshold 초과하면 경고 반환.
+    경고에 어떤 신호가 트리거됐는지 메타 포함.
+    """
+    if not a or not b or a == b:
+        return None
+
+    signals: list[str] = []
+    jac = _jaccard_similarity(a, b)
+    if jac >= SIMILARITY_JACCARD_THRESHOLD:
+        signals.append(f"jaccard={int(jac*100)}%")
+    pre = _prefix_overlap(a, b)
+    if pre >= SIMILARITY_PREFIX_THRESHOLD:
+        signals.append(f"prefix={int(pre*100)}%")
+    noun = _noun_overlap(a, b)
+    if noun >= SIMILARITY_NOUN_OVERLAP_THRESHOLD:
+        signals.append(f"noun_overlap={int(noun*100)}%")
+
+    if signals:
+        return f"{label} 유사도 경고 [{', '.join(signals)}]"
+    return None
 
 
 def _validate_output_similarity(
@@ -623,33 +723,25 @@ def _validate_output_similarity(
     follow_up: str = "",
 ) -> list[str]:
     """
-    PR 22 — 4종 출력물 간 유사중복 검사.
+    PR 22/28 — 4종 출력물 간 유사중복 검사 (multi-signal).
 
     검사 항목:
-      1. final_post 첫 줄 vs final_short 첫 줄 (완전 동일)
-      2. final_short vs dist_share_line (Jaccard ≥ 70%)
-      3. final_post 마지막 줄 vs dist_follow_up (완전 동일)
-      4. final_short vs dist_follow_up (Jaccard ≥ 70%)
+      1. final_short vs dist_share_line
+      2. final_post 마지막 줄 vs dist_follow_up (완전 동일)
+      3. final_short vs dist_follow_up
+      4. final_post 첫 줄 vs dist_share_line (완전 복제)
 
-    반환: 경고 목록 (WARN-only, 게이트 태그 없음)
+    반환: 경고 목록 (WARN-only, 트리거 신호 메타 포함)
     """
     warnings: list[str] = []
 
-    # 1. post 첫 줄 vs short 첫 줄 — 완전 동일 체크
-    # (기존 _validate_final_post에 이미 있으나 여기서 첫줄 동일도 추가 체크)
-    post_first = _first_line(post)
-    short_first = _first_line(short)
-
-    # 2. short vs share_line — 유사도
+    # 1. short vs share_line — multi-signal
     if short and share_line and short != share_line:
-        sim = _jaccard_similarity(short, share_line)
-        if sim >= _SIMILARITY_WARN_THRESHOLD:
-            warnings.append(
-                f"final_short ↔ dist_share_line 유사도 {int(sim*100)}% — "
-                "공유 문구가 짧은 버전과 거의 동일"
-            )
+        w = _check_pair_similarity(short, share_line, "final_short ↔ dist_share_line")
+        if w:
+            warnings.append(w)
 
-    # 3. post 마지막 줄 vs follow_up — 완전 동일
+    # 2. post 마지막 줄 vs follow_up — 완전 동일
     if post and follow_up:
         post_lines = [ln.strip() for ln in post.strip().splitlines() if ln.strip()]
         if post_lines:
@@ -660,22 +752,19 @@ def _validate_output_similarity(
                     "답글 차별화 필요"
                 )
 
-    # 4. short vs follow_up — 유사도
+    # 3. short vs follow_up — multi-signal
     if short and follow_up:
-        sim = _jaccard_similarity(short, follow_up)
-        if sim >= _SIMILARITY_WARN_THRESHOLD:
-            warnings.append(
-                f"final_short ↔ dist_follow_up 유사도 {int(sim*100)}% — "
-                "짧은 버전과 후속 답글이 거의 동일"
-            )
+        w = _check_pair_similarity(short, follow_up, "final_short ↔ dist_follow_up")
+        if w:
+            warnings.append(w)
 
-    # 5. post 첫 줄 vs share_line — 첫 줄 완전 복제
-    if post_first and share_line:
-        if post_first == share_line:
-            warnings.append(
-                "dist_share_line이 final_post 첫 줄의 완전 복제 — "
-                "공유 문구 차별화 필요"
-            )
+    # 4. post 첫 줄 vs share_line — 완전 복제
+    post_first = _first_line(post)
+    if post_first and share_line and post_first == share_line:
+        warnings.append(
+            "dist_share_line이 final_post 첫 줄의 완전 복제 — "
+            "공유 문구 차별화 필요"
+        )
 
     return warnings
 
@@ -728,8 +817,8 @@ def _validate_search_surface(
     warnings: list[str] = []
 
     surface_kw = _extract_surface_keywords(post)
-    if len(surface_kw) < 2:
-        # 핵심어 1개 이하면 오탐 위험 — 스킵
+    if len(surface_kw) < SEARCH_SURFACE_MIN_KEYWORDS:
+        # 핵심어 부족하면 오탐 위험 — 스킵
         return warnings
 
     # short에 핵심어 존재 확인
@@ -946,7 +1035,7 @@ def _build_pairwise_review_record(
 # PR 27: eval_store.py 와 연동하여 DB 에도 영속 저장 (fail-open).
 
 _ONLINE_EVAL_BUFFER: list[dict] = []
-_ONLINE_EVAL_MAX_SIZE = 100
+_ONLINE_EVAL_MAX_SIZE = ONLINE_EVAL_BUFFER_SIZE
 
 
 def _feed_online_eval(eval_meta: dict, db=None) -> None:
@@ -1011,21 +1100,21 @@ def _get_online_eval_summary() -> dict:
     # ── 자동 경고 생성 ──
     alerts: list[str] = []
     none_reward = reward_dist.get(None, 0)
-    if total >= 5 and none_reward / total > 0.5:
+    if total >= ONLINE_EVAL_MIN_SAMPLE and none_reward / total > ONLINE_EVAL_REWARD_NONE_ALERT:
         alerts.append(
             f"reward_type None 비율 {none_reward}/{total} "
-            f"({int(none_reward/total*100)}%) — 50% 초과"
+            f"({int(none_reward/total*100)}%) — {int(ONLINE_EVAL_REWARD_NONE_ALERT*100)}% 초과"
         )
     none_market = market_dist.get("NONE", 0)
-    if total >= 5 and none_market / total > 0.5:
+    if total >= ONLINE_EVAL_MIN_SAMPLE and none_market / total > ONLINE_EVAL_MARKET_NONE_ALERT:
         alerts.append(
             f"market_angle NONE 비율 {none_market}/{total} "
-            f"({int(none_market/total*100)}%) — 50% 초과"
+            f"({int(none_market/total*100)}%) — {int(ONLINE_EVAL_MARKET_NONE_ALERT*100)}% 초과"
         )
-    if avg_strong > 0.5:
-        alerts.append(f"avg strong_fail {avg_strong} — 0.5 초과")
-    if avg_unresolved > 2.0:
-        alerts.append(f"avg unresolved {avg_unresolved} — 2.0 초과")
+    if avg_strong > ONLINE_EVAL_STRONG_FAIL_ALERT:
+        alerts.append(f"avg strong_fail {avg_strong} — {ONLINE_EVAL_STRONG_FAIL_ALERT} 초과")
+    if avg_unresolved > ONLINE_EVAL_UNRESOLVED_ALERT:
+        alerts.append(f"avg unresolved {avg_unresolved} — {ONLINE_EVAL_UNRESOLVED_ALERT} 초과")
 
     return {
         "total": total,

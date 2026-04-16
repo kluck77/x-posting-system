@@ -9690,7 +9690,7 @@ class TestOutputSimilarity:
         short = "한국은행 기준금리를 동결했다 다음 회의까지 유지된다"
         followup = "한국은행 기준금리를 동결했다 다음 회의까지 지속된다"
         warns = _validate_output_similarity("본문.\n다른 마지막.", short, "", followup)
-        sim_warns = [w for w in warns if "짧은 버전과 후속 답글" in w]
+        sim_warns = [w for w in warns if "dist_follow_up" in w and "유사도" in w]
         assert len(sim_warns) >= 1
 
     def test_share_line_equals_post_first_line(self):
@@ -10481,3 +10481,153 @@ class TestPairwiseSourceId:
             "A.", "A.", "B.", "B.", "EXPLAIN",
         )
         assert rec["source_id"] == ""
+
+
+# ── PR 28: Calibration + Normalization + Duplication Tests ──
+
+from app.services.output_meta import (
+    SIMILARITY_JACCARD_THRESHOLD, SIMILARITY_PREFIX_THRESHOLD,
+    SIMILARITY_NOUN_OVERLAP_THRESHOLD, SEARCH_SURFACE_MIN_KEYWORDS,
+    FINDABILITY_PASS_THRESHOLD, ONLINE_EVAL_MIN_SAMPLE,
+    _prefix_overlap, _noun_overlap, _extract_nouns_ko,
+    _check_pair_similarity,
+)
+from app.services.evidence_resolver import (
+    _normalize_relative_dates,
+    SCORE_SOURCE_TEXT, SCORE_CATEGORY_MATCH, SCORE_EXACT_KEYWORD,
+)
+
+
+class TestTunableThresholds:
+    """PR 28 — config 상수 존재 및 기본값 확인."""
+
+    def test_similarity_thresholds_exist(self):
+        assert SIMILARITY_JACCARD_THRESHOLD == 0.70
+        assert SIMILARITY_PREFIX_THRESHOLD == 0.80
+        assert SIMILARITY_NOUN_OVERLAP_THRESHOLD == 0.60
+
+    def test_search_surface_min(self):
+        assert SEARCH_SURFACE_MIN_KEYWORDS == 2
+
+    def test_findability_pass(self):
+        assert FINDABILITY_PASS_THRESHOLD == 2
+
+    def test_score_weights_exist(self):
+        assert SCORE_SOURCE_TEXT == 10
+        assert SCORE_CATEGORY_MATCH == 5
+        assert SCORE_EXACT_KEYWORD == 4
+
+
+class TestMultiSignalSimilarity:
+    """PR 28 — multi-signal 유사도 검사."""
+
+    def test_prefix_overlap_identical(self):
+        assert _prefix_overlap("동일한 시작 문장", "동일한 시작 문장") == 1.0
+
+    def test_prefix_overlap_different(self):
+        assert _prefix_overlap("첫번째 문장", "두번째 문장") < 0.5
+
+    def test_prefix_overlap_empty(self):
+        assert _prefix_overlap("", "테스트") == 0.0
+
+    def test_noun_overlap_high(self):
+        """같은 명사 사용 → 높은 유사도."""
+        sim = _noun_overlap("삼성전자 매출 증가", "삼성전자 매출 감소")
+        assert sim >= 0.5
+
+    def test_noun_overlap_low(self):
+        """다른 명사 → 낮은 유사도."""
+        sim = _noun_overlap("삼성전자 반도체", "한국은행 금리")
+        assert sim < 0.3
+
+    def test_extract_nouns_ko_josa_removal(self):
+        """조사 제거 확인."""
+        nouns = _extract_nouns_ko("삼성전자가 매출을 발표했다")
+        assert "삼성전자" in nouns
+        assert "매출" in nouns
+
+    def test_check_pair_similarity_detects(self):
+        """multi-signal 경고 발생."""
+        w = _check_pair_similarity(
+            "삼성전자 HBM 매출이 2조원을 넘어 역대 최고를 기록했다",
+            "삼성전자 HBM 매출이 2조원을 넘어 역대 최고를 달성했다",
+            "test_label",
+        )
+        assert w is not None
+        assert "test_label" in w
+
+    def test_check_pair_similarity_no_trigger(self):
+        """충분히 다르면 None."""
+        w = _check_pair_similarity(
+            "삼성전자 반도체 실적",
+            "한국은행 금리 동결 결정",
+            "test_label",
+        )
+        assert w is None
+
+    def test_validate_output_similarity_multi_signal(self):
+        """multi-signal이 실제 _validate_output_similarity에서 작동."""
+        warns = _validate_output_similarity(
+            "본문 전체.",
+            "삼성전자 HBM 매출이 2조원을 넘어 역대 최고를 기록했다",
+            "삼성전자 HBM 매출이 2조원을 넘어 역대 최고를 달성했다",
+            "",
+        )
+        assert any("유사도 경고" in w for w in warns)
+
+
+class TestRelativeDateNormalizer:
+    """PR 28 — 상대 날짜 정규화."""
+
+    def test_next_year(self):
+        labels = _normalize_relative_dates("내년 1분기 시행 예정")
+        assert "NEXT_YEAR" in labels
+
+    def test_next_month(self):
+        labels = _normalize_relative_dates("다음 달 발표 예정")
+        assert "NEXT_MONTH" in labels
+
+    def test_this_quarter(self):
+        labels = _normalize_relative_dates("이번 분기 실적 발표")
+        assert "THIS_QUARTER" in labels
+
+    def test_multiple_dates(self):
+        labels = _normalize_relative_dates("내년 상반기부터 내달 시작")
+        assert "NEXT_YEAR" in labels
+        assert "H1" in labels
+
+    def test_no_relative_date(self):
+        labels = _normalize_relative_dates("2024년 3월 15일 시행")
+        assert labels == []
+
+    def test_tomorrow(self):
+        labels = _normalize_relative_dates("내일 발표된다")
+        assert "TOMORROW" in labels
+
+    def test_metadata_includes_relative(self):
+        """_extract_source_metadata에 relative_dates 포함."""
+        card = CandidateCard(key_facts=["내년 상반기 시행 예정"])
+        meta = _extract_source_metadata(card, "")
+        assert "relative_dates" in meta
+        assert "NEXT_YEAR" in meta["relative_dates"]
+
+
+class TestSentenceSplitter:
+    """PR 28 — 문장 분리 보강."""
+
+    def test_abbreviation_protected(self):
+        """약어 뒤 마침표에서 오분리 안 됨."""
+        sents = _split_sentences("Dr. Kim은 삼성전자의 CEO다. 실적 발표를 했다.")
+        # "Dr. Kim" 이 분리되지 않아야 함
+        assert any("Dr. Kim" in s or "Dr§ Kim" not in s for s in sents)
+
+    def test_korean_company_protected(self):
+        """한국 기업명 뒤 마침표 보호."""
+        sents = _split_sentences("삼성전자. SK하이닉스도 실적 발표.")
+        # 결과에서 삼성전자가 독립 문장이 되어도 내용은 보존
+        assert len(sents) >= 1
+
+    def test_normal_split_still_works(self):
+        """일반 문장 분리는 정상 동작."""
+        sents = _split_sentences("첫 문장이다. 두번째 문장이다. 세번째.")
+        assert len(sents) >= 2

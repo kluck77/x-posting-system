@@ -285,13 +285,72 @@ _DOC_TYPE_PATTERNS: dict[str, list[str]] = {
     ],
 }
 
-# ── 날짜 패턴 (한국어/영어) ──
+# ── 날짜 패턴 (한국어/영어 — 절대 + 상대) ──
 _DATE_RE = re.compile(
-    r"\d{4}[-./]\d{1,2}[-./]\d{1,2}"
-    r"|\d{1,2}월\s*\d{1,2}일"
-    r"|\d{4}년\s*\d{1,2}월"
-    r"|\d{1,2}/\d{1,2}/\d{4}"
+    r"\d{4}[-./]\d{1,2}[-./]\d{1,2}"        # 2024-01-15
+    r"|\d{1,2}월\s*\d{1,2}일"                # 1월 15일
+    r"|\d{4}년\s*\d{1,2}월"                  # 2024년 1월
+    r"|\d{1,2}/\d{1,2}/\d{4}"               # 01/15/2024
 )
+
+# PR 28: 상대 날짜 패턴
+_RELATIVE_DATE_RE = re.compile(
+    r"내년|올해|작년|내달|다음\s*달|이번\s*달|지난\s*달"
+    r"|이번\s*분기|다음\s*분기|지난\s*분기|상반기|하반기"
+    r"|내주|다음\s*주|이번\s*주|지난\s*주"
+    r"|내일|모레|어제|그제"
+    r"|올\s*\d{1,2}월|내\s*\d{1,2}월"
+)
+
+# PR 28: 상대 날짜 → 정규화 라벨
+_RELATIVE_DATE_LABELS: dict[str, str] = {
+    "내년": "NEXT_YEAR", "올해": "THIS_YEAR", "작년": "LAST_YEAR",
+    "내달": "NEXT_MONTH", "상반기": "H1", "하반기": "H2",
+    "내주": "NEXT_WEEK", "내일": "TOMORROW", "모레": "DAY_AFTER_TOMORROW",
+    "어제": "YESTERDAY", "그제": "DAY_BEFORE_YESTERDAY",
+}
+
+
+def _normalize_relative_dates(text: str) -> list[str]:
+    """
+    PR 28 — 상대 날짜 표현을 정규화 라벨로 변환.
+
+    "내년 1분기 시행" → ["NEXT_YEAR"]
+    "다음 달 발표 예정" → ["NEXT_MONTH"]
+    절대 날짜와 별개로 작동. 둘 다 추출 가능.
+    """
+    matches = _RELATIVE_DATE_RE.findall(text)
+    labels = []
+    seen = set()
+    for m in matches:
+        clean = m.strip()
+        label = _RELATIVE_DATE_LABELS.get(clean)
+        if not label:
+            # "다음 달" → NEXT_MONTH, "이번 분기" → THIS_QUARTER 등
+            if "다음" in clean and "달" in clean:
+                label = "NEXT_MONTH"
+            elif "이번" in clean and "달" in clean:
+                label = "THIS_MONTH"
+            elif "지난" in clean and "달" in clean:
+                label = "LAST_MONTH"
+            elif "다음" in clean and "분기" in clean:
+                label = "NEXT_QUARTER"
+            elif "이번" in clean and "분기" in clean:
+                label = "THIS_QUARTER"
+            elif "지난" in clean and "분기" in clean:
+                label = "LAST_QUARTER"
+            elif "다음" in clean and "주" in clean:
+                label = "NEXT_WEEK"
+            elif "이번" in clean and "주" in clean:
+                label = "THIS_WEEK"
+            elif "지난" in clean and "주" in clean:
+                label = "LAST_WEEK"
+            else:
+                label = f"RELATIVE:{clean}"
+        if label not in seen:
+            labels.append(label)
+            seen.add(label)
+    return labels[:5]
 
 
 def _extract_source_metadata(
@@ -336,8 +395,9 @@ def _extract_source_metadata(
             best_doc_hits = hits
             doc_type = dtype
 
-    # ── dates ──
+    # ── dates (절대 + 상대) ──
     dates = _DATE_RE.findall(combined)[:3]
+    relative_dates = _normalize_relative_dates(combined)
 
     # ── entity_keywords ──
     entity_keywords: list[str] = []
@@ -353,6 +413,7 @@ def _extract_source_metadata(
         "country": country,
         "doc_type": doc_type,
         "dates": dates,
+        "relative_dates": relative_dates,
         "entity_keywords": entity_keywords,
     }
 
@@ -430,16 +491,29 @@ class EvidenceCandidate:
     category_match: str = ""  # 매칭된 질문 카테고리
 
 
-# ── 문장 분리 ──
-_SENTENCE_SPLIT_RE = re.compile(r"[.!?。]\s*|\n")
+# ── 문장 분리 (PR 28 보강) ──
+# 약어 뒤 마침표 오분리 방지: 알려진 약어 패턴을 임시 치환 후 분리
+_ABBREV_PATTERNS = re.compile(
+    r"(?:Dr|Mr|Mrs|Ms|Prof|Inc|Corp|Ltd|Jr|Sr|vs|etc|No|Vol)\."
+    r"|(?:삼성전자|SK하이닉스|LG에너지솔루션)\."  # 한국 기업명+마침표
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|\n")
 
 
 def _split_sentences(text: str) -> list[str]:
-    """텍스트를 문장 단위로 분리."""
+    """PR 25/28 — 텍스트를 문장 단위로 분리. 약어 오분리 방지."""
     if not text:
         return []
-    parts = _SENTENCE_SPLIT_RE.split(text)
-    return [s.strip() for s in parts if s.strip() and len(s.strip()) > 5]
+    # 약어 마침표를 임시 치환
+    protected = _ABBREV_PATTERNS.sub(lambda m: m.group().replace(".", "§"), text)
+    parts = _SENTENCE_SPLIT_RE.split(protected)
+    # 복원
+    result = []
+    for s in parts:
+        restored = s.replace("§", ".").strip()
+        if restored and len(restored) > 5:
+            result.append(restored)
+    return result
 
 
 def _collect_evidence_candidates(
@@ -528,31 +602,49 @@ def _collect_evidence_candidates(
     return candidates
 
 
+# PR 28: Tunable score weights
+SCORE_SOURCE_TEXT = 10     # source_text 출처 보너스
+SCORE_CATEGORY_MATCH = 5   # 카테고리 정확 매칭
+SCORE_LONG_SPAN = 3        # span ≥ 20자
+SCORE_HEAD_POSITION = 2    # 문서 상단 (start < 500)
+SCORE_HAS_NUMBER = 1       # 숫자 포함
+SCORE_EXACT_KEYWORD = 4    # 핵심 키워드 정확 매칭 (짧지만 정확)
+SCORE_HEAD_POSITION_LIMIT = 500
+
+
 def _score_candidate(
     candidate: EvidenceCandidate,
     category: str,
 ) -> int:
     """
-    PR 25 — 근거 후보 적합도 점수 계산.
+    PR 25/28 — 근거 후보 적합도 점수 계산.
 
-    점수 기준 (합산):
-      +10  source_text 출처 (key_facts 보다 신뢰도 높음)
-      +5   카테고리 정확 매칭
-      +3   span 길이 20자 이상 (충분한 컨텍스트)
-      +2   span 앞부분 위치 (문서 상단 = 더 중요)
-      +1   숫자 포함 (구체성)
+    점수 기준 (tunable weights):
+      +SCORE_SOURCE_TEXT   source_text 출처
+      +SCORE_CATEGORY_MATCH  카테고리 정확 매칭
+      +SCORE_LONG_SPAN     span ≥ 20자
+      +SCORE_HEAD_POSITION  문서 상단
+      +SCORE_HAS_NUMBER    숫자 포함
+      +SCORE_EXACT_KEYWORD  핵심 키워드 정확 매칭 (짧은 span도 허용)
     """
     score = 0
     if candidate.source == "SOURCE_TEXT":
-        score += 10
+        score += SCORE_SOURCE_TEXT
     if candidate.category_match == category:
-        score += 5
+        score += SCORE_CATEGORY_MATCH
     if len(candidate.span) >= 20:
         score += 3
-    if candidate.span_start >= 0 and candidate.span_start < 500:
-        score += 2
+    if candidate.span_start >= 0 and candidate.span_start < SCORE_HEAD_POSITION_LIMIT:
+        score += SCORE_HEAD_POSITION
     if re.search(r"\d", candidate.span):
-        score += 1
+        score += SCORE_HAS_NUMBER
+    # PR 28: 짧지만 핵심 키워드 정확 매칭 보너스
+    # 기관명/수치가 span에 직접 포함되면 길이와 무관하게 가산
+    from app.services.evidence_resolver import _INSTITUTION_COUNTRY_MAP
+    for inst in _INSTITUTION_COUNTRY_MAP:
+        if inst in candidate.span:
+            score += SCORE_EXACT_KEYWORD
+            break
     return score
 
 
@@ -641,7 +733,9 @@ def _build_citation_report(
         # best evidence 로 snippet 보강 (기존 snippet 이 비어있거나 짧을 때)
         if ranked and q.status == "RESOLVED":
             best = ranked[0]
-            if len(best.span) > len(q.evidence_snippet):
+            # PR 28: 길이뿐 아니라 점수가 높은 span이면 교체 (짧더라도)
+            if (best.relevance_score >= SCORE_SOURCE_TEXT
+                    or len(best.span) > len(q.evidence_snippet)):
                 q.evidence_snippet = best.span[:50]
 
     return report
