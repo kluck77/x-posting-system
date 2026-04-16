@@ -90,10 +90,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── SCORE BLOCK ── */
-.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.score-box{text-align:center;padding:12px 8px;border-radius:var(--r-md);
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.score-box{text-align:center;padding:8px 6px;border-radius:var(--r-sm);
   background:var(--bg-raised);border:1px solid var(--border-subtle)}
-.score-num{font-size:28px;font-weight:800;line-height:1;margin-bottom:2px}
+.score-num{font-size:22px;font-weight:700;line-height:1;margin-bottom:2px}
 .score-label{font-size:9px;letter-spacing:1px;color:var(--text-sec);text-transform:uppercase}
 .score-num.green{color:var(--green)}.score-num.amber{color:var(--amber)}
 .score-num.red{color:var(--red)}.score-num.blue{color:var(--indigo)}
@@ -165,6 +165,56 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ops-val{font-size:18px;font-weight:700}
 .ops-label{font-size:9px;color:var(--text-sec);margin-top:2px;text-transform:uppercase}
 
+/* ── PULSE: STRIP + HEADLINE ── */
+.status-strip{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px}
+.pulse-hl{font-size:20px;font-weight:700;line-height:1.3;margin-bottom:12px}
+
+/* ── PULSE: TODAY ROW ── */
+.today-row{display:flex;gap:16px;margin-bottom:8px}
+.today-item{display:flex;align-items:baseline;gap:4px}
+.today-val{font-size:16px;font-weight:700}
+.today-lbl{font-size:10px;color:var(--text-sec)}
+
+/* ── PULSE: QUEUE GRID ── */
+.q-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+.q-cell{background:var(--bg-surface);border-radius:var(--r-sm);padding:8px 4px;
+  text-align:center;border:1px solid var(--border-subtle)}
+.q-cell.dim{opacity:.3}
+.q-num{font-size:18px;font-weight:700;line-height:1}
+.q-lbl{font-size:8px;color:var(--text-mut);margin-top:2px;letter-spacing:.5px;text-transform:uppercase}
+
+/* ── ALERTS: NAVER ROW ── */
+.naver-row{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:10px;
+  background:var(--bg-surface);border-radius:var(--r-sm);border:1px solid var(--border-subtle)}
+.naver-pct{font-size:14px;font-weight:700;min-width:36px}
+.naver-track{flex:1;height:3px;border-radius:2px;background:var(--bg-raised);overflow:hidden}
+.naver-fill{height:100%;border-radius:2px;background:var(--green)}
+.naver-rem{font-size:9px;color:var(--text-mut);white-space:nowrap}
+
+/* ── ALERTS: ITEM ── */
+.alert-item{background:var(--bg-surface);border-radius:var(--r-sm);padding:10px 12px;
+  margin-bottom:6px;border:1px solid var(--border-subtle);border-left:3px solid var(--red)}
+.alert-snap{font-size:12px;margin-bottom:4px;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alert-meta{display:flex;gap:6px;align-items:center}
+
+/* ── PIPELINE: STAGE GRID ── */
+.stage-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:12px}
+.stage-cell{text-align:center;padding:8px 2px;background:var(--bg-surface);
+  border-radius:var(--r-sm);border:1px solid var(--border-subtle)}
+.stage-num{font-size:16px;font-weight:700;line-height:1}
+.stage-lbl{font-size:8px;color:var(--text-mut);margin-top:2px;letter-spacing:.3px;text-transform:uppercase}
+
+/* ── PIPELINE: DRAFT ROW ── */
+.draft-row{display:flex;align-items:center;gap:8px;padding:8px 0;
+  border-bottom:1px solid var(--border-subtle);min-height:40px}
+.draft-row:last-child{border-bottom:none}
+.draft-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.draft-hook{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── COMPACT EMPTY ── */
+.empty-sm{padding:8px;text-align:center;font-size:10px;color:var(--text-mut)}
+
 /* ── REDUCED MOTION ── */
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{
   animation-duration:.01ms!important;transition-duration:.01ms!important}}
@@ -190,19 +240,17 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ PULSE TAB ═══ -->
 <section class="tab-pane active" id="tab-pulse">
-  <!-- system status -->
-  <div class="card">
-    <div class="card-row">
-      <div class="dots" id="statusDots">
-        <div class="dot"><span class="dot-led" id="dot-db"></span>DB</div>
-        <div class="dot"><span class="dot-led" id="dot-tg"></span>TG</div>
-        <div class="dot"><span class="dot-led" id="dot-x"></span>X</div>
-      </div>
-      <span class="card-sub" id="syncTime">—</span>
+  <div class="status-strip">
+    <div class="dots" id="statusDots">
+      <div class="dot"><span class="dot-led" id="dot-db"></span>DB</div>
+      <div class="dot"><span class="dot-led" id="dot-tg"></span>TG</div>
+      <div class="dot"><span class="dot-led" id="dot-x"></span>X</div>
     </div>
+    <span class="card-sub" id="syncTime">—</span>
   </div>
 
-  <!-- editorial scores -->
+  <div class="pulse-hl" id="pulseHL">시스템 확인 중</div>
+
   <div class="score-grid">
     <div class="score-box">
       <div class="score-num blue" id="avgPost">—</div>
@@ -214,65 +262,39 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     </div>
   </div>
 
-  <!-- queue summary -->
-  <div class="card">
-    <div class="card-title">ROUTING QUEUE</div>
-    <div class="card-row">
-      <span>🔴 Immediate</span>
-      <span class="badge badge-red" id="qImmediate">0</span>
-    </div>
-    <div class="card-row">
-      <span>🟡 Day Digest</span>
-      <span class="badge badge-amber" id="qDigest">0</span>
-    </div>
-    <div class="card-row">
-      <span>🔵 5AM Top10</span>
-      <span class="badge badge-blue" id="qTop10">0</span>
-    </div>
-    <div class="card-row">
-      <span>⚪ Weekly Pool</span>
-      <span class="badge badge-green" id="qWeekly">0</span>
-    </div>
+  <div class="today-row">
+    <div class="today-item"><span class="today-val" id="todayDrafts">—</span><span class="today-lbl">오늘 처리</span></div>
+    <div class="today-item"><span class="today-val" id="evalCount">—</span><span class="today-lbl">Eval</span></div>
   </div>
 
-  <!-- today activity -->
-  <div class="card">
-    <div class="card-title">TODAY</div>
-    <div class="card-row">
-      <span>초안 생성</span>
-      <span class="card-val" id="todayDrafts">—</span>
-    </div>
-    <div class="card-row">
-      <span>Eval 기록</span>
-      <span class="card-sub" id="evalCount">—</span>
-    </div>
+  <div class="q-grid">
+    <div class="q-cell"><div class="q-num" style="color:var(--red)" id="qImmediate">0</div><div class="q-lbl">IMM</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--amber)" id="qDigest">0</div><div class="q-lbl">DAY</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--indigo)" id="qTop10">0</div><div class="q-lbl">5AM</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--green)" id="qWeekly">0</div><div class="q-lbl">WK</div></div>
   </div>
 
-  <!-- recent immediate alerts -->
   <div class="sec-head">RECENT ALERTS</div>
   <ul class="mini-list" id="recentAlerts">
-    <li class="empty">— 알림 없음 —</li>
+    <li class="empty-sm">긴급 알림 대기 중</li>
   </ul>
 </section>
 
 <!-- ═══ ALERTS TAB ═══ -->
 <section class="tab-pane" id="tab-alerts">
-  <!-- naver gauge -->
-  <div class="card">
-    <div class="card-title">NAVER API</div>
-    <div class="card-row">
-      <span>사용률</span>
-      <span class="card-val" id="naverPct">—</span>
-    </div>
-    <div class="progress-bar"><div class="progress-fill" id="naverBar" style="width:0%"></div></div>
+  <div class="sec-head" style="margin-top:0">NAVER API</div>
+  <div class="naver-row">
+    <span class="naver-pct" id="naverPct">—</span>
+    <div class="naver-track"><div class="naver-fill" id="naverBar" style="width:0%"></div></div>
+    <span class="naver-rem" id="naverRemain"></span>
   </div>
 
   <div class="sec-head">IMMEDIATE QUEUE</div>
-  <div id="immediateList"><div class="empty">— 긴급 항목 없음 —</div></div>
+  <div id="immediateList"><div class="empty-sm">긴급 항목 없음</div></div>
 
   <div class="sec-head">RECENT NEWS</div>
   <ul class="mini-list" id="newsList">
-    <li class="empty">— 뉴스 없음 —</li>
+    <li class="empty-sm">수집 대기 중</li>
   </ul>
 </section>
 
@@ -289,23 +311,16 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ PIPELINE TAB ═══ -->
 <section class="tab-pane" id="tab-pipeline">
-  <div class="sec-head">CONTENT FLOW</div>
-  <div class="flow" id="pipelineFlow">
-    <div class="flow-step"><div class="flow-icon">📡</div><div class="flow-label">Source</div><div class="flow-count" id="fSource">—</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step"><div class="flow-icon">🔬</div><div class="flow-label">Research</div><div class="flow-count" id="fResearch">—</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step"><div class="flow-icon">✍️</div><div class="flow-label">Draft</div><div class="flow-count" id="fDraft">—</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step"><div class="flow-icon">🔍</div><div class="flow-label">Review</div><div class="flow-count" id="fReview">—</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step"><div class="flow-icon">✅</div><div class="flow-label">Publish</div><div class="flow-count" id="fPublish">—</div></div>
+  <div class="stage-grid">
+    <div class="stage-cell"><div class="stage-num" id="fSource">—</div><div class="stage-lbl">Source</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fResearch">—</div><div class="stage-lbl">Draft</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fDraft">—</div><div class="stage-lbl">Ready</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fReview">—</div><div class="stage-lbl">Review</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fPublish">—</div><div class="stage-lbl">Pub</div></div>
   </div>
 
   <div class="sec-head">RECENT DRAFTS</div>
-  <ul class="mini-list" id="draftList">
-    <li class="empty">— 초안 없음 —</li>
-  </ul>
+  <div id="draftList"><div class="empty-sm">초안 입력 대기</div></div>
 </section>
 
 <!-- ═══ OPS TAB ═══ -->
@@ -367,6 +382,7 @@ async function loadStatus(){
     const d=await r.json();
     const h=d.health||{};
     setLed('dot-db',h.db_ok);setLed('dot-tg',h.telegram_configured);setLed('dot-x',h.x_configured);
+    _hl.dbOk=!!h.db_ok;updateHL();
     document.getElementById('syncTime').textContent=d.generated_at_kst||'—';
     const hs=document.getElementById('headerSync');
     if(hs)hs.textContent='sync '+(d.generated_at_kst||'').substring(11,16);
@@ -392,14 +408,16 @@ async function loadEditorial(){
     const r=await fetch(API+'/control/editorial-summary');
     const d=await r.json();
     const rq=d.routing_queue||{};
-    document.getElementById('qImmediate').textContent=rq.IMMEDIATE||0;
-    document.getElementById('qDigest').textContent=rq.DAY_DIGEST||0;
-    document.getElementById('qTop10').textContent=rq.TOP10_5AM||0;
-    document.getElementById('qWeekly').textContent=rq.WEEKLY_POOL||0;
+    const qm={qImmediate:rq.IMMEDIATE||0,qDigest:rq.DAY_DIGEST||0,qTop10:rq.TOP10_5AM||0,qWeekly:rq.WEEKLY_POOL||0};
+    Object.entries(qm).forEach(([id,v])=>{
+      const el=document.getElementById(id);
+      if(el){el.textContent=v;const c=el.closest('.q-cell');if(c)c.classList.toggle('dim',v===0)}
+    });
+    _hl.imm=rq.IMMEDIATE||0;updateHL();
 
     const ap=d.avg_postability||0;const at=d.avg_trust||0;
     setScore('avgPost',ap);setScore('avgTrust',at);
-    document.getElementById('evalCount').textContent=`${d.recent_eval_count||0}건`;
+    document.getElementById('evalCount').textContent=d.recent_eval_count||0;
 
     // eval counts → ops
     const ec=d.eval_counts||{};
@@ -412,9 +430,9 @@ async function loadEditorial(){
     const items=d.immediate_items||[];
     if(items.length){
       document.getElementById('immediateList').innerHTML=items.map(i=>
-        `<div class="card" style="margin-bottom:8px">
-          <div style="font-size:12px;margin-bottom:4px">${(i.post_snapshot||'').substring(0,60)}…</div>
-          <div class="card-row">
+        `<div class="alert-item">
+          <div class="alert-snap">${(i.post_snapshot||'').substring(0,60)}</div>
+          <div class="alert-meta">
             <span class="badge badge-blue">P:${i.postability_score||0}</span>
             <span class="badge badge-green">T:${i.trust_score||0}</span>
             <span class="mini-item-time">${(i.created_at||'').substring(11,16)}</span>
@@ -440,6 +458,7 @@ async function loadProviders(){
     const roles=d.roles||[];
     const today=d.today_draft_count||0;
     document.getElementById('todayDrafts').textContent=today;
+    _hl.today=today;updateHL();
 
     // agent cards
     document.getElementById('agentCards').innerHTML=roles.map(a=>{
@@ -473,7 +492,7 @@ async function loadFlowTrace(){
     const d=await r.json();
     if(!d.length){return}
 
-    const statusMap={pending:'🟡',approved:'🟢',rejected:'🔴',published:'🔵',failed:'⚫'};
+    const dotMap={pending:'var(--amber)',approved:'var(--green)',rejected:'var(--red)',published:'var(--indigo)',failed:'var(--text-mut)'};
     let pending=0,approved=0,published=0;
     d.forEach(x=>{
       if(x.status==='pending')pending++;
@@ -484,11 +503,11 @@ async function loadFlowTrace(){
     document.getElementById('fPublish').textContent=published;
 
     document.getElementById('draftList').innerHTML=d.slice(0,8).map(x=>
-      `<li class="mini-item">
-        <span>${statusMap[x.status]||'⚪'}</span>
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.hook||'—'}</span>
+      `<div class="draft-row">
+        <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
+        <span class="draft-hook">${x.hook||'—'}</span>
         <span class="mini-item-time">${x.created_kst||''}</span>
-      </li>`
+      </div>`
     ).join('');
   }catch(e){console.warn('flow:',e)}
 }
@@ -513,6 +532,8 @@ async function loadNaver(){
     const pct=limit?Math.round(used/limit*100):0;
     document.getElementById('naverPct').textContent=pct+'%';
     document.getElementById('naverBar').style.width=pct+'%';
+    const rem=document.getElementById('naverRemain');
+    if(rem)rem.textContent=(limit-used).toLocaleString()+'건 남음';
   }catch(e){console.warn('naver:',e)}
 }
 
@@ -538,6 +559,14 @@ function setScore(id,val){
   if(!el)return;
   el.textContent=val||'—';
   el.className='score-num '+(val>=70?'green':val>=40?'amber':'red');
+}
+let _hl={dbOk:true,imm:0,today:0};
+function updateHL(){
+  const el=document.getElementById('pulseHL');if(!el)return;
+  if(!_hl.dbOk){el.textContent='DB 연결 끊김';el.style.color='var(--red)';return}
+  if(_hl.imm>0){el.textContent='긴급 '+_hl.imm+'건 대기';el.style.color='var(--red)';return}
+  if(_hl.today>0){el.textContent='오늘 '+_hl.today+'건 처리';el.style.color='var(--green)';return}
+  el.textContent='시스템 대기 중';el.style.color='var(--text-sec)';
 }
 
 // ── LOAD ALL ──
