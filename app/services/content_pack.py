@@ -1312,6 +1312,11 @@ class FinalPost:
     # PR 12 Layer D — Market/Stake Layer v2
     # 시장/생활 반영 경로 유형. 로그/테스트 전용.
     market_angle_type: Optional[str] = None
+    # PR 13 — External Evidence Layer
+    # source_text 밖의 1차 출처 감지 메타. 로그/테스트 전용.
+    used_primary_source: bool = False
+    primary_source_type: Optional[str] = None
+    external_evidence_count: int = 0
 
 
 @dataclass
@@ -2589,11 +2594,25 @@ async def generate_final_post(
     mode = route_article_mode(card)
     user_prompt += f"\nARTICLE_MODE: {mode}\n"
 
+    # ── PR 13: External Evidence 감지 ──
+    _primary_source_type, _ext_evidence_count = _detect_primary_source(
+        card, source_text
+    )
+    if _primary_source_type:
+        logger.info(
+            f"[ExternalEvidence] type={_primary_source_type} "
+            f"count={_ext_evidence_count}"
+        )
+
     # ── PR 11: Reader Question Resolver ──
-    # 독자 핵심 질문 생성 → source_text 대조 → 프롬프트 삽입
+    # 독자 핵심 질문 생성 → source_text 대조 → 외부 evidence 대조 → 프롬프트 삽입
     _reader_questions = _generate_reader_questions(card, mode)
     _reader_questions = _resolve_questions_from_source(
         _reader_questions, source_text
+    )
+    # PR 13: 외부 evidence 로 UNRESOLVED 질문 재해결
+    _reader_questions = _resolve_questions_from_external(
+        _reader_questions, _primary_source_type, _ext_evidence_count
     )
     _rq_resolved = sum(1 for q in _reader_questions if q.status == "RESOLVED")
     _rq_unresolved = len(_reader_questions) - _rq_resolved
@@ -2787,12 +2806,18 @@ async def generate_final_post(
     final.unresolved_count = _rq_unresolved
     # PR 12 Layer A — source 상태 메타
     final.source_missing_reason = _source_missing
+    # PR 13 — External Evidence 메타
+    final.used_primary_source = _primary_source_type is not None
+    final.primary_source_type = _primary_source_type
+    final.external_evidence_count = _ext_evidence_count
 
     logger.info(
         f"최종 마감 완료: mode={mode} "
         f"certainty={card.certainty_level} "
         f"reward={final.reward_type} "
         f"market_angle={final.market_angle_type} "
+        f"primary_source={_primary_source_type} "
+        f"ext_evidence={_ext_evidence_count} "
         f"resolved={_rq_resolved}/{len(_reader_questions)} "
         f"source_missing={_source_missing} "
         f"post={len(final.final_post)}자, "
@@ -4598,6 +4623,170 @@ def _validate_market_stake(
     )
 
 
+# ─── PR 13: External Evidence Layer ───────────────────────────────────────
+#
+# source_text 내부만 보지 말고, source_url / key_facts / source_text 에서
+# 1차 출처 유형을 감지한다. 감지된 외부 evidence 로 UNRESOLVED 질문을
+# 재해결 시도한다. AI 호출 없음 — rule-first.
+#
+# primary_source_type 유형:
+#   GOVERNMENT   — 정부/기관 공지, 정책 발표
+#   REPORT       — 공식 보고서 (IMF, OECD, 한은, 통계청 등)
+#   DISCLOSURE   — 기업 공시, 실적 발표
+#   DATA_SOURCE  — 원 데이터 제공처 (CoinGecko, FRED, 통계청 DB 등)
+#   DIRECT_STMT  — 회사/노조/당국 직접 발표문
+#   None         — 1차 출처 감지 실패
+
+# URL 도메인 → 출처 유형 매핑
+_PRIMARY_SOURCE_URL_PATTERNS: dict[str, list[str]] = {
+    "GOVERNMENT": [
+        "go.kr", "gov.kr", "moef.go.kr", "mof.go.kr", "moel.go.kr",
+        "nts.go.kr", "korea.kr", "whitehouse.gov", "congress.gov",
+        "state.gov", "treasury.gov", "europa.eu", "gov.uk",
+    ],
+    "REPORT": [
+        "imf.org", "oecd.org", "worldbank.org", "bis.org",
+        "bok.or.kr", "kostat.go.kr", "kosis.kr",
+        "federalreserve.gov", "ecb.europa.eu", "boj.or.jp",
+    ],
+    "DISCLOSURE": [
+        "dart.fss.or.kr", "kind.krx.co.kr", "sec.gov",
+        "ir.", "investor.", "investors.",
+    ],
+    "DATA_SOURCE": [
+        "coingecko.com", "coinmarketcap.com", "fred.stlouisfed.org",
+        "tradingview.com", "bloomberg.com", "reuters.com",
+        "data.go.kr", "ecos.bok.or.kr",
+    ],
+}
+
+# 텍스트 키워드 → 출처 유형 매핑 (source_text / key_facts 에서 탐지)
+_PRIMARY_SOURCE_TEXT_PATTERNS: dict[str, list[str]] = {
+    "GOVERNMENT": [
+        "정부 발표", "국무회의", "기재부", "기획재정부", "국세청",
+        "국토부", "국토교통부", "고용노동부", "산업부", "산업통상자원부",
+        "금융위", "금융위원회", "공정위", "공정거래위원회",
+        "대통령실", "국회", "백악관", "재무부", "상무부",
+        "White House", "Treasury", "Congress",
+    ],
+    "REPORT": [
+        "IMF", "OECD", "세계은행", "World Bank", "BIS",
+        "한국은행", "한은", "통계청", "보고서", "연차보고",
+        "Federal Reserve", "ECB", "BOJ", "중앙은행",
+    ],
+    "DISCLOSURE": [
+        "공시", "실적 발표", "IR", "분기 보고서", "사업보고서",
+        "감사보고서", "유가증권", "코스닥", "거래소 공시",
+        "SEC filing", "10-K", "10-Q", "earnings",
+    ],
+    "DATA_SOURCE": [
+        "CoinGecko", "CoinMarketCap", "TradingView",
+        "Bloomberg", "Reuters", "FRED",
+        "원본 데이터", "원 데이터", "raw data",
+    ],
+    "DIRECT_STMT": [
+        "직접 발표", "공식 입장", "보도자료", "성명",
+        "노조 발표", "경영진 발표", "대변인", "대표이사",
+        "CEO", "press release", "statement",
+        "밝혔다", "발표했다", "공개했다",
+    ],
+}
+
+# 유효한 primary_source_type 값
+_PRIMARY_SOURCE_VALID_TYPES = frozenset([
+    "GOVERNMENT", "REPORT", "DISCLOSURE", "DATA_SOURCE", "DIRECT_STMT",
+])
+
+
+def _detect_primary_source(
+    card: "CandidateCard",
+    source_text: str = "",
+) -> tuple[Optional[str], int]:
+    """
+    PR 13 — 1차 출처 유형 감지.
+
+    card.source_url / card.key_facts / source_text 에서 rule-first 로
+    primary source 유형을 탐지한다. AI 호출 없음.
+
+    반환: (primary_source_type, external_evidence_count)
+      primary_source_type: GOVERNMENT / REPORT / DISCLOSURE / DATA_SOURCE / DIRECT_STMT / None
+      external_evidence_count: 감지된 외부 근거 패턴 수 (0 이상)
+    """
+    detected_type: Optional[str] = None
+    evidence_count = 0
+
+    # ── 1단계: source_url 도메인 매칭 (가장 신뢰도 높음) ──
+    url = (card.source_url or "").lower()
+    if url:
+        for src_type, domains in _PRIMARY_SOURCE_URL_PATTERNS.items():
+            for domain in domains:
+                if domain in url:
+                    detected_type = src_type
+                    evidence_count += 1
+                    break
+            if detected_type:
+                break
+
+    # ── 2단계: key_facts + source_text 텍스트 매칭 ──
+    combined = " ".join(card.key_facts or []) + " " + (source_text or "")
+    type_hits: dict[str, int] = {}
+    for src_type, patterns in _PRIMARY_SOURCE_TEXT_PATTERNS.items():
+        hits = sum(1 for p in patterns if p in combined)
+        if hits > 0:
+            type_hits[src_type] = hits
+            evidence_count += hits
+
+    # URL 에서 이미 감지했으면 텍스트 hits 는 evidence_count 만 보강
+    if not detected_type and type_hits:
+        # 가장 많이 매칭된 유형 채택
+        detected_type = max(type_hits, key=type_hits.get)
+
+    return detected_type, evidence_count
+
+
+def _resolve_questions_from_external(
+    questions: list["ReaderQuestion"],
+    primary_source_type: Optional[str],
+    evidence_count: int,
+) -> list["ReaderQuestion"]:
+    """
+    PR 13 — 외부 evidence 로 UNRESOLVED 질문 재해결 시도.
+
+    source_text 내부 매칭에서 놓친 질문을, 감지된 1차 출처 유형을
+    근거로 추가 해결한다. 억지 해석 금지 — 출처 유형이 질문 카테고리와
+    직접 연관될 때만 RESOLVED.
+    """
+    if not primary_source_type or evidence_count == 0:
+        return questions
+
+    for q in questions:
+        if q.status == "RESOLVED":
+            continue
+
+        if q.category == "SOURCE":
+            # 1차 출처가 감지되면 SOURCE 질문은 해결 가능
+            q.status = "RESOLVED"
+            q.evidence = f"외부 1차 출처 감지: {primary_source_type}"
+
+        elif q.category == "SCOPE" and primary_source_type in (
+            "REPORT", "DISCLOSURE", "DATA_SOURCE",
+        ):
+            # 보고서/공시/데이터 소스면 구체 수치가 있을 가능성 높음
+            if evidence_count >= 2:
+                q.status = "RESOLVED"
+                q.evidence = f"외부 데이터 출처 감지: {primary_source_type}"
+
+        elif q.category == "CHECKPOINT" and primary_source_type in (
+            "GOVERNMENT", "DISCLOSURE",
+        ):
+            # 정부 발표/기업 공시면 다음 확인 시점이 있을 가능성 높음
+            if evidence_count >= 2:
+                q.status = "RESOLVED"
+                q.evidence = f"외부 공식 일정 출처 감지: {primary_source_type}"
+
+    return questions
+
+
 # ─── PR 12 Layer A: Source Integrity Layer ────────────────────────────────
 #
 # source_text 상태를 최종 글 생성 전에 점검한다.
@@ -5353,11 +5542,12 @@ def _build_evaluation_meta(
     source_missing: Optional[str],
 ) -> dict:
     """
-    PR 12 Layer E — dataset export 용 구조화 메타데이터 빌드.
+    PR 12/13 Layer E — dataset export 용 구조화 메타데이터 빌드.
 
     반환 dict 필드:
       mode, certainty, reward_type, market_angle_type,
       resolved_count, unresolved_count, source_missing_reason,
+      used_primary_source, primary_source_type, external_evidence_count,
       gate_fails, strong_fail_count, warn_tag_count,
       post_length, short_length, question_count,
       topic_tags, has_thesis
@@ -5376,6 +5566,10 @@ def _build_evaluation_meta(
         "unresolved_count": final.unresolved_count,
         "question_count": len(final.reader_questions),
         "source_missing_reason": source_missing,
+        # PR 13 — External Evidence
+        "used_primary_source": final.used_primary_source,
+        "primary_source_type": final.primary_source_type,
+        "external_evidence_count": final.external_evidence_count,
         "gate_fails": list(final.gate_fails or []),
         "strong_fail_count": strong,
         "warn_tag_count": warn_only,

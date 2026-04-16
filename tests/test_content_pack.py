@@ -55,6 +55,10 @@ from app.services.content_pack import (
     _MARKET_ANGLE_PATTERNS, _MARKET_ANGLE_VALID_TYPES,
     # PR 12 Layer E: Evaluation Loop
     _build_evaluation_meta,
+    # PR 13: External Evidence Layer
+    _detect_primary_source, _resolve_questions_from_external,
+    _PRIMARY_SOURCE_URL_PATTERNS, _PRIMARY_SOURCE_TEXT_PATTERNS,
+    _PRIMARY_SOURCE_VALID_TYPES,
 )
 from app.models.content_request import ContentRequest
 
@@ -8280,3 +8284,322 @@ class TestEvaluationLoop:
         assert meta["reward_type"] == "FOLLOW"
         assert meta["strong_fail_count"] == 0
         assert meta["warn_tag_count"] == 1
+
+
+# ─── PR 13: External Evidence Layer ─────────────────────────────────────
+
+class TestExternalEvidenceLayer:
+    """PR 13 — 1차 출처 감지 + 외부 evidence 질문 해결 테스트."""
+
+    def _make_card(self, **kwargs):
+        defaults = dict(
+            key_facts=["삼성전자 노조가 5월 파업 예고"],
+            hook_candidates=["삼성전자 파업"],
+            thesis_cards=[ThesisCard(
+                thesis="파업 현실화 시 반도체 공급망 영향",
+                reader_stake="반도체 가격 영향",
+            )],
+            certainty_level="확정",
+            source_url=None,
+            source_type="news_link",
+        )
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    # ─── FinalPost 신규 필드 ─────────────────────────────────────────
+
+    def test_finalpost_has_external_fields(self):
+        """FinalPost에 PR 13 필드 3개 존재."""
+        fp = FinalPost()
+        assert hasattr(fp, "used_primary_source")
+        assert hasattr(fp, "primary_source_type")
+        assert hasattr(fp, "external_evidence_count")
+        assert fp.used_primary_source is False
+        assert fp.primary_source_type is None
+        assert fp.external_evidence_count == 0
+
+    # ─── URL 기반 감지 ────────────────────────────────────────────────
+
+    def test_detect_government_url(self):
+        """go.kr URL → GOVERNMENT."""
+        card = self._make_card(source_url="https://www.moef.go.kr/news/12345")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "GOVERNMENT"
+        assert count >= 1
+
+    def test_detect_report_url_imf(self):
+        """imf.org URL → REPORT."""
+        card = self._make_card(source_url="https://www.imf.org/en/Publications")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "REPORT"
+
+    def test_detect_report_url_bok(self):
+        """bok.or.kr URL → REPORT."""
+        card = self._make_card(source_url="https://ecos.bok.or.kr/data")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "REPORT"
+
+    def test_detect_disclosure_url(self):
+        """dart.fss.or.kr URL → DISCLOSURE."""
+        card = self._make_card(source_url="https://dart.fss.or.kr/report/12345")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "DISCLOSURE"
+
+    def test_detect_data_source_url(self):
+        """coingecko.com URL → DATA_SOURCE."""
+        card = self._make_card(source_url="https://www.coingecko.com/ko/coins/bitcoin")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "DATA_SOURCE"
+
+    def test_detect_coinmarketcap_url(self):
+        """coinmarketcap.com URL → DATA_SOURCE."""
+        card = self._make_card(source_url="https://coinmarketcap.com/currencies/bitcoin")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "DATA_SOURCE"
+
+    def test_detect_whitehouse_url(self):
+        """whitehouse.gov URL → GOVERNMENT."""
+        card = self._make_card(source_url="https://www.whitehouse.gov/briefing")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "GOVERNMENT"
+
+    def test_detect_sec_url(self):
+        """sec.gov URL → DISCLOSURE."""
+        card = self._make_card(source_url="https://www.sec.gov/filing/10-K")
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "DISCLOSURE"
+
+    # ─── 텍스트 기반 감지 ─────────────────────────────────────────────
+
+    def test_detect_imf_from_key_facts(self):
+        """key_facts에 'IMF' → REPORT."""
+        card = self._make_card(
+            key_facts=["IMF가 한국 재정 건전성 경고 발표"]
+        )
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "REPORT"
+
+    def test_detect_government_from_key_facts(self):
+        """key_facts에 '국세청' → GOVERNMENT."""
+        card = self._make_card(
+            key_facts=["국세청 소상공인 세정지원 8가지 발표"]
+        )
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "GOVERNMENT"
+
+    def test_detect_disclosure_from_source_text(self):
+        """source_text에 '공시' + '실적 발표' → DISCLOSURE."""
+        card = self._make_card()
+        src_type, count = _detect_primary_source(
+            card, "삼성전자가 공시를 통해 분기 실적 발표를 했다."
+        )
+        assert src_type == "DISCLOSURE"
+        assert count >= 2
+
+    def test_detect_direct_stmt_from_text(self):
+        """source_text에 '보도자료' + '공식 입장' → DIRECT_STMT."""
+        card = self._make_card()
+        src_type, count = _detect_primary_source(
+            card, "회사 측이 보도자료를 통해 공식 입장을 밝혔다."
+        )
+        assert src_type == "DIRECT_STMT"
+        assert count >= 2
+
+    def test_detect_coingecko_from_text(self):
+        """source_text에 'CoinGecko' → DATA_SOURCE."""
+        card = self._make_card()
+        src_type, _ = _detect_primary_source(
+            card, "CoinGecko 데이터에 따르면 비트코인 거래량이 급증했다."
+        )
+        assert src_type == "DATA_SOURCE"
+
+    # ─── 감지 실패 ────────────────────────────────────────────────────
+
+    def test_no_primary_source(self):
+        """관련 패턴 없으면 None."""
+        card = self._make_card(
+            key_facts=["시장이 조정 국면이다"],
+            source_url=None,
+        )
+        src_type, count = _detect_primary_source(card, "일반적인 뉴스 내용.")
+        assert src_type is None
+        assert count == 0
+
+    def test_empty_card(self):
+        """빈 카드 → None."""
+        card = self._make_card(key_facts=[], source_url=None)
+        src_type, count = _detect_primary_source(card, "")
+        assert src_type is None
+        assert count == 0
+
+    # ─── URL 우선순위 ─────────────────────────────────────────────────
+
+    def test_url_takes_priority_over_text(self):
+        """URL 매칭이 텍스트 매칭보다 우선."""
+        card = self._make_card(
+            source_url="https://dart.fss.or.kr/report/12345",
+            key_facts=["IMF 보고서 경고"],  # 텍스트로는 REPORT
+        )
+        src_type, _ = _detect_primary_source(card)
+        assert src_type == "DISCLOSURE"  # URL 우선
+
+    # ─── _resolve_questions_from_external ──────────────────────────────
+
+    def test_external_resolves_source_question(self):
+        """1차 출처 감지 → UNRESOLVED SOURCE 질문 해결."""
+        qs = [ReaderQuestion(question="Q1", category="SOURCE", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, "GOVERNMENT", 3)
+        assert result[0].status == "RESOLVED"
+        assert "외부" in result[0].evidence
+
+    def test_external_resolves_scope_from_report(self):
+        """REPORT 출처 + evidence 2+ → SCOPE 해결."""
+        qs = [ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, "REPORT", 2)
+        assert result[0].status == "RESOLVED"
+
+    def test_external_resolves_checkpoint_from_government(self):
+        """GOVERNMENT 출처 + evidence 2+ → CHECKPOINT 해결."""
+        qs = [ReaderQuestion(question="Q4", category="CHECKPOINT", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, "GOVERNMENT", 2)
+        assert result[0].status == "RESOLVED"
+
+    def test_external_skips_already_resolved(self):
+        """이미 RESOLVED 인 질문은 건너뛴다."""
+        qs = [ReaderQuestion(question="Q1", category="SOURCE", status="RESOLVED",
+                             evidence="원문 출처 인용 존재")]
+        result = _resolve_questions_from_external(qs, "GOVERNMENT", 3)
+        assert result[0].evidence == "원문 출처 인용 존재"  # 기존 evidence 유지
+
+    def test_external_no_source_type(self):
+        """primary_source_type None → 변경 없음."""
+        qs = [ReaderQuestion(question="Q1", category="SOURCE", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, None, 0)
+        assert result[0].status == "UNRESOLVED"
+
+    def test_external_scope_not_from_direct_stmt(self):
+        """DIRECT_STMT 출처 → SCOPE 해결 안 됨 (데이터 출처가 아님)."""
+        qs = [ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, "DIRECT_STMT", 3)
+        assert result[0].status == "UNRESOLVED"
+
+    def test_external_checkpoint_not_from_data_source(self):
+        """DATA_SOURCE 출처 → CHECKPOINT 해결 안 됨."""
+        qs = [ReaderQuestion(question="Q4", category="CHECKPOINT", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, "DATA_SOURCE", 3)
+        assert result[0].status == "UNRESOLVED"
+
+    def test_external_scope_low_evidence_unresolved(self):
+        """evidence_count 1 → SCOPE 해결 안 됨 (2 이상 필요)."""
+        qs = [ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED")]
+        result = _resolve_questions_from_external(qs, "REPORT", 1)
+        assert result[0].status == "UNRESOLVED"
+
+    # ─── 통합 시나리오 ────────────────────────────────────────────────
+
+    def test_full_pipeline_imf_article(self):
+        """IMF 기사 → 외부 evidence 로 추가 해결."""
+        card = self._make_card(
+            key_facts=["IMF가 한국 재정 건전성 경고 발표",
+                        "GDP 대비 국가 부채 비율 55%"],
+            source_url="https://www.imf.org/publications/report",
+        )
+        source = "IMF 보고서에 따르면 한국의 부채 비율이 55%에 달한다."
+        # 1단계: source_text 매칭
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        qs = _resolve_questions_from_source(qs, source)
+        resolved_internal = sum(1 for q in qs if q.status == "RESOLVED")
+        # 2단계: 외부 evidence 매칭
+        src_type, ext_count = _detect_primary_source(card, source)
+        qs = _resolve_questions_from_external(qs, src_type, ext_count)
+        resolved_total = sum(1 for q in qs if q.status == "RESOLVED")
+        assert resolved_total >= resolved_internal
+        assert src_type == "REPORT"
+
+    def test_full_pipeline_nts_article(self):
+        """국세청 기사 → GOVERNMENT 감지."""
+        card = self._make_card(
+            key_facts=["국세청 소상공인 세정지원 8가지 발표"],
+            source_url="https://www.nts.go.kr/news/12345",
+        )
+        src_type, count = _detect_primary_source(card)
+        assert src_type == "GOVERNMENT"
+        assert count >= 1
+
+    def test_full_pipeline_no_external(self):
+        """외부 출처 없는 기사 → 기존 동작 유지."""
+        card = self._make_card(source_url="https://www.chosun.com/news/12345")
+        qs = [ReaderQuestion(question="Q", category="SOURCE", status="UNRESOLVED")]
+        src_type, count = _detect_primary_source(card, "일반 뉴스 기사")
+        qs = _resolve_questions_from_external(qs, src_type, count)
+        # 외부 evidence 없으면 UNRESOLVED 유지
+        if src_type is None:
+            assert qs[0].status == "UNRESOLVED"
+
+    # ─── 상수 검증 ────────────────────────────────────────────────────
+
+    def test_valid_types_set(self):
+        """_PRIMARY_SOURCE_VALID_TYPES 5개 유형."""
+        assert len(_PRIMARY_SOURCE_VALID_TYPES) == 5
+        assert "GOVERNMENT" in _PRIMARY_SOURCE_VALID_TYPES
+        assert "REPORT" in _PRIMARY_SOURCE_VALID_TYPES
+        assert "DISCLOSURE" in _PRIMARY_SOURCE_VALID_TYPES
+        assert "DATA_SOURCE" in _PRIMARY_SOURCE_VALID_TYPES
+        assert "DIRECT_STMT" in _PRIMARY_SOURCE_VALID_TYPES
+
+    def test_url_patterns_not_empty(self):
+        """URL 패턴 사전 비어있지 않음."""
+        for key, patterns in _PRIMARY_SOURCE_URL_PATTERNS.items():
+            assert len(patterns) >= 2, f"{key}: URL 패턴 부족"
+
+    def test_text_patterns_not_empty(self):
+        """텍스트 패턴 사전 비어있지 않음."""
+        for key, patterns in _PRIMARY_SOURCE_TEXT_PATTERNS.items():
+            assert len(patterns) >= 3, f"{key}: 텍스트 패턴 부족"
+
+    # ─── EvalMeta 연동 ────────────────────────────────────────────────
+
+    def test_eval_meta_has_external_fields(self):
+        """_build_evaluation_meta 에 PR 13 필드 3개 포함."""
+        fp = FinalPost(
+            used_primary_source=True,
+            primary_source_type="REPORT",
+            external_evidence_count=5,
+        )
+        card = self._make_card()
+        meta = _build_evaluation_meta(fp, card, "EXPLAIN", None)
+        assert meta["used_primary_source"] is True
+        assert meta["primary_source_type"] == "REPORT"
+        assert meta["external_evidence_count"] == 5
+
+    def test_eval_meta_no_external(self):
+        """외부 출처 없으면 기본값."""
+        fp = FinalPost()
+        card = self._make_card()
+        meta = _build_evaluation_meta(fp, card, "EXPLAIN", None)
+        assert meta["used_primary_source"] is False
+        assert meta["primary_source_type"] is None
+        assert meta["external_evidence_count"] == 0
+
+    # ─── 회귀 검증 ────────────────────────────────────────────────────
+
+    def test_verify_regression_intact(self):
+        """VERIFY 과해석 게이트 여전히 동작."""
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert _STRONG_FAIL_TAGS == frozenset({
+            "WEAK_OPENER", "DEAD_ENDING",
+            "STRUCTURE_COLUMN", "LOW_CONFIDENCE_OVERREACH",
+        })
+
+    def test_reader_reward_regression(self):
+        """Reader Reward Layer 회귀 없음."""
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("답은 다음 CPI가 기준이다.") == "SAVE"
+
+    def test_findability_regression(self):
+        """Findability Layer 회귀 없음."""
+        count, warn = _validate_findability(
+            "삼성전자 노조가 5월 21일부터 파업을 예고했다.\n답은 참여율이다."
+        )
+        assert count >= 2
+        assert warn is None
