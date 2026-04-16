@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>X System — Control Room</title>
@@ -21,16 +21,18 @@
   --font:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
   --mono:'Courier New',monospace;
   --r-sm:8px;--r-md:12px;--r-lg:16px;
-  --nav-h:60px;--safe-b:env(safe-area-inset-bottom,0px);
+  --nav-h:52px;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;background:var(--bg-void);color:var(--text-pri);
+html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-pri);
   font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased;
-  overflow:hidden}
+  -webkit-text-size-adjust:100%;overflow:hidden}
 
 /* ── TOPBAR ── */
-.topbar{position:sticky;top:0;z-index:50;height:48px;display:flex;
-  align-items:center;justify-content:space-between;padding:0 16px;
+.topbar{position:fixed;top:0;left:0;right:0;z-index:50;
+  height:calc(48px + var(--safe-t));padding-top:var(--safe-t);
+  display:flex;align-items:center;justify-content:space-between;
+  padding-left:16px;padding-right:12px;
   background:rgba(5,5,10,.92);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border-subtle)}
 .topbar-brand{display:flex;align-items:center;gap:8px}
@@ -42,9 +44,11 @@ html,body{height:100%;background:var(--bg-void);color:var(--text-pri);
   font-size:18px;cursor:pointer;padding:4px 8px;border-radius:var(--r-sm);
   transition:color .2s}
 .topbar-refresh:active{color:var(--indigo)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.topbar-sync{font-size:9px;color:var(--text-mut)}
 
 /* ── MAIN CONTENT ── */
-.main{position:absolute;top:48px;left:0;right:0;
+.main{position:fixed;top:calc(48px + var(--safe-t));left:0;right:0;
   bottom:calc(var(--nav-h) + var(--safe-b));overflow-y:auto;
   -webkit-overflow-scrolling:touch}
 .tab-pane{display:none;padding:16px 16px 24px}
@@ -56,7 +60,7 @@ html,body{height:100%;background:var(--bg-void);color:var(--text-pri);
   display:flex;background:rgba(5,5,10,.95);backdrop-filter:blur(16px);
   border-top:1px solid var(--border-subtle)}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:2px;background:none;border:none;
+  justify-content:center;gap:2px;min-height:44px;background:none;border:none;
   color:var(--text-mut);font-size:10px;cursor:pointer;
   -webkit-tap-highlight-color:transparent;transition:color .2s}
 .nav-btn.active{color:var(--indigo)}
@@ -174,8 +178,11 @@ html,body{height:100%;background:var(--bg-void);color:var(--text-pri);
     <span style="font-size:18px">🦊</span>
     <span class="topbar-badge">CONTROL ROOM</span>
   </div>
-  <span class="topbar-time" id="clock"></span>
-  <button class="topbar-refresh" id="refreshBtn" onclick="loadAll()">↻</button>
+  <div class="topbar-right">
+    <span class="topbar-sync" id="headerSync"></span>
+    <span class="topbar-time" id="clock"></span>
+    <button class="topbar-refresh" id="refreshBtn" onclick="loadAll()">↻</button>
+  </div>
 </header>
 
 <!-- MAIN -->
@@ -361,6 +368,8 @@ async function loadStatus(){
     const h=d.health||{};
     setLed('dot-db',h.db_ok);setLed('dot-tg',h.telegram_configured);setLed('dot-x',h.x_configured);
     document.getElementById('syncTime').textContent=d.generated_at_kst||'—';
+    const hs=document.getElementById('headerSync');
+    if(hs)hs.textContent='sync '+(d.generated_at_kst||'').substring(11,16);
 
     // queue
     const q=d.queue||{};
