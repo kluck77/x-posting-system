@@ -10455,3 +10455,29 @@ class TestQueryExpansion:
         ctx = _build_topic_context_for_post([])
         assert ctx["related_topics"] == []
         assert ctx["expanded_keywords"] == []
+
+
+# ── PR 27: source_id + persistence integration ──
+
+
+class TestPairwiseSourceId:
+    """PR 27 — pairwise source_id 필드 확인."""
+
+    def test_source_id_in_record(self):
+        """source_id가 반환 dict에 포함."""
+        rec = _build_pairwise_review_record(
+            "A 포스트.", "A 짧은.",
+            "B 포스트.", "B 짧은.",
+            "EXPLAIN",
+            verdict="A_BETTER",
+            reasons=["MORE_FINDABLE"],
+            source_id="src_001",
+        )
+        assert rec["source_id"] == "src_001"
+
+    def test_source_id_default_empty(self):
+        """source_id 미지정 → 빈 문자열."""
+        rec = _build_pairwise_review_record(
+            "A.", "A.", "B.", "B.", "EXPLAIN",
+        )
+        assert rec["source_id"] == ""

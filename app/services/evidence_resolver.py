@@ -264,7 +264,7 @@ _DOMAIN_COUNTRY_MAP: dict[str, str] = {
 # ── 문서유형 키워드 ──
 _DOC_TYPE_PATTERNS: dict[str, list[str]] = {
     "POLICY_ANNOUNCEMENT": [
-        "시행", "시행일", "시행령", "고시", "공포", "개정",
+        "시행일", "시행령", "고시", "공포", "개정",
         "발효", "적용 시작", "executive order",
     ],
     "STATISTICAL_RELEASE": [

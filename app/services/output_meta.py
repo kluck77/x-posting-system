@@ -893,11 +893,13 @@ def _build_pairwise_review_record(
     verdict: str = "",
     reasons: list[str] | None = None,
     evaluator_note: str = "",
+    source_id: str = "",
 ) -> dict:
     """
-    PR 23 — Human Pairwise Review 레코드 빌드.
+    PR 23/27 — Human Pairwise Review 레코드 빌드.
 
     동일 소스의 A안/B안 비교 판정 레코드.
+    PR 27: source_id 추가 — 동일 소스 보장용.
     AI 호출 없음. rule-first.
     """
     reasons = reasons or []
@@ -914,6 +916,7 @@ def _build_pairwise_review_record(
 
     return {
         "record_type": "pairwise_review",
+        "source_id": source_id,
         "verdict": verdict,
         "reasons": list(reasons),
         "evaluator_note": evaluator_note,
@@ -940,21 +943,29 @@ def _build_pairwise_review_record(
 # ── PR 26: Online Production Eval Layer ──
 #
 # 최근 N건의 eval_meta 를 메모리 내 집계하여 품질 분포/경고를 실시간 제공.
-# DB 없이 리스트 버퍼 방식. 호출자가 generate_final_post 후 feed.
+# PR 27: eval_store.py 와 연동하여 DB 에도 영속 저장 (fail-open).
 
 _ONLINE_EVAL_BUFFER: list[dict] = []
 _ONLINE_EVAL_MAX_SIZE = 100
 
 
-def _feed_online_eval(eval_meta: dict) -> None:
+def _feed_online_eval(eval_meta: dict, db=None) -> None:
     """
-    PR 26 — eval_meta 1건을 온라인 버퍼에 적재.
+    PR 26/27 — eval_meta 1건을 온라인 버퍼에 적재 + DB 영속 저장.
 
     최대 _ONLINE_EVAL_MAX_SIZE 건 유지 (FIFO).
+    db 가 주어지면 eval_store 에도 저장 (fail-open).
     """
     _ONLINE_EVAL_BUFFER.append(eval_meta)
     if len(_ONLINE_EVAL_BUFFER) > _ONLINE_EVAL_MAX_SIZE:
         _ONLINE_EVAL_BUFFER.pop(0)
+    # PR 27: DB 영속화
+    if db is not None:
+        try:
+            from app.services.eval_store import save_eval_record
+            save_eval_record(db, "eval_meta", eval_meta)
+        except Exception:
+            pass  # fail-open
 
 
 def _get_online_eval_summary() -> dict:
