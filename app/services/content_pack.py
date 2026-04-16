@@ -1481,6 +1481,11 @@ from app.services.output_meta import (  # noqa: F401  (re-export)
     _validate_learning_label,
     _FOLLOW_UP_SIGNALS,
     _build_distribution_package,
+    # PR 22: Duplicate / Similarity Guard + Search Surface
+    _validate_output_similarity,
+    _validate_search_surface,
+    _extract_surface_keywords,
+    _SIMILARITY_WARN_THRESHOLD,
 )
 
 
@@ -3046,6 +3051,19 @@ async def generate_final_post(
         logger.info(
             f"[DistPkg] share={len(_share)}자 follow_up={len(_followup)}자"
         )
+
+    # PR 22 — Distribution 빌드 후 4종 유사중복 + Search Surface 재검사
+    _dist_sim_warns = _validate_output_similarity(
+        final.final_post, final.final_short, _share, _followup,
+    )
+    for w in _dist_sim_warns:
+        logger.warning(f"[SimilarityGuard] {w}")
+
+    _dist_surf_warns = _validate_search_surface(
+        final.final_post, final.final_short, _share,
+    )
+    for w in _dist_surf_warns:
+        logger.warning(f"[SearchSurface] {w}")
 
     return final
 
@@ -5389,6 +5407,19 @@ def _validate_final_post(
         warnings.append(_ms_warn)
         if _ms_tag and _ms_tag not in gate_fails:
             gate_fails.append(_ms_tag)
+
+    # PR 22 — Duplicate / Similarity Guard: 4종 출력물 간 유사중복 검사.
+    # WARN-only — _STRONG_FAIL_TAGS 미편입.
+    # 주의: dist_share_line / dist_follow_up 은 _validate_final_post 시점에
+    #       아직 빌드 전이므로 빈 문자열로 전달. 실제 검사는 generate_final_post
+    #       에서 distribution 빌드 후 별도 호출하거나, 여기선 post↔short 만 검사.
+    _sim_warns = _validate_output_similarity(post, short)
+    warnings.extend(_sim_warns)
+
+    # PR 22 — Search Surface: post 핵심어가 short 에도 남아있는지 검사.
+    # WARN-only.
+    _surf_warns = _validate_search_surface(post, short)
+    warnings.extend(_surf_warns)
 
     return post, short, warnings, gate_fails
 

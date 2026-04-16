@@ -76,6 +76,9 @@ from app.services.content_pack import (
     _decide_draft_count,
     # PR 20: Distribution Packaging Layer
     _build_distribution_package, _FOLLOW_UP_SIGNALS,
+    # PR 22: Duplicate / Similarity Guard + Search Surface
+    _validate_output_similarity, _validate_search_surface,
+    _extract_surface_keywords, _SIMILARITY_WARN_THRESHOLD,
 )
 from app.models.content_request import ContentRequest
 
@@ -9626,3 +9629,129 @@ class TestDistributionPackagingLayer:
         )
         share, follow = _build_distribution_package(fp, "VERIFY")
         assert "갈린다" in follow
+
+
+# ── PR 22: Duplicate / Similarity Guard + Search Surface Tests ──
+
+
+class TestOutputSimilarity:
+    """PR 22 — 4종 출력물 간 유사중복 검사."""
+
+    def test_no_warning_when_all_different(self):
+        """모든 출력물이 충분히 다르면 경고 없음."""
+        warns = _validate_output_similarity(
+            "삼성전자 HBM 매출 2조원 돌파.",
+            "삼성 HBM 역대 최고.",
+            "삼성 반도체 실적 호조",
+            "다음 분기 실적도 주목",
+        )
+        assert len(warns) == 0
+
+    def test_short_vs_share_high_similarity(self):
+        """short ↔ share_line 유사도 높으면 경고."""
+        short = "삼성전자 HBM 매출이 2조원을 넘어 역대 최고를 기록했다"
+        share = "삼성전자 HBM 매출이 2조원을 넘어 역대 최고를 달성했다"
+        warns = _validate_output_similarity("본문 전체.", short, share, "")
+        sim_warns = [w for w in warns if "dist_share_line" in w]
+        assert len(sim_warns) >= 1
+
+    def test_post_last_line_equals_followup(self):
+        """post 마지막 줄 = follow_up 완전 동일 → 경고."""
+        post = "첫 줄.\n두번째 줄.\n마지막 줄 그대로"
+        warns = _validate_output_similarity(post, "짧은 버전", "", "마지막 줄 그대로")
+        dup_warns = [w for w in warns if "dist_follow_up" in w and "완전 동일" in w]
+        assert len(dup_warns) == 1
+
+    def test_short_vs_followup_high_similarity(self):
+        """short ↔ follow_up 유사도 높으면 경고."""
+        short = "한국은행 기준금리를 동결했다 다음 회의까지 유지된다"
+        followup = "한국은행 기준금리를 동결했다 다음 회의까지 지속된다"
+        warns = _validate_output_similarity("본문.\n다른 마지막.", short, "", followup)
+        sim_warns = [w for w in warns if "짧은 버전과 후속 답글" in w]
+        assert len(sim_warns) >= 1
+
+    def test_share_line_equals_post_first_line(self):
+        """share_line이 post 첫 줄의 완전 복제 → 경고."""
+        post = "삼성전자 HBM 실적 역대 최고.\n세부 사항 여기에."
+        warns = _validate_output_similarity(post, "짧은 버전", "삼성전자 HBM 실적 역대 최고.", "")
+        dup_warns = [w for w in warns if "완전 복제" in w]
+        assert len(dup_warns) == 1
+
+    def test_empty_inputs_no_crash(self):
+        """빈 입력에도 크래시 없음."""
+        warns = _validate_output_similarity("", "", "", "")
+        assert warns == []
+
+    def test_similarity_threshold_constant(self):
+        """유사도 임계값 상수 확인."""
+        assert _SIMILARITY_WARN_THRESHOLD == 0.70
+
+    def test_validate_final_post_includes_similarity_check(self):
+        """_validate_final_post가 유사중복 경고를 포함하는지 확인."""
+        # post와 short가 첫 줄 동일 → 기존 경고 발생
+        post = "동일한 첫 줄 내용입니다."
+        short = "동일한 첫 줄 내용입니다."
+        _, _, warnings, _ = _validate_final_post(post, short)
+        dup_warns = [w for w in warnings if "final_short 첫 문장이 final_post와 동일" in w]
+        assert len(dup_warns) >= 1
+
+
+class TestSearchSurface:
+    """PR 22 — Search Surface 핵심어 검사."""
+
+    def test_extract_keywords_from_entities(self):
+        """고유명사 추출 확인."""
+        kw = _extract_surface_keywords("삼성전자 HBM 매출이 2조원을 넘었다")
+        assert "삼성" in kw or "삼성전자" in kw
+        assert "HBM" in kw
+
+    def test_extract_keywords_english_ticker(self):
+        """영문 약어/티커 추출."""
+        kw = _extract_surface_keywords("KOSPI가 2800 돌파. GDP 성장률 주목.")
+        assert "KOSPI" in kw
+        assert "GDP" in kw
+
+    def test_extract_keywords_alias(self):
+        """alias 매핑 추출."""
+        kw = _extract_surface_keywords("한은이 금리를 동결했다")
+        assert "한은" in kw
+
+    def test_no_warning_when_keyword_in_short(self):
+        """short에 핵심어 있으면 경고 없음."""
+        post = "삼성전자 HBM 매출 2조 돌파. 역대 최고 실적."
+        short = "삼성 HBM 역대 최고."
+        warns = _validate_search_surface(post, short)
+        assert len(warns) == 0
+
+    def test_warning_when_keyword_missing_in_short(self):
+        """short에 핵심어 전부 빠지면 경고."""
+        post = "삼성전자 HBM 매출 2조원 돌파."
+        short = "반도체 실적 좋다."
+        warns = _validate_search_surface(post, short)
+        short_warns = [w for w in warns if "final_short에 핵심 검색어 없음" in w]
+        assert len(short_warns) >= 1
+
+    def test_warning_when_keyword_missing_in_share(self):
+        """share_line에 핵심어 전부 빠지면 경고."""
+        post = "삼성전자 HBM 매출 2조원 돌파."
+        warns = _validate_search_surface(post, "삼성 HBM.", "반도체 좋다")
+        share_warns = [w for w in warns if "dist_share_line에 핵심 검색어 없음" in w]
+        assert len(share_warns) >= 1
+
+    def test_no_crash_empty_post(self):
+        """빈 post에 크래시 없음."""
+        warns = _validate_search_surface("", "", "")
+        assert warns == []
+
+    def test_no_warning_without_keywords(self):
+        """post에 핵심어 자체가 없으면 검사 스킵."""
+        warns = _validate_search_surface("일반적인 내용입니다.", "짧은 버전.")
+        assert warns == []
+
+    def test_validate_final_post_includes_search_surface(self):
+        """_validate_final_post가 search surface 경고를 포함하는지 확인."""
+        post = "삼성전자 HBM 매출이 2조원을 넘었다. 역대 최고."
+        short = "반도체 실적 좋다."
+        _, _, warnings, _ = _validate_final_post(post, short)
+        surf_warns = [w for w in warnings if "핵심 검색어 없음" in w]
+        assert len(surf_warns) >= 1

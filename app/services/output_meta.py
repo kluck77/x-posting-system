@@ -573,3 +573,181 @@ def _build_distribution_package(
                     follow_up = candidate
 
     return share_line, follow_up
+
+
+# ── PR 22: Duplicate / Similarity Guard Layer ──
+#
+# final_post / final_short / dist_share_line / dist_follow_up 4종 간
+# 유사중복 검사. 동일 게시물 내 출력물끼리 지나치게 비슷하면 X 검색
+# 품질이 떨어진다 (중복 노출 → 계정 신뢰 하락).
+#
+# WARN-only — _STRONG_FAIL_TAGS 미편입.
+
+_SIMILARITY_WARN_THRESHOLD = 0.70   # Jaccard ≥ 70% → 경고
+
+
+def _tokenize_ko(text: str) -> set[str]:
+    """한국어 텍스트를 공백 + 조사 제거 토큰 셋으로 변환."""
+    if not text:
+        return set()
+    # 공백 분리 후 1자 이하 토큰 제거
+    tokens = set()
+    for tok in text.lower().replace("\n", " ").split():
+        tok = tok.strip(".,!?·…\"'""''()[]{}~")
+        if len(tok) > 1:
+            tokens.add(tok)
+    return tokens
+
+
+def _jaccard_similarity(a: str, b: str) -> float:
+    """두 텍스트의 Jaccard 유사도 (0.0~1.0)."""
+    ta = _tokenize_ko(a)
+    tb = _tokenize_ko(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+def _first_line(text: str) -> str:
+    """텍스트의 첫 줄만 추출."""
+    if not text:
+        return ""
+    lines = text.strip().splitlines()
+    return lines[0].strip() if lines else ""
+
+
+def _validate_output_similarity(
+    post: str,
+    short: str,
+    share_line: str = "",
+    follow_up: str = "",
+) -> list[str]:
+    """
+    PR 22 — 4종 출력물 간 유사중복 검사.
+
+    검사 항목:
+      1. final_post 첫 줄 vs final_short 첫 줄 (완전 동일)
+      2. final_short vs dist_share_line (Jaccard ≥ 70%)
+      3. final_post 마지막 줄 vs dist_follow_up (완전 동일)
+      4. final_short vs dist_follow_up (Jaccard ≥ 70%)
+
+    반환: 경고 목록 (WARN-only, 게이트 태그 없음)
+    """
+    warnings: list[str] = []
+
+    # 1. post 첫 줄 vs short 첫 줄 — 완전 동일 체크
+    # (기존 _validate_final_post에 이미 있으나 여기서 첫줄 동일도 추가 체크)
+    post_first = _first_line(post)
+    short_first = _first_line(short)
+
+    # 2. short vs share_line — 유사도
+    if short and share_line and short != share_line:
+        sim = _jaccard_similarity(short, share_line)
+        if sim >= _SIMILARITY_WARN_THRESHOLD:
+            warnings.append(
+                f"final_short ↔ dist_share_line 유사도 {int(sim*100)}% — "
+                "공유 문구가 짧은 버전과 거의 동일"
+            )
+
+    # 3. post 마지막 줄 vs follow_up — 완전 동일
+    if post and follow_up:
+        post_lines = [ln.strip() for ln in post.strip().splitlines() if ln.strip()]
+        if post_lines:
+            last_line = post_lines[-1]
+            if last_line == follow_up:
+                warnings.append(
+                    "dist_follow_up이 final_post 마지막 줄과 완전 동일 — "
+                    "답글 차별화 필요"
+                )
+
+    # 4. short vs follow_up — 유사도
+    if short and follow_up:
+        sim = _jaccard_similarity(short, follow_up)
+        if sim >= _SIMILARITY_WARN_THRESHOLD:
+            warnings.append(
+                f"final_short ↔ dist_follow_up 유사도 {int(sim*100)}% — "
+                "짧은 버전과 후속 답글이 거의 동일"
+            )
+
+    # 5. post 첫 줄 vs share_line — 첫 줄 완전 복제
+    if post_first and share_line:
+        if post_first == share_line:
+            warnings.append(
+                "dist_share_line이 final_post 첫 줄의 완전 복제 — "
+                "공유 문구 차별화 필요"
+            )
+
+    return warnings
+
+
+# ── PR 22: Search Surface Layer ──
+#
+# X 검색에서 계정/게시글이 발견되려면 핵심 엔티티/키워드가
+# 첫 2문장, 짧은 버전, 공유 문구에 최소 1회 이상 등장해야 한다.
+# findability 가 "앵커 개수"를 세는 반면, search surface 는
+# "핵심어가 어디에 빠졌는지"를 검사한다.
+
+def _extract_surface_keywords(post: str) -> set[str]:
+    """
+    final_post 전체에서 검색 표면 핵심어를 추출.
+
+    추출 대상:
+      - _FINDABILITY_KNOWN_ENTITIES 에 매칭되는 고유명사
+      - _ENTITY_ALIAS_MAP 의 alias 키
+      - 영문 약어/티커 (2자+)
+    """
+    if not post:
+        return set()
+    keywords: set[str] = set()
+    for ent in _FINDABILITY_KNOWN_ENTITIES:
+        if ent in post:
+            keywords.add(ent)
+    for alias in _ENTITY_ALIAS_MAP:
+        if alias in post:
+            keywords.add(alias)
+    for m in _FINDABILITY_ANCHOR_RE.finditer(post):
+        tok = m.group()
+        if len(tok) >= 2 and tok[0].isupper():
+            keywords.add(tok)
+    return keywords
+
+
+def _validate_search_surface(
+    post: str,
+    short: str,
+    share_line: str = "",
+) -> list[str]:
+    """
+    PR 22 — 핵심 엔티티/키워드의 출력물별 등장 검사.
+
+    post 전체에서 추출한 핵심어가 short / share_line 에도
+    최소 1개 이상 남아있는지 확인한다.
+
+    반환: 경고 목록 (WARN-only)
+    """
+    warnings: list[str] = []
+
+    surface_kw = _extract_surface_keywords(post)
+    if len(surface_kw) < 2:
+        # 핵심어 1개 이하면 오탐 위험 — 스킵
+        return warnings
+
+    # short에 핵심어 존재 확인
+    if short:
+        short_hits = {kw for kw in surface_kw if kw in short}
+        if not short_hits:
+            warnings.append(
+                f"final_short에 핵심 검색어 없음 — "
+                f"post 핵심어: {sorted(surface_kw)[:3]}"
+            )
+
+    # share_line에 핵심어 존재 확인
+    if share_line:
+        share_hits = {kw for kw in surface_kw if kw in share_line}
+        if not share_hits:
+            warnings.append(
+                f"dist_share_line에 핵심 검색어 없음 — "
+                f"post 핵심어: {sorted(surface_kw)[:3]}"
+            )
+
+    return warnings
