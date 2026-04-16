@@ -10827,3 +10827,139 @@ class TestEvalStoreMigration:
         finally:
             _initialized_dbs.discard(id(conn))
             conn.close()
+
+
+# ── PR 32: Editorial Scoring Engine Tests ──
+
+from app.services.output_meta import (
+    _compute_alert_score, _compute_postability_score,
+    _compute_trust_score, _compute_editorial_scores,
+)
+
+
+class TestAlertScore:
+
+    def test_breaking_now_high(self):
+        s = _compute_alert_score(breaking_class="BREAKING_NOW", urgency="high",
+                                  institution="한국은행", topic_tags=["금융"])
+        assert s >= 75
+
+    def test_candidate_medium(self):
+        s = _compute_alert_score(breaking_class="CANDIDATE", urgency="medium",
+                                  topic_tags=["정치"])
+        assert 35 <= s < 75
+
+    def test_hold_low(self):
+        s = _compute_alert_score(breaking_class="HOLD")
+        assert s < 35
+
+    def test_urgent_relative_date(self):
+        s1 = _compute_alert_score(relative_dates=["TOMORROW"])
+        s2 = _compute_alert_score(relative_dates=["NEXT_YEAR"])
+        assert s1 > s2
+
+    def test_empty_inputs(self):
+        assert _compute_alert_score() == 0
+
+    def test_max_100(self):
+        s = _compute_alert_score(breaking_class="BREAKING_NOW", urgency="high",
+                                  relative_dates=["TOMORROW"],
+                                  institution="한국은행", topic_tags=["금융"])
+        assert s <= 100
+
+
+class TestPostabilityScore:
+
+    def test_perfect_post(self):
+        s = _compute_postability_score(
+            strong_fail_count=0, warn_tag_count=0,
+            reward_type="FOLLOW", anchor_count=3,
+            market_angle_type="CHECKPOINT", unresolved_count=0)
+        assert s >= 90
+
+    def test_strong_fail_drops(self):
+        assert _compute_postability_score(strong_fail_count=2) <= 60
+
+    def test_all_warnings(self):
+        s = _compute_postability_score(
+            strong_fail_count=0, warn_tag_count=3,
+            reward_type=None, anchor_count=0,
+            market_angle_type="NONE", unresolved_count=3,
+            similarity_warn_count=2, surface_warn_count=1)
+        assert s < 50
+
+    def test_no_reward_penalty(self):
+        s1 = _compute_postability_score(reward_type="SAVE")
+        s2 = _compute_postability_score(reward_type=None)
+        assert s1 > s2
+
+    def test_length_penalties(self):
+        assert _compute_postability_score(post_length=300) > _compute_postability_score(post_length=50)
+
+    def test_floor_zero(self):
+        assert _compute_postability_score(strong_fail_count=4, warn_tag_count=10) >= 0
+
+
+class TestTrustScore:
+
+    def test_government_full_meta(self):
+        s = _compute_trust_score(
+            source_missing_reason=None, primary_source_type="GOVERNMENT",
+            external_evidence_count=3, resolved_count=4,
+            institution="기재부", country="KR", doc_type="POLICY_ANNOUNCEMENT")
+        assert s >= 80
+
+    def test_missing_source(self):
+        assert _compute_trust_score(source_missing_reason="MISSING_SOURCE_TEXT") < 30
+
+    def test_resolved_boost(self):
+        assert _compute_trust_score(resolved_count=4) > _compute_trust_score(resolved_count=0)
+
+    def test_metadata_richness(self):
+        s1 = _compute_trust_score(institution="한은", country="KR", doc_type="STATISTICAL_RELEASE")
+        assert s1 > _compute_trust_score()
+
+    def test_max_100(self):
+        s = _compute_trust_score(
+            source_missing_reason=None, primary_source_type="GOVERNMENT",
+            external_evidence_count=10, resolved_count=4,
+            institution="한은", country="KR", doc_type="POLICY_ANNOUNCEMENT")
+        assert s <= 100
+
+
+class TestEditorialScoresIntegration:
+
+    def test_from_eval_meta(self):
+        meta = {
+            "strong_fail_count": 0, "warn_tag_count": 1,
+            "reward_type": "FOLLOW", "market_angle_type": "CHECKPOINT",
+            "resolved_count": 3, "unresolved_count": 1, "question_count": 4,
+            "source_missing_reason": None, "primary_source_type": "GOVERNMENT",
+            "external_evidence_count": 2, "post_length": 250,
+            "topic_tags": ["금융"],
+            "source_meta": {"institution": "한국은행", "country": "KR",
+                            "doc_type": "POLICY_ANNOUNCEMENT",
+                            "dates": ["2024-03-15"], "relative_dates": []},
+        }
+        scores = _compute_editorial_scores(meta)
+        assert scores["postability_score"] >= 70
+        assert scores["trust_score"] >= 70
+
+    def test_bad_post_routing(self):
+        meta = {
+            "strong_fail_count": 3, "warn_tag_count": 5,
+            "reward_type": None, "market_angle_type": "NONE",
+            "resolved_count": 0, "unresolved_count": 4, "question_count": 4,
+            "source_missing_reason": "MISSING_SOURCE_TEXT",
+            "primary_source_type": None, "external_evidence_count": 0,
+            "post_length": 50, "topic_tags": [], "source_meta": {},
+        }
+        scores = _compute_editorial_scores(meta)
+        assert scores["postability_routing"] == "NEEDS_EDIT"
+        assert scores["trust_routing"] == "LOW_TRUST"
+
+    def test_empty_meta(self):
+        scores = _compute_editorial_scores({})
+        assert scores["alert_score"] == 0
+        assert scores["postability_score"] >= 0
+        assert scores["trust_score"] >= 0

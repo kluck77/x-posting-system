@@ -1500,6 +1500,9 @@ from app.services.output_meta import (  # noqa: F401  (re-export)
     _feed_online_eval, _get_online_eval_summary, _reset_online_eval,
     _TOPIC_GRAPH, _get_topic_context, _expand_query_keywords,
     _build_topic_context_for_post, _ONLINE_EVAL_MAX_SIZE,
+    # PR 32: Editorial Scoring Engine
+    _compute_alert_score, _compute_postability_score,
+    _compute_trust_score, _compute_editorial_scores,
 )
 
 # ─── evidence_resolver re-export ─────────────────────────────────────────
@@ -3119,6 +3122,14 @@ async def generate_final_post(
         _eval_meta["topic_context"] = _build_topic_context_for_post(
             _topic_entities
         )
+    # PR 32: Editorial Scores 계산 + 병합
+    _editorial = _compute_editorial_scores(_eval_meta)
+    _eval_meta["editorial_scores"] = _editorial
+    logger.info(
+        f"[EditorialScore] alert={_editorial['alert_score']}({_editorial['alert_routing']}) "
+        f"post={_editorial['postability_score']}({_editorial['postability_routing']}) "
+        f"trust={_editorial['trust_score']}({_editorial['trust_routing']})"
+    )
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
     # PR 26/29: 온라인 eval 버퍼에 적재 + DB 영속화
     _feed_online_eval(_eval_meta, db=db)

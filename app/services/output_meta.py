@@ -1315,3 +1315,277 @@ def _build_topic_context_for_post(
         "expected_market_angles": all_angles[:5],
         "expanded_keywords": _expand_query_keywords(entities),
     }
+
+
+# ── PR 32: Editorial Scoring Engine ──
+#
+# 48개 분산 신호를 3개 점수로 통합.
+# Alert(즉시성) / Postability(게시 가능성) / Trust(근거 신뢰도).
+# 모든 가중치는 tunable. human feedback 보정 확장점 확보.
+
+# ── Alert Score Weights (0-100) ──
+ALERT_W_BREAKING = {
+    "BREAKING_NOW": 40, "CANDIDATE": 25, "HOLD": 10, "REJECT": 0,
+}
+ALERT_W_URGENCY = {"high": 15, "medium": 8}
+ALERT_W_DATE_ABSOLUTE = 10
+ALERT_W_DATE_RELATIVE_URGENT = 15   # TOMORROW / NEXT_WEEK
+ALERT_W_DATE_RELATIVE_NORMAL = 5
+ALERT_W_INSTITUTION = {
+    "central_bank": 15, "president": 15,
+    "government": 10, "corporate": 5,
+}
+ALERT_W_DOMAIN = {
+    "금융": 15, "크립토": 15, "투자": 12, "주식": 12,
+    "정치": 10, "정책": 10,
+}
+ALERT_W_DOMAIN_DEFAULT = 5
+
+# 기관 → 등급 매핑
+_INSTITUTION_TIER: dict[str, str] = {
+    "한국은행": "central_bank", "한은": "central_bank",
+    "Federal Reserve": "central_bank", "Fed": "central_bank",
+    "ECB": "central_bank", "BOJ": "central_bank",
+    "인민은행": "central_bank", "PBOC": "central_bank",
+    "대통령실": "president", "백악관": "president",
+    "White House": "president",
+}
+
+# 긴급 상대날짜
+_URGENT_RELATIVE_DATES = frozenset({
+    "TOMORROW", "DAY_AFTER_TOMORROW", "NEXT_WEEK", "THIS_WEEK",
+})
+
+
+def _compute_alert_score(
+    *,
+    breaking_class: str = "",
+    urgency: str = "",
+    dates: list[str] | None = None,
+    relative_dates: list[str] | None = None,
+    institution: str | None = None,
+    topic_tags: list[str] | None = None,
+) -> int:
+    """
+    PR 32 — Alert Score (0-100).
+
+    "이 기사를 즉시 알려야 하는가?"
+    ≥75 즉시 알림 / 55~74 낮 digest / 35~54 5AM top10 / <35 주간 후보
+    """
+    score = 0
+
+    # breaking 분류
+    score += ALERT_W_BREAKING.get(breaking_class, 0)
+
+    # urgency
+    score += ALERT_W_URGENCY.get(urgency, 0)
+
+    # 날짜 긴급성
+    dates = dates or []
+    relative_dates = relative_dates or []
+    if relative_dates:
+        if any(rd in _URGENT_RELATIVE_DATES for rd in relative_dates):
+            score += ALERT_W_DATE_RELATIVE_URGENT
+        else:
+            score += ALERT_W_DATE_RELATIVE_NORMAL
+    elif dates:
+        score += ALERT_W_DATE_ABSOLUTE
+
+    # 기관 중요도
+    if institution:
+        tier = _INSTITUTION_TIER.get(institution, "government")
+        score += ALERT_W_INSTITUTION.get(tier, 5)
+
+    # 도메인 관련성
+    tags = topic_tags or []
+    best_domain = 0
+    for tag in tags:
+        best_domain = max(best_domain, ALERT_W_DOMAIN.get(tag, ALERT_W_DOMAIN_DEFAULT))
+    score += best_domain
+
+    return min(score, 100)
+
+
+# ── Postability Score Weights (0-100) ──
+POST_W_BASE = 100
+POST_W_STRONG_FAIL = -25       # per tag
+POST_W_WARN_TAG = -5           # per tag
+POST_W_NO_REWARD = -10
+POST_W_FINDABILITY = {0: -15, 1: -5}   # anchor_count → 감점
+POST_W_NO_MARKET = -10
+POST_W_UNRESOLVED = -3         # per question
+POST_W_SIMILARITY_WARN = -3   # per warning
+POST_W_SURFACE_WARN = -5      # per warning
+POST_W_LENGTH_SHORT = -10     # <100자
+POST_W_LENGTH_LONG = -5       # >800자
+
+
+def _compute_postability_score(
+    *,
+    strong_fail_count: int = 0,
+    warn_tag_count: int = 0,
+    reward_type: str | None = None,
+    anchor_count: int = 2,
+    market_angle_type: str = "NONE",
+    unresolved_count: int = 0,
+    similarity_warn_count: int = 0,
+    surface_warn_count: int = 0,
+    post_length: int = 300,
+) -> int:
+    """
+    PR 32 — Postability Score (0-100).
+
+    "이 글을 게시해도 되는가?"
+    ≥70 즉시 게시 / 50~69 경고 확인 / <50 수정 필요
+    """
+    score = POST_W_BASE
+    score += strong_fail_count * POST_W_STRONG_FAIL
+    score += warn_tag_count * POST_W_WARN_TAG
+    if reward_type is None:
+        score += POST_W_NO_REWARD
+    score += POST_W_FINDABILITY.get(anchor_count, 0)
+    if market_angle_type == "NONE":
+        score += POST_W_NO_MARKET
+    score += unresolved_count * POST_W_UNRESOLVED
+    score += similarity_warn_count * POST_W_SIMILARITY_WARN
+    score += surface_warn_count * POST_W_SURFACE_WARN
+    if post_length < 100:
+        score += POST_W_LENGTH_SHORT
+    elif post_length > 800:
+        score += POST_W_LENGTH_LONG
+
+    return max(0, min(score, 100))
+
+
+# ── Trust Score Weights (0-100) ──
+TRUST_W_SOURCE_OK = 25
+TRUST_W_SOURCE_SHORT = 12
+TRUST_W_SOURCE_MISSING = 0
+TRUST_W_PRIMARY = {
+    "GOVERNMENT": 25, "REPORT": 25,
+    "DISCLOSURE": 20, "DATA_SOURCE": 20,
+    "DIRECT_STMT": 15,
+}
+TRUST_W_EVIDENCE_PER = 5       # per evidence, max 15
+TRUST_W_EVIDENCE_MAX = 15
+TRUST_W_RESOLVED_PER = 5      # per resolved question, max 20
+TRUST_W_RESOLVED_MAX = 20
+TRUST_W_META_PER = 5          # per metadata field (institution/country/doc_type), max 15
+TRUST_W_META_MAX = 15
+
+
+def _compute_trust_score(
+    *,
+    source_missing_reason: str | None = None,
+    primary_source_type: str | None = None,
+    external_evidence_count: int = 0,
+    resolved_count: int = 0,
+    question_count: int = 4,
+    institution: str | None = None,
+    country: str | None = None,
+    doc_type: str | None = None,
+) -> int:
+    """
+    PR 32 — Trust Score (0-100).
+
+    "이 글의 근거를 얼마나 신뢰할 수 있는가?"
+    ≥70 높은 신뢰 / 40~69 중간 / <40 낮은 신뢰
+    """
+    score = 0
+
+    # source 무결성
+    if source_missing_reason is None:
+        score += TRUST_W_SOURCE_OK
+    elif source_missing_reason == "SOURCE_TEXT_TOO_SHORT":
+        score += TRUST_W_SOURCE_SHORT
+    else:
+        score += TRUST_W_SOURCE_MISSING
+
+    # 1차 출처 유형
+    score += TRUST_W_PRIMARY.get(primary_source_type or "", 0)
+
+    # 증거 수량
+    score += min(external_evidence_count * TRUST_W_EVIDENCE_PER, TRUST_W_EVIDENCE_MAX)
+
+    # 질문 해결률
+    score += min(resolved_count * TRUST_W_RESOLVED_PER, TRUST_W_RESOLVED_MAX)
+
+    # 메타데이터 풍부도
+    meta_count = sum(1 for x in [institution, country, doc_type] if x)
+    score += min(meta_count * TRUST_W_META_PER, TRUST_W_META_MAX)
+
+    return min(score, 100)
+
+
+def _compute_editorial_scores(eval_meta: dict) -> dict:
+    """
+    PR 32 — eval_meta dict 에서 3점수 일괄 계산.
+
+    반환: {"alert_score": int, "postability_score": int, "trust_score": int,
+           "alert_routing": str, "postability_routing": str, "trust_routing": str}
+    """
+    source_meta = eval_meta.get("source_meta", {})
+
+    alert = _compute_alert_score(
+        dates=source_meta.get("dates", []),
+        relative_dates=source_meta.get("relative_dates", []),
+        institution=source_meta.get("institution"),
+        topic_tags=eval_meta.get("topic_tags", []),
+    )
+
+    anchor_count = 2  # 기본값
+    post_length = eval_meta.get("post_length", 300)
+
+    postability = _compute_postability_score(
+        strong_fail_count=eval_meta.get("strong_fail_count", 0),
+        warn_tag_count=eval_meta.get("warn_tag_count", 0),
+        reward_type=eval_meta.get("reward_type"),
+        anchor_count=anchor_count,
+        market_angle_type=eval_meta.get("market_angle_type", "NONE"),
+        unresolved_count=eval_meta.get("unresolved_count", 0),
+        post_length=post_length,
+    )
+
+    trust = _compute_trust_score(
+        source_missing_reason=eval_meta.get("source_missing_reason"),
+        primary_source_type=eval_meta.get("primary_source_type"),
+        external_evidence_count=eval_meta.get("external_evidence_count", 0),
+        resolved_count=eval_meta.get("resolved_count", 0),
+        question_count=eval_meta.get("question_count", 4),
+        institution=source_meta.get("institution"),
+        country=source_meta.get("country"),
+        doc_type=source_meta.get("doc_type"),
+    )
+
+    # 라우팅 라벨
+    if alert >= 75:
+        alert_routing = "IMMEDIATE"
+    elif alert >= 55:
+        alert_routing = "DAY_DIGEST"
+    elif alert >= 35:
+        alert_routing = "TOP10_5AM"
+    else:
+        alert_routing = "WEEKLY_POOL"
+
+    if postability >= 70:
+        post_routing = "PUBLISH_READY"
+    elif postability >= 50:
+        post_routing = "REVIEW_THEN_PUBLISH"
+    else:
+        post_routing = "NEEDS_EDIT"
+
+    if trust >= 70:
+        trust_routing = "HIGH_TRUST"
+    elif trust >= 40:
+        trust_routing = "MEDIUM_TRUST"
+    else:
+        trust_routing = "LOW_TRUST"
+
+    return {
+        "alert_score": alert,
+        "postability_score": postability,
+        "trust_score": trust,
+        "alert_routing": alert_routing,
+        "postability_routing": post_routing,
+        "trust_routing": trust_routing,
+    }
