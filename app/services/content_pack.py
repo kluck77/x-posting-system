@@ -2706,9 +2706,12 @@ async def generate_final_post(
     card: CandidateCard,
     hook_index: int,
     source_text: str = "",
+    *,
+    db=None,
 ) -> FinalPost:
     """
     CandidateCard + 선택된 훅 → FinalPost (2차 마감).
+    PR 29: db 파라미터 추가 — eval_store 영속화용 (옵션, fail-open).
     """
     if hook_index < 0 or hook_index >= len(card.hook_candidates):
         hook_index = 0
@@ -3108,8 +3111,8 @@ async def generate_final_post(
             _topic_entities
         )
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
-    # PR 26: 온라인 eval 버퍼에 적재
-    _feed_online_eval(_eval_meta)
+    # PR 26/29: 온라인 eval 버퍼에 적재 + DB 영속화
+    _feed_online_eval(_eval_meta, db=db)
 
     # PR 15 — Learning Dataset 레코드 (outcome 미판정 상태로 기록)
     _learn_record = _build_learning_record(
@@ -3118,6 +3121,13 @@ async def generate_final_post(
     logger.info(
         f"[LearnRecord] {json.dumps(_learn_record, ensure_ascii=False)}"
     )
+    # PR 29: learning record 도 DB 영속화
+    if db is not None:
+        try:
+            from app.services.eval_store import save_eval_record
+            save_eval_record(db, "learning_record", _learn_record)
+        except Exception:
+            pass  # fail-open
 
     # PR 20 — Distribution Package: 3종 패키지 추출
     _share, _followup = _build_distribution_package(final, mode)

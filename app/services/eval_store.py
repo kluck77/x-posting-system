@@ -23,6 +23,16 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _get_raw_conn(db):
+    """SQLAlchemy Session → raw sqlite3 connection 추출. raw면 그대로."""
+    try:
+        # SQLAlchemy Session
+        raw = db.connection().connection
+        return raw
+    except (AttributeError, Exception):
+        return db
+
 # ── 테이블 DDL ──
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS eval_records (
@@ -48,9 +58,10 @@ def _ensure_table(db) -> None:
     if db_id in _initialized_dbs:
         return
     try:
-        db.execute(_CREATE_TABLE_SQL)
-        db.execute(_CREATE_INDEX_SQL)
-        db.commit()
+        raw = _get_raw_conn(db)
+        raw.execute(_CREATE_TABLE_SQL)
+        raw.execute(_CREATE_INDEX_SQL)
+        raw.commit()
         _initialized_dbs.add(db_id)
     except Exception as e:
         logger.warning(f"[EvalStore] 테이블 생성 실패 (무시): {e}")
@@ -75,13 +86,14 @@ def save_eval_record(
     """
     _ensure_table(db)
     try:
+        raw = _get_raw_conn(db)
         now = datetime.now(timezone.utc).isoformat()
-        db.execute(
+        raw.execute(
             "INSERT INTO eval_records (record_type, source_id, payload, created_at) "
             "VALUES (?, ?, ?, ?)",
             (record_type, source_id, json.dumps(payload, ensure_ascii=False), now),
         )
-        db.commit()
+        raw.commit()
         return True
     except Exception as e:
         logger.warning(f"[EvalStore] 저장 실패 (무시): {e}")
@@ -100,7 +112,8 @@ def load_recent_records(
     """
     _ensure_table(db)
     try:
-        rows = db.execute(
+        raw = _get_raw_conn(db)
+        rows = raw.execute(
             "SELECT payload FROM eval_records "
             "WHERE record_type = ? "
             "ORDER BY created_at DESC LIMIT ?",
@@ -125,7 +138,8 @@ def count_records(
     """record_type 별 총 건수."""
     _ensure_table(db)
     try:
-        row = db.execute(
+        raw = _get_raw_conn(db)
+        row = raw.execute(
             "SELECT COUNT(*) FROM eval_records WHERE record_type = ?",
             (record_type,),
         ).fetchone()
@@ -147,24 +161,25 @@ def load_records_by_source(
     """
     _ensure_table(db)
     try:
+        conn = _get_raw_conn(db)
         if record_type:
-            rows = db.execute(
+            rows = conn.execute(
                 "SELECT payload FROM eval_records "
                 "WHERE source_id = ? AND record_type = ? "
                 "ORDER BY created_at DESC",
                 (source_id, record_type),
             ).fetchall()
         else:
-            rows = db.execute(
+            rows = conn.execute(
                 "SELECT payload FROM eval_records "
                 "WHERE source_id = ? "
                 "ORDER BY created_at DESC",
                 (source_id,),
             ).fetchall()
         results = []
-        for (raw,) in rows:
+        for (payload_str,) in rows:
             try:
-                results.append(json.loads(raw))
+                results.append(json.loads(payload_str))
             except (json.JSONDecodeError, TypeError):
                 continue
         return results

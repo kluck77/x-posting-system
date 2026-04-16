@@ -10631,3 +10631,112 @@ class TestSentenceSplitter:
         """일반 문장 분리는 정상 동작."""
         sents = _split_sentences("첫 문장이다. 두번째 문장이다. 세번째.")
         assert len(sents) >= 2
+
+
+# ── PR 29: Smoke Tests — db 주입 + eval_store + CLI 경로 ──
+
+import sqlite3
+from app.services.eval_store import (
+    save_eval_record, load_recent_records, count_records,
+    _initialized_dbs,
+)
+
+
+class TestGenerateFinalPostDbParam:
+    """PR 29 — generate_final_post db 파라미터 수용 확인."""
+
+    def test_signature_accepts_db(self):
+        """db=None 기본값으로 기존 호출 호환."""
+        import inspect
+        from app.services.content_pack import generate_final_post
+        sig = inspect.signature(generate_final_post)
+        assert "db" in sig.parameters
+        assert sig.parameters["db"].default is None
+
+    def test_feed_online_eval_with_db(self):
+        """_feed_online_eval(db=...) 시 eval_store에 저장."""
+        _reset_online_eval()
+        conn = sqlite3.connect(":memory:")
+        try:
+            meta = {"mode": "VERIFY", "reward_type": "FOLLOW",
+                    "market_angle_type": "CHECKPOINT",
+                    "strong_fail_count": 0, "unresolved_count": 1,
+                    "gate_fails": []}
+            _feed_online_eval(meta, db=conn)
+            assert count_records(conn, "eval_meta") == 1
+            records = load_recent_records(conn, "eval_meta")
+            assert records[0]["mode"] == "VERIFY"
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()
+
+    def test_feed_online_eval_without_db(self):
+        """db=None이면 버퍼만, DB 저장 안 함."""
+        _reset_online_eval()
+        meta = {"mode": "EXPLAIN", "reward_type": "SAVE",
+                "market_angle_type": "COST",
+                "strong_fail_count": 0, "unresolved_count": 0,
+                "gate_fails": []}
+        _feed_online_eval(meta)  # db=None
+        summary = _get_online_eval_summary()
+        assert summary["total"] == 1
+        # DB 없으므로 영속화 없음 — 이건 의도적 동작
+
+
+class TestEvalStoreSmoke:
+    """PR 29 — eval_store end-to-end 경로."""
+
+    def test_gold_eval_write_read(self):
+        """gold_eval 레코드 저장 → 조회."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            from app.services.output_meta import _build_gold_eval_record
+            rec = _build_gold_eval_record(
+                "삼성전자 HBM 매출 2조원 돌파. 역대 최고.",
+                "삼성 HBM 역대 최고.",
+                "EXPLAIN",
+                quality="GOOD",
+                reasons=["MORE_FINDABLE"],
+            )
+            ok = save_eval_record(conn, "gold_eval", rec, source_id="test_src")
+            assert ok is True
+            assert count_records(conn, "gold_eval") == 1
+            loaded = load_recent_records(conn, "gold_eval")
+            assert loaded[0]["quality"] == "GOOD"
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()
+
+    def test_pairwise_write_read(self):
+        """pairwise 레코드 저장 → 조회."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            from app.services.output_meta import _build_pairwise_review_record
+            rec = _build_pairwise_review_record(
+                "A안.", "A짧은.",
+                "B안.", "B짧은.",
+                "EXPLAIN",
+                verdict="A_BETTER",
+                reasons=["MORE_FINDABLE"],
+                source_id="src_001",
+            )
+            ok = save_eval_record(conn, "pairwise_review", rec, source_id="src_001")
+            assert ok is True
+            assert rec["source_id"] == "src_001"
+            loaded = load_recent_records(conn, "pairwise_review")
+            assert loaded[0]["verdict"] == "A_BETTER"
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()
+
+    def test_learning_record_write_read(self):
+        """learning_record 저장 경로 확인."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            rec = {"mode": "VERIFY", "outcome": "", "output_post": "test"}
+            ok = save_eval_record(conn, "learning_record", rec)
+            assert ok is True
+            assert count_records(conn, "learning_record") == 1
+        finally:
+            _initialized_dbs.discard(id(conn))
+            conn.close()

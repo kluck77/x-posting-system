@@ -32,6 +32,15 @@ from app.orchestrator import Orchestrator
 logger = logging.getLogger(__name__)
 
 
+def _get_eval_db():
+    """PR 29 — eval_store 영속화용 DB 커넥션 (fail-open)."""
+    try:
+        from app.db import get_db
+        return get_db()
+    except Exception:
+        return None
+
+
 # ─── 검증 결과 한국어 정규화 ──────────────────────────────────────────────────
 
 def _normalize_to_korean(text: str) -> str:
@@ -1676,7 +1685,7 @@ async def _handle_thesis_select_callback(
     try:
         source_text = context.user_data.get(CANDIDATE_SOURCE_KEY, "")
         result = await asyncio.wait_for(
-            generate_final_post(card, thesis_index, source_text),
+            generate_final_post(card, thesis_index, source_text, db=_get_eval_db()),
             timeout=180,
         )
 
