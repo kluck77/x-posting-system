@@ -935,3 +935,283 @@ def _build_pairwise_review_record(
         "b_post_snapshot": post_b[:200],
         "b_short_snapshot": short_b[:100],
     }
+
+
+# ── PR 26: Online Production Eval Layer ──
+#
+# 최근 N건의 eval_meta 를 메모리 내 집계하여 품질 분포/경고를 실시간 제공.
+# DB 없이 리스트 버퍼 방식. 호출자가 generate_final_post 후 feed.
+
+_ONLINE_EVAL_BUFFER: list[dict] = []
+_ONLINE_EVAL_MAX_SIZE = 100
+
+
+def _feed_online_eval(eval_meta: dict) -> None:
+    """
+    PR 26 — eval_meta 1건을 온라인 버퍼에 적재.
+
+    최대 _ONLINE_EVAL_MAX_SIZE 건 유지 (FIFO).
+    """
+    _ONLINE_EVAL_BUFFER.append(eval_meta)
+    if len(_ONLINE_EVAL_BUFFER) > _ONLINE_EVAL_MAX_SIZE:
+        _ONLINE_EVAL_BUFFER.pop(0)
+
+
+def _get_online_eval_summary() -> dict:
+    """
+    PR 26 — 현재 버퍼 기준 품질 분포 요약.
+
+    반환 dict:
+      total: 버퍼 내 총 건수
+      reward_type_dist: {SAVE: n, SHARE: n, FOLLOW: n, None: n}
+      market_angle_dist: {COST: n, DEMAND: n, ..., NONE: n}
+      mode_dist: {EXPLAIN: n, JUDGMENT: n, VERIFY: n}
+      avg_strong_fail: 평균 strong_fail_count
+      avg_unresolved: 평균 unresolved_count
+      gate_fail_dist: {WEAK_OPENER: n, ...}
+      alerts: 경고 목록
+    """
+    buf = _ONLINE_EVAL_BUFFER
+    total = len(buf)
+    if total == 0:
+        return {"total": 0, "alerts": []}
+
+    from collections import Counter
+
+    reward_dist: Counter = Counter()
+    market_dist: Counter = Counter()
+    mode_dist: Counter = Counter()
+    gate_dist: Counter = Counter()
+    strong_sum = 0
+    unresolved_sum = 0
+
+    for m in buf:
+        reward_dist[m.get("reward_type")] += 1
+        market_dist[m.get("market_angle_type", "NONE")] += 1
+        mode_dist[m.get("mode", "UNKNOWN")] += 1
+        strong_sum += m.get("strong_fail_count", 0)
+        unresolved_sum += m.get("unresolved_count", 0)
+        for gf in m.get("gate_fails", []):
+            gate_dist[gf] += 1
+
+    avg_strong = round(strong_sum / total, 2)
+    avg_unresolved = round(unresolved_sum / total, 2)
+
+    # ── 자동 경고 생성 ──
+    alerts: list[str] = []
+    none_reward = reward_dist.get(None, 0)
+    if total >= 5 and none_reward / total > 0.5:
+        alerts.append(
+            f"reward_type None 비율 {none_reward}/{total} "
+            f"({int(none_reward/total*100)}%) — 50% 초과"
+        )
+    none_market = market_dist.get("NONE", 0)
+    if total >= 5 and none_market / total > 0.5:
+        alerts.append(
+            f"market_angle NONE 비율 {none_market}/{total} "
+            f"({int(none_market/total*100)}%) — 50% 초과"
+        )
+    if avg_strong > 0.5:
+        alerts.append(f"avg strong_fail {avg_strong} — 0.5 초과")
+    if avg_unresolved > 2.0:
+        alerts.append(f"avg unresolved {avg_unresolved} — 2.0 초과")
+
+    return {
+        "total": total,
+        "reward_type_dist": dict(reward_dist),
+        "market_angle_dist": dict(market_dist),
+        "mode_dist": dict(mode_dist),
+        "avg_strong_fail": avg_strong,
+        "avg_unresolved": avg_unresolved,
+        "gate_fail_dist": dict(gate_dist),
+        "alerts": alerts,
+    }
+
+
+def _reset_online_eval() -> None:
+    """PR 26 — 버퍼 초기화 (테스트용)."""
+    _ONLINE_EVAL_BUFFER.clear()
+
+
+# ── PR 26: Topic Graph / Query Expansion Layer ──
+#
+# entity → topic → related keyword 관계를 dict 로 정의.
+# 그래프 DB 없이 인메모리 dict. query expansion 시 관련 키워드 자동 추가.
+
+# ── 토픽 그래프: entity → {topics, checkpoints, market_angles, doc_keywords} ──
+_TOPIC_GRAPH: dict[str, dict] = {
+    # ── 한국 금융 ──
+    "한국은행": {
+        "topics": ["금리", "통화정책", "금통위", "기준금리"],
+        "checkpoints": ["금통위 의결", "기준금리 발표", "통화정책방향"],
+        "market_angles": ["POLICY", "FLOW"],
+        "doc_keywords": ["통화정책방향", "금융통화위원회", "의결서"],
+    },
+    "기재부": {
+        "topics": ["세제", "예산", "재정", "경제정책"],
+        "checkpoints": ["세법 시행일", "추경 편성", "경제전망"],
+        "market_angles": ["POLICY", "COST"],
+        "doc_keywords": ["세법 개정안", "경제정책방향", "추경안"],
+    },
+    "통계청": {
+        "topics": ["물가", "고용", "인구", "경제지표"],
+        "checkpoints": ["CPI 발표", "고용동향", "인구동향"],
+        "market_angles": ["CHECKPOINT"],
+        "doc_keywords": ["소비자물가지수", "경제활동인구조사", "잠정치"],
+    },
+    "금감원": {
+        "topics": ["금융감독", "검사", "제재", "소비자보호"],
+        "checkpoints": ["검사 결과 발표", "제재 의결"],
+        "market_angles": ["POLICY"],
+        "doc_keywords": ["검사보고서", "제재조치", "금융감독원장"],
+    },
+    # ── 한국 기업 ──
+    "삼성전자": {
+        "topics": ["반도체", "HBM", "파운드리", "메모리"],
+        "checkpoints": ["분기 실적", "IR", "설비투자"],
+        "market_angles": ["SUPPLY", "DEMAND"],
+        "doc_keywords": ["사업보고서", "잠정실적", "공시"],
+    },
+    "SK하이닉스": {
+        "topics": ["반도체", "HBM", "NAND", "메모리"],
+        "checkpoints": ["분기 실적", "HBM 출하량"],
+        "market_angles": ["SUPPLY", "DEMAND"],
+        "doc_keywords": ["잠정실적", "IR", "공시"],
+    },
+    "현대차": {
+        "topics": ["자동차", "전기차", "수소차", "수출"],
+        "checkpoints": ["월간 판매", "분기 실적"],
+        "market_angles": ["DEMAND", "SUPPLY"],
+        "doc_keywords": ["판매실적", "수출실적"],
+    },
+    # ── 미국 ──
+    "Federal Reserve": {
+        "topics": ["금리", "인플레이션", "고용", "QT"],
+        "checkpoints": ["FOMC", "dot plot", "beige book"],
+        "market_angles": ["POLICY", "FLOW"],
+        "doc_keywords": ["FOMC statement", "minutes", "summary of projections"],
+    },
+    "SEC": {
+        "topics": ["증권규제", "공시", "ETF", "크립토규제"],
+        "checkpoints": ["ETF 승인", "규제 의견서", "enforcement action"],
+        "market_angles": ["POLICY"],
+        "doc_keywords": ["filing", "enforcement", "rule proposal"],
+    },
+    # ── 국제 ──
+    "IMF": {
+        "topics": ["세계경제", "성장률", "재정건전성"],
+        "checkpoints": ["WEO 발표", "Article IV"],
+        "market_angles": ["CHECKPOINT"],
+        "doc_keywords": ["World Economic Outlook", "Article IV", "Staff Report"],
+    },
+}
+
+
+def _get_topic_context(entity: str) -> Optional[dict]:
+    """
+    PR 26 — entity 로 토픽 그래프 조회.
+
+    반환: {topics, checkpoints, market_angles, doc_keywords} 또는 None
+    """
+    return _TOPIC_GRAPH.get(entity)
+
+
+def _expand_query_keywords(
+    entities: list[str],
+    alias_map: Optional[dict] = None,
+) -> list[str]:
+    """
+    PR 26 — entity 목록에서 검색 확장 키워드 생성.
+
+    확장 순서:
+      1. alias → canonical name
+      2. topic graph → related topics + doc_keywords
+      3. 중복 제거, 최대 15개
+
+    AI 호출 없음.
+    """
+    if alias_map is None:
+        alias_map = _ENTITY_ALIAS_MAP
+
+    expanded: list[str] = []
+    seen: set[str] = set()
+
+    for ent in entities:
+        # 원래 엔티티 추가
+        if ent not in seen:
+            expanded.append(ent)
+            seen.add(ent)
+
+        # alias 확장
+        canonical = alias_map.get(ent)
+        if canonical and canonical not in seen:
+            expanded.append(canonical)
+            seen.add(canonical)
+
+        # topic graph 확장
+        ctx = _get_topic_context(ent)
+        if not ctx:
+            # alias 로 한번 더 시도
+            if canonical:
+                ctx = _get_topic_context(canonical)
+        if ctx:
+            for topic in ctx.get("topics", [])[:3]:
+                if topic not in seen:
+                    expanded.append(topic)
+                    seen.add(topic)
+            for dk in ctx.get("doc_keywords", [])[:2]:
+                if dk not in seen:
+                    expanded.append(dk)
+                    seen.add(dk)
+
+    return expanded[:15]
+
+
+def _build_topic_context_for_post(
+    entities: list[str],
+) -> dict:
+    """
+    PR 26 — 게시물 엔티티 목록에서 토픽 컨텍스트 빌드.
+
+    반환:
+      related_topics: 관련 토픽 목록
+      expected_checkpoints: 예상 확인 시점
+      expected_market_angles: 예상 시장 반영 경로
+      expanded_keywords: 확장된 검색 키워드
+    """
+    all_topics: list[str] = []
+    all_checkpoints: list[str] = []
+    all_angles: list[str] = []
+    seen_t: set[str] = set()
+    seen_c: set[str] = set()
+    seen_a: set[str] = set()
+
+    for ent in entities:
+        ctx = _get_topic_context(ent)
+        if not ctx:
+            # alias fallback
+            canonical = _ENTITY_ALIAS_MAP.get(ent)
+            if canonical:
+                ctx = _get_topic_context(canonical)
+        if not ctx:
+            continue
+
+        for t in ctx.get("topics", []):
+            if t not in seen_t:
+                all_topics.append(t)
+                seen_t.add(t)
+        for c in ctx.get("checkpoints", []):
+            if c not in seen_c:
+                all_checkpoints.append(c)
+                seen_c.add(c)
+        for a in ctx.get("market_angles", []):
+            if a not in seen_a:
+                all_angles.append(a)
+                seen_a.add(a)
+
+    return {
+        "related_topics": all_topics[:10],
+        "expected_checkpoints": all_checkpoints[:5],
+        "expected_market_angles": all_angles[:5],
+        "expanded_keywords": _expand_query_keywords(entities),
+    }

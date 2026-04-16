@@ -97,6 +97,12 @@ from app.services.evidence_resolver import (
     _build_citation_record, _build_citation_report, _score_candidate,
     _split_sentences,
 )
+# PR 26: Online Eval + Topic Graph
+from app.services.output_meta import (
+    _feed_online_eval, _get_online_eval_summary, _reset_online_eval,
+    _TOPIC_GRAPH, _get_topic_context, _expand_query_keywords,
+    _build_topic_context_for_post, _ONLINE_EVAL_MAX_SIZE,
+)
 from app.models.content_request import ContentRequest
 
 
@@ -10273,3 +10279,179 @@ class TestBuildCitationReport:
         report = _build_citation_report([q], "", [])
         assert len(report) == 1
         assert report[0]["best_evidence"] is None
+
+
+# ── PR 26: Online Production Eval + Topic Graph Tests ──
+
+
+class TestOnlineProductionEval:
+    """PR 26 — 온라인 eval 버퍼 + 분포 집계."""
+
+    def setup_method(self):
+        _reset_online_eval()
+
+    def test_feed_and_summary_empty(self):
+        """빈 버퍼 → total=0."""
+        s = _get_online_eval_summary()
+        assert s["total"] == 0
+        assert s["alerts"] == []
+
+    def test_feed_single(self):
+        """1건 적재 → 정상 집계."""
+        _feed_online_eval({
+            "reward_type": "FOLLOW",
+            "market_angle_type": "CHECKPOINT",
+            "mode": "VERIFY",
+            "strong_fail_count": 0,
+            "unresolved_count": 1,
+            "gate_fails": [],
+        })
+        s = _get_online_eval_summary()
+        assert s["total"] == 1
+        assert s["reward_type_dist"]["FOLLOW"] == 1
+        assert s["mode_dist"]["VERIFY"] == 1
+
+    def test_feed_multiple_distribution(self):
+        """복수 적재 → 분포 정확."""
+        for _ in range(3):
+            _feed_online_eval({"reward_type": "SAVE", "mode": "EXPLAIN",
+                               "market_angle_type": "COST", "strong_fail_count": 0,
+                               "unresolved_count": 0, "gate_fails": []})
+        for _ in range(2):
+            _feed_online_eval({"reward_type": None, "mode": "VERIFY",
+                               "market_angle_type": "NONE", "strong_fail_count": 1,
+                               "unresolved_count": 3, "gate_fails": ["WEAK_OPENER"]})
+        s = _get_online_eval_summary()
+        assert s["total"] == 5
+        assert s["reward_type_dist"]["SAVE"] == 3
+        assert s["reward_type_dist"][None] == 2
+        assert s["gate_fail_dist"]["WEAK_OPENER"] == 2
+
+    def test_alert_reward_none_over_50(self):
+        """reward None 50% 초과 → 경고."""
+        for _ in range(3):
+            _feed_online_eval({"reward_type": None, "mode": "EXPLAIN",
+                               "market_angle_type": "NONE", "strong_fail_count": 0,
+                               "unresolved_count": 0, "gate_fails": []})
+        for _ in range(2):
+            _feed_online_eval({"reward_type": "SAVE", "mode": "EXPLAIN",
+                               "market_angle_type": "COST", "strong_fail_count": 0,
+                               "unresolved_count": 0, "gate_fails": []})
+        s = _get_online_eval_summary()
+        assert any("reward_type None" in a for a in s["alerts"])
+
+    def test_alert_high_strong_fail(self):
+        """avg strong_fail > 0.5 → 경고."""
+        for _ in range(5):
+            _feed_online_eval({"reward_type": "FOLLOW", "mode": "VERIFY",
+                               "market_angle_type": "CHECKPOINT",
+                               "strong_fail_count": 1, "unresolved_count": 0,
+                               "gate_fails": ["WEAK_OPENER"]})
+        s = _get_online_eval_summary()
+        assert any("strong_fail" in a for a in s["alerts"])
+
+    def test_buffer_fifo(self):
+        """버퍼 최대 크기 초과 시 FIFO."""
+        for i in range(_ONLINE_EVAL_MAX_SIZE + 10):
+            _feed_online_eval({"reward_type": "SAVE", "mode": "EXPLAIN",
+                               "market_angle_type": "COST", "strong_fail_count": 0,
+                               "unresolved_count": 0, "gate_fails": [], "idx": i})
+        s = _get_online_eval_summary()
+        assert s["total"] == _ONLINE_EVAL_MAX_SIZE
+
+    def test_reset(self):
+        """리셋 후 빈 버퍼."""
+        _feed_online_eval({"reward_type": "SAVE", "mode": "EXPLAIN",
+                           "market_angle_type": "COST", "strong_fail_count": 0,
+                           "unresolved_count": 0, "gate_fails": []})
+        _reset_online_eval()
+        assert _get_online_eval_summary()["total"] == 0
+
+
+class TestTopicGraph:
+    """PR 26 — 토픽 그래프 조회."""
+
+    def test_bok_context(self):
+        """한국은행 토픽 컨텍스트."""
+        ctx = _get_topic_context("한국은행")
+        assert ctx is not None
+        assert "금리" in ctx["topics"]
+        assert "POLICY" in ctx["market_angles"]
+
+    def test_samsung_context(self):
+        """삼성전자 토픽 컨텍스트."""
+        ctx = _get_topic_context("삼성전자")
+        assert ctx is not None
+        assert "반도체" in ctx["topics"]
+        assert "HBM" in ctx["topics"]
+
+    def test_fed_context(self):
+        """Federal Reserve 토픽 컨텍스트."""
+        ctx = _get_topic_context("Federal Reserve")
+        assert ctx is not None
+        assert "FOMC" in ctx["checkpoints"]
+
+    def test_unknown_entity(self):
+        """미등록 엔티티 → None."""
+        assert _get_topic_context("알수없는기관") is None
+
+    def test_graph_has_required_keys(self):
+        """모든 그래프 항목에 필수 키 존재."""
+        for entity, ctx in _TOPIC_GRAPH.items():
+            assert "topics" in ctx, f"{entity} missing topics"
+            assert "checkpoints" in ctx, f"{entity} missing checkpoints"
+            assert "market_angles" in ctx, f"{entity} missing market_angles"
+            assert "doc_keywords" in ctx, f"{entity} missing doc_keywords"
+
+
+class TestQueryExpansion:
+    """PR 26 — 쿼리 확장."""
+
+    def test_expand_bok(self):
+        """한국은행 → 금리 + 통화정책 + ... 확장."""
+        expanded = _expand_query_keywords(["한국은행"])
+        assert "한국은행" in expanded
+        assert "금리" in expanded
+        assert len(expanded) >= 3
+
+    def test_expand_alias(self):
+        """한은(alias) → 한국은행(canonical) 확장."""
+        expanded = _expand_query_keywords(["한은"])
+        assert "한국은행" in expanded
+
+    def test_expand_multiple_entities(self):
+        """복수 엔티티 확장 + 중복 제거."""
+        expanded = _expand_query_keywords(["한국은행", "기재부"])
+        assert "한국은행" in expanded
+        assert "기재부" in expanded
+        assert "금리" in expanded
+        assert "세제" in expanded
+        assert len(expanded) == len(set(expanded))  # 중복 없음
+
+    def test_expand_max_15(self):
+        """최대 15개 제한."""
+        expanded = _expand_query_keywords(
+            ["한국은행", "기재부", "삼성전자", "SK하이닉스", "현대차"]
+        )
+        assert len(expanded) <= 15
+
+    def test_expand_unknown_entity(self):
+        """미등록 엔티티 → 원래 이름만."""
+        expanded = _expand_query_keywords(["알수없는기관"])
+        assert expanded == ["알수없는기관"]
+
+    def test_build_topic_context(self):
+        """build_topic_context_for_post 구조 확인."""
+        ctx = _build_topic_context_for_post(["한국은행", "삼성전자"])
+        assert "related_topics" in ctx
+        assert "expected_checkpoints" in ctx
+        assert "expected_market_angles" in ctx
+        assert "expanded_keywords" in ctx
+        assert "금리" in ctx["related_topics"]
+        assert "반도체" in ctx["related_topics"]
+
+    def test_build_topic_context_empty(self):
+        """빈 엔티티 → 빈 컨텍스트."""
+        ctx = _build_topic_context_for_post([])
+        assert ctx["related_topics"] == []
+        assert ctx["expanded_keywords"] == []

@@ -1495,6 +1495,10 @@ from app.services.output_meta import (  # noqa: F401  (re-export)
     PAIRWISE_A_BETTER, PAIRWISE_B_BETTER, PAIRWISE_TIE,
     _VALID_PAIRWISE_VERDICTS, _VALID_PAIRWISE_REASONS,
     _validate_pairwise_label, _build_pairwise_review_record,
+    # PR 26: Online Production Eval + Topic Graph
+    _feed_online_eval, _get_online_eval_summary, _reset_online_eval,
+    _TOPIC_GRAPH, _get_topic_context, _expand_query_keywords,
+    _build_topic_context_for_post, _ONLINE_EVAL_MAX_SIZE,
 )
 
 
@@ -3081,7 +3085,15 @@ async def generate_final_post(
     _eval_meta["source_meta"] = _source_meta
     # PR 25: citation_report 를 eval_meta 에 병합
     _eval_meta["citation_report"] = _citation_report
+    # PR 26: topic context 를 eval_meta 에 병합
+    _topic_entities = _source_meta.get("entity_keywords", [])
+    if _topic_entities:
+        _eval_meta["topic_context"] = _build_topic_context_for_post(
+            _topic_entities
+        )
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
+    # PR 26: 온라인 eval 버퍼에 적재
+    _feed_online_eval(_eval_meta)
 
     # PR 15 — Learning Dataset 레코드 (outcome 미판정 상태로 기록)
     _learn_record = _build_learning_record(
