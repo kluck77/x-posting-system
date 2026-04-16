@@ -115,32 +115,38 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .mini-item-time{font-size:10px;color:var(--text-mut);font-family:var(--mono);
   white-space:nowrap}
 
-/* ── AGENT CARDS ── */
-.agent-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;
-  -webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory}
-.agent-card{flex:0 0 140px;scroll-snap-align:start;background:var(--bg-surface);
-  border:1px solid var(--border-subtle);border-radius:var(--r-lg);
-  padding:14px 12px;position:relative;overflow:hidden}
-.agent-card.working{border-color:var(--indigo);box-shadow:0 0 12px rgba(99,102,241,.15)}
-.agent-name{font-size:12px;font-weight:600;margin-bottom:4px}
-.agent-provider{font-size:10px;color:var(--text-sec);margin-bottom:8px}
-.agent-stat{font-size:20px;font-weight:800;margin-bottom:2px}
-.agent-status{font-size:10px;display:flex;align-items:center;gap:4px}
+/* ── AGENT ROWS ── */
+.agent-list{display:flex;flex-direction:column;gap:6px}
+.ag-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:10px;row-gap:4px;
+  padding:10px 12px;background:var(--bg-surface);border-radius:var(--r-sm);
+  border:1px solid var(--border-subtle);border-left:3px solid transparent}
+.ag-row.working{border-left-color:var(--indigo)}
+.ag-row.blocked{border-left-color:var(--red)}
+.ag-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ag-dot.idle{background:var(--text-mut)}
+.ag-dot.working{background:var(--indigo);box-shadow:0 0 6px var(--indigo)}
+.ag-dot.blocked{background:var(--red)}
+.ag-dot.manual{background:var(--text-mut);opacity:.5}
+.ag-info{flex:1;min-width:0}
+.ag-name{font-size:12px;font-weight:600}
+.ag-prov{font-size:9px;color:var(--text-mut)}
+.ag-runs{text-align:right}
+.ag-count{font-size:18px;font-weight:700;line-height:1}
+.ag-label{font-size:8px;color:var(--text-sec);text-transform:uppercase;letter-spacing:.5px}
+.ag-bar{flex-basis:100%;height:2px;border-radius:1px;background:var(--bg-raised);overflow:hidden}
+.ag-bar-fill{height:100%;border-radius:1px;
+  background:linear-gradient(90deg,var(--indigo),var(--cyan),var(--indigo));
+  background-size:200% 100%;animation:shimmer 2.5s linear infinite}
+.prov-strip{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
+.prov-tag{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-sec)}
+.prov-led{width:6px;height:6px;border-radius:50%}
+.prov-led.on{background:var(--green)}.prov-led.off{background:var(--text-mut)}
 
 /* ── WORKING MOTION ── */
-@keyframes pulse-ring{0%{transform:scale(1);opacity:.6}100%{transform:scale(1.8);opacity:0}}
+@keyframes ag-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
-.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--indigo);
-  position:relative;display:inline-block}
-.pulse-dot::after{content:'';position:absolute;inset:-2px;border-radius:50%;
-  border:2px solid var(--indigo);animation:pulse-ring 1.5s ease-out infinite}
-.agent-card.working .agent-name{animation:breathe 2s ease-in-out infinite}
-.progress-bar{height:3px;border-radius:2px;background:var(--bg-raised);
-  overflow:hidden;margin-top:8px}
-.progress-fill{height:100%;border-radius:2px;
-  background:linear-gradient(90deg,var(--indigo),var(--cyan),var(--indigo));
-  background-size:200% 100%;animation:shimmer 2s linear infinite}
+.ag-dot.working{animation:ag-pulse 2s ease-in-out infinite}
+.ag-dot.blocked{animation:blink 1.5s ease-in-out infinite}
 
 /* ── PIPELINE FLOW ── */
 .flow{display:flex;align-items:center;gap:0;overflow-x:auto;padding:8px 0;
@@ -159,11 +165,20 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .empty{padding:12px;text-align:center;font-size:11px;color:var(--text-mut)}
 
 /* ── OPS GRID ── */
-.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.ops-item{background:var(--bg-raised);border-radius:var(--r-md);padding:12px;
+.ops-health{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;
+  padding:10px 12px;background:var(--bg-surface);border-radius:var(--r-sm);
+  border:1px solid var(--border-subtle)}
+.ops-h-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-sec)}
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.ops-item{background:var(--bg-surface);border-radius:var(--r-sm);padding:10px 12px;
   border:1px solid var(--border-subtle)}
 .ops-val{font-size:18px;font-weight:700}
-.ops-label{font-size:9px;color:var(--text-sec);margin-top:2px;text-transform:uppercase}
+.ops-label{font-size:8px;color:var(--text-mut);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.biz-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+.biz-cell{background:var(--bg-surface);border-radius:var(--r-sm);padding:8px;
+  text-align:center;border:1px solid var(--border-subtle)}
+.biz-num{font-size:16px;font-weight:700;line-height:1}
+.biz-lbl{font-size:8px;color:var(--text-mut);margin-top:2px;text-transform:uppercase}
 
 /* ── PULSE: STRIP + HEADLINE ── */
 .status-strip{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px}
@@ -300,13 +315,11 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ AGENTS TAB ═══ -->
 <section class="tab-pane" id="tab-agents">
-  <div class="sec-head">AI WORKSTATION</div>
-  <div class="agent-scroll" id="agentCards"></div>
+  <div class="sec-head" style="margin-top:0">AI WORKSTATION</div>
+  <div class="agent-list" id="agentCards"></div>
 
-  <div class="sec-head" style="margin-top:16px">PROVIDER STATUS</div>
-  <div class="card" id="providerSummary">
-    <div class="empty">로딩 중...</div>
-  </div>
+  <div class="sec-head">PROVIDERS</div>
+  <div class="prov-strip" id="providerSummary"></div>
 </section>
 
 <!-- ═══ PIPELINE TAB ═══ -->
@@ -325,22 +338,23 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ OPS TAB ═══ -->
 <section class="tab-pane" id="tab-ops">
-  <div class="sec-head">SYSTEM HEALTH</div>
+  <div class="sec-head" style="margin-top:0">SYSTEM HEALTH</div>
+  <div class="ops-health" id="opsHealth"></div>
+
+  <div class="sec-head">EVAL STORE</div>
   <div class="ops-grid">
-    <div class="ops-item"><div class="ops-val" id="opsEvalMeta">—</div><div class="ops-label">Eval Records</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsGold">—</div><div class="ops-label">Gold Evals</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsEvalMeta">—</div><div class="ops-label">Eval Meta</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsGold">—</div><div class="ops-label">Gold Eval</div></div>
     <div class="ops-item"><div class="ops-val" id="opsPairwise">—</div><div class="ops-label">Pairwise</div></div>
     <div class="ops-item"><div class="ops-val" id="opsLearning">—</div><div class="ops-label">Learning</div></div>
   </div>
 
-  <div class="sec-head">BUSINESS FUNNEL</div>
-  <div class="card" id="bizSummary">
-    <div class="empty">로딩 중...</div>
-  </div>
+  <div class="sec-head">BUSINESS</div>
+  <div class="biz-grid" id="bizSummary"></div>
 
-  <div class="sec-head">QUEUE STATUS</div>
+  <div class="sec-head">QUEUE</div>
   <div class="card" id="queueStatus">
-    <div class="empty">로딩 중...</div>
+    <div class="empty-sm">로딩 중</div>
   </div>
 </section>
 
@@ -387,19 +401,29 @@ async function loadStatus(){
     const hs=document.getElementById('headerSync');
     if(hs)hs.textContent='sync '+(d.generated_at_kst||'').substring(11,16);
 
-    // queue
+    // queue + activity → ops
     const q=d.queue||{};
-    document.getElementById('queueStatus').innerHTML=
-      `<div class="card-row"><span>대기</span><span>${q.pending_count||0}건</span></div>`+
-      `<div class="card-row"><span>전체</span><span>${q.total_count||0}건</span></div>`;
-
-    // activity
     const a=d.activity||{};
+    const idleTxt=a.is_idle?`<span style="color:var(--amber)">유휴 ${a.hours_idle||0}h</span>`:`<span style="color:var(--green)">활성</span>`;
+    document.getElementById('queueStatus').innerHTML=
+      `<div class="card-row"><span>Post 대기</span><span>${q.pending_count||0}건</span></div>`+
+      `<div class="card-row"><span>Post 전체</span><span>${q.total_count||0}건</span></div>`+
+      `<div class="card-row"><span>활동 상태</span><span>${idleTxt}</span></div>`;
     if(a.is_idle)document.getElementById('syncTime').style.color='var(--amber)';
 
     // news monitor
     const n=d.news||{};
     document.getElementById('fSource').textContent=n.pending_articles||0;
+
+    // ops health panel
+    const oh=document.getElementById('opsHealth');
+    if(oh){
+      oh.innerHTML=[
+        {l:'DB',ok:h.db_ok},{l:'Telegram',ok:h.telegram_configured},
+        {l:'Mock',ok:!h.mock_mode,t:h.mock_mode?'ON':'OFF'},
+        {l:'야간버퍼',ok:true,t:(n.overnight_buffer||0)+'건'},
+      ].map(i=>`<div class="ops-h-item"><span class="prov-led ${i.ok?'on':'off'}"></span>${i.l}${i.t?' '+i.t:''}</div>`).join('');
+    }
   }catch(e){console.warn('status:',e)}
 }
 
@@ -425,6 +449,10 @@ async function loadEditorial(){
     document.getElementById('opsGold').textContent=ec.gold_eval||0;
     document.getElementById('opsPairwise').textContent=ec.pairwise_review||0;
     document.getElementById('opsLearning').textContent=ec.learning_record||0;
+    ['opsEvalMeta','opsGold','opsPairwise','opsLearning'].forEach(id=>{
+      const el=document.getElementById(id);if(!el)return;
+      el.style.color=parseInt(el.textContent)?'var(--text-pri)':'var(--text-mut)';
+    });
 
     // immediate items → alerts
     const items=d.immediate_items||[];
@@ -460,25 +488,29 @@ async function loadProviders(){
     document.getElementById('todayDrafts').textContent=today;
     _hl.today=today;updateHL();
 
-    // agent cards
+    // agent rows
     document.getElementById('agentCards').innerHTML=roles.map(a=>{
       const working=a.runs_today>0;
-      return`<div class="agent-card ${working?'working':''}">
-        <div class="agent-name">${a.role}</div>
-        <div class="agent-provider">${a.provider||'—'}</div>
-        <div class="agent-stat">${a.runs_today??'—'}</div>
-        <div class="agent-status">
-          ${working?'<span class="pulse-dot"></span>':'<span class="dot-led ok"></span>'}
-          <span>${working?'active':'idle'}</span>
-        </div>
-        ${working?'<div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>':''}
+      const blocked=!a.configured;
+      const manual=a.role==='TrendHunter';
+      let st='',dot='idle',lbl='IDLE',clr='var(--text-mut)';
+      if(blocked){st='blocked';dot='blocked';lbl='BLOCKED';clr='var(--red)'}
+      else if(working){st='working';dot='working';lbl='ACTIVE';clr='var(--indigo)'}
+      else if(manual){dot='manual';lbl='MANUAL'}
+      return`<div class="ag-row ${st}">
+        <span class="ag-dot ${dot}"></span>
+        <div class="ag-info"><div class="ag-name">${a.role}</div><div class="ag-prov">${a.provider||'—'}</div></div>
+        <div class="ag-runs"><div class="ag-count" style="color:${clr}">${a.runs_today??'—'}</div><div class="ag-label">${lbl}</div></div>
+        ${working?'<div class="ag-bar"><div class="ag-bar-fill"></div></div>':''}
       </div>`;
     }).join('');
 
-    // provider summary
+    // provider strip
+    const provs=new Map();
+    roles.forEach(a=>{const p=String(a.provider||'').replace(/\s*\(.+\)/,'');if(p&&p!=='—')provs.set(p,a.configured)});
     document.getElementById('providerSummary').innerHTML=
-      `<div class="card-row"><span>Mock Mode</span><span>${d.mock_mode?'🟡 ON':'🟢 OFF'}</span></div>`+
-      `<div class="card-row"><span>오늘 초안</span><span>${today}건</span></div>`;
+      Array.from(provs).map(([p,ok])=>`<div class="prov-tag"><span class="prov-led ${ok?'on':'off'}"></span>${p}</div>`).join('')+
+      (d.mock_mode?'<div class="prov-tag" style="margin-left:auto;color:var(--amber)">MOCK</div>':'');
 
     // pipeline research/draft = today count
     document.getElementById('fResearch').textContent=today;
@@ -543,9 +575,9 @@ async function loadBiz(){
     const d=await r.json();
     const p=d.premium||{};const b=d.b2b||{};const n=d.newsletter||{};
     document.getElementById('bizSummary').innerHTML=
-      `<div class="card-row"><span>Premium</span><span>${p.total||0}건</span></div>`+
-      `<div class="card-row"><span>B2B</span><span>${b.total||0}건</span></div>`+
-      `<div class="card-row"><span>Newsletter</span><span>${n.newsletter_total||0}건</span></div>`;
+      `<div class="biz-cell"><div class="biz-num" style="color:var(--amber)">${p.total||0}</div><div class="biz-lbl">Premium</div></div>`+
+      `<div class="biz-cell"><div class="biz-num" style="color:var(--indigo)">${b.total||0}</div><div class="biz-lbl">B2B</div></div>`+
+      `<div class="biz-cell"><div class="biz-num" style="color:var(--cyan)">${n.newsletter_total||0}</div><div class="biz-lbl">Newsletter</div></div>`;
   }catch(e){console.warn('biz:',e)}
 }
 
