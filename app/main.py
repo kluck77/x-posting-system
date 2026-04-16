@@ -21,6 +21,8 @@ _TOP5_MINUTE = 0
 _MONITOR_INTERVAL = 60  # 뉴스 모니터 폴링 간격 (초)
 _CLEANUP_HOUR = 4  # 04:00 KST — Draft 자동 정리
 _CLEANUP_MINUTE = 0
+_DIGEST_HOUR = 5    # 05:00 KST — 모닝 다이제스트
+_DIGEST_MINUTE = 1  # 05:01 (top5 와 1분 간격)
 
 
 async def _top5_scheduler_loop() -> None:
@@ -97,6 +99,37 @@ async def _draft_cleanup_loop() -> None:
             logger.warning(f"[draft-cleanup] 실행 실패 (fail-open): {e}")
 
 
+async def _morning_digest_loop() -> None:
+    """매일 05:01 KST 에 run_morning_digest() 를 실행하는 백그라운드 루프.
+
+    news_monitor 가 22:00~05:00 수집한 overnight_buffer 기반.
+    morning_digest.py 가 없으면 자동 비활성화.
+    """
+    try:
+        from app.services.morning_digest import run_morning_digest
+    except ImportError:
+        logger.info("[morning-digest] morning_digest.py 없음 — 비활성화")
+        return
+    while True:
+        now = datetime.now(tz=_KST)
+        target = now.replace(
+            hour=_DIGEST_HOUR, minute=_DIGEST_MINUTE,
+            second=0, microsecond=0,
+        )
+        if target <= now:
+            target += timedelta(days=1)
+        wait_seconds = (target - now).total_seconds()
+        logger.info(
+            f"[morning-digest] 다음 실행: {target.isoformat()} "
+            f"(대기 {wait_seconds:.0f}초)"
+        )
+        await asyncio.sleep(wait_seconds)
+        try:
+            await run_morning_digest()
+        except Exception as e:
+            logger.warning(f"[morning-digest] 실행 실패 (fail-open): {e}")
+
+
 def run_fastapi_server():
     """FastAPI 서버를 실행합니다."""
     uvicorn.run(
@@ -142,6 +175,10 @@ async def run_all():
     # 뉴스 모니터 (1분 간격, 서버 전용 news_monitor.py 의존)
     asyncio.create_task(_news_monitor_loop())
     logger.info("[news-monitor] 1분 간격 폴링 등록")
+
+    # 모닝 다이제스트 (05:01 KST, overnight_buffer 기반)
+    asyncio.create_task(_morning_digest_loop())
+    logger.info("[morning-digest] 05:01 KST 자동 실행 등록")
 
     # Draft 자동 정리 (04:00 KST)
     asyncio.create_task(_draft_cleanup_loop())
