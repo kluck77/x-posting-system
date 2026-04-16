@@ -113,7 +113,7 @@ def check_live_ai():
         title="[canary] 삼성전자 HBM 매출 2조원 돌파",
         source_text="삼성전자가 HBM 반도체 매출 2조원을 달성했다고 밝혔다. 전년 대비 50% 증가.",
         source_url="https://example.com/canary",
-        source_type="manual",
+        source_type="news_link",
     )
 
     try:
