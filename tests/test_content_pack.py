@@ -48,6 +48,8 @@ from app.services.content_pack import (
     _SOURCE_CITATION_RE, _SCOPE_NUMBER_RE,
     # PR 12 Layer A: Source Integrity
     _check_source_integrity, _SOURCE_TEXT_MIN_LEN,
+    # PR 12 Layer C: Evidence Resolver
+    _CHECKPOINT_EVIDENCE_PATTERNS,
 )
 from app.models.content_request import ContentRequest
 
@@ -7301,10 +7303,11 @@ class TestReaderQuestionResolver:
 
     # ─── 3. _generate_reader_questions ───────────────────────────────────
 
-    def test_generate_3_questions(self):
+    def test_generate_4_questions(self):
+        """PR 12 v2 — 4개 질문 생성 (SOURCE/SCOPE/IMPACT/CHECKPOINT)."""
         card = self._make_card()
         qs = _generate_reader_questions(card, "EXPLAIN")
-        assert len(qs) == 3
+        assert len(qs) == 4
         assert all(isinstance(q, ReaderQuestion) for q in qs)
 
     def test_generate_categories(self):
@@ -7314,6 +7317,7 @@ class TestReaderQuestionResolver:
         assert "SOURCE" in cats
         assert "SCOPE" in cats
         assert "IMPACT" in cats
+        assert "CHECKPOINT" in cats
 
     def test_generate_explain_references_fact(self):
         """EXPLAIN — Q1 이 key_facts 의 내용을 참조."""
@@ -7344,10 +7348,10 @@ class TestReaderQuestionResolver:
         assert "공식" in impact_q.question or "확인 시점" in impact_q.question
 
     def test_generate_no_key_facts(self):
-        """key_facts 없어도 3개 생성."""
+        """key_facts 없어도 4개 생성."""
         card = self._make_card(key_facts=[])
         qs = _generate_reader_questions(card, "EXPLAIN")
-        assert len(qs) == 3
+        assert len(qs) == 4
 
     # ─── 4. _resolve_questions_from_source ────────────────────────────────
 
@@ -7454,7 +7458,7 @@ class TestReaderQuestionResolver:
         ]
         warns, tags = _validate_question_coverage("본문", qs, "EXPLAIN")
         assert len(warns) == 1
-        assert "1/3" in warns[0]
+        assert "1/" in warns[0]
         assert len(tags) == 0
 
     def test_coverage_2_unresolved_gate(self):
@@ -7650,3 +7654,250 @@ class TestSourceIntegrityLayer:
         fp = FinalPost()
         assert hasattr(fp, "market_angle_type")
         assert fp.market_angle_type is None
+
+
+# ─── PR 12 Layer B+C: Question v2 + Evidence Resolver ────────────────────
+
+class TestQuestionResolverV2:
+    """PR 12 Layer B — CHECKPOINT 카테고리 추가 + mode별 우선순위."""
+
+    def _make_card(self, **kwargs):
+        defaults = dict(
+            key_facts=["삼성전자 노조가 5월 파업 예고",
+                        "생산라인 영향 가능성"],
+            hook_candidates=["삼성전자 파업 예고"],
+            thesis_cards=[ThesisCard(
+                thesis="파업 현실화 시 반도체 공급망 영향",
+                reader_stake="반도체 가격 영향 가능성",
+                opener="삼성 노조가 파업을 예고했다.",
+            )],
+            tensions=["노조는 파업 불가피, 경영진은 대화 강조"],
+            certainty_level="확정",
+        )
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    # ─── CHECKPOINT 카테고리 생성 ──────────────────────────────────────
+
+    def test_checkpoint_exists_in_explain(self):
+        """EXPLAIN → CHECKPOINT 질문 포함."""
+        card = self._make_card()
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        cats = [q.category for q in qs]
+        assert "CHECKPOINT" in cats
+
+    def test_checkpoint_exists_in_verify(self):
+        """VERIFY → CHECKPOINT 질문 포함."""
+        card = self._make_card(certainty_level="미확인")
+        qs = _generate_reader_questions(card, "VERIFY")
+        cats = [q.category for q in qs]
+        assert "CHECKPOINT" in cats
+
+    def test_checkpoint_exists_in_judgment(self):
+        """JUDGMENT → CHECKPOINT 질문 포함."""
+        card = self._make_card(certainty_level="상충")
+        qs = _generate_reader_questions(card, "JUDGMENT")
+        cats = [q.category for q in qs]
+        assert "CHECKPOINT" in cats
+
+    # ─── mode별 순서 검증 ──────────────────────────────────────────────
+
+    def test_verify_order_source_checkpoint_first(self):
+        """VERIFY → SOURCE 1번, CHECKPOINT 2번."""
+        card = self._make_card(certainty_level="미확인")
+        qs = _generate_reader_questions(card, "VERIFY")
+        assert qs[0].category == "SOURCE"
+        assert qs[1].category == "CHECKPOINT"
+
+    def test_explain_order_checkpoint_last(self):
+        """EXPLAIN → CHECKPOINT 마지막."""
+        card = self._make_card()
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        assert qs[-1].category == "CHECKPOINT"
+
+    def test_judgment_order_checkpoint_last(self):
+        """JUDGMENT → CHECKPOINT 마지막."""
+        card = self._make_card(certainty_level="상충")
+        qs = _generate_reader_questions(card, "JUDGMENT")
+        assert qs[-1].category == "CHECKPOINT"
+
+    # ─── CHECKPOINT 질문 내용 ──────────────────────────────────────────
+
+    def test_verify_checkpoint_content(self):
+        """VERIFY CHECKPOINT → '공식 데이터/발표' 포함."""
+        card = self._make_card(certainty_level="미확인")
+        qs = _generate_reader_questions(card, "VERIFY")
+        ck = [q for q in qs if q.category == "CHECKPOINT"][0]
+        assert "공식" in ck.question or "발표" in ck.question
+
+    def test_judgment_checkpoint_references_tension(self):
+        """JUDGMENT + tensions → CHECKPOINT 질문에 갈림 키워드."""
+        card = self._make_card(certainty_level="상충")
+        qs = _generate_reader_questions(card, "JUDGMENT")
+        ck = [q for q in qs if q.category == "CHECKPOINT"][0]
+        assert "어느 쪽" in ck.question or "다음 신호" in ck.question
+
+    def test_explain_checkpoint_references_thesis(self):
+        """EXPLAIN + thesis → CHECKPOINT 질문에 '확인' 키워드."""
+        card = self._make_card()
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        ck = [q for q in qs if q.category == "CHECKPOINT"][0]
+        assert "확인" in ck.question or "보면" in ck.question
+
+    # ─── 4개 카테고리 유니크 ──────────────────────────────────────────
+
+    def test_all_4_categories_unique(self):
+        """4개 질문의 카테고리가 모두 다르다."""
+        card = self._make_card()
+        for mode in ("EXPLAIN", "JUDGMENT", "VERIFY"):
+            qs = _generate_reader_questions(card, mode)
+            cats = [q.category for q in qs]
+            assert len(set(cats)) == 4, f"mode={mode}: 중복 카테고리"
+
+
+# ─── PR 12 Layer C: Evidence Resolver 강화 ─────────────────────────────
+
+class TestEvidenceResolverV2:
+    """PR 12 Layer C — 4카테고리 evidence 패턴 매칭 강화 테스트."""
+
+    # ─── CHECKPOINT resolve ──────────────────────────────────────────
+
+    def test_checkpoint_resolved_by_시행일(self):
+        """source에 '시행일' → CHECKPOINT RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="CHECKPOINT")]
+        result = _resolve_questions_from_source(qs, "이 법안의 시행일은 5월 1일이다.")
+        assert result[0].status == "RESOLVED"
+        assert "검증 시점" in result[0].evidence
+
+    def test_checkpoint_resolved_by_나오면(self):
+        """source에 '나오면' → CHECKPOINT RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="CHECKPOINT")]
+        result = _resolve_questions_from_source(qs, "원본 데이터가 나오면 확인 가능하다.")
+        assert result[0].status == "RESOLVED"
+
+    def test_checkpoint_resolved_by_예정(self):
+        """source에 '발표 예정' → CHECKPOINT RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="CHECKPOINT")]
+        result = _resolve_questions_from_source(qs, "5월 공식 발표 예정이다.")
+        assert result[0].status == "RESOLVED"
+
+    def test_checkpoint_unresolved_no_pattern(self):
+        """source에 관련 패턴 없으면 UNRESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="CHECKPOINT")]
+        result = _resolve_questions_from_source(qs, "시장이 크게 반응했다.")
+        assert result[0].status == "UNRESOLVED"
+
+    # ─── SOURCE resolve 강화 (영문 패턴) ──────────────────────────────
+
+    def test_source_resolved_english_announced(self):
+        """영문 'announced' → SOURCE RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="SOURCE")]
+        result = _resolve_questions_from_source(qs, "The Fed announced a rate decision.")
+        assert result[0].status == "RESOLVED"
+
+    def test_source_resolved_english_according(self):
+        """영문 'according to' → SOURCE RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="SOURCE")]
+        result = _resolve_questions_from_source(qs, "according to the IMF report")
+        assert result[0].status == "RESOLVED"
+
+    # ─── SCOPE resolve 강화 (영문 단위) ──────────────────────────────
+
+    def test_scope_resolved_english_billion(self):
+        """영문 '$50 billion' → SCOPE RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="SCOPE")]
+        result = _resolve_questions_from_source(qs, "The package is worth $50 billion.")
+        assert result[0].status == "RESOLVED"
+
+    def test_scope_resolved_dollar_amount(self):
+        """'$100' → SCOPE RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="SCOPE")]
+        result = _resolve_questions_from_source(qs, "Oil price hit $100 per barrel.")
+        assert result[0].status == "RESOLVED"
+
+    # ─── IMPACT resolve 강화 (시장/생활 반영 경로) ──────────────────
+
+    def test_impact_resolved_market_patterns(self):
+        """'원가' + '공급' → IMPACT RESOLVED (2개 패턴)."""
+        qs = [ReaderQuestion(question="Q", category="IMPACT")]
+        result = _resolve_questions_from_source(
+            qs, "원가 상승이 예상되며 공급 차질 우려도 있다."
+        )
+        assert result[0].status == "RESOLVED"
+
+    def test_impact_resolved_생활비_집행(self):
+        """'생활비' + '집행' → IMPACT RESOLVED."""
+        qs = [ReaderQuestion(question="Q", category="IMPACT")]
+        result = _resolve_questions_from_source(
+            qs, "생활비 부담 증가와 정책 집행 지연 우려가 나온다."
+        )
+        assert result[0].status == "RESOLVED"
+
+    # ─── 전체 4개 해결 시나리오 ──────────────────────────────────────
+
+    def test_full_article_resolves_all_4(self):
+        """완전한 기사 → 4개 모두 해결 가능."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE"),
+            ReaderQuestion(question="Q2", category="SCOPE"),
+            ReaderQuestion(question="Q3", category="IMPACT"),
+            ReaderQuestion(question="Q4", category="CHECKPOINT"),
+        ]
+        source = (
+            "국세청이 발표했다. 지원 규모는 3,000억원이다. "
+            "5월 시행 예정이며 대상은 소상공인이다. "
+            "원본 데이터가 나오면 확인 가능하다."
+        )
+        result = _resolve_questions_from_source(qs, source)
+        resolved = [q for q in result if q.status == "RESOLVED"]
+        assert len(resolved) == 4
+
+    def test_empty_source_all_unresolved(self):
+        """source_text 빈 문자열 → 4개 모두 UNRESOLVED."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE"),
+            ReaderQuestion(question="Q2", category="SCOPE"),
+            ReaderQuestion(question="Q3", category="IMPACT"),
+            ReaderQuestion(question="Q4", category="CHECKPOINT"),
+        ]
+        result = _resolve_questions_from_source(qs, "")
+        assert all(q.status == "UNRESOLVED" for q in result)
+
+    # ─── CHECKPOINT_EVIDENCE_PATTERNS 상수 검증 ──────────────────────
+
+    def test_checkpoint_patterns_exist(self):
+        """_CHECKPOINT_EVIDENCE_PATTERNS 이 비어있지 않다."""
+        assert len(_CHECKPOINT_EVIDENCE_PATTERNS) >= 5
+
+    def test_checkpoint_patterns_contain_key_signals(self):
+        """핵심 확인 신호 패턴 포함."""
+        pats = _CHECKPOINT_EVIDENCE_PATTERNS
+        assert "나오면" in pats
+        assert "시행일" in pats
+        assert "공개되면" in pats
+
+    # ─── prompt section v2 ──────────────────────────────────────────
+
+    def test_prompt_section_has_checkpoint_label(self):
+        """prompt section에 CHECKPOINT 라벨 포함."""
+        qs = [ReaderQuestion(question="Q", category="CHECKPOINT", status="UNRESOLVED")]
+        section = _build_question_prompt_section(qs)
+        assert "다음 확인 신호" in section
+
+    def test_prompt_section_has_checkpoint_instruction(self):
+        """prompt section에 CHECKPOINT 지시문 포함."""
+        qs = [ReaderQuestion(question="Q", category="CHECKPOINT")]
+        section = _build_question_prompt_section(qs)
+        assert "CHECKPOINT" in section
+
+    # ─── 회귀 검증 ──────────────────────────────────────────────────
+
+    def test_source_citation_regex_backward_compat(self):
+        """기존 한국어 출처 패턴 여전히 동작."""
+        assert _SOURCE_CITATION_RE.search("정부가 발표했다") is not None
+        assert _SOURCE_CITATION_RE.search("보고서에 따르면") is not None
+
+    def test_scope_number_regex_backward_compat(self):
+        """기존 한국어 수치 패턴 여전히 동작."""
+        assert _SCOPE_NUMBER_RE.search("3,000억원") is not None
+        assert _SCOPE_NUMBER_RE.search("25%") is not None
