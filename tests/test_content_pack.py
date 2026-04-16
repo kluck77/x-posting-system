@@ -88,6 +88,11 @@ from app.services.content_pack import (
     _VALID_PAIRWISE_VERDICTS, _VALID_PAIRWISE_REASONS,
     _validate_pairwise_label, _build_pairwise_review_record,
 )
+from app.services.evidence_resolver import (
+    _extract_source_metadata, _resolve_questions_with_metadata,
+    _INSTITUTION_COUNTRY_MAP, _DOC_TYPE_PATTERNS, _DATE_RE,
+    _DOMAIN_COUNTRY_MAP,
+)
 from app.models.content_request import ContentRequest
 
 
@@ -9929,3 +9934,165 @@ class TestPairwiseReview:
         assert rec["a_post_length"] == 0
         assert rec["b_post_length"] == 0
         assert rec["record_type"] == "pairwise_review"
+
+
+# ── PR 24: Hybrid Retrieval + Metadata Filter Tests ──
+
+
+class TestExtractSourceMetadata:
+    """PR 24 — 구조화 메타데이터 추출."""
+
+    def test_detect_korean_institution(self):
+        """한국 기관명 감지."""
+        card = CandidateCard(
+            key_facts=["기획재정부가 세제 개편안을 발표했다"],
+            source_url="https://moef.go.kr/policy",
+        )
+        meta = _extract_source_metadata(card, "", "GOVERNMENT")
+        assert meta["institution"] == "기획재정부"
+        assert meta["country"] == "KR"
+        assert meta["source_type"] == "GOVERNMENT"
+
+    def test_detect_us_institution(self):
+        """미국 기관명 감지."""
+        card = CandidateCard(
+            key_facts=["Federal Reserve raised rates"],
+            source_url="https://federalreserve.gov/news",
+        )
+        meta = _extract_source_metadata(card, "", "REPORT")
+        assert meta["institution"] == "Federal Reserve"
+        assert meta["country"] == "US"
+
+    def test_detect_doc_type_statistical(self):
+        """통계 발표 문서유형 감지."""
+        card = CandidateCard(
+            key_facts=["CPI 잠정치 발표", "물가 지표 집계"],
+        )
+        meta = _extract_source_metadata(card, "")
+        assert meta["doc_type"] == "STATISTICAL_RELEASE"
+
+    def test_detect_doc_type_earnings(self):
+        """실적 발표 문서유형 감지."""
+        card = CandidateCard(
+            key_facts=["삼성전자 3분기 실적 발표", "영업이익 10조원"],
+        )
+        meta = _extract_source_metadata(card, "")
+        assert meta["doc_type"] == "EARNINGS_REPORT"
+
+    def test_detect_dates(self):
+        """날짜 패턴 감지."""
+        card = CandidateCard(
+            key_facts=["2024-03-15 시행 예정", "4월 1일부터 적용"],
+        )
+        meta = _extract_source_metadata(card, "")
+        assert len(meta["dates"]) >= 1
+        assert "2024-03-15" in meta["dates"]
+
+    def test_country_from_url_fallback(self):
+        """기관명 없을 때 URL에서 국가 추론."""
+        card = CandidateCard(
+            key_facts=["새로운 정책 발표"],
+            source_url="https://example.go.kr/news",
+        )
+        meta = _extract_source_metadata(card, "")
+        assert meta["country"] == "KR"
+
+    def test_entity_keywords_extraction(self):
+        """엔티티 키워드 추출."""
+        card = CandidateCard(
+            key_facts=["한국은행 기준금리 동결", "기재부 예산안 발표"],
+        )
+        meta = _extract_source_metadata(card, "")
+        assert len(meta["entity_keywords"]) >= 1
+
+    def test_empty_input_no_crash(self):
+        """빈 입력 크래시 없음."""
+        card = CandidateCard()
+        meta = _extract_source_metadata(card, "")
+        assert meta["institution"] is None
+        assert meta["country"] is None
+        assert meta["doc_type"] is None
+        assert meta["dates"] == []
+
+
+class TestResolveQuestionsWithMetadata:
+    """PR 24 — metadata filter 질문 해결."""
+
+    def _make_question(self, category, status="UNRESOLVED"):
+        return ReaderQuestion(
+            question=f"테스트 {category} 질문",
+            category=category,
+            status=status,
+        )
+
+    def test_source_resolved_by_institution(self):
+        """기관 감지 → SOURCE 질문 해결."""
+        q = self._make_question("SOURCE")
+        meta = {"institution": "기획재정부", "country": "KR",
+                "doc_type": None, "dates": []}
+        result = _resolve_questions_with_metadata([q], meta)
+        assert result[0].status == "RESOLVED"
+        assert "기획재정부" in result[0].evidence
+        assert result[0].evidence_source == "METADATA"
+
+    def test_scope_resolved_by_statistical(self):
+        """통계 문서유형 → SCOPE 질문 해결."""
+        q = self._make_question("SCOPE")
+        meta = {"institution": None, "country": None,
+                "doc_type": "STATISTICAL_RELEASE", "dates": []}
+        result = _resolve_questions_with_metadata([q], meta)
+        assert result[0].status == "RESOLVED"
+
+    def test_impact_resolved_by_dates(self):
+        """날짜 감지 → IMPACT 질문 해결."""
+        q = self._make_question("IMPACT")
+        meta = {"institution": None, "country": None,
+                "doc_type": None, "dates": ["2024-03-15"]}
+        result = _resolve_questions_with_metadata([q], meta)
+        assert result[0].status == "RESOLVED"
+        assert "2024-03-15" in result[0].evidence
+
+    def test_checkpoint_resolved_by_policy(self):
+        """정책 문서유형 → CHECKPOINT 질문 해결."""
+        q = self._make_question("CHECKPOINT")
+        meta = {"institution": None, "country": None,
+                "doc_type": "POLICY_ANNOUNCEMENT", "dates": []}
+        result = _resolve_questions_with_metadata([q], meta)
+        assert result[0].status == "RESOLVED"
+
+    def test_already_resolved_not_overwritten(self):
+        """이미 RESOLVED인 질문은 건드리지 않음."""
+        q = self._make_question("SOURCE", "RESOLVED")
+        q.evidence = "원래 근거"
+        meta = {"institution": "한국은행", "country": "KR",
+                "doc_type": None, "dates": []}
+        result = _resolve_questions_with_metadata([q], meta)
+        assert result[0].evidence == "원래 근거"
+
+    def test_no_metadata_no_change(self):
+        """metadata 비어있으면 변경 없음."""
+        q = self._make_question("SOURCE")
+        result = _resolve_questions_with_metadata([q], {})
+        assert result[0].status == "UNRESOLVED"
+
+    def test_scope_not_resolved_by_policy(self):
+        """POLICY 문서유형은 SCOPE 질문을 해결하지 않음."""
+        q = self._make_question("SCOPE")
+        meta = {"institution": None, "country": None,
+                "doc_type": "POLICY_ANNOUNCEMENT", "dates": []}
+        result = _resolve_questions_with_metadata([q], meta)
+        assert result[0].status == "UNRESOLVED"
+
+    def test_metadata_before_external_pipeline(self):
+        """metadata → external 순서로 질문 해결 확인 (통합)."""
+        from app.services.question_resolver import ReaderQuestion as RQ
+        qs = [
+            RQ(question="출처?", category="SOURCE", status="UNRESOLVED"),
+            RQ(question="수치?", category="SCOPE", status="UNRESOLVED"),
+        ]
+        meta = {"institution": "한국은행", "country": "KR",
+                "doc_type": None, "dates": []}
+        qs = _resolve_questions_with_metadata(qs, meta)
+        assert qs[0].status == "RESOLVED"
+        assert qs[0].evidence_source == "METADATA"
+        assert qs[1].status == "UNRESOLVED"

@@ -3,6 +3,7 @@
 ==================================================
 PR 12 Layer A/C, PR 13 — source_text 상태 점검,
 1차 출처 유형 감지, 외부 evidence 로 질문 재해결.
+PR 24 — Hybrid Retrieval + Metadata Filter Layer 추가.
 AI 호출 없음 — rule-first.
 
 content_pack.py 에서 분리됨 (PR 21).
@@ -10,6 +11,7 @@ content_pack.py 에서 분리됨 (PR 21).
 
 from __future__ import annotations
 
+import re
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -211,5 +213,201 @@ def _resolve_questions_from_external(
                 q.evidence = f"외부 공식 일정 출처 감지: {primary_source_type}"
                 q.evidence_snippet = f"{primary_source_type}×{evidence_count}"
                 q.evidence_source = "EXTERNAL"
+
+    return questions
+
+
+# ── PR 24: Hybrid Retrieval + Metadata Filter Layer ──
+#
+# 1차 출처 감지 시 source_type / 기관 / 국가 / 문서유형 같은
+# 구조화 메타데이터를 더 풍부하게 남긴다.
+# 질문 해결 시 metadata filter를 우선 적용한 뒤 기존 로직 fallback.
+# 벡터DB 없이 rule-first 로 구현.
+
+# ── 기관명 → 국가 매핑 ──
+_INSTITUTION_COUNTRY_MAP: dict[str, str] = {
+    # 한국
+    "기재부": "KR", "기획재정부": "KR", "국세청": "KR", "국토부": "KR",
+    "국토교통부": "KR", "고용노동부": "KR", "산업부": "KR",
+    "산업통상자원부": "KR", "금융위": "KR", "금융위원회": "KR",
+    "공정위": "KR", "공정거래위원회": "KR", "한국은행": "KR", "한은": "KR",
+    "통계청": "KR", "대통령실": "KR", "국회": "KR", "금감원": "KR",
+    "삼성전자": "KR", "SK하이닉스": "KR", "현대차": "KR",
+    # 미국
+    "백악관": "US", "재무부": "US", "상무부": "US", "연준": "US",
+    "White House": "US", "Treasury": "US", "Congress": "US",
+    "Federal Reserve": "US", "Fed": "US", "SEC": "US",
+    # 국제
+    "IMF": "INTL", "OECD": "INTL", "World Bank": "INTL",
+    "세계은행": "INTL", "BIS": "INTL",
+    # 유럽
+    "ECB": "EU", "유럽중앙은행": "EU",
+    # 일본
+    "BOJ": "JP", "일본은행": "JP",
+    # 중국
+    "인민은행": "CN", "PBOC": "CN",
+}
+
+# ── URL 도메인 → 국가 매핑 ──
+_DOMAIN_COUNTRY_MAP: dict[str, str] = {
+    "go.kr": "KR", "gov.kr": "KR", "or.kr": "KR",
+    "whitehouse.gov": "US", "treasury.gov": "US",
+    "sec.gov": "US", "federalreserve.gov": "US",
+    "europa.eu": "EU", "ecb.europa.eu": "EU",
+    "gov.uk": "UK",
+    "boj.or.jp": "JP",
+    "imf.org": "INTL", "oecd.org": "INTL", "worldbank.org": "INTL",
+    "bis.org": "INTL",
+}
+
+# ── 문서유형 키워드 ──
+_DOC_TYPE_PATTERNS: dict[str, list[str]] = {
+    "POLICY_ANNOUNCEMENT": [
+        "시행", "시행일", "시행령", "고시", "공포", "개정",
+        "발효", "적용 시작", "executive order",
+    ],
+    "STATISTICAL_RELEASE": [
+        "통계", "집계", "속보", "잠정치", "확정치", "지표",
+        "CPI", "GDP", "PMI", "고용률", "실업률", "물가",
+    ],
+    "EARNINGS_REPORT": [
+        "실적", "매출", "영업이익", "순이익", "분기",
+        "어닝", "earnings", "revenue", "profit",
+    ],
+    "OFFICIAL_STATEMENT": [
+        "보도자료", "성명", "공식 입장", "대변인",
+        "press release", "statement", "발표문",
+    ],
+    "REGULATORY_FILING": [
+        "공시", "사업보고서", "감사보고서", "유가증권",
+        "10-K", "10-Q", "SEC filing", "dart",
+    ],
+}
+
+# ── 날짜 패턴 (한국어/영어) ──
+_DATE_RE = re.compile(
+    r"\d{4}[-./]\d{1,2}[-./]\d{1,2}"
+    r"|\d{1,2}월\s*\d{1,2}일"
+    r"|\d{4}년\s*\d{1,2}월"
+    r"|\d{1,2}/\d{1,2}/\d{4}"
+)
+
+
+def _extract_source_metadata(
+    card: "CandidateCard",
+    source_text: str = "",
+    primary_source_type: Optional[str] = None,
+) -> dict:
+    """
+    PR 24 — 1차 출처에서 구조화 메타데이터 추출.
+
+    반환 dict 필드:
+      source_type, institution, country, doc_type,
+      dates (최대 3), entity_keywords (최대 5)
+
+    AI 호출 없음.
+    """
+    combined = " ".join(card.key_facts or []) + " " + (source_text or "")
+    url = (card.source_url or "").lower()
+
+    # ── institution ──
+    institution: Optional[str] = None
+    country: Optional[str] = None
+    for inst, ctry in _INSTITUTION_COUNTRY_MAP.items():
+        if inst in combined:
+            institution = inst
+            country = ctry
+            break
+
+    # ── country from URL (fallback) ──
+    if not country and url:
+        for domain, ctry in _DOMAIN_COUNTRY_MAP.items():
+            if domain in url:
+                country = ctry
+                break
+
+    # ── doc_type ──
+    doc_type: Optional[str] = None
+    best_doc_hits = 0
+    for dtype, patterns in _DOC_TYPE_PATTERNS.items():
+        hits = sum(1 for p in patterns if p in combined)
+        if hits > best_doc_hits:
+            best_doc_hits = hits
+            doc_type = dtype
+
+    # ── dates ──
+    dates = _DATE_RE.findall(combined)[:3]
+
+    # ── entity_keywords ──
+    entity_keywords: list[str] = []
+    for inst_name in _INSTITUTION_COUNTRY_MAP:
+        if inst_name in combined and inst_name not in entity_keywords:
+            entity_keywords.append(inst_name)
+            if len(entity_keywords) >= 5:
+                break
+
+    return {
+        "source_type": primary_source_type,
+        "institution": institution,
+        "country": country,
+        "doc_type": doc_type,
+        "dates": dates,
+        "entity_keywords": entity_keywords,
+    }
+
+
+def _resolve_questions_with_metadata(
+    questions: list["ReaderQuestion"],
+    metadata: dict,
+) -> list["ReaderQuestion"]:
+    """
+    PR 24 — metadata filter 우선 적용 후 기존 로직 fallback.
+
+    _resolve_questions_from_external 보다 먼저 호출.
+    institution / doc_type / dates 기반으로 질문 해결.
+
+    AI 호출 없음.
+    """
+    if not metadata:
+        return questions
+
+    institution = metadata.get("institution")
+    country = metadata.get("country")
+    doc_type = metadata.get("doc_type")
+    dates = metadata.get("dates", [])
+
+    for q in questions:
+        if q.status == "RESOLVED":
+            continue
+
+        if q.category == "SOURCE" and institution:
+            q.status = "RESOLVED"
+            q.evidence = f"기관 감지: {institution}"
+            if country:
+                q.evidence += f" ({country})"
+            q.evidence_snippet = institution[:50]
+            q.evidence_source = "METADATA"
+
+        elif q.category == "SCOPE" and doc_type in (
+            "STATISTICAL_RELEASE", "EARNINGS_REPORT",
+        ):
+            q.status = "RESOLVED"
+            q.evidence = f"문서유형 감지: {doc_type}"
+            q.evidence_snippet = doc_type[:50]
+            q.evidence_source = "METADATA"
+
+        elif q.category == "IMPACT" and dates:
+            q.status = "RESOLVED"
+            q.evidence = f"일정 감지: {dates[0]}"
+            q.evidence_snippet = dates[0][:50]
+            q.evidence_source = "METADATA"
+
+        elif q.category == "CHECKPOINT" and doc_type in (
+            "POLICY_ANNOUNCEMENT", "REGULATORY_FILING",
+        ):
+            q.status = "RESOLVED"
+            q.evidence = f"정책/규제 문서 감지: {doc_type}"
+            q.evidence_snippet = doc_type[:50]
+            q.evidence_source = "METADATA"
 
     return questions

@@ -2757,13 +2757,32 @@ async def generate_final_post(
             f"count={_ext_evidence_count}"
         )
 
+    # ── PR 24: Hybrid Retrieval — 구조화 메타데이터 추출 ──
+    from app.services.evidence_resolver import (
+        _extract_source_metadata, _resolve_questions_with_metadata,
+    )
+    _source_meta = _extract_source_metadata(
+        card, source_text, _primary_source_type,
+    )
+    if _source_meta.get("institution") or _source_meta.get("doc_type"):
+        logger.info(
+            f"[SourceMeta] institution={_source_meta.get('institution')} "
+            f"country={_source_meta.get('country')} "
+            f"doc_type={_source_meta.get('doc_type')} "
+            f"dates={_source_meta.get('dates')}"
+        )
+
     # ── PR 11: Reader Question Resolver ──
     # 독자 핵심 질문 생성 → source_text 대조 → 외부 evidence 대조 → 프롬프트 삽입
     _reader_questions = _generate_reader_questions(card, mode)
     _reader_questions = _resolve_questions_from_source(
         _reader_questions, source_text
     )
-    # PR 13: 외부 evidence 로 UNRESOLVED 질문 재해결
+    # PR 24: metadata filter 우선 적용
+    _reader_questions = _resolve_questions_with_metadata(
+        _reader_questions, _source_meta,
+    )
+    # PR 13: 외부 evidence 로 UNRESOLVED 질문 재해결 (fallback)
     _reader_questions = _resolve_questions_from_external(
         _reader_questions, _primary_source_type, _ext_evidence_count
     )
@@ -3042,6 +3061,8 @@ async def generate_final_post(
 
     # PR 12 Layer E — 평가/학습 루프: 구조화 메타 로그
     _eval_meta = _build_evaluation_meta(final, card, mode, _source_missing)
+    # PR 24: source_meta 를 eval_meta 에 병합
+    _eval_meta["source_meta"] = _source_meta
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
 
     # PR 15 — Learning Dataset 레코드 (outcome 미판정 상태로 기록)
