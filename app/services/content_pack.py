@@ -1301,6 +1301,20 @@ class FinalPost:
     # 마지막 문장에서 감지된 독자 보상 유형. UI 노출 X, 로그/테스트 전용.
     # 값: "SAVE" (저장 가치) / "SHARE" (공유 가치) / "FOLLOW" (팔로우 가치) / None.
     reward_type: Optional[str] = None
+    # PR 11 — Reader Question Resolver
+    # 독자 핵심 질문 목록 + 해결/미해결 카운트. 로그/테스트 전용.
+    reader_questions: list = field(default_factory=list)
+    resolved_count: int = 0
+    unresolved_count: int = 0
+
+
+@dataclass
+class ReaderQuestion:
+    """PR 11 — 독자 핵심 질문 1개. 카테고리별 생성 + source 대조."""
+    question: str = ""
+    category: str = ""        # "SOURCE" | "SCOPE" | "IMPACT"
+    status: str = "UNRESOLVED"  # "RESOLVED" | "UNRESOLVED"
+    evidence: str = ""         # 해결 시 근거 요약
 
 
 # ─── 1차: 후보 카드 시스템 프롬프트 ──────────────────────────────────────────
@@ -2564,6 +2578,19 @@ async def generate_final_post(
     mode = route_article_mode(card)
     user_prompt += f"\nARTICLE_MODE: {mode}\n"
 
+    # ── PR 11: Reader Question Resolver ──
+    # 독자 핵심 질문 생성 → source_text 대조 → 프롬프트 삽입
+    _reader_questions = _generate_reader_questions(card, mode)
+    _reader_questions = _resolve_questions_from_source(
+        _reader_questions, source_text
+    )
+    _rq_resolved = sum(1 for q in _reader_questions if q.status == "RESOLVED")
+    _rq_unresolved = len(_reader_questions) - _rq_resolved
+    logger.info(
+        f"[ReaderQ] mode={mode} questions={len(_reader_questions)} "
+        f"resolved={_rq_resolved} unresolved={_rq_unresolved}"
+    )
+
     # Low confidence 추정 경고 (VERIFY/JUDGMENT에서 모두 필요)
     _is_low_confidence = card.certainty_level in ("미확인", "상충")
     _speculation_guard = ""
@@ -2577,6 +2604,9 @@ async def generate_final_post(
 
     # ── mode별 '지시' 블록 (EXPLAIN/JUDGMENT/VERIFY 분기) ──
     user_prompt += _build_mode_finalize_instruction(mode)
+
+    # ── PR 11: 독자 질문 컨텍스트 삽입 (mode 지시 이후) ──
+    user_prompt += _build_question_prompt_section(_reader_questions)
 
     # 공통 후행 지시 (mode 불문 동일)
     user_prompt += (
@@ -2732,10 +2762,24 @@ async def generate_final_post(
     # PR 8/9: mode / reward_type 을 최종 요약 로그에 포함. 운영 grep 에서
     # mode / reward / gate_fails 분포를 한 줄로 얻을 수 있다 (로그 포인트
     # 추가 금지, 기존 라인 확장만).
+    # PR 11 — 독자 질문 커버리지 검증 + FinalPost 메타데이터 주입
+    _qc_warns, _qc_tags = _validate_question_coverage(
+        final.final_post, _reader_questions, mode
+    )
+    for w in _qc_warns:
+        logger.warning(f"[ReaderQ] {w}")
+    for t in _qc_tags:
+        if t not in final.gate_fails:
+            final.gate_fails.append(t)
+    final.reader_questions = _reader_questions
+    final.resolved_count = _rq_resolved
+    final.unresolved_count = _rq_unresolved
+
     logger.info(
         f"최종 마감 완료: mode={mode} "
         f"certainty={card.certainty_level} "
         f"reward={final.reward_type} "
+        f"resolved={_rq_resolved}/{len(_reader_questions)} "
         f"post={len(final.final_post)}자, "
         f"short={len(final.final_short)}자, gate_fails={final.gate_fails}"
     )
@@ -4444,6 +4488,177 @@ def _validate_findability(post: str) -> tuple[int, Optional[str]]:
         "첫 2문장에 검색 가능한 고유명사/숫자/기관명/지표 없음 — "
         "추상명사만으로 시작"
     )
+
+
+# ─── PR 11: Reader Question Resolver ─────────────────────────────────────
+#
+# 독자가 실제로 궁금해할 질문 3개를 기사/카드 데이터에서 생성하고,
+# source_text 에서 답을 찾은 뒤, 해결 여부를 finalize 프롬프트에 전달한다.
+# 최종 post 에서 질문 커버리지를 검증한다.  AI 호출 없음 — 모두 결정론.
+#
+# UNRESOLVED_READER_QUESTION gate tag 는 WARN-only.
+
+_SOURCE_CITATION_RE = re.compile(
+    r"에 따르면|발표했다|밝혔다|보도했다|전했다|공개했다|확인했다|"
+    r"공시했다|발간했다|보고서|공식 발표|공식 확인"
+)
+
+_SCOPE_NUMBER_RE = re.compile(
+    r"\d[\d,.]*\s*[%원달러조억만개건호명세대가구]"
+)
+
+_IMPACT_MARKER_PATTERNS = [
+    "월 ", "일부터", "일까지", "분기", "년 ",
+    "시행", "적용", "반영", "대상", "해당",
+]
+
+
+def _generate_reader_questions(
+    card: "CandidateCard", mode: str,
+) -> list["ReaderQuestion"]:
+    """
+    PR 11 — 카드 데이터에서 독자 핵심 질문 3개 생성.
+
+    카테고리:
+      SOURCE — 핵심 팩트의 구체적 근거/원본 출처
+      SCOPE  — 구체적 수치/규모/대상
+      IMPACT — 영향 경로/다음 확인 시점
+
+    AI 호출 없음. 카드 필드에서 결정론으로 생성.
+    """
+    questions: list[ReaderQuestion] = []
+    kf = card.key_facts if card.key_facts else []
+    tc = card.thesis_cards if card.thesis_cards else []
+    tens = card.tensions if card.tensions else []
+
+    # ── Q1: 출처/근거 ──
+    if kf:
+        core = kf[0][:40].rstrip(".")
+        if mode == "VERIFY":
+            q1 = f"'{core}' — 이 주장의 원본 출처/공식 확인은?"
+        else:
+            q1 = f"'{core}' — 이 사실의 구체적 근거/수치는?"
+    else:
+        q1 = "핵심 주장의 구체적 근거/원본 출처는?"
+    questions.append(ReaderQuestion(question=q1, category="SOURCE"))
+
+    # ── Q2: 범위/구체성 ──
+    if mode == "JUDGMENT" and tens:
+        core_t = tens[0][:30].rstrip(".")
+        q2 = f"'{core_t}' — 양측 근거의 데이터 차이는?"
+    elif tc and tc[0].reader_stake:
+        stake = tc[0].reader_stake[:30].rstrip(".")
+        q2 = f"'{stake}' — 구체적 수치/규모/대상은?"
+    elif len(kf) > 1:
+        core2 = kf[1][:30].rstrip(".")
+        q2 = f"'{core2}' — 구체적 범위/대상은?"
+    else:
+        q2 = "구체적 수치/규모/대상이 특정됐는가?"
+    questions.append(ReaderQuestion(question=q2, category="SCOPE"))
+
+    # ── Q3: 영향/시점 ──
+    if mode == "VERIFY":
+        q3 = "다음 공식 발표/확인 시점은?"
+    elif tc and tc[0].thesis:
+        t_core = tc[0].thesis[:30].rstrip(".")
+        q3 = f"'{t_core}' 가 맞으면 어디에 먼저 반영되나?"
+    else:
+        q3 = "이게 맞으면 어디에 먼저 반영되나?"
+    questions.append(ReaderQuestion(question=q3, category="IMPACT"))
+
+    return questions[:3]
+
+
+def _resolve_questions_from_source(
+    questions: list["ReaderQuestion"],
+    source_text: str,
+) -> list["ReaderQuestion"]:
+    """
+    PR 11 — source_text 에서 각 질문의 답을 검색.
+
+    AI 호출 없음. 패턴 매칭으로 해결 여부만 판정.
+    못 찾으면 UNRESOLVED 유지 — 억지 해석 금지.
+    """
+    if not source_text:
+        return questions
+
+    for q in questions:
+        if q.category == "SOURCE":
+            if _SOURCE_CITATION_RE.search(source_text):
+                q.status = "RESOLVED"
+                q.evidence = "원문 출처 인용 존재"
+        elif q.category == "SCOPE":
+            if _SCOPE_NUMBER_RE.search(source_text):
+                q.status = "RESOLVED"
+                q.evidence = "원문 구체 수치 존재"
+        elif q.category == "IMPACT":
+            hits = [p for p in _IMPACT_MARKER_PATTERNS if p in source_text]
+            if len(hits) >= 2:
+                q.status = "RESOLVED"
+                q.evidence = "원문 시점/대상 특정"
+    return questions
+
+
+def _build_question_prompt_section(
+    questions: list["ReaderQuestion"],
+) -> str:
+    """
+    PR 11 — 질문 해결 상태를 finalize user_prompt 에 삽입할 섹션으로 조립.
+
+    원칙: source_text 원문은 전달하지 않는다(요약 회귀 방지).
+    해결/미해결 라벨만 전달해 AI 가 참고하게 한다.
+    """
+    if not questions:
+        return ""
+    section = "\n━━━ 독자 핵심 질문 (Reader Questions) ━━━\n"
+    section += "이 기사에서 독자가 실제로 궁금해할 질문:\n"
+    for i, q in enumerate(questions, 1):
+        label = "해결됨" if q.status == "RESOLVED" else "미해결"
+        section += f"  Q{i} [{label}]: {q.question}\n"
+    section += (
+        "\n원칙:\n"
+        "- 해결된 질문 = 본문에 근거 기반으로 반영하라.\n"
+        "- 미해결 질문 = 억지 해석 금지. "
+        "'아직 확인 안 됨' 또는 '원문 미확인' 으로 남겨라.\n"
+    )
+    return section
+
+
+def _validate_question_coverage(
+    post: str,
+    questions: list["ReaderQuestion"],
+    mode: str,
+) -> tuple[list[str], list[str]]:
+    """
+    PR 11 — 최종 post 가 독자 질문을 얼마나 반영했는지 검사.
+
+    반환: (warnings, gate_tags)
+      UNRESOLVED_READER_QUESTION 는 WARN-only.
+      _STRONG_FAIL_TAGS 에 넣지 않는다 (재생성 루프 금지).
+    """
+    warnings: list[str] = []
+    gate_tags: list[str] = []
+
+    if not questions:
+        return warnings, gate_tags
+
+    unresolved = [q for q in questions if q.status == "UNRESOLVED"]
+    total = len(questions)
+
+    if len(unresolved) >= 2:
+        severity = "강한 경고" if mode == "VERIFY" else "경고"
+        warnings.append(
+            f"[{severity}] 독자 핵심 질문 {len(unresolved)}/{total}개 미해결 "
+            "— 원문에 근거 부족"
+        )
+        gate_tags.append("UNRESOLVED_READER_QUESTION")
+    elif len(unresolved) == 1:
+        warnings.append(
+            f"독자 핵심 질문 1/{total}개 미해결: "
+            f"{unresolved[0].question[:40]}"
+        )
+
+    return warnings, gate_tags
 
 
 # 근거 없는 일반론 의견 패턴 (칼럼체/보고서체 — 원칙 C)

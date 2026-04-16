@@ -41,6 +41,11 @@ from app.services.content_pack import (
     _FINDABILITY_KNOWN_ENTITIES, _FINDABILITY_ANCHOR_RE,
     _extract_first_two_sentences, _count_findability_anchors,
     _validate_findability,
+    # PR 11: Reader Question Resolver
+    ReaderQuestion,
+    _generate_reader_questions, _resolve_questions_from_source,
+    _build_question_prompt_section, _validate_question_coverage,
+    _SOURCE_CITATION_RE, _SCOPE_NUMBER_RE,
 )
 from app.models.content_request import ContentRequest
 
@@ -7225,3 +7230,352 @@ class TestMarketStakePromptRules:
         )
         s = _build_mode_finalize_instruction(MODE_EXPLAIN)
         assert "영향이 예상된다" in s
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PR 11 — Reader Question Resolver
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestReaderQuestionResolver:
+    """
+    PR 11 — Reader Question Resolver.
+
+    독자 핵심 질문 3개 생성 → source_text 대조 → 커버리지 검증.
+    UNRESOLVED_READER_QUESTION 는 WARN-only, _STRONG_FAIL_TAGS 미편입.
+    """
+
+    # ─── helper ──────────────────────────────────────────────────────────
+
+    def _make_card(self, **kwargs):
+        """테스트용 CandidateCard 생성."""
+        from app.services.content_pack import ThesisCard
+        defaults = dict(
+            key_facts=["삼성전자 노조가 5월 21일부터 파업 예고",
+                        "메모리 반도체 라인 영향 가능성"],
+            hook_candidates=["파업 예고 자체보다 실제 참여율이 핵심"],
+            thesis_cards=[ThesisCard(
+                thesis="파업 예고보다 실제 참여율이 핵심",
+                reader_stake="메모리 반도체 공급에 직결",
+                opener="삼성전자 노조가 파업을 예고했다",
+            )],
+            tensions=["노조 요구 vs 경영진 입장"],
+            one_liner=["답은 실제 참여율이다"],
+            cautions=["과장 금지"],
+            watch_points=["5월 21일 참여율"],
+            certainty_level="확정",
+            topic_tags=["반도체"],
+            risk_flags=[],
+        )
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    # ─── 1. ReaderQuestion 데이터클래스 ──────────────────────────────────
+
+    def test_reader_question_defaults(self):
+        q = ReaderQuestion(question="테스트", category="SOURCE")
+        assert q.status == "UNRESOLVED"
+        assert q.evidence == ""
+
+    def test_reader_question_resolved(self):
+        q = ReaderQuestion(question="테스트", category="SCOPE", status="RESOLVED",
+                           evidence="수치 확인")
+        assert q.status == "RESOLVED"
+        assert q.evidence == "수치 확인"
+
+    # ─── 2. FinalPost 신규 필드 ──────────────────────────────────────────
+
+    def test_final_post_question_fields(self):
+        fp = FinalPost()
+        assert fp.reader_questions == []
+        assert fp.resolved_count == 0
+        assert fp.unresolved_count == 0
+
+    def test_final_post_question_fields_set(self):
+        qs = [ReaderQuestion(question="Q1", category="SOURCE", status="RESOLVED")]
+        fp = FinalPost(reader_questions=qs, resolved_count=1, unresolved_count=0)
+        assert len(fp.reader_questions) == 1
+        assert fp.resolved_count == 1
+
+    # ─── 3. _generate_reader_questions ───────────────────────────────────
+
+    def test_generate_3_questions(self):
+        card = self._make_card()
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        assert len(qs) == 3
+        assert all(isinstance(q, ReaderQuestion) for q in qs)
+
+    def test_generate_categories(self):
+        card = self._make_card()
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        cats = [q.category for q in qs]
+        assert "SOURCE" in cats
+        assert "SCOPE" in cats
+        assert "IMPACT" in cats
+
+    def test_generate_explain_references_fact(self):
+        """EXPLAIN — Q1 이 key_facts 의 내용을 참조."""
+        card = self._make_card()
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        source_q = [q for q in qs if q.category == "SOURCE"][0]
+        assert "삼성전자" in source_q.question or "파업" in source_q.question
+
+    def test_generate_verify_mode_source(self):
+        """VERIFY — Q1 에 '원본 출처/공식 확인' 포함."""
+        card = self._make_card(certainty_level="미확인")
+        qs = _generate_reader_questions(card, "VERIFY")
+        source_q = [q for q in qs if q.category == "SOURCE"][0]
+        assert "원본 출처" in source_q.question or "공식 확인" in source_q.question
+
+    def test_generate_judgment_tension(self):
+        """JUDGMENT — Q2 가 tensions 참조."""
+        card = self._make_card(certainty_level="상충")
+        qs = _generate_reader_questions(card, "JUDGMENT")
+        scope_q = [q for q in qs if q.category == "SCOPE"][0]
+        assert "노조" in scope_q.question or "양측" in scope_q.question
+
+    def test_generate_verify_impact(self):
+        """VERIFY — Q3 는 '공식 발표/확인 시점'."""
+        card = self._make_card(certainty_level="미확인")
+        qs = _generate_reader_questions(card, "VERIFY")
+        impact_q = [q for q in qs if q.category == "IMPACT"][0]
+        assert "공식" in impact_q.question or "확인 시점" in impact_q.question
+
+    def test_generate_no_key_facts(self):
+        """key_facts 없어도 3개 생성."""
+        card = self._make_card(key_facts=[])
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        assert len(qs) == 3
+
+    # ─── 4. _resolve_questions_from_source ────────────────────────────────
+
+    def test_resolve_source_citation(self):
+        """출처 인용이 있으면 SOURCE 질문 RESOLVED."""
+        qs = [ReaderQuestion(question="Q1", category="SOURCE")]
+        source = "국세청에 따르면 소상공인 지원 8건이 확정됐다."
+        result = _resolve_questions_from_source(qs, source)
+        assert result[0].status == "RESOLVED"
+        assert result[0].evidence == "원문 출처 인용 존재"
+
+    def test_resolve_scope_number(self):
+        """구체 수치가 있으면 SCOPE 질문 RESOLVED."""
+        qs = [ReaderQuestion(question="Q2", category="SCOPE")]
+        source = "대상은 약 3,000억원 규모다."
+        result = _resolve_questions_from_source(qs, source)
+        assert result[0].status == "RESOLVED"
+        assert result[0].evidence == "원문 구체 수치 존재"
+
+    def test_resolve_impact_timeline(self):
+        """시점/대상 마커 2개+ 있으면 IMPACT 질문 RESOLVED."""
+        qs = [ReaderQuestion(question="Q3", category="IMPACT")]
+        source = "5월 시행 예정이며 대상은 소상공인이다."
+        result = _resolve_questions_from_source(qs, source)
+        assert result[0].status == "RESOLVED"
+
+    def test_resolve_impact_insufficient(self):
+        """마커 1개만 있으면 UNRESOLVED 유지."""
+        qs = [ReaderQuestion(question="Q3", category="IMPACT")]
+        source = "5월 발표 예정."
+        result = _resolve_questions_from_source(qs, source)
+        assert result[0].status == "UNRESOLVED"
+
+    def test_resolve_empty_source(self):
+        """source_text 빈 문자열이면 전부 UNRESOLVED."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE"),
+            ReaderQuestion(question="Q2", category="SCOPE"),
+            ReaderQuestion(question="Q3", category="IMPACT"),
+        ]
+        result = _resolve_questions_from_source(qs, "")
+        assert all(q.status == "UNRESOLVED" for q in result)
+
+    def test_resolve_full_article(self):
+        """완전한 기사 → SOURCE + SCOPE 해결."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE"),
+            ReaderQuestion(question="Q2", category="SCOPE"),
+            ReaderQuestion(question="Q3", category="IMPACT"),
+        ]
+        source = (
+            "국세청이 발표했다. 지원 규모는 3,000억원이다. "
+            "오늘 시행되며 대상은 소상공인이다."
+        )
+        result = _resolve_questions_from_source(qs, source)
+        resolved = [q for q in result if q.status == "RESOLVED"]
+        assert len(resolved) >= 2
+
+    # ─── 5. _build_question_prompt_section ────────────────────────────────
+
+    def test_prompt_section_empty(self):
+        assert _build_question_prompt_section([]) == ""
+
+    def test_prompt_section_has_labels(self):
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE", status="RESOLVED"),
+            ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED"),
+        ]
+        section = _build_question_prompt_section(qs)
+        assert "해결됨" in section
+        assert "미해결" in section
+        assert "Reader Questions" in section
+
+    def test_prompt_section_contains_questions(self):
+        qs = [ReaderQuestion(question="이 수치의 원본은?", category="SOURCE")]
+        section = _build_question_prompt_section(qs)
+        assert "이 수치의 원본은?" in section
+
+    def test_prompt_section_principle(self):
+        """'억지 해석 금지' 원칙 포함."""
+        qs = [ReaderQuestion(question="Q", category="SOURCE")]
+        section = _build_question_prompt_section(qs)
+        assert "억지 해석 금지" in section
+
+    # ─── 6. _validate_question_coverage ───────────────────────────────────
+
+    def test_coverage_all_resolved(self):
+        """전부 해결 → 경고 0, gate tag 0."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE", status="RESOLVED"),
+            ReaderQuestion(question="Q2", category="SCOPE", status="RESOLVED"),
+            ReaderQuestion(question="Q3", category="IMPACT", status="RESOLVED"),
+        ]
+        warns, tags = _validate_question_coverage("본문", qs, "EXPLAIN")
+        assert len(warns) == 0
+        assert len(tags) == 0
+
+    def test_coverage_1_unresolved_warn_only(self):
+        """1개 미해결 → 경고만, gate tag 없음."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE", status="RESOLVED"),
+            ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q3", category="IMPACT", status="RESOLVED"),
+        ]
+        warns, tags = _validate_question_coverage("본문", qs, "EXPLAIN")
+        assert len(warns) == 1
+        assert "1/3" in warns[0]
+        assert len(tags) == 0
+
+    def test_coverage_2_unresolved_gate(self):
+        """2개 미해결 → UNRESOLVED_READER_QUESTION gate tag."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q3", category="IMPACT", status="RESOLVED"),
+        ]
+        warns, tags = _validate_question_coverage("본문", qs, "EXPLAIN")
+        assert "UNRESOLVED_READER_QUESTION" in tags
+
+    def test_coverage_verify_strong_warning(self):
+        """VERIFY + 2개 미해결 → '강한 경고' 문구."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q3", category="IMPACT", status="RESOLVED"),
+        ]
+        warns, tags = _validate_question_coverage("본문", qs, "VERIFY")
+        assert any("강한 경고" in w for w in warns)
+        assert "UNRESOLVED_READER_QUESTION" in tags
+
+    def test_coverage_explain_normal_warning(self):
+        """EXPLAIN + 2개 미해결 → '경고' (강한 아님)."""
+        qs = [
+            ReaderQuestion(question="Q1", category="SOURCE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q2", category="SCOPE", status="UNRESOLVED"),
+            ReaderQuestion(question="Q3", category="IMPACT", status="RESOLVED"),
+        ]
+        warns, tags = _validate_question_coverage("본문", qs, "EXPLAIN")
+        assert any("경고" in w and "강한 경고" not in w for w in warns)
+
+    def test_coverage_empty_questions(self):
+        warns, tags = _validate_question_coverage("본문", [], "EXPLAIN")
+        assert len(warns) == 0
+        assert len(tags) == 0
+
+    # ─── 7. UNRESOLVED_READER_QUESTION not in _STRONG_FAIL_TAGS ──────────
+
+    def test_unresolved_not_strong_fail(self):
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert "UNRESOLVED_READER_QUESTION" not in _STRONG_FAIL_TAGS
+
+    # ─── 8. _STRONG_FAIL_TAGS 여전히 4개 (회귀) ─────────────────────────
+
+    def test_strong_fail_tags_unchanged(self):
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert _STRONG_FAIL_TAGS == frozenset({
+            "WEAK_OPENER", "DEAD_ENDING",
+            "STRUCTURE_COLUMN", "LOW_CONFIDENCE_OVERREACH",
+        })
+
+    # ─── 9. Reader Reward Layer 회귀 없음 ────────────────────────────────
+
+    def test_reader_reward_regression(self):
+        from app.services.content_pack import _detect_reward_type
+        assert _detect_reward_type("답은 다음 CPI가 기준이다.") == "SAVE"
+        assert _detect_reward_type("특사 파견이 공개되면 검증 가능.") == "FOLLOW"
+
+    # ─── 10. Findability Layer 회귀 없음 ─────────────────────────────────
+
+    def test_findability_regression(self):
+        count, warn = _validate_findability(
+            "삼성전자 노조가 5월 21일부터 파업을 예고했다.\n답은 참여율이다."
+        )
+        assert count >= 2
+        assert warn is None
+
+    # ─── 11. 소스 패턴 상수 커버리지 ─────────────────────────────────────
+
+    def test_source_citation_regex(self):
+        assert _SOURCE_CITATION_RE.search("정부가 발표했다") is not None
+        assert _SOURCE_CITATION_RE.search("보고서에 따르면") is not None
+        assert _SOURCE_CITATION_RE.search("아무 내용 없음") is None
+
+    def test_scope_number_regex(self):
+        assert _SCOPE_NUMBER_RE.search("3,000억원") is not None
+        assert _SCOPE_NUMBER_RE.search("25%") is not None
+        assert _SCOPE_NUMBER_RE.search("아무 숫자 없음") is None
+
+    # ─── 12. 전/후 샘플 — 질문 생성 품질 ────────────────────────────────
+
+    def test_sample_imf_article(self):
+        """IMF 재정 위험 기사 → SOURCE 질문에 근거/수치 포함."""
+        card = self._make_card(
+            key_facts=["IMF가 한국 재정 건전성 경고 발표",
+                        "GDP 대비 국가 부채 비율 55%"],
+        )
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        source_q = [q for q in qs if q.category == "SOURCE"][0]
+        assert "IMF" in source_q.question
+
+    def test_sample_nts_article(self):
+        """국세청 세정지원 기사 → SCOPE 질문에 구체성."""
+        from app.services.content_pack import ThesisCard
+        card = self._make_card(
+            key_facts=["국세청 소상공인 세정지원 8가지 발표",
+                        "신청 기한 6월 30일"],
+            thesis_cards=[ThesisCard(
+                thesis="지원 규모보다 신청 가능 항목 수가 핵심",
+                reader_stake="지금 신청 가능한 건 몇 개인가",
+            )],
+        )
+        qs = _generate_reader_questions(card, "EXPLAIN")
+        scope_q = [q for q in qs if q.category == "SCOPE"][0]
+        assert "신청" in scope_q.question or "수치" in scope_q.question
+
+    def test_sample_crypto_claim(self):
+        """SNS 크립토 주장 → VERIFY SOURCE 에 '원본 출처' 포함."""
+        card = self._make_card(
+            key_facts=["한국 코인 거래 비중 30% 주장 확산"],
+            certainty_level="미확인",
+        )
+        qs = _generate_reader_questions(card, "VERIFY")
+        source_q = [q for q in qs if q.category == "SOURCE"][0]
+        assert "원본 출처" in source_q.question or "공식 확인" in source_q.question
+
+    # ─── 13. PR 4-9 _BANNED_ENDINGS 회귀 ────────────────────────────────
+
+    def test_banned_endings_pr10_intact(self):
+        """PR 10 추가 금지 표현 여전히 작동."""
+        _, _, _, gate_fails = _validate_final_post(
+            "이번 결과는 변화를 시사한다.", ""
+        )
+        assert "DEAD_ENDING" in gate_fails
