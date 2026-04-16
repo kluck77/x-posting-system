@@ -46,6 +46,8 @@ from app.services.content_pack import (
     _generate_reader_questions, _resolve_questions_from_source,
     _build_question_prompt_section, _validate_question_coverage,
     _SOURCE_CITATION_RE, _SCOPE_NUMBER_RE,
+    # PR 12 Layer A: Source Integrity
+    _check_source_integrity, _SOURCE_TEXT_MIN_LEN,
 )
 from app.models.content_request import ContentRequest
 
@@ -7579,3 +7581,72 @@ class TestReaderQuestionResolver:
             "이번 결과는 변화를 시사한다.", ""
         )
         assert "DEAD_ENDING" in gate_fails
+
+
+# ─── PR 12 Layer A: Source Integrity Layer ─────────────────────────────────
+
+class TestSourceIntegrityLayer:
+    """PR 12 Layer A — source_text 상태 점검 테스트."""
+
+    def test_empty_string(self):
+        """빈 문자열 → MISSING_SOURCE_TEXT."""
+        assert _check_source_integrity("") == "MISSING_SOURCE_TEXT"
+
+    def test_none_value(self):
+        """None → MISSING_SOURCE_TEXT."""
+        assert _check_source_integrity(None) == "MISSING_SOURCE_TEXT"
+
+    def test_whitespace_only(self):
+        """공백만 → MISSING_SOURCE_TEXT."""
+        assert _check_source_integrity("   \n\t  ") == "MISSING_SOURCE_TEXT"
+
+    def test_too_short(self):
+        """유의미하지만 너무 짧은 텍스트 → SOURCE_TEXT_TOO_SHORT."""
+        short = "짧은 기사 내용"
+        assert len(short.strip()) < _SOURCE_TEXT_MIN_LEN
+        assert _check_source_integrity(short) == "SOURCE_TEXT_TOO_SHORT"
+
+    def test_just_below_min(self):
+        """최소 길이 바로 아래 → SOURCE_TEXT_TOO_SHORT."""
+        text = "가" * (_SOURCE_TEXT_MIN_LEN - 1)
+        assert _check_source_integrity(text) == "SOURCE_TEXT_TOO_SHORT"
+
+    def test_exactly_min(self):
+        """최소 길이 정확히 → 정상 (None)."""
+        text = "가" * _SOURCE_TEXT_MIN_LEN
+        assert _check_source_integrity(text) is None
+
+    def test_normal_article(self):
+        """정상 기사 길이 → None."""
+        article = (
+            "트럼프 대통령이 중국산 제품에 대한 관세를 25%로 인상한다고 발표했다. "
+            "이번 조치는 반도체와 전자제품을 포함하며, 5월 1일부터 시행된다. "
+            "중국 상무부는 즉각 보복 관세를 예고했다."
+        )
+        assert _check_source_integrity(article) is None
+
+    def test_long_article(self):
+        """긴 기사 → None."""
+        text = "한국 경제 뉴스. " * 200
+        assert _check_source_integrity(text) is None
+
+    def test_min_len_constant_reasonable(self):
+        """_SOURCE_TEXT_MIN_LEN 이 합리적 범위 (50~200)."""
+        assert 50 <= _SOURCE_TEXT_MIN_LEN <= 200
+
+    def test_finalpost_has_source_missing_reason(self):
+        """FinalPost에 source_missing_reason 필드 존재."""
+        fp = FinalPost()
+        assert hasattr(fp, "source_missing_reason")
+        assert fp.source_missing_reason is None
+
+    def test_finalpost_source_missing_reason_settable(self):
+        """FinalPost.source_missing_reason 에 라벨 설정 가능."""
+        fp = FinalPost(source_missing_reason="MISSING_SOURCE_TEXT")
+        assert fp.source_missing_reason == "MISSING_SOURCE_TEXT"
+
+    def test_finalpost_market_angle_type_exists(self):
+        """FinalPost에 market_angle_type 필드 존재 (Layer D 사전 준비)."""
+        fp = FinalPost()
+        assert hasattr(fp, "market_angle_type")
+        assert fp.market_angle_type is None

@@ -1306,6 +1306,12 @@ class FinalPost:
     reader_questions: list = field(default_factory=list)
     resolved_count: int = 0
     unresolved_count: int = 0
+    # PR 12 Layer A — Source Integrity Layer
+    # source_text 상태 라벨. None=정상, 그 외=원인 코드.
+    source_missing_reason: Optional[str] = None
+    # PR 12 Layer D — Market/Stake Layer v2
+    # 시장/생활 반영 경로 유형. 로그/테스트 전용.
+    market_angle_type: Optional[str] = None
 
 
 @dataclass
@@ -2574,6 +2580,11 @@ async def generate_final_post(
     # ━━━ 기사 원문 제거 — 요약 회귀 방지 ━━━
     # source_text를 주지 않는다. 슬롯 + 팩트만으로 쓰게 한다.
 
+    # ── PR 12 Layer A: Source Integrity 점검 ──
+    _source_missing = _check_source_integrity(source_text)
+    if _source_missing:
+        logger.warning(f"[SourceIntegrity] {_source_missing}")
+
     # ── 기사 라우터: mode 결정 ──
     mode = route_article_mode(card)
     user_prompt += f"\nARTICLE_MODE: {mode}\n"
@@ -2774,12 +2785,15 @@ async def generate_final_post(
     final.reader_questions = _reader_questions
     final.resolved_count = _rq_resolved
     final.unresolved_count = _rq_unresolved
+    # PR 12 Layer A — source 상태 메타
+    final.source_missing_reason = _source_missing
 
     logger.info(
         f"최종 마감 완료: mode={mode} "
         f"certainty={card.certainty_level} "
         f"reward={final.reward_type} "
         f"resolved={_rq_resolved}/{len(_reader_questions)} "
+        f"source_missing={_source_missing} "
         f"post={len(final.final_post)}자, "
         f"short={len(final.final_short)}자, gate_fails={final.gate_fails}"
     )
@@ -4490,9 +4504,37 @@ def _validate_findability(post: str) -> tuple[int, Optional[str]]:
     )
 
 
+# ─── PR 12 Layer A: Source Integrity Layer ────────────────────────────────
+#
+# source_text 상태를 최종 글 생성 전에 점검한다.
+# 빈 값 / 너무 짧음 / 존재하나 질문 해결 불가 — 원인을 라벨링.
+# MISSING_SOURCE_TEXT / SOURCE_TEXT_TOO_SHORT 는 WARN-only.
+
+# 최소 유의미 source_text 길이 (한국어 기사 기준 ~2문장)
+_SOURCE_TEXT_MIN_LEN = 80
+
+
+def _check_source_integrity(
+    source_text: str,
+) -> Optional[str]:
+    """
+    PR 12 Layer A — source_text 상태 라벨 반환.
+
+    반환값:
+      None                          — 정상 (길이 충분)
+      "MISSING_SOURCE_TEXT"         — 빈 문자열 / None / 공백만
+      "SOURCE_TEXT_TOO_SHORT"       — 존재하지만 _SOURCE_TEXT_MIN_LEN 미만
+    """
+    if not source_text or not source_text.strip():
+        return "MISSING_SOURCE_TEXT"
+    if len(source_text.strip()) < _SOURCE_TEXT_MIN_LEN:
+        return "SOURCE_TEXT_TOO_SHORT"
+    return None
+
+
 # ─── PR 11: Reader Question Resolver ─────────────────────────────────────
 #
-# 독자가 실제로 궁금해할 질문 3개를 기사/카드 데이터에서 생성하고,
+# 독자가 실제로 궁금해할 질문을 기사/카드 데이터에서 생성하고,
 # source_text 에서 답을 찾은 뒤, 해결 여부를 finalize 프롬프트에 전달한다.
 # 최종 post 에서 질문 커버리지를 검증한다.  AI 호출 없음 — 모두 결정론.
 #
