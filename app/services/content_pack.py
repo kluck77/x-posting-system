@@ -2792,6 +2792,7 @@ async def generate_final_post(
         f"최종 마감 완료: mode={mode} "
         f"certainty={card.certainty_level} "
         f"reward={final.reward_type} "
+        f"market_angle={final.market_angle_type} "
         f"resolved={_rq_resolved}/{len(_reader_questions)} "
         f"source_missing={_source_missing} "
         f"post={len(final.final_post)}자, "
@@ -4504,6 +4505,95 @@ def _validate_findability(post: str) -> tuple[int, Optional[str]]:
     )
 
 
+# ─── PR 12 Layer D: Market/Stake Layer v2 ─────────────────────────────────
+#
+# 최종 글이 시장/생활 반영 경로를 남기는지 점검.
+# market_angle_type 필드 자동 태깅 + 마지막 2~3문장 validator.
+# WARN-only — _STRONG_FAIL_TAGS 미편입.
+
+_MARKET_ANGLE_PATTERNS: dict[str, list[str]] = {
+    "COST": ["원가", "비용", "단가", "인건비", "물가", "가격 인상",
+             "가격 인하", "생산 비용", "운송비"],
+    "DEMAND": ["수요", "소비", "판매", "주문", "소비자", "매출",
+               "구매", "고객"],
+    "SUPPLY": ["공급", "생산", "가동률", "재고", "물량",
+               "공급망", "납품", "수입"],
+    "POLICY": ["시행", "집행", "규제", "법안", "정책", "조치",
+               "제도", "시행일", "적용"],
+    "FLOW": ["입금", "공시", "실적", "결산", "배당",
+             "투자", "자금", "유입", "유출"],
+    "CHECKPOINT": ["확인 가능", "검증 가능", "나오면", "공개되면",
+                   "집계되면", "참여율", "발표 예정"],
+}
+
+_MARKET_ANGLE_VALID_TYPES = frozenset(
+    list(_MARKET_ANGLE_PATTERNS.keys()) + ["NONE"]
+)
+
+
+def _detect_market_angle_type(
+    post: str, mode: str,
+) -> str:
+    """
+    PR 12 Layer D — 최종 post 에서 시장/생활 반영 경로 유형 감지.
+
+    반환: COST / DEMAND / SUPPLY / POLICY / FLOW / CHECKPOINT / NONE
+    VERIFY 모드에서는 CHECKPOINT 만 허용 (예언 금지 원칙).
+    """
+    if not post:
+        return "NONE"
+
+    # 뒤에서 3문장만 검사 (시장 시각은 본문 후반부에 위치)
+    sentences = [s.strip() for s in post.replace("\n", " ").split(".") if s.strip()]
+    tail = ". ".join(sentences[-3:]) if len(sentences) >= 3 else post
+
+    best_type = "NONE"
+    best_count = 0
+
+    for angle_type, patterns in _MARKET_ANGLE_PATTERNS.items():
+        if mode == "VERIFY" and angle_type not in ("CHECKPOINT", "NONE"):
+            continue
+        hits = sum(1 for p in patterns if p in tail)
+        if hits > best_count:
+            best_count = hits
+            best_type = angle_type
+
+    return best_type
+
+
+def _validate_market_stake(
+    post: str, mode: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    PR 12 Layer D — 마지막 2~3문장에 시장/생활 반영 표현 존재 여부 검사.
+
+    반환: (warning_message, gate_tag)
+      gate_tag 는 "NO_MARKET_STAKE" — WARN-only.
+    """
+    if not post:
+        return None, None
+
+    sentences = [s.strip() for s in post.replace("\n", " ").split(".") if s.strip()]
+    tail = ". ".join(sentences[-3:]) if len(sentences) >= 3 else post
+
+    # VERIFY 는 예언 금지이므로 CHECKPOINT 패턴만 검사
+    if mode == "VERIFY":
+        check_patterns = _MARKET_ANGLE_PATTERNS.get("CHECKPOINT", [])
+    else:
+        check_patterns = []
+        for patterns in _MARKET_ANGLE_PATTERNS.values():
+            check_patterns.extend(patterns)
+
+    if any(p in tail for p in check_patterns):
+        return None, None
+
+    return (
+        "마지막 2~3문장에 시장/생활 반영 경로 표현 없음 — "
+        "'그래서 어디에 먼저 반영되나' 시각 부재",
+        "NO_MARKET_STAKE",
+    )
+
+
 # ─── PR 12 Layer A: Source Integrity Layer ────────────────────────────────
 #
 # source_text 상태를 최종 글 생성 전에 점검한다.
@@ -5235,6 +5325,14 @@ def _validate_final_post(
         if _anchor_count == 0 and "LOW_FINDABILITY" not in gate_fails:
             gate_fails.append("LOW_FINDABILITY")
 
+    # PR 12 Layer D — Market/Stake Layer v2: 시장/생활 반영 경로 검사.
+    # WARN-only — _STRONG_FAIL_TAGS 미편입 (재생성 루프 금지).
+    _ms_warn, _ms_tag = _validate_market_stake(post, mode or "EXPLAIN")
+    if _ms_warn:
+        warnings.append(_ms_warn)
+        if _ms_tag and _ms_tag not in gate_fails:
+            gate_fails.append(_ms_tag)
+
     return post, short, warnings, gate_fails
 
 
@@ -5274,6 +5372,7 @@ def _parse_final_post(
             final_short=short,
             gate_fails=gate_fails,
             reward_type=_resolve_reward_type(post, short),
+            market_angle_type=_detect_market_angle_type(post, mode or "EXPLAIN"),
         )
     except Exception as e:
         logger.warning(f"FinalPost 파싱 오류: {e}")

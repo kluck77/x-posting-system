@@ -50,6 +50,9 @@ from app.services.content_pack import (
     _check_source_integrity, _SOURCE_TEXT_MIN_LEN,
     # PR 12 Layer C: Evidence Resolver
     _CHECKPOINT_EVIDENCE_PATTERNS,
+    # PR 12 Layer D: Market/Stake v2
+    _detect_market_angle_type, _validate_market_stake,
+    _MARKET_ANGLE_PATTERNS, _MARKET_ANGLE_VALID_TYPES,
 )
 from app.models.content_request import ContentRequest
 
@@ -1779,7 +1782,7 @@ class TestValidateFinalPost:
 
     def test_clean_post_no_warnings(self):
         """깨끗한 게시글은 경고 없음."""
-        post = "관건은 미국 관세 25%가 반도체까지 확대되느냐다."
+        post = "관건은 미국 관세 25%가 반도체까지 확대되느냐다. 답은 원가 상승이 먼저 반영되느냐다."
         short = "반도체 관세가 확대되면 삼성 마진이 줄어든다."
         _, _, warnings, _ = _validate_final_post(post, short)
         assert len(warnings) == 0
@@ -2853,8 +2856,8 @@ class TestValidationGate:
 
     def test_clean_post_no_warnings(self):
         """깨끗한 포스트는 경고 0개."""
-        post = "미국 관세 발표에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행령 여부다."
-        _, _, warnings, _ = _validate_final_post(post, "환율 1400원대, 변수는 시행령이다.")
+        post = "미국 관세 발표에서 먼저 건드리는 건 외교가 아니라 비용이다.\n원화 환율이 1400원대에 진입했다.\n진짜 변수는 시행 여부다."
+        _, _, warnings, _ = _validate_final_post(post, "환율 1400원대, 변수는 시행이다.")
         # 과장 표현도 없고 금지 마감도 없는 깨끗한 포스트
         assert len(warnings) == 0, f"경고 0개 예상, 실제: {warnings}"
 
@@ -7901,3 +7904,189 @@ class TestEvidenceResolverV2:
         """기존 한국어 수치 패턴 여전히 동작."""
         assert _SCOPE_NUMBER_RE.search("3,000억원") is not None
         assert _SCOPE_NUMBER_RE.search("25%") is not None
+
+
+# ─── PR 12 Layer D: Market/Stake Layer v2 ────────────────────────────────
+
+class TestMarketStakeLayerV2:
+    """PR 12 Layer D — market_angle_type 태깅 + validator 테스트."""
+
+    # ─── _detect_market_angle_type ──────────────────────────────────
+
+    def test_detect_cost(self):
+        """'원가' → COST."""
+        post = "관세 인상으로 원가 상승이 먼저 반영된다."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "COST"
+
+    def test_detect_demand(self):
+        """'소비' → DEMAND."""
+        post = "결국 소비 위축이 먼저 나타난다."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "DEMAND"
+
+    def test_detect_supply(self):
+        """'공급' → SUPPLY."""
+        post = "공급 차질이 먼저 반영될 수 있다."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "SUPPLY"
+
+    def test_detect_policy(self):
+        """'시행' → POLICY."""
+        post = "핵심은 시행일이다."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "POLICY"
+
+    def test_detect_flow(self):
+        """'실적' → FLOW."""
+        post = "다음 실적 발표가 갈림길이다."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "FLOW"
+
+    def test_detect_checkpoint(self):
+        """'확인 가능' → CHECKPOINT."""
+        post = "공식 발표가 나오면 확인 가능."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "CHECKPOINT"
+
+    def test_detect_none(self):
+        """관련 패턴 없으면 NONE."""
+        post = "이 사건은 주목할 만하다."
+        assert _detect_market_angle_type(post, "EXPLAIN") == "NONE"
+
+    def test_detect_empty_post(self):
+        """빈 post → NONE."""
+        assert _detect_market_angle_type("", "EXPLAIN") == "NONE"
+
+    def test_verify_mode_only_checkpoint(self):
+        """VERIFY → CHECKPOINT 외의 시장 앵글 무시."""
+        post = "원가 상승이 예상된다. 공급 차질 우려."
+        result = _detect_market_angle_type(post, "VERIFY")
+        # VERIFY에서는 COST/SUPPLY 아닌 NONE 또는 CHECKPOINT만
+        assert result in ("NONE", "CHECKPOINT")
+
+    def test_verify_mode_checkpoint_detected(self):
+        """VERIFY + 확인 포인트 → CHECKPOINT."""
+        post = "특사 파견이 공개되면 확인 가능."
+        assert _detect_market_angle_type(post, "VERIFY") == "CHECKPOINT"
+
+    # ─── _validate_market_stake ─────────────────────────────────────
+
+    def test_validate_with_market_expression(self):
+        """시장 표현 있으면 통과."""
+        warn, tag = _validate_market_stake(
+            "원가 상승이 먼저 반영된다.", "EXPLAIN"
+        )
+        assert warn is None
+        assert tag is None
+
+    def test_validate_no_market_expression(self):
+        """시장 표현 없으면 NO_MARKET_STAKE."""
+        warn, tag = _validate_market_stake(
+            "이것은 주목할 만한 사건이다.", "EXPLAIN"
+        )
+        assert warn is not None
+        assert tag == "NO_MARKET_STAKE"
+
+    def test_validate_verify_checkpoint_pass(self):
+        """VERIFY + 확인 포인트 표현 → 통과."""
+        warn, tag = _validate_market_stake(
+            "특사 파견이 공개되면 확인 가능.", "VERIFY"
+        )
+        assert warn is None
+        assert tag is None
+
+    def test_validate_verify_no_checkpoint(self):
+        """VERIFY + 확인 포인트 없음 → NO_MARKET_STAKE."""
+        warn, tag = _validate_market_stake(
+            "트럼프 측이 대화 의향을 밝혔다.", "VERIFY"
+        )
+        assert warn is not None
+        assert tag == "NO_MARKET_STAKE"
+
+    def test_validate_empty_post(self):
+        """빈 post → 통과 (None)."""
+        warn, tag = _validate_market_stake("", "EXPLAIN")
+        assert warn is None
+        assert tag is None
+
+    # ─── gate_fails 연동 ──────────────────────────────────────────
+
+    def test_no_market_stake_in_gate_fails(self):
+        """시장 표현 없는 post → gate_fails에 NO_MARKET_STAKE."""
+        _, _, _, gate_fails = _validate_final_post(
+            "이 사건은 주목할 만한 사건이다.", "짧은 버전"
+        )
+        assert "NO_MARKET_STAKE" in gate_fails
+
+    def test_no_market_stake_not_strong_fail(self):
+        """NO_MARKET_STAKE 는 _STRONG_FAIL_TAGS 에 없다."""
+        from app.services.content_pack import _STRONG_FAIL_TAGS
+        assert "NO_MARKET_STAKE" not in _STRONG_FAIL_TAGS
+
+    # ─── 상수 검증 ──────────────────────────────────────────────────
+
+    def test_valid_types_include_all(self):
+        """_MARKET_ANGLE_VALID_TYPES 에 7개 유형 포함."""
+        assert "COST" in _MARKET_ANGLE_VALID_TYPES
+        assert "DEMAND" in _MARKET_ANGLE_VALID_TYPES
+        assert "SUPPLY" in _MARKET_ANGLE_VALID_TYPES
+        assert "POLICY" in _MARKET_ANGLE_VALID_TYPES
+        assert "FLOW" in _MARKET_ANGLE_VALID_TYPES
+        assert "CHECKPOINT" in _MARKET_ANGLE_VALID_TYPES
+        assert "NONE" in _MARKET_ANGLE_VALID_TYPES
+
+    def test_pattern_dict_not_empty(self):
+        """_MARKET_ANGLE_PATTERNS 비어있지 않음."""
+        assert len(_MARKET_ANGLE_PATTERNS) >= 6
+        for key, patterns in _MARKET_ANGLE_PATTERNS.items():
+            assert len(patterns) >= 3, f"{key}: 패턴 수 부족"
+
+    # ─── _parse_final_post 연동 ──────────────────────────────────────
+
+    def test_parse_sets_market_angle_type(self):
+        """_parse_final_post → market_angle_type 자동 설정."""
+        import json
+        raw = json.dumps({
+            "final_post": "삼성전자 25% 관세 영향. 원가 상승이 먼저 반영된다. 답은 다음 실적이다.",
+            "final_short": "관세가 원가에 먼저 반영된다."
+        })
+        fp = _parse_final_post(raw, mode="EXPLAIN")
+        assert fp is not None
+        assert fp.market_angle_type is not None
+        assert fp.market_angle_type in _MARKET_ANGLE_VALID_TYPES
+
+    def test_parse_verify_market_angle(self):
+        """VERIFY _parse → CHECKPOINT 또는 NONE."""
+        import json
+        raw = json.dumps({
+            "final_post": "트럼프 측 발언이 있었다. 접촉은 확인되지 않았다. 특사 파견이 공개되면 확인 가능.",
+            "final_short": "접촉 확인 안 됨."
+        })
+        fp = _parse_final_post(raw, mode="VERIFY", certainty_level="미확인")
+        assert fp is not None
+        assert fp.market_angle_type in ("CHECKPOINT", "NONE")
+
+    # ─── mode별 market angle 시나리오 ────────────────────────────────
+
+    def test_explain_cost_scenario(self):
+        """EXPLAIN — 원가/비용 기사 → COST."""
+        post = (
+            "반도체 관세 25%가 시행되면 칩 단가가 먼저 오른다.\n"
+            "비용 전가 순서는 파운드리→팹리스→완성품이다.\n"
+            "답은 다음 분기 원가 보고서다."
+        )
+        assert _detect_market_angle_type(post, "EXPLAIN") == "COST"
+
+    def test_judgment_갈림_scenario(self):
+        """JUDGMENT — 갈림 기사 → 시장 앵글 감지."""
+        post = (
+            "인하 vs 동결, 한은의 선택이 갈린다.\n"
+            "소비 위축 데이터가 인하 쪽을 밀고 있다.\n"
+            "답은 다음 소비자심리지수다."
+        )
+        angle = _detect_market_angle_type(post, "JUDGMENT")
+        assert angle in ("DEMAND", "POLICY"), f"got {angle}"
+
+    def test_verify_checkpoint_scenario(self):
+        """VERIFY — 확인 포인트만 허용."""
+        post = (
+            "중국 측이 대화 의향을 밝혔다.\n"
+            "실제 접촉은 확인되지 않았다.\n"
+            "특사 파견이 공개되면 확인 가능."
+        )
+        assert _detect_market_angle_type(post, "VERIFY") == "CHECKPOINT"
