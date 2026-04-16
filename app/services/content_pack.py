@@ -23,6 +23,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Optional
@@ -2714,8 +2715,8 @@ async def generate_final_post(
     PR 29: db 파라미터 추가 — eval_store 영속화용.
     PR 30: db=None 시 자동 획득 (fail-open).
     """
-    # PR 30: db 미주입 시 자동 획득 — 어떤 진입점에서든 영속화 보장
-    if db is None:
+    # PR 30/31: db 미주입 시 자동 획득 — 테스트 환경에서는 스킵
+    if db is None and not os.environ.get("TESTING"):
         try:
             from app.db import get_db
             db = get_db()

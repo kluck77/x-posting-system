@@ -186,3 +186,57 @@ def load_records_by_source(
     except Exception as e:
         logger.warning(f"[EvalStore] source 조회 실패 (무시): {e}")
         return []
+
+
+# ── PR 31: Retention / Cleanup ──
+
+# 기본 보존 정책: 최근 90일 또는 최대 10,000건 (둘 중 먼저 도달하는 조건)
+RETENTION_DAYS = 90
+RETENTION_MAX_ROWS = 10000
+
+
+def cleanup_old_records(
+    db,
+    retention_days: int = RETENTION_DAYS,
+    max_rows: int = RETENTION_MAX_ROWS,
+) -> int:
+    """
+    PR 31 — 오래된 eval_records 정리.
+
+    1단계: retention_days 초과 레코드 삭제
+    2단계: max_rows 초과 시 오래된 순서로 삭제
+
+    반환: 삭제된 총 건수 (fail-open)
+    """
+    _ensure_table(db)
+    deleted = 0
+    try:
+        conn = _get_raw_conn(db)
+
+        # 1단계: 날짜 기준 삭제
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+        cursor = conn.execute(
+            "DELETE FROM eval_records WHERE created_at < ?",
+            (cutoff,),
+        )
+        deleted += cursor.rowcount
+
+        # 2단계: 건수 기준 삭제 (가장 오래된 것부터)
+        row = conn.execute("SELECT COUNT(*) FROM eval_records").fetchone()
+        total = row[0] if row else 0
+        if total > max_rows:
+            excess = total - max_rows
+            conn.execute(
+                "DELETE FROM eval_records WHERE id IN "
+                "(SELECT id FROM eval_records ORDER BY created_at ASC LIMIT ?)",
+                (excess,),
+            )
+            deleted += excess
+
+        conn.commit()
+        if deleted > 0:
+            logger.info(f"[EvalStore] cleanup: {deleted}건 삭제 (retention={retention_days}d, max={max_rows})")
+    except Exception as e:
+        logger.warning(f"[EvalStore] cleanup 실패 (무시): {e}")
+    return deleted

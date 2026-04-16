@@ -1692,12 +1692,26 @@ async def _handle_thesis_select_callback(
         clear_progress_callback()
         await msg.delete()
 
-        # PR 30: gold/pairwise 커맨드용 결과 저장
+        # PR 30/31: gold/pairwise 커맨드용 결과 저장 (메모리 + DB 영속화)
         context.user_data["last_final_result"] = result
         history = context.user_data.setdefault("final_result_history", [])
         history.append(result)
         if len(history) > 5:
             history.pop(0)
+
+        # PR 31: eval_store에 스냅샷 영속화 — 봇 재시작 후에도 복원 가능
+        try:
+            from app.services.eval_store import save_eval_record
+            _eval_db = _get_eval_db()
+            if _eval_db:
+                save_eval_record(_eval_db, "eval_target", {
+                    "post": result.final_post[:500],
+                    "short": result.final_short[:200],
+                    "chat_id": query.message.chat_id,
+                })
+                _eval_db.close()
+        except Exception:
+            pass  # fail-open
 
         # ── 최종 결과: 압축형 ──
         # 선택된 슬롯 설명은 50자 안쪽 우선 — 의미 보존형 압축
@@ -3593,14 +3607,31 @@ async def gold_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reasons = [r.strip() for r in args[1].split(",") if r.strip()]
     note = " ".join(args[2:]) if len(args) > 2 else ""
 
-    # 마지막 생성 결과에서 post/short 가져오기
+    # 마지막 생성 결과에서 post/short 가져오기 (메모리 → DB fallback)
     last_result = context.user_data.get("last_final_result")
-    if not last_result:
-        await update.message.reply_text("⚠️ 최근 생성 결과 없음. /pack → 슬롯 선택 후 다시 시도.")
-        return
-
-    post = getattr(last_result, "final_post", "")
-    short = getattr(last_result, "final_short", "")
+    if last_result:
+        post = getattr(last_result, "final_post", "")
+        short = getattr(last_result, "final_short", "")
+    else:
+        # PR 31: DB fallback — 봇 재시작 후에도 최근 결과 복원
+        try:
+            from app.services.eval_store import load_recent_records
+            _fdb = _get_eval_db()
+            if _fdb:
+                targets = load_recent_records(_fdb, "eval_target", limit=1)
+                _fdb.close()
+                if targets:
+                    post = targets[0].get("post", "")
+                    short = targets[0].get("short", "")
+                else:
+                    await update.message.reply_text("⚠️ 최근 생성 결과 없음.")
+                    return
+            else:
+                await update.message.reply_text("⚠️ 최근 생성 결과 없음.")
+                return
+        except Exception:
+            await update.message.reply_text("⚠️ 최근 생성 결과 없음.")
+            return
 
     record = _build_gold_eval_record(
         post, short, "EXPLAIN",

@@ -10,6 +10,8 @@ import pytest
 from app.services.eval_store import (
     save_eval_record,
     load_recent_records,
+    cleanup_old_records,
+    RETENTION_DAYS, RETENTION_MAX_ROWS,
     count_records,
     load_records_by_source,
     _ensure_table,
@@ -91,3 +93,43 @@ class TestEvalStore:
         assert count_records(db, "pairwise_review") == 1
         assert count_records(db, "learning_record") == 1
         assert count_records(db, "online_summary") == 1
+
+
+class TestRetention:
+    """PR 31 — eval_records retention/cleanup."""
+
+    def test_cleanup_by_max_rows(self, db):
+        """max_rows 초과 시 오래된 것부터 삭제."""
+        for i in range(15):
+            save_eval_record(db, "eval_meta", {"idx": i})
+        assert count_records(db, "eval_meta") == 15
+        deleted = cleanup_old_records(db, retention_days=9999, max_rows=10)
+        assert deleted == 5
+        assert count_records(db, "eval_meta") == 10
+
+    def test_cleanup_by_age(self, db):
+        """retention_days=0 → 전부 삭제."""
+        save_eval_record(db, "eval_meta", {"a": 1})
+        save_eval_record(db, "gold_eval", {"b": 2})
+        deleted = cleanup_old_records(db, retention_days=0)
+        assert deleted >= 2
+        assert count_records(db, "eval_meta") == 0
+
+    def test_cleanup_empty_db(self, db):
+        """빈 DB cleanup 크래시 없음."""
+        deleted = cleanup_old_records(db)
+        assert deleted == 0
+
+    def test_retention_constants(self):
+        """기본 retention 상수 확인."""
+        assert RETENTION_DAYS == 90
+        assert RETENTION_MAX_ROWS == 10000
+
+
+class TestTestingGuard:
+    """PR 31 — TESTING 환경변수 guard."""
+
+    def test_testing_env_set(self):
+        """conftest.py가 TESTING=1 설정했는지."""
+        import os
+        assert os.environ.get("TESTING") == "1"
