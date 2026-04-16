@@ -92,6 +92,10 @@ from app.services.evidence_resolver import (
     _extract_source_metadata, _resolve_questions_with_metadata,
     _INSTITUTION_COUNTRY_MAP, _DOC_TYPE_PATTERNS, _DATE_RE,
     _DOMAIN_COUNTRY_MAP,
+    # PR 25: Citation + Rerank
+    EvidenceCandidate, _collect_evidence_candidates, _rerank_evidence,
+    _build_citation_record, _build_citation_report, _score_candidate,
+    _split_sentences,
 )
 from app.models.content_request import ContentRequest
 
@@ -10096,3 +10100,176 @@ class TestResolveQuestionsWithMetadata:
         assert qs[0].status == "RESOLVED"
         assert qs[0].evidence_source == "METADATA"
         assert qs[1].status == "UNRESOLVED"
+
+
+# ── PR 25: Exact Citation + Evidence Rerank Tests ──
+
+
+class TestSplitSentences:
+    """PR 25 — 문장 분리."""
+
+    def test_split_korean(self):
+        sents = _split_sentences("첫 문장이다. 두번째 문장이다. 세번째.")
+        assert len(sents) >= 2
+
+    def test_split_newline(self):
+        sents = _split_sentences("첫 문장이다\n두번째 문장이다")
+        assert len(sents) == 2
+
+    def test_empty_input(self):
+        assert _split_sentences("") == []
+
+
+class TestCollectEvidenceCandidates:
+    """PR 25 — 근거 후보 수집."""
+
+    def test_source_candidates_from_text(self):
+        """SOURCE 카테고리 후보 수집."""
+        text = "기획재정부에 따르면 세제 개편이 확정됐다. 별도의 내용."
+        cands = _collect_evidence_candidates(text, [], "SOURCE")
+        assert len(cands) >= 1
+        assert cands[0].source == "SOURCE_TEXT"
+        assert "따르면" in cands[0].span
+
+    def test_scope_candidates_from_text(self):
+        """SCOPE 카테고리 후보 수집."""
+        text = "매출이 2조원을 돌파했다. 영업이익은 5000억원이다."
+        cands = _collect_evidence_candidates(text, [], "SCOPE")
+        assert len(cands) >= 1
+
+    def test_candidates_from_key_facts(self):
+        """key_facts에서도 후보 수집."""
+        cands = _collect_evidence_candidates(
+            "", ["기획재정부가 발표했다"], "SOURCE"
+        )
+        assert len(cands) >= 1
+        assert cands[0].source == "KEY_FACTS"
+
+    def test_no_candidates_for_mismatch(self):
+        """카테고리 불일치 시 후보 없음."""
+        text = "기획재정부에 따르면 확정됐다."
+        cands = _collect_evidence_candidates(text, [], "SCOPE")
+        assert len(cands) == 0
+
+    def test_multiple_candidates(self):
+        """여러 문장에서 복수 후보 수집."""
+        text = "한은에 따르면 금리 동결. 기재부가 밝혔다."
+        cands = _collect_evidence_candidates(text, [], "SOURCE")
+        assert len(cands) >= 2
+
+
+class TestScoreCandidate:
+    """PR 25 — 근거 점수 계산."""
+
+    def test_source_text_bonus(self):
+        """SOURCE_TEXT 출처는 +10점."""
+        c = EvidenceCandidate(span="테스트 문장 근거", source="SOURCE_TEXT",
+                              span_start=0, span_end=20, category_match="SOURCE")
+        score = _score_candidate(c, "SOURCE")
+        assert score >= 10
+
+    def test_key_facts_lower(self):
+        """KEY_FACTS 출처는 SOURCE_TEXT보다 낮음."""
+        c1 = EvidenceCandidate(span="같은 근거 문장 20자 이상", source="SOURCE_TEXT",
+                               span_start=0, span_end=30, category_match="SOURCE")
+        c2 = EvidenceCandidate(span="같은 근거 문장 20자 이상", source="KEY_FACTS",
+                               span_start=-1, span_end=-1, category_match="SOURCE")
+        assert _score_candidate(c1, "SOURCE") > _score_candidate(c2, "SOURCE")
+
+    def test_number_bonus(self):
+        """숫자 포함 시 +1점."""
+        c1 = EvidenceCandidate(span="매출 2조원 달성이다", source="SOURCE_TEXT",
+                               span_start=0, span_end=20, category_match="SCOPE")
+        c2 = EvidenceCandidate(span="매출이 많이 늘었다는 것", source="SOURCE_TEXT",
+                               span_start=0, span_end=20, category_match="SCOPE")
+        assert _score_candidate(c1, "SCOPE") > _score_candidate(c2, "SCOPE")
+
+
+class TestRerankEvidence:
+    """PR 25 — 근거 리랭크."""
+
+    def test_rerank_order(self):
+        """점수 내림차순 정렬."""
+        c1 = EvidenceCandidate(span="약한 근거", source="KEY_FACTS",
+                               span_start=-1, span_end=-1, category_match="SOURCE")
+        c2 = EvidenceCandidate(span="강한 근거 문장 20자 이상이다 여기", source="SOURCE_TEXT",
+                               span_start=0, span_end=30, category_match="SOURCE")
+        ranked = _rerank_evidence([c1, c2], "SOURCE")
+        assert ranked[0].span == c2.span
+        assert ranked[0].relevance_score >= ranked[1].relevance_score
+
+    def test_empty_candidates(self):
+        """빈 후보 리스트 크래시 없음."""
+        ranked = _rerank_evidence([], "SOURCE")
+        assert ranked == []
+
+
+class TestBuildCitationRecord:
+    """PR 25 — citation 레코드 빌드."""
+
+    def test_record_structure(self):
+        """레코드 필드 구조 확인."""
+        q = ReaderQuestion(question="출처?", category="SOURCE", status="RESOLVED")
+        c = EvidenceCandidate(span="기재부에 따르면", source="SOURCE_TEXT",
+                              span_start=0, span_end=15, relevance_score=15,
+                              category_match="SOURCE")
+        rec = _build_citation_record(q, [c], "https://example.com", "GOVERNMENT")
+        assert rec["category"] == "SOURCE"
+        assert rec["source_url"] == "https://example.com"
+        assert rec["source_type"] == "GOVERNMENT"
+        assert rec["best_evidence"]["span"] == "기재부에 따르면"
+        assert rec["best_evidence"]["relevance_score"] == 15
+        assert rec["alternatives_count"] == 0
+
+    def test_record_with_alternatives(self):
+        """대안 근거 포함."""
+        q = ReaderQuestion(question="출처?", category="SOURCE", status="RESOLVED")
+        cs = [
+            EvidenceCandidate(span="best", relevance_score=20, source="SOURCE_TEXT"),
+            EvidenceCandidate(span="alt1", relevance_score=10, source="KEY_FACTS"),
+            EvidenceCandidate(span="alt2", relevance_score=5, source="KEY_FACTS"),
+        ]
+        rec = _build_citation_record(q, cs)
+        assert rec["alternatives_count"] == 2
+        assert len(rec["alternatives"]) == 2
+
+    def test_record_no_candidates(self):
+        """후보 없을 때 best_evidence = None."""
+        q = ReaderQuestion(question="수치?", category="SCOPE", status="UNRESOLVED")
+        rec = _build_citation_record(q, [])
+        assert rec["best_evidence"] is None
+        assert rec["alternatives_count"] == 0
+
+
+class TestBuildCitationReport:
+    """PR 25 — 전체 citation report."""
+
+    def test_report_enriches_snippet(self):
+        """report 빌드 시 snippet 보강."""
+        q = ReaderQuestion(
+            question="출처?", category="SOURCE",
+            status="RESOLVED", evidence_snippet="따르면",
+        )
+        text = "기획재정부에 따르면 세제 개편이 확정됐다. 그 외 내용."
+        report = _build_citation_report([q], text, [], "", None)
+        assert len(report) == 1
+        assert report[0]["category"] == "SOURCE"
+        # snippet이 더 긴 span으로 보강됨
+        assert len(q.evidence_snippet) >= len("따르면")
+
+    def test_report_multiple_questions(self):
+        """복수 질문 report."""
+        qs = [
+            ReaderQuestion(question="출처?", category="SOURCE", status="RESOLVED"),
+            ReaderQuestion(question="수치?", category="SCOPE", status="UNRESOLVED"),
+        ]
+        text = "기재부가 밝혔다. 매출 2조원."
+        report = _build_citation_report(qs, text, [])
+        assert len(report) == 2
+
+    def test_report_empty_source(self):
+        """빈 source_text 크래시 없음."""
+        q = ReaderQuestion(question="출처?", category="SOURCE", status="UNRESOLVED")
+        report = _build_citation_report([q], "", [])
+        assert len(report) == 1
+        assert report[0]["best_evidence"] is None

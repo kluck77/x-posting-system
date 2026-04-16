@@ -2793,6 +2793,22 @@ async def generate_final_post(
         f"resolved={_rq_resolved} unresolved={_rq_unresolved}"
     )
 
+    # PR 25: Citation Report — 근거 후보 수집 + rerank + snippet 보강
+    from app.services.evidence_resolver import _build_citation_report
+    _citation_report = _build_citation_report(
+        _reader_questions, source_text, card.key_facts or [],
+        source_url=card.source_url or "",
+        source_type=_primary_source_type,
+    )
+    _best_counts = sum(
+        1 for cr in _citation_report
+        if cr.get("best_evidence") and cr["best_evidence"]["relevance_score"] > 0
+    )
+    logger.info(
+        f"[CitationReport] questions={len(_citation_report)} "
+        f"with_evidence={_best_counts}"
+    )
+
     # Low confidence 추정 경고 (VERIFY/JUDGMENT에서 모두 필요)
     _is_low_confidence = card.certainty_level in ("미확인", "상충")
     _speculation_guard = ""
@@ -3063,6 +3079,8 @@ async def generate_final_post(
     _eval_meta = _build_evaluation_meta(final, card, mode, _source_missing)
     # PR 24: source_meta 를 eval_meta 에 병합
     _eval_meta["source_meta"] = _source_meta
+    # PR 25: citation_report 를 eval_meta 에 병합
+    _eval_meta["citation_report"] = _citation_report
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
 
     # PR 15 — Learning Dataset 레코드 (outcome 미판정 상태로 기록)

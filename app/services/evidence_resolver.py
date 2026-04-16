@@ -12,6 +12,7 @@ content_pack.py 에서 분리됨 (PR 21).
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -411,3 +412,236 @@ def _resolve_questions_with_metadata(
             q.evidence_source = "METADATA"
 
     return questions
+
+
+# ── PR 25: Exact Citation + Evidence Rerank Layer ──
+#
+# 질문 해결 근거를 더 정확히 잡고, 여러 근거 후보 중 가장 적합한 것을 고른다.
+# AI 호출 없음 — rule-first rerank.
+
+@dataclass
+class EvidenceCandidate:
+    """PR 25 — 단일 근거 후보."""
+    span: str = ""            # 원문에서 추출한 근거 문자열
+    span_start: int = -1      # 원문 내 시작 위치
+    span_end: int = -1        # 원문 내 끝 위치
+    source: str = ""          # "SOURCE_TEXT" | "KEY_FACTS" | "METADATA"
+    relevance_score: int = 0  # 질문 적합도 점수 (높을수록 적합)
+    category_match: str = ""  # 매칭된 질문 카테고리
+
+
+# ── 문장 분리 ──
+_SENTENCE_SPLIT_RE = re.compile(r"[.!?。]\s*|\n")
+
+
+def _split_sentences(text: str) -> list[str]:
+    """텍스트를 문장 단위로 분리."""
+    if not text:
+        return []
+    parts = _SENTENCE_SPLIT_RE.split(text)
+    return [s.strip() for s in parts if s.strip() and len(s.strip()) > 5]
+
+
+def _collect_evidence_candidates(
+    source_text: str,
+    key_facts: list[str],
+    category: str,
+) -> list[EvidenceCandidate]:
+    """
+    PR 25 — 주어진 카테고리에 대한 근거 후보 수집.
+
+    source_text 를 문장 단위로 분리한 뒤, 각 문장이 카테고리 패턴에
+    매칭되는지 확인. key_facts 도 별도 소스로 검사.
+
+    반환: EvidenceCandidate 리스트 (점수 미계산 상태)
+    """
+    from app.services.question_resolver import (
+        _SOURCE_CITATION_RE, _SCOPE_NUMBER_RE,
+        _IMPACT_MARKER_PATTERNS, _CHECKPOINT_EVIDENCE_PATTERNS,
+    )
+
+    candidates: list[EvidenceCandidate] = []
+
+    # ── source_text 문장별 검사 ──
+    sentences = _split_sentences(source_text)
+    offset = 0
+    for sent in sentences:
+        pos = source_text.find(sent, offset)
+        if pos == -1:
+            pos = offset
+        matched = False
+
+        if category == "SOURCE":
+            m = _SOURCE_CITATION_RE.search(sent)
+            if m:
+                matched = True
+        elif category == "SCOPE":
+            m = _SCOPE_NUMBER_RE.search(sent)
+            if m:
+                matched = True
+        elif category == "IMPACT":
+            hits = [p for p in _IMPACT_MARKER_PATTERNS if p in sent]
+            if hits:
+                matched = True
+        elif category == "CHECKPOINT":
+            hits = [p for p in _CHECKPOINT_EVIDENCE_PATTERNS if p in sent]
+            if hits:
+                matched = True
+
+        if matched:
+            candidates.append(EvidenceCandidate(
+                span=sent[:100],
+                span_start=pos,
+                span_end=pos + len(sent),
+                source="SOURCE_TEXT",
+                category_match=category,
+            ))
+        offset = pos + len(sent)
+
+    # ── key_facts 검사 ──
+    for fact in (key_facts or []):
+        matched = False
+        if category == "SOURCE":
+            if _SOURCE_CITATION_RE.search(fact):
+                matched = True
+        elif category == "SCOPE":
+            if _SCOPE_NUMBER_RE.search(fact):
+                matched = True
+        elif category == "IMPACT":
+            hits = [p for p in _IMPACT_MARKER_PATTERNS if p in fact]
+            if hits:
+                matched = True
+        elif category == "CHECKPOINT":
+            hits = [p for p in _CHECKPOINT_EVIDENCE_PATTERNS if p in fact]
+            if hits:
+                matched = True
+
+        if matched:
+            candidates.append(EvidenceCandidate(
+                span=fact[:100],
+                span_start=-1,
+                span_end=-1,
+                source="KEY_FACTS",
+                category_match=category,
+            ))
+
+    return candidates
+
+
+def _score_candidate(
+    candidate: EvidenceCandidate,
+    category: str,
+) -> int:
+    """
+    PR 25 — 근거 후보 적합도 점수 계산.
+
+    점수 기준 (합산):
+      +10  source_text 출처 (key_facts 보다 신뢰도 높음)
+      +5   카테고리 정확 매칭
+      +3   span 길이 20자 이상 (충분한 컨텍스트)
+      +2   span 앞부분 위치 (문서 상단 = 더 중요)
+      +1   숫자 포함 (구체성)
+    """
+    score = 0
+    if candidate.source == "SOURCE_TEXT":
+        score += 10
+    if candidate.category_match == category:
+        score += 5
+    if len(candidate.span) >= 20:
+        score += 3
+    if candidate.span_start >= 0 and candidate.span_start < 500:
+        score += 2
+    if re.search(r"\d", candidate.span):
+        score += 1
+    return score
+
+
+def _rerank_evidence(
+    candidates: list[EvidenceCandidate],
+    category: str,
+) -> list[EvidenceCandidate]:
+    """
+    PR 25 — 근거 후보 리랭크.
+
+    점수 계산 후 내림차순 정렬. AI 호출 없음.
+    """
+    for c in candidates:
+        c.relevance_score = _score_candidate(c, category)
+    return sorted(candidates, key=lambda c: c.relevance_score, reverse=True)
+
+
+def _build_citation_record(
+    question: "ReaderQuestion",
+    candidates: list[EvidenceCandidate],
+    source_url: str = "",
+    source_type: Optional[str] = None,
+) -> dict:
+    """
+    PR 25 — 질문 단위 citation 레코드 빌드.
+
+    최상위 후보를 best_evidence 로, 나머지를 alternatives 로 기록.
+    """
+    best = candidates[0] if candidates else None
+
+    return {
+        "question": question.question,
+        "category": question.category,
+        "status": question.status,
+        "source_url": source_url,
+        "source_type": source_type,
+        # best evidence
+        "best_evidence": {
+            "span": best.span if best else "",
+            "span_start": best.span_start if best else -1,
+            "span_end": best.span_end if best else -1,
+            "source": best.source if best else "",
+            "relevance_score": best.relevance_score if best else 0,
+        } if best else None,
+        # alternatives (최대 2개)
+        "alternatives_count": max(0, len(candidates) - 1),
+        "alternatives": [
+            {
+                "span": c.span[:60],
+                "source": c.source,
+                "relevance_score": c.relevance_score,
+            }
+            for c in candidates[1:3]
+        ],
+    }
+
+
+def _build_citation_report(
+    questions: list["ReaderQuestion"],
+    source_text: str,
+    key_facts: list[str],
+    source_url: str = "",
+    source_type: Optional[str] = None,
+) -> list[dict]:
+    """
+    PR 25 — 전체 질문에 대한 citation report 빌드.
+
+    각 질문별로 근거 후보 수집 → rerank → citation 레코드 생성.
+    best evidence 를 ReaderQuestion.evidence_snippet 에 보강.
+
+    반환: citation 레코드 리스트
+    """
+    report: list[dict] = []
+
+    for q in questions:
+        candidates = _collect_evidence_candidates(
+            source_text, key_facts, q.category,
+        )
+        ranked = _rerank_evidence(candidates, q.category)
+
+        record = _build_citation_record(
+            q, ranked, source_url, source_type,
+        )
+        report.append(record)
+
+        # best evidence 로 snippet 보강 (기존 snippet 이 비어있거나 짧을 때)
+        if ranked and q.status == "RESOLVED":
+            best = ranked[0]
+            if len(best.span) > len(q.evidence_snippet):
+                q.evidence_snippet = best.span[:50]
+
+    return report
