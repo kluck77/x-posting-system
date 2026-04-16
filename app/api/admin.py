@@ -26,6 +26,19 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# PR 34: Control Room 라우터 + Static 파일 마운트
+from app.api.control_room import router as control_router
+app.include_router(control_router)
+
+try:
+    from fastapi.staticfiles import StaticFiles
+    from pathlib import Path
+    _static = Path("static")
+    if _static.exists():
+        app.mount("/static", StaticFiles(directory="static"), name="static")
+except Exception:
+    pass
+
 
 @app.on_event("startup")
 async def startup():
