@@ -23,7 +23,7 @@
 set -e
 
 REPO_DIR="/root/x-posting-system"
-DEFAULT_BRANCH="claude/fix-operatorhints-error-UryDJ"
+DEFAULT_BRANCH="claude/refactor-service-modules-9yIMA"
 BRANCH="${1:-$DEFAULT_BRANCH}"
 SERVICE="x-posting-bot"
 
