@@ -61,6 +61,10 @@ from app.services.content_pack import (
     _PRIMARY_SOURCE_VALID_TYPES,
     # PR 14: Draft Ranking Layer
     _score_draft, _select_best_draft,
+    # PR 15: Learning Dataset Layer
+    _build_learning_record,
+    OUTCOME_ADOPTED, OUTCOME_MODIFIED, OUTCOME_DISCARDED,
+    _VALID_OUTCOMES,
 )
 from app.models.content_request import ContentRequest
 
@@ -8963,3 +8967,291 @@ class TestDraftRankingLayer:
         )
         score = _score_draft(d)
         assert score == 80  # 100 - 20 (too short)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PR 15: Learning Dataset Layer 테스트
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestLearningDatasetLayer:
+    """PR 15 — _build_learning_record / outcome 상수 / FinalPost.claude_review_changed."""
+
+    # ── 헬퍼 ──
+
+    def _make_card(self, **kwargs):
+        defaults = dict(
+            key_facts=["팩트1", "팩트2", "팩트3"],
+            hook_candidates=["훅1"],
+            thesis_cards=[ThesisCard(thesis="해석 슬롯 논지", opener="첫 문장 초안")],
+            certainty_level="확정",
+            topic_tags=["경제", "무역"],
+        )
+        defaults.update(kwargs)
+        return CandidateCard(**defaults)
+
+    def _make_final(self, **kwargs):
+        defaults = dict(
+            final_post=(
+                "관세 25%가 반도체까지 확대되면 원가 상승이 먼저 반영된다.\n"
+                "삼성전자 파운드리 원가 기준으로 웨이퍼당 12% 인상 예고.\n"
+                "답은 다음 CPI 발표에서 반도체 장비 가격이 반영되느냐다."
+            ),
+            final_short="관세 확대 시 원가 상승 선반영.",
+            gate_fails=[],
+            reward_type="SAVE",
+            market_angle_type="COST",
+            draft_candidates_count=2,
+            draft_selected_rank=1,
+            draft_scores=[120, 95],
+            claude_review_changed=False,
+        )
+        defaults.update(kwargs)
+        return FinalPost(**defaults)
+
+    # ── outcome 상수 ──
+
+    def test_outcome_constants(self):
+        """3개 outcome 상수 정의."""
+        assert OUTCOME_ADOPTED == "ADOPTED"
+        assert OUTCOME_MODIFIED == "MODIFIED"
+        assert OUTCOME_DISCARDED == "DISCARDED"
+
+    def test_valid_outcomes_set(self):
+        """_VALID_OUTCOMES 에 3개 포함."""
+        assert len(_VALID_OUTCOMES) == 3
+        assert OUTCOME_ADOPTED in _VALID_OUTCOMES
+        assert OUTCOME_MODIFIED in _VALID_OUTCOMES
+        assert OUTCOME_DISCARDED in _VALID_OUTCOMES
+
+    # ── FinalPost.claude_review_changed ──
+
+    def test_finalpost_claude_review_default(self):
+        """기본값 False."""
+        fp = FinalPost()
+        assert fp.claude_review_changed is False
+
+    def test_finalpost_claude_review_set(self):
+        """True 설정."""
+        fp = FinalPost(claude_review_changed=True)
+        assert fp.claude_review_changed is True
+
+    # ── _build_learning_record 기본 ──
+
+    def test_record_superset_of_eval_meta(self):
+        """learning record 는 eval_meta 의 상위 집합."""
+        fp = self._make_final()
+        card = self._make_card()
+        meta = _build_evaluation_meta(fp, card, "EXPLAIN", None)
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        for key in meta:
+            assert key in record, f"eval_meta key '{key}' missing in record"
+            assert record[key] == meta[key]
+
+    def test_record_has_input_context(self):
+        """입력 컨텍스트 필드 포함."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["input_key_facts"] == ["팩트1", "팩트2", "팩트3"]
+        assert record["input_thesis"] == "해석 슬롯 논지"
+        assert record["input_hook"] == "훅1"
+
+    def test_record_input_key_facts_max_3(self):
+        """key_facts 최대 3개까지만."""
+        card = self._make_card(key_facts=["a", "b", "c", "d", "e"])
+        fp = self._make_final()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert len(record["input_key_facts"]) == 3
+
+    def test_record_input_no_thesis(self):
+        """thesis 없으면 빈 문자열."""
+        card = self._make_card(thesis_cards=[])
+        fp = self._make_final()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["input_thesis"] == ""
+
+    def test_record_input_no_hook(self):
+        """hook 없으면 빈 문자열."""
+        card = self._make_card(hook_candidates=[])
+        fp = self._make_final()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["input_hook"] == ""
+
+    def test_record_has_output_text(self):
+        """출력 텍스트 필드 포함."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["output_post"] == fp.final_post
+        assert record["output_short"] == fp.final_short
+
+    def test_record_has_pipeline_signals(self):
+        """파이프라인 신호 필드 포함."""
+        fp = self._make_final(
+            claude_review_changed=True,
+            draft_scores=[110, 95],
+        )
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["claude_review_changed"] is True
+        assert record["draft_scores"] == [110, 95]
+
+    def test_record_claude_review_false(self):
+        """Claude 미수정 → claude_review_changed=False."""
+        fp = self._make_final(claude_review_changed=False)
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["claude_review_changed"] is False
+
+    # ── outcome 판정 ──
+
+    def test_record_outcome_adopted(self):
+        """ADOPTED 판정."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", None,
+            outcome=OUTCOME_ADOPTED,
+        )
+        assert record["outcome"] == "ADOPTED"
+        assert record["modification_reason"] == ""
+
+    def test_record_outcome_modified(self):
+        """MODIFIED 판정 + 수정 사유."""
+        fp = self._make_final(claude_review_changed=True)
+        card = self._make_card()
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", None,
+            outcome=OUTCOME_MODIFIED,
+            modification_reason="Claude 리뷰에서 첫 문장 재작성",
+        )
+        assert record["outcome"] == "MODIFIED"
+        assert record["modification_reason"] == "Claude 리뷰에서 첫 문장 재작성"
+
+    def test_record_outcome_discarded(self):
+        """DISCARDED 판정."""
+        fp = self._make_final(gate_fails=["WEAK_OPENER", "RETRY_EXHAUSTED"])
+        card = self._make_card()
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", None,
+            outcome=OUTCOME_DISCARDED,
+            modification_reason="재생성 실패",
+        )
+        assert record["outcome"] == "DISCARDED"
+        assert record["modification_reason"] == "재생성 실패"
+
+    def test_record_outcome_empty_default(self):
+        """미판정 → 빈 문자열."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["outcome"] == ""
+        assert record["modification_reason"] == ""
+
+    # ── 전체 필드 검증 ──
+
+    def test_record_all_fields_present(self):
+        """학습 레코드 모든 필드 존재."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", None,
+            outcome=OUTCOME_ADOPTED,
+        )
+        expected_keys = {
+            # EvalMeta 기반
+            "mode", "certainty", "reward_type", "market_angle_type",
+            "resolved_count", "unresolved_count", "question_count",
+            "source_missing_reason",
+            "used_primary_source", "primary_source_type",
+            "external_evidence_count",
+            "draft_candidates_count", "draft_selected_rank",
+            "gate_fails", "strong_fail_count", "warn_tag_count",
+            "post_length", "short_length", "topic_tags", "has_thesis",
+            # PR 15 추가
+            "input_key_facts", "input_thesis", "input_hook",
+            "output_post", "output_short",
+            "claude_review_changed", "draft_scores",
+            "outcome", "modification_reason",
+        }
+        assert expected_keys.issubset(set(record.keys()))
+
+    def test_record_json_serializable(self):
+        """학습 레코드 JSON 직렬화 가능."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", None,
+            outcome=OUTCOME_ADOPTED,
+        )
+        serialized = json.dumps(record, ensure_ascii=False)
+        deserialized = json.loads(serialized)
+        assert deserialized["outcome"] == "ADOPTED"
+        assert deserialized["mode"] == "EXPLAIN"
+
+    # ── mode별 시나리오 ──
+
+    def test_record_verify_mode(self):
+        """VERIFY mode 학습 레코드."""
+        fp = self._make_final(
+            gate_fails=["LOW_CONFIDENCE_OVERREACH"],
+            reward_type="FOLLOW",
+            market_angle_type=None,
+        )
+        card = self._make_card(certainty_level="미확인")
+        record = _build_learning_record(
+            fp, card, "VERIFY", None,
+            outcome=OUTCOME_DISCARDED,
+        )
+        assert record["mode"] == "VERIFY"
+        assert record["certainty"] == "미확인"
+        assert record["outcome"] == "DISCARDED"
+        assert "LOW_CONFIDENCE_OVERREACH" in record["gate_fails"]
+
+    def test_record_judgment_mode(self):
+        """JUDGMENT mode 학습 레코드."""
+        fp = self._make_final(reward_type="SHARE")
+        card = self._make_card(certainty_level="상충")
+        record = _build_learning_record(
+            fp, card, "JUDGMENT", None,
+            outcome=OUTCOME_MODIFIED,
+            modification_reason="수동 편집",
+        )
+        assert record["mode"] == "JUDGMENT"
+        assert record["certainty"] == "상충"
+        assert record["reward_type"] == "SHARE"
+
+    # ── 복합 시나리오 ──
+
+    def test_record_with_external_evidence(self):
+        """외부 evidence 정보 포함."""
+        fp = self._make_final(
+            used_primary_source=True,
+            primary_source_type="GOVERNMENT",
+            external_evidence_count=3,
+        )
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["used_primary_source"] is True
+        assert record["primary_source_type"] == "GOVERNMENT"
+        assert record["external_evidence_count"] == 3
+
+    def test_record_with_source_missing(self):
+        """source_text 없는 경우."""
+        fp = self._make_final()
+        card = self._make_card()
+        record = _build_learning_record(
+            fp, card, "EXPLAIN", "MISSING_SOURCE_TEXT"
+        )
+        assert record["source_missing_reason"] == "MISSING_SOURCE_TEXT"
+
+    def test_record_draft_scores_preserved(self):
+        """draft_scores 원본 리스트 보존."""
+        fp = self._make_final(draft_scores=[120, 95, 80])
+        card = self._make_card()
+        record = _build_learning_record(fp, card, "EXPLAIN", None)
+        assert record["draft_scores"] == [120, 95, 80]
+        # 원본 변경 없음
+        record["draft_scores"].append(999)
+        assert fp.draft_scores == [120, 95, 80]

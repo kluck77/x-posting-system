@@ -1322,6 +1322,9 @@ class FinalPost:
     draft_candidates_count: int = 1   # 생성된 후보 수
     draft_selected_rank: int = 1      # 채택된 후보 순위 (1-indexed)
     draft_scores: list = field(default_factory=list)  # 후보별 점수
+    # PR 15 — Learning Dataset Layer
+    # Claude 리뷰 수정 여부. 로그/dataset 전용.
+    claude_review_changed: bool = False
 
 
 @dataclass
@@ -2801,6 +2804,8 @@ async def generate_final_post(
             mode=mode,
         )
         _final = _reviewed if _reviewed else _best
+        # PR 15: Claude 리뷰 수정 여부
+        _final.claude_review_changed = _reviewed is not None
 
         # PR 14: 랭킹 메타데이터 주입
         _final.draft_candidates_count = _d_count
@@ -2957,6 +2962,14 @@ async def generate_final_post(
     # PR 12 Layer E — 평가/학습 루프: 구조화 메타 로그
     _eval_meta = _build_evaluation_meta(final, card, mode, _source_missing)
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
+
+    # PR 15 — Learning Dataset 레코드 (outcome 미판정 상태로 기록)
+    _learn_record = _build_learning_record(
+        final, card, mode, _source_missing
+    )
+    logger.info(
+        f"[LearnRecord] {json.dumps(_learn_record, ensure_ascii=False)}"
+    )
 
     return final
 
@@ -5702,6 +5715,62 @@ def _build_evaluation_meta(
         "topic_tags": list(card.topic_tags) if card.topic_tags else [],
         "has_thesis": bool(card.thesis_cards),
     }
+
+
+# ── PR 15: Learning Dataset Layer — 학습 데이터셋 레코드 ──
+
+OUTCOME_ADOPTED = "ADOPTED"       # 그대로 채택
+OUTCOME_MODIFIED = "MODIFIED"     # 수정 후 채택
+OUTCOME_DISCARDED = "DISCARDED"   # 폐기
+
+_VALID_OUTCOMES = frozenset({OUTCOME_ADOPTED, OUTCOME_MODIFIED, OUTCOME_DISCARDED})
+
+
+def _build_learning_record(
+    final: "FinalPost",
+    card: "CandidateCard",
+    mode: str,
+    source_missing: Optional[str],
+    *,
+    outcome: str = "",
+    modification_reason: str = "",
+) -> dict:
+    """
+    PR 15 — Learning Dataset Layer.
+
+    채택/수정/폐기 판정을 포함한 학습 데이터셋 레코드.
+    _build_evaluation_meta 의 상위 집합이다.
+
+    - outcome: ADOPTED / MODIFIED / DISCARDED (빈 문자열 = 미판정)
+    - modification_reason: 수정 사유 (MODIFIED 일 때만 유의미)
+
+    AI 호출 없음. rule-first.
+    """
+    # 기반: EvalMeta (PR 12/13/14)
+    record = _build_evaluation_meta(final, card, mode, source_missing)
+
+    # ── 입력 컨텍스트 (학습용) ──
+    record["input_key_facts"] = list(card.key_facts)[:3]
+    record["input_thesis"] = (
+        card.thesis_cards[0].thesis if card.thesis_cards else ""
+    )
+    record["input_hook"] = (
+        card.hook_candidates[0] if card.hook_candidates else ""
+    )
+
+    # ── 출력 텍스트 ──
+    record["output_post"] = final.final_post
+    record["output_short"] = final.final_short
+
+    # ── 파이프라인 신호 ──
+    record["claude_review_changed"] = final.claude_review_changed
+    record["draft_scores"] = list(final.draft_scores)
+
+    # ── 판정 (호출자가 설정) ──
+    record["outcome"] = outcome
+    record["modification_reason"] = modification_reason
+
+    return record
 
 
 def _parse_final_post(
