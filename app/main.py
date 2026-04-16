@@ -16,33 +16,11 @@ from app.utils.logging_config import setup_logging
 logger = logging.getLogger(__name__)
 
 _KST = timezone(timedelta(hours=9))
-_TOP5_HOUR = 5   # 05:00 KST
-_TOP5_MINUTE = 0
 _MONITOR_INTERVAL = 60  # 뉴스 모니터 폴링 간격 (초)
 _CLEANUP_HOUR = 4  # 04:00 KST — Draft 자동 정리
 _CLEANUP_MINUTE = 0
-_DIGEST_HOUR = 5    # 05:00 KST — 모닝 다이제스트
-_DIGEST_MINUTE = 1  # 05:01 (top5 와 1분 간격)
-
-
-async def _top5_scheduler_loop() -> None:
-    """매일 05:00 KST 에 run_top5_briefing() 을 실행하는 백그라운드 루프."""
-    while True:
-        now = datetime.now(tz=_KST)
-        target = now.replace(hour=_TOP5_HOUR, minute=_TOP5_MINUTE, second=0, microsecond=0)
-        if target <= now:
-            target += timedelta(days=1)
-        wait_seconds = (target - now).total_seconds()
-        logger.info(
-            f"[top5-scheduler] 다음 실행: {target.isoformat()} "
-            f"(대기 {wait_seconds:.0f}초)"
-        )
-        await asyncio.sleep(wait_seconds)
-        try:
-            from app.services.top5_briefing_service import run_top5_briefing
-            await run_top5_briefing()
-        except Exception as e:
-            logger.warning(f"[top5-scheduler] 실행 실패 (fail-open): {e}")
+_DIGEST_HOUR = 5    # 05:00 KST — 모닝 다이제스트 (공식 5AM 브리핑)
+_DIGEST_MINUTE = 0
 
 
 async def _news_monitor_loop() -> None:
@@ -168,17 +146,13 @@ async def run_all():
     logger.info("FastAPI 서버 시작: http://localhost:8000")
     logger.info("API 문서: http://localhost:8000/docs")
 
-    # Top5 브리핑 스케줄러 (05:00 KST)
-    asyncio.create_task(_top5_scheduler_loop())
-    logger.info("[top5-scheduler] 05:00 KST 자동 실행 등록")
-
     # 뉴스 모니터 (1분 간격, 서버 전용 news_monitor.py 의존)
     asyncio.create_task(_news_monitor_loop())
     logger.info("[news-monitor] 1분 간격 폴링 등록")
 
-    # 모닝 다이제스트 (05:01 KST, overnight_buffer 기반)
+    # 5AM 모닝 다이제스트 (overnight_buffer 기반, 공식 브리핑 경로)
     asyncio.create_task(_morning_digest_loop())
-    logger.info("[morning-digest] 05:01 KST 자동 실행 등록")
+    logger.info("[morning-digest] 05:00 KST 자동 실행 등록")
 
     # Draft 자동 정리 (04:00 KST)
     asyncio.create_task(_draft_cleanup_loop())

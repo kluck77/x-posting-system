@@ -390,27 +390,13 @@ async def get_providers():
 @router.get("/recent-news")
 async def get_recent_news(limit: int = 8):
     """
-    뉴스 모니터 버퍼에서 최근 기사 제목 목록을 반환합니다.
-    버퍼가 비어있거나 import 실패 시 빈 배열을 반환합니다.
+    최근 수집된 기사 제목 목록을 반환합니다.
+    _recent_items 버퍼 기반 — overnight_buffer 클리어와 독립.
     """
     try:
-        from app.services.news_monitor import _pending_articles, overnight_buffer
-        articles: list = []
-        for src in (overnight_buffer, _pending_articles):
-            try:
-                articles.extend(list(src or []))
-            except Exception:
-                pass
-        result = []
-        for a in articles[:limit]:
-            if isinstance(a, dict):
-                title = a.get("title") or a.get("name") or ""
-            else:
-                title = getattr(a, "title", None) or ""
-            title = str(title).strip()[:100]
-            if title:
-                result.append({"title": title})
-        return result
+        from app.services.news_monitor import get_recent_items
+        items = get_recent_items(limit=limit)
+        return [{"title": str(a.get("title", "")).strip()[:100]} for a in items if a.get("title")]
     except Exception as e:
         logger.warning(f"recent-news 오류: {e}")
         return []

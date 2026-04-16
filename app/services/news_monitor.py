@@ -59,6 +59,11 @@ _alerted_stories: set[str] = set()
 # 오버나이트 버퍼: 수면 시간 동안 수집된 기사 목록
 overnight_buffer: list[dict] = []
 
+# 최근 기사 버퍼: 수면/깨어있는 시간 무관, 항상 최근 N건 유지
+# morning_digest 후에도 비워지지 않음 → Alerts Recent News 소스
+_recent_items: list[dict] = []
+_RECENT_ITEMS_MAX = 50
+
 
 # ─── 유틸리티 ─────────────────────────────────────────────────────────────────
 
@@ -277,6 +282,11 @@ def clear_overnight_buffer() -> None:
     overnight_buffer.clear()
 
 
+def get_recent_items(limit: int = 20) -> list[dict]:
+    """최근 수집 기사 N건 반환. overnight_buffer 클리어와 독립."""
+    return list(reversed(_recent_items[-limit:]))
+
+
 # ─── 모니터 메인 사이클 ───────────────────────────────────────────────────────
 
 async def run_monitor_cycle() -> int:
@@ -327,17 +337,24 @@ async def run_monitor_cycle() -> int:
         _db_dup_count = 0
         _pipeline_count = 0
         for article in new_articles:
-            # 오버나이트 버퍼 수집 (수면 시간 여부 무관하게)
+            _art_dict = {
+                "title":    article.title,
+                "url":      article.url,
+                "summary":  article.summary,
+                "category": article.category,
+                "source":   article.source,
+                "region":   getattr(article, "region", "KR"),
+                "added_at": datetime.now(KST).isoformat(),
+            }
+
+            # 최근 기사 버퍼 (항상 유지, morning_digest와 독립)
+            _recent_items.append(_art_dict)
+            if len(_recent_items) > _RECENT_ITEMS_MAX:
+                del _recent_items[:len(_recent_items) - _RECENT_ITEMS_MAX]
+
+            # 오버나이트 버퍼 수집 (수면 시간에만)
             if sleeping:
-                overnight_buffer.append({
-                    "title":    article.title,
-                    "url":      article.url,
-                    "summary":  article.summary,
-                    "category": article.category,
-                    "source":   article.source,
-                    "region":   getattr(article, "region", "KR"),
-                    "added_at": datetime.now(KST).isoformat(),
-                })
+                overnight_buffer.append(_art_dict)
 
             # 교차 확인 클러스터 업데이트 (기존 유지)
             ready_key = _ingest_article(article)
