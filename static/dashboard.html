@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>X System — Control Room</title>
+<style>
+:root{
+  --bg-void:#050508;--bg-deep:#0a0a12;--bg-surface:#0f0f1a;--bg-raised:#141420;
+  --border-subtle:rgba(255,255,255,.06);--border-normal:rgba(255,255,255,.10);
+  --border-accent:rgba(99,102,241,.35);
+  --indigo:#6366f1;--indigo-dim:rgba(99,102,241,.15);
+  --green:#22c55e;--green-dim:rgba(34,197,94,.15);
+  --amber:#f59e0b;--amber-dim:rgba(245,158,11,.15);
+  --red:#ef4444;--red-dim:rgba(239,68,68,.15);
+  --cyan:#06b6d4;
+  --text-pri:rgba(255,255,255,.92);--text-sec:rgba(255,255,255,.55);
+  --text-mut:rgba(255,255,255,.30);--text-acc:#a5b4fc;
+  --font:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
+  --mono:'Courier New',monospace;
+  --r-sm:8px;--r-md:12px;--r-lg:16px;
+  --nav-h:60px;--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--bg-void);color:var(--text-pri);
+  font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased;
+  overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;z-index:50;height:48px;display:flex;
+  align-items:center;justify-content:space-between;padding:0 16px;
+  background:rgba(5,5,10,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border-subtle)}
+.topbar-brand{display:flex;align-items:center;gap:8px}
+.topbar-badge{font-size:9px;letter-spacing:1.5px;color:var(--text-acc);
+  background:var(--indigo-dim);border:1px solid var(--border-accent);
+  border-radius:4px;padding:2px 6px;font-weight:600}
+.topbar-time{font-size:11px;color:var(--text-sec);font-family:var(--mono)}
+.topbar-refresh{background:none;border:none;color:var(--text-sec);
+  font-size:18px;cursor:pointer;padding:4px 8px;border-radius:var(--r-sm);
+  transition:color .2s}
+.topbar-refresh:active{color:var(--indigo)}
+
+/* ── MAIN CONTENT ── */
+.main{position:absolute;top:48px;left:0;right:0;
+  bottom:calc(var(--nav-h) + var(--safe-b));overflow-y:auto;
+  -webkit-overflow-scrolling:touch}
+.tab-pane{display:none;padding:16px 16px 24px}
+.tab-pane.active{display:block}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:100;
+  height:calc(var(--nav-h) + var(--safe-b));padding-bottom:var(--safe-b);
+  display:flex;background:rgba(5,5,10,.95);backdrop-filter:blur(16px);
+  border-top:1px solid var(--border-subtle)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;background:none;border:none;
+  color:var(--text-mut);font-size:10px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:color .2s}
+.nav-btn.active{color:var(--indigo)}
+.nav-btn .nav-icon{font-size:20px;line-height:1;transition:filter .2s}
+.nav-btn.active .nav-icon{filter:drop-shadow(0 0 6px rgba(99,102,241,.6))}
+
+/* ── CARDS ── */
+.card{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--r-lg);padding:14px 16px;margin-bottom:10px;
+  transition:border-color .2s}
+.card:active{border-color:var(--border-accent)}
+.card-title{font-size:10px;letter-spacing:1.2px;color:var(--text-mut);
+  margin-bottom:8px;text-transform:uppercase}
+.card-row{display:flex;justify-content:space-between;align-items:center;
+  min-height:32px}
+.card-val{font-size:22px;font-weight:700;line-height:1}
+.card-sub{font-size:11px;color:var(--text-sec)}
+
+/* ── STATUS DOTS ── */
+.dots{display:flex;gap:12px}
+.dot{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-sec)}
+.dot-led{width:8px;height:8px;border-radius:50%;background:var(--text-mut)}
+.dot-led.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot-led.err{background:var(--red);box-shadow:0 0 6px var(--red);
+  animation:blink 1.5s ease-in-out infinite}
+.dot-led.warn{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── SCORE BLOCK ── */
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.score-box{text-align:center;padding:12px 8px;border-radius:var(--r-md);
+  background:var(--bg-raised);border:1px solid var(--border-subtle)}
+.score-num{font-size:28px;font-weight:800;line-height:1;margin-bottom:2px}
+.score-label{font-size:9px;letter-spacing:1px;color:var(--text-sec);text-transform:uppercase}
+.score-num.green{color:var(--green)}.score-num.amber{color:var(--amber)}
+.score-num.red{color:var(--red)}.score-num.blue{color:var(--indigo)}
+
+/* ── QUEUE BADGE ── */
+.badge{display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;border-radius:10px;font-size:11px;font-weight:700;
+  padding:0 6px}
+.badge-red{background:var(--red-dim);color:var(--red)}
+.badge-amber{background:var(--amber-dim);color:var(--amber)}
+.badge-green{background:var(--green-dim);color:var(--green)}
+.badge-blue{background:var(--indigo-dim);color:var(--indigo)}
+
+/* ── MINI LIST ── */
+.mini-list{list-style:none}
+.mini-item{display:flex;align-items:center;gap:8px;padding:8px 0;
+  border-bottom:1px solid var(--border-subtle);font-size:12px}
+.mini-item:last-child{border-bottom:none}
+.mini-item-time{font-size:10px;color:var(--text-mut);font-family:var(--mono);
+  white-space:nowrap}
+
+/* ── AGENT CARDS ── */
+.agent-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;
+  -webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory}
+.agent-card{flex:0 0 140px;scroll-snap-align:start;background:var(--bg-surface);
+  border:1px solid var(--border-subtle);border-radius:var(--r-lg);
+  padding:14px 12px;position:relative;overflow:hidden}
+.agent-card.working{border-color:var(--indigo);box-shadow:0 0 12px rgba(99,102,241,.15)}
+.agent-name{font-size:12px;font-weight:600;margin-bottom:4px}
+.agent-provider{font-size:10px;color:var(--text-sec);margin-bottom:8px}
+.agent-stat{font-size:20px;font-weight:800;margin-bottom:2px}
+.agent-status{font-size:10px;display:flex;align-items:center;gap:4px}
+
+/* ── WORKING MOTION ── */
+@keyframes pulse-ring{0%{transform:scale(1);opacity:.6}100%{transform:scale(1.8);opacity:0}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--indigo);
+  position:relative;display:inline-block}
+.pulse-dot::after{content:'';position:absolute;inset:-2px;border-radius:50%;
+  border:2px solid var(--indigo);animation:pulse-ring 1.5s ease-out infinite}
+.agent-card.working .agent-name{animation:breathe 2s ease-in-out infinite}
+.progress-bar{height:3px;border-radius:2px;background:var(--bg-raised);
+  overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;border-radius:2px;
+  background:linear-gradient(90deg,var(--indigo),var(--cyan),var(--indigo));
+  background-size:200% 100%;animation:shimmer 2s linear infinite}
+
+/* ── PIPELINE FLOW ── */
+.flow{display:flex;align-items:center;gap:0;overflow-x:auto;padding:8px 0;
+  -webkit-overflow-scrolling:touch}
+.flow-step{flex:0 0 auto;text-align:center;padding:8px 12px}
+.flow-icon{font-size:20px;margin-bottom:2px}
+.flow-label{font-size:9px;color:var(--text-sec);letter-spacing:.5px}
+.flow-count{font-size:16px;font-weight:700;margin-top:2px}
+.flow-arrow{color:var(--text-mut);font-size:14px;flex:0 0 auto}
+
+/* ── SECTION HEADER ── */
+.sec-head{font-size:10px;letter-spacing:1.5px;color:var(--text-mut);
+  margin:16px 0 8px;text-transform:uppercase}
+
+/* ── EMPTY STATE ── */
+.empty{padding:12px;text-align:center;font-size:11px;color:var(--text-mut)}
+
+/* ── OPS GRID ── */
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ops-item{background:var(--bg-raised);border-radius:var(--r-md);padding:12px;
+  border:1px solid var(--border-subtle)}
+.ops-val{font-size:18px;font-weight:700}
+.ops-label{font-size:9px;color:var(--text-sec);margin-top:2px;text-transform:uppercase}
+
+/* ── REDUCED MOTION ── */
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{
+  animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span style="font-size:18px">🦊</span>
+    <span class="topbar-badge">CONTROL ROOM</span>
+  </div>
+  <span class="topbar-time" id="clock"></span>
+  <button class="topbar-refresh" id="refreshBtn" onclick="loadAll()">↻</button>
+</header>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- ═══ PULSE TAB ═══ -->
+<section class="tab-pane active" id="tab-pulse">
+  <!-- system status -->
+  <div class="card">
+    <div class="card-row">
+      <div class="dots" id="statusDots">
+        <div class="dot"><span class="dot-led" id="dot-db"></span>DB</div>
+        <div class="dot"><span class="dot-led" id="dot-tg"></span>TG</div>
+        <div class="dot"><span class="dot-led" id="dot-x"></span>X</div>
+      </div>
+      <span class="card-sub" id="syncTime">—</span>
+    </div>
+  </div>
+
+  <!-- editorial scores -->
+  <div class="score-grid">
+    <div class="score-box">
+      <div class="score-num blue" id="avgPost">—</div>
+      <div class="score-label">Postability</div>
+    </div>
+    <div class="score-box">
+      <div class="score-num green" id="avgTrust">—</div>
+      <div class="score-label">Trust</div>
+    </div>
+  </div>
+
+  <!-- queue summary -->
+  <div class="card">
+    <div class="card-title">ROUTING QUEUE</div>
+    <div class="card-row">
+      <span>🔴 Immediate</span>
+      <span class="badge badge-red" id="qImmediate">0</span>
+    </div>
+    <div class="card-row">
+      <span>🟡 Day Digest</span>
+      <span class="badge badge-amber" id="qDigest">0</span>
+    </div>
+    <div class="card-row">
+      <span>🔵 5AM Top10</span>
+      <span class="badge badge-blue" id="qTop10">0</span>
+    </div>
+    <div class="card-row">
+      <span>⚪ Weekly Pool</span>
+      <span class="badge badge-green" id="qWeekly">0</span>
+    </div>
+  </div>
+
+  <!-- today activity -->
+  <div class="card">
+    <div class="card-title">TODAY</div>
+    <div class="card-row">
+      <span>초안 생성</span>
+      <span class="card-val" id="todayDrafts">—</span>
+    </div>
+    <div class="card-row">
+      <span>Eval 기록</span>
+      <span class="card-sub" id="evalCount">—</span>
+    </div>
+  </div>
+
+  <!-- recent immediate alerts -->
+  <div class="sec-head">RECENT ALERTS</div>
+  <ul class="mini-list" id="recentAlerts">
+    <li class="empty">— 알림 없음 —</li>
+  </ul>
+</section>
+
+<!-- ═══ ALERTS TAB ═══ -->
+<section class="tab-pane" id="tab-alerts">
+  <!-- naver gauge -->
+  <div class="card">
+    <div class="card-title">NAVER API</div>
+    <div class="card-row">
+      <span>사용률</span>
+      <span class="card-val" id="naverPct">—</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="naverBar" style="width:0%"></div></div>
+  </div>
+
+  <div class="sec-head">IMMEDIATE QUEUE</div>
+  <div id="immediateList"><div class="empty">— 긴급 항목 없음 —</div></div>
+
+  <div class="sec-head">RECENT NEWS</div>
+  <ul class="mini-list" id="newsList">
+    <li class="empty">— 뉴스 없음 —</li>
+  </ul>
+</section>
+
+<!-- ═══ AGENTS TAB ═══ -->
+<section class="tab-pane" id="tab-agents">
+  <div class="sec-head">AI WORKSTATION</div>
+  <div class="agent-scroll" id="agentCards"></div>
+
+  <div class="sec-head" style="margin-top:16px">PROVIDER STATUS</div>
+  <div class="card" id="providerSummary">
+    <div class="empty">로딩 중...</div>
+  </div>
+</section>
+
+<!-- ═══ PIPELINE TAB ═══ -->
+<section class="tab-pane" id="tab-pipeline">
+  <div class="sec-head">CONTENT FLOW</div>
+  <div class="flow" id="pipelineFlow">
+    <div class="flow-step"><div class="flow-icon">📡</div><div class="flow-label">Source</div><div class="flow-count" id="fSource">—</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="flow-icon">🔬</div><div class="flow-label">Research</div><div class="flow-count" id="fResearch">—</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="flow-icon">✍️</div><div class="flow-label">Draft</div><div class="flow-count" id="fDraft">—</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="flow-icon">🔍</div><div class="flow-label">Review</div><div class="flow-count" id="fReview">—</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="flow-icon">✅</div><div class="flow-label">Publish</div><div class="flow-count" id="fPublish">—</div></div>
+  </div>
+
+  <div class="sec-head">RECENT DRAFTS</div>
+  <ul class="mini-list" id="draftList">
+    <li class="empty">— 초안 없음 —</li>
+  </ul>
+</section>
+
+<!-- ═══ OPS TAB ═══ -->
+<section class="tab-pane" id="tab-ops">
+  <div class="sec-head">SYSTEM HEALTH</div>
+  <div class="ops-grid">
+    <div class="ops-item"><div class="ops-val" id="opsEvalMeta">—</div><div class="ops-label">Eval Records</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsGold">—</div><div class="ops-label">Gold Evals</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsPairwise">—</div><div class="ops-label">Pairwise</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsLearning">—</div><div class="ops-label">Learning</div></div>
+  </div>
+
+  <div class="sec-head">BUSINESS FUNNEL</div>
+  <div class="card" id="bizSummary">
+    <div class="empty">로딩 중...</div>
+  </div>
+
+  <div class="sec-head">QUEUE STATUS</div>
+  <div class="card" id="queueStatus">
+    <div class="empty">로딩 중...</div>
+  </div>
+</section>
+
+</div><!-- /main -->
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-tab="pulse"><span class="nav-icon">⚡</span>Pulse</button>
+  <button class="nav-btn" data-tab="alerts"><span class="nav-icon">🔔</span>Alerts</button>
+  <button class="nav-btn" data-tab="agents"><span class="nav-icon">🤖</span>Agents</button>
+  <button class="nav-btn" data-tab="pipeline"><span class="nav-icon">🔄</span>Pipeline</button>
+  <button class="nav-btn" data-tab="ops"><span class="nav-icon">⚙️</span>Ops</button>
+</nav>
+
+<script>
+const API=window.location.origin;
+
+// ── TAB SWITCHING ──
+document.querySelectorAll('.nav-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('tab-'+b.dataset.tab).classList.add('active');
+  });
+});
+
+// ── CLOCK ──
+function tick(){
+  const el=document.getElementById('clock');
+  if(el)el.textContent=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Asia/Seoul'})+' KST';
+}
+setInterval(tick,1000);tick();
+
+// ── DATA LOADERS ──
+async function loadStatus(){
+  try{
+    const r=await fetch(API+'/control/status');
+    const d=await r.json();
+    const h=d.health||{};
+    setLed('dot-db',h.db_ok);setLed('dot-tg',h.telegram_configured);setLed('dot-x',h.x_configured);
+    document.getElementById('syncTime').textContent=d.generated_at_kst||'—';
+
+    // queue
+    const q=d.queue||{};
+    document.getElementById('queueStatus').innerHTML=
+      `<div class="card-row"><span>대기</span><span>${q.pending_count||0}건</span></div>`+
+      `<div class="card-row"><span>전체</span><span>${q.total_count||0}건</span></div>`;
+
+    // activity
+    const a=d.activity||{};
+    if(a.is_idle)document.getElementById('syncTime').style.color='var(--amber)';
+
+    // news monitor
+    const n=d.news||{};
+    document.getElementById('fSource').textContent=n.pending_articles||0;
+  }catch(e){console.warn('status:',e)}
+}
+
+async function loadEditorial(){
+  try{
+    const r=await fetch(API+'/control/editorial-summary');
+    const d=await r.json();
+    const rq=d.routing_queue||{};
+    document.getElementById('qImmediate').textContent=rq.IMMEDIATE||0;
+    document.getElementById('qDigest').textContent=rq.DAY_DIGEST||0;
+    document.getElementById('qTop10').textContent=rq.TOP10_5AM||0;
+    document.getElementById('qWeekly').textContent=rq.WEEKLY_POOL||0;
+
+    const ap=d.avg_postability||0;const at=d.avg_trust||0;
+    setScore('avgPost',ap);setScore('avgTrust',at);
+    document.getElementById('evalCount').textContent=`${d.recent_eval_count||0}건`;
+
+    // eval counts → ops
+    const ec=d.eval_counts||{};
+    document.getElementById('opsEvalMeta').textContent=ec.eval_meta||0;
+    document.getElementById('opsGold').textContent=ec.gold_eval||0;
+    document.getElementById('opsPairwise').textContent=ec.pairwise_review||0;
+    document.getElementById('opsLearning').textContent=ec.learning_record||0;
+
+    // immediate items → alerts
+    const items=d.immediate_items||[];
+    if(items.length){
+      document.getElementById('immediateList').innerHTML=items.map(i=>
+        `<div class="card" style="margin-bottom:8px">
+          <div style="font-size:12px;margin-bottom:4px">${(i.post_snapshot||'').substring(0,60)}…</div>
+          <div class="card-row">
+            <span class="badge badge-blue">P:${i.postability_score||0}</span>
+            <span class="badge badge-green">T:${i.trust_score||0}</span>
+            <span class="mini-item-time">${(i.created_at||'').substring(11,16)}</span>
+          </div>
+        </div>`
+      ).join('');
+
+      // pulse recent alerts
+      document.getElementById('recentAlerts').innerHTML=items.slice(0,3).map(i=>
+        `<li class="mini-item">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(i.post_snapshot||'').substring(0,40)}</span>
+          <span class="mini-item-time">${(i.created_at||'').substring(11,16)}</span>
+        </li>`
+      ).join('');
+    }
+  }catch(e){console.warn('editorial:',e)}
+}
+
+async function loadProviders(){
+  try{
+    const r=await fetch(API+'/control/providers');
+    const d=await r.json();
+    const roles=d.roles||[];
+    const today=d.today_draft_count||0;
+    document.getElementById('todayDrafts').textContent=today;
+
+    // agent cards
+    document.getElementById('agentCards').innerHTML=roles.map(a=>{
+      const working=a.runs_today>0;
+      return`<div class="agent-card ${working?'working':''}">
+        <div class="agent-name">${a.role}</div>
+        <div class="agent-provider">${a.provider||'—'}</div>
+        <div class="agent-stat">${a.runs_today??'—'}</div>
+        <div class="agent-status">
+          ${working?'<span class="pulse-dot"></span>':'<span class="dot-led ok"></span>'}
+          <span>${working?'active':'idle'}</span>
+        </div>
+        ${working?'<div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>':''}
+      </div>`;
+    }).join('');
+
+    // provider summary
+    document.getElementById('providerSummary').innerHTML=
+      `<div class="card-row"><span>Mock Mode</span><span>${d.mock_mode?'🟡 ON':'🟢 OFF'}</span></div>`+
+      `<div class="card-row"><span>오늘 초안</span><span>${today}건</span></div>`;
+
+    // pipeline research/draft = today count
+    document.getElementById('fResearch').textContent=today;
+    document.getElementById('fDraft').textContent=today;
+  }catch(e){console.warn('providers:',e)}
+}
+
+async function loadFlowTrace(){
+  try{
+    const r=await fetch(API+'/control/flow-trace?limit=10');
+    const d=await r.json();
+    if(!d.length){return}
+
+    const statusMap={pending:'🟡',approved:'🟢',rejected:'🔴',published:'🔵',failed:'⚫'};
+    let pending=0,approved=0,published=0;
+    d.forEach(x=>{
+      if(x.status==='pending')pending++;
+      if(x.status==='approved')approved++;
+      if(x.status==='published')published++;
+    });
+    document.getElementById('fReview').textContent=pending;
+    document.getElementById('fPublish').textContent=published;
+
+    document.getElementById('draftList').innerHTML=d.slice(0,8).map(x=>
+      `<li class="mini-item">
+        <span>${statusMap[x.status]||'⚪'}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.hook||'—'}</span>
+        <span class="mini-item-time">${x.created_kst||''}</span>
+      </li>`
+    ).join('');
+  }catch(e){console.warn('flow:',e)}
+}
+
+async function loadNews(){
+  try{
+    const r=await fetch(API+'/control/recent-news?limit=6');
+    const d=await r.json();
+    if(d.length){
+      document.getElementById('newsList').innerHTML=d.map(n=>
+        `<li class="mini-item">${n.title||'—'}</li>`
+      ).join('');
+    }
+  }catch(e){console.warn('news:',e)}
+}
+
+async function loadNaver(){
+  try{
+    const r=await fetch(API+'/control/naver');
+    const d=await r.json();
+    const used=d.used_today||0;const limit=d.daily_limit||25000;
+    const pct=limit?Math.round(used/limit*100):0;
+    document.getElementById('naverPct').textContent=pct+'%';
+    document.getElementById('naverBar').style.width=pct+'%';
+  }catch(e){console.warn('naver:',e)}
+}
+
+async function loadBiz(){
+  try{
+    const r=await fetch(API+'/control/business-summary');
+    const d=await r.json();
+    const p=d.premium||{};const b=d.b2b||{};const n=d.newsletter||{};
+    document.getElementById('bizSummary').innerHTML=
+      `<div class="card-row"><span>Premium</span><span>${p.total||0}건</span></div>`+
+      `<div class="card-row"><span>B2B</span><span>${b.total||0}건</span></div>`+
+      `<div class="card-row"><span>Newsletter</span><span>${n.newsletter_total||0}건</span></div>`;
+  }catch(e){console.warn('biz:',e)}
+}
+
+// ── HELPERS ──
+function setLed(id,ok){
+  const el=document.getElementById(id);
+  if(el)el.className='dot-led '+(ok?'ok':'err');
+}
+function setScore(id,val){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.textContent=val||'—';
+  el.className='score-num '+(val>=70?'green':val>=40?'amber':'red');
+}
+
+// ── LOAD ALL ──
+async function loadAll(){
+  await Promise.allSettled([
+    loadStatus(),loadEditorial(),loadProviders(),
+    loadFlowTrace(),loadNews(),loadNaver(),loadBiz()
+  ]);
+}
+loadAll();
+setInterval(loadAll,30000);
+</script>
+</body>
+</html>

@@ -423,6 +423,63 @@ async def get_naver_quota():
     return get_status()
 
 
+@router.get("/editorial-summary")
+async def get_editorial_summary():
+    """
+    PR 34 — Editorial Score + Routing Queue 집계.
+    대시보드 Pulse/Alerts 탭 데이터 소스.
+    """
+    db = get_db()
+    try:
+        from app.services.eval_store import (
+            load_recent_records, count_records,
+            load_routing_queue, count_routing_queue,
+        )
+        # routing queue 건수
+        queue_counts = {}
+        for rt in ("IMMEDIATE", "DAY_DIGEST", "TOP10_5AM", "WEEKLY_POOL"):
+            queue_counts[rt] = count_routing_queue(db, rt)
+
+        # 최근 IMMEDIATE 항목
+        immediate_items = load_routing_queue(db, "IMMEDIATE", limit=5)
+
+        # eval_records 건수
+        eval_counts = {}
+        for et in ("eval_meta", "gold_eval", "pairwise_review", "learning_record"):
+            eval_counts[et] = count_records(db, et)
+
+        # 최근 eval_meta에서 editorial scores 평균
+        recent_evals = load_recent_records(db, "eval_meta", limit=20)
+        avg_post = 0
+        avg_trust = 0
+        if recent_evals:
+            scores = [e.get("editorial_scores", {}) for e in recent_evals]
+            post_scores = [s.get("postability_score", 0) for s in scores if s]
+            trust_scores = [s.get("trust_score", 0) for s in scores if s]
+            if post_scores:
+                avg_post = round(sum(post_scores) / len(post_scores))
+            if trust_scores:
+                avg_trust = round(sum(trust_scores) / len(trust_scores))
+
+        return {
+            "routing_queue": queue_counts,
+            "immediate_items": immediate_items,
+            "eval_counts": eval_counts,
+            "avg_postability": avg_post,
+            "avg_trust": avg_trust,
+            "recent_eval_count": len(recent_evals),
+        }
+    except Exception as e:
+        logger.warning(f"editorial-summary 오류: {e}")
+        return {
+            "routing_queue": {}, "immediate_items": [],
+            "eval_counts": {}, "avg_postability": 0, "avg_trust": 0,
+            "recent_eval_count": 0,
+        }
+    finally:
+        db.close()
+
+
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 
 def _get_queue_status() -> dict:
