@@ -112,30 +112,36 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   white-space:nowrap}
 
 /* ── AGENT ROWS ── */
-.agent-list{display:flex;flex-direction:column;gap:6px}
-.ag-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:10px;row-gap:4px;
+.ag-sum{font-size:11px;color:var(--text-sec);margin-bottom:8px}
+.ag-sum b{font-weight:700}
+.ag-sum .ag-s-act{color:var(--indigo)}
+.agent-list{display:flex;flex-direction:column;gap:4px}
+.ag-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:10px;row-gap:3px;
   padding:10px 12px;background:var(--bg-surface);border-radius:var(--r-md);
   border:1px solid var(--border-subtle);border-left:3px solid transparent}
 .ag-row.working{border-left-color:var(--indigo)}
 .ag-row.blocked{border-left-color:var(--red)}
+.ag-row.idle-row{opacity:.7}
 .ag-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .ag-dot.idle{background:var(--text-mut)}
-.ag-dot.working{background:var(--indigo);box-shadow:0 0 6px var(--indigo)}
+.ag-dot.working{background:var(--indigo);box-shadow:0 0 6px rgba(129,140,248,.4)}
 .ag-dot.blocked{background:var(--red)}
-.ag-dot.manual{background:var(--text-mut);opacity:.5}
+.ag-dot.manual{background:var(--text-mut);opacity:.4}
 .ag-info{flex:1;min-width:0}
 .ag-name{font-size:12px;font-weight:600}
-.ag-prov{font-size:9px;color:var(--text-mut)}
+.ag-prov{font-size:8px;color:var(--text-mut)}
+.ag-note{flex-basis:100%;font-size:8px;color:var(--text-mut);
+  padding-left:18px;margin-top:-1px}
 .ag-runs{text-align:right}
 .ag-count{font-size:18px;font-weight:700;line-height:1}
-.ag-label{font-size:8px;color:var(--text-sec);text-transform:uppercase;letter-spacing:.5px}
+.ag-label{font-size:7px;text-transform:uppercase;letter-spacing:.5px}
 .ag-bar{flex-basis:100%;height:2px;border-radius:1px;background:var(--bg-raised);overflow:hidden}
 .ag-bar-fill{height:100%;border-radius:1px;
   background:linear-gradient(90deg,var(--indigo),var(--cyan),var(--indigo));
   background-size:200% 100%;animation:shimmer 2.5s linear infinite}
-.prov-strip{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
-.prov-tag{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-sec)}
-.prov-led{width:6px;height:6px;border-radius:50%}
+.prov-strip{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0}
+.prov-tag{display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text-sec)}
+.prov-led{width:5px;height:5px;border-radius:50%}
 .prov-led.on{background:var(--green)}.prov-led.off{background:var(--text-mut)}
 
 /* ── WORKING MOTION ── */
@@ -219,19 +225,25 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .news-title{flex:1;font-size:11px;color:var(--text-sec);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* ── PIPELINE: STAGE GRID ── */
-.stage-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:12px}
+/* ── PIPELINE ── */
+.pi-sum{font-size:11px;color:var(--text-sec);margin-bottom:8px}
+.pi-sum b{font-weight:700}
+.stage-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:10px}
 .stage-cell{text-align:center;padding:7px 2px;background:var(--bg-surface);
   border-radius:var(--r-md)}
+.stage-cell.empty-stage{opacity:.25}
 .stage-num{font-size:16px;font-weight:700;line-height:1}
-.stage-lbl{font-size:8px;color:var(--text-mut);margin-top:2px;letter-spacing:.3px;text-transform:uppercase}
+.stage-lbl{font-size:7px;color:var(--text-mut);margin-top:2px;letter-spacing:.3px;text-transform:uppercase}
 
 /* ── PIPELINE: DRAFT ROW ── */
-.draft-row{display:flex;align-items:center;gap:8px;padding:8px 0;
-  border-bottom:1px solid var(--border-subtle);min-height:40px}
+.draft-row{display:flex;align-items:center;gap:6px;padding:6px 0;
+  border-bottom:1px solid var(--border-subtle);min-height:34px}
 .draft-row:last-child{border-bottom:none}
-.draft-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.draft-hook{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.draft-hook{flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-chip{font-size:7px;font-weight:600;padding:1px 4px;border-radius:var(--r-sm);
+  text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.draft-time{font-size:8px;color:var(--text-mut);font-family:var(--mono);white-space:nowrap}
 
 /* ── COMPACT EMPTY ── */
 .empty-sm{padding:8px;text-align:center;font-size:10px;color:var(--text-mut)}
@@ -325,6 +337,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 <!-- ═══ AGENTS TAB ═══ -->
 <section class="tab-pane" id="tab-agents">
   <div class="sec-head" style="margin-top:0">AI WORKSTATION</div>
+  <div class="ag-sum" id="agentSummary"></div>
   <div class="agent-list" id="agentCards"></div>
 
   <div class="sec-head">PROVIDERS</div>
@@ -333,6 +346,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ PIPELINE TAB ═══ -->
 <section class="tab-pane" id="tab-pipeline">
+  <div class="pi-sum" id="pipeSummary"></div>
   <div class="stage-grid">
     <div class="stage-cell"><div class="stage-num" id="fSource">—</div><div class="stage-lbl">Source</div></div>
     <div class="stage-cell"><div class="stage-num" id="fResearch">—</div><div class="stage-lbl">Draft</div></div>
@@ -499,19 +513,30 @@ async function loadProviders(){
     document.getElementById('todayDrafts').textContent=today;
     _hl.today=today;updateHL();
 
+    // sort: working first, then idle, then manual
+    const sorted=[...roles].sort((a,b)=>{
+      const w=x=>x.runs_today>0?0:!x.configured?1:x.role==='TrendHunter'?3:2;
+      return w(a)-w(b);
+    });
+    // summary
+    const act=sorted.filter(a=>a.runs_today>0).length;
+    const as=document.getElementById('agentSummary');
+    if(as)as.innerHTML=`<b class="ag-s-act">${act}/${sorted.length}</b> active · <b>${today}</b> runs today`;
     // agent rows
-    document.getElementById('agentCards').innerHTML=roles.map(a=>{
+    document.getElementById('agentCards').innerHTML=sorted.map(a=>{
       const working=a.runs_today>0;
       const blocked=!a.configured;
       const manual=a.role==='TrendHunter';
-      let st='',dot='idle',lbl='IDLE',clr='var(--text-mut)';
-      if(blocked){st='blocked';dot='blocked';lbl='BLOCKED';clr='var(--red)'}
-      else if(working){st='working';dot='working';lbl='ACTIVE';clr='var(--indigo)'}
-      else if(manual){dot='manual';lbl='MANUAL'}
+      let st='',dot='idle',lbl='IDLE',clr='var(--text-mut)',lblClr='var(--text-sec)';
+      if(blocked){st='blocked';dot='blocked';lbl='BLOCKED';clr='var(--red)';lblClr='var(--red)'}
+      else if(working){st='working';dot='working';lbl='ACTIVE';clr='var(--indigo)';lblClr='var(--indigo)'}
+      else if(manual){dot='manual';lbl='MANUAL';st='idle-row'}
+      else{st='idle-row'}
       return`<div class="ag-row ${st}">
         <span class="ag-dot ${dot}"></span>
         <div class="ag-info"><div class="ag-name">${a.role}</div><div class="ag-prov">${a.provider||'—'}</div></div>
-        <div class="ag-runs"><div class="ag-count" style="color:${clr}">${a.runs_today??'—'}</div><div class="ag-label">${lbl}</div></div>
+        <div class="ag-runs"><div class="ag-count" style="color:${clr}">${a.runs_today??'—'}</div><div class="ag-label" style="color:${lblClr}">${lbl}</div></div>
+        ${a.note?`<div class="ag-note">${a.note}</div>`:''}
         ${working?'<div class="ag-bar"><div class="ag-bar-fill"></div></div>':''}
       </div>`;
     }).join('');
@@ -523,35 +548,53 @@ async function loadProviders(){
       Array.from(provs).map(([p,ok])=>`<div class="prov-tag"><span class="prov-led ${ok?'on':'off'}"></span>${p}</div>`).join('')+
       (d.mock_mode?'<div class="prov-tag" style="margin-left:auto;color:var(--amber)">MOCK</div>':'');
 
-    // pipeline research/draft = today count
-    document.getElementById('fResearch').textContent=today;
-    document.getElementById('fDraft').textContent=today;
   }catch(e){console.warn('providers:',e)}
 }
 
 async function loadFlowTrace(){
   try{
-    const r=await fetch(API+'/control/flow-trace?limit=10');
+    const r=await fetch(API+'/control/flow-trace?limit=20');
     const d=await r.json();
-    if(!d.length){return}
+    const ct={total:d.length,pending:0,approved:0,published:0,rejected:0,failed:0};
+    d.forEach(x=>{if(ct.hasOwnProperty(x.status))ct[x.status]++});
 
-    const dotMap={pending:'var(--amber)',approved:'var(--green)',rejected:'var(--red)',published:'var(--indigo)',failed:'var(--text-mut)'};
-    let pending=0,approved=0,published=0;
-    d.forEach(x=>{
-      if(x.status==='pending')pending++;
-      if(x.status==='approved')approved++;
-      if(x.status==='published')published++;
+    // pipeline summary
+    const ps=document.getElementById('pipeSummary');
+    if(ps)ps.innerHTML=ct.total?
+      `<b>${ct.total}</b> total · <b style="color:var(--amber)">${ct.pending}</b> wait · <b style="color:var(--green)">${ct.published}</b> pub`:
+      'パイプライン 입력 대기';
+
+    // stage grid — set numbers + colors + dim empty
+    const stages=[
+      {id:'fSource',v:ct.total,c:'var(--text-pri)'},
+      {id:'fResearch',v:ct.approved+ct.pending,c:'var(--indigo)'},
+      {id:'fDraft',v:ct.approved,c:'var(--indigo)'},
+      {id:'fReview',v:ct.pending,c:'var(--amber)'},
+      {id:'fPublish',v:ct.published,c:'var(--green)'},
+    ];
+    stages.forEach(s=>{
+      const el=document.getElementById(s.id);if(!el)return;
+      el.textContent=s.v;
+      el.style.color=s.v?s.c:'var(--text-mut)';
+      el.closest('.stage-cell')?.classList.toggle('empty-stage',s.v===0);
     });
-    document.getElementById('fReview').textContent=pending;
-    document.getElementById('fPublish').textContent=published;
 
-    document.getElementById('draftList').innerHTML=d.slice(0,8).map(x=>
-      `<div class="draft-row">
-        <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
-        <span class="draft-hook">${x.hook||'—'}</span>
-        <span class="mini-item-time">${x.created_kst||''}</span>
-      </div>`
-    ).join('');
+    // draft list — dense with status chip
+    const dotMap={pending:'var(--amber)',approved:'var(--green)',rejected:'var(--red)',published:'var(--indigo)',failed:'var(--text-mut)'};
+    const chipMap={pending:['WAIT','var(--amber-dim)','var(--amber)'],approved:['OK','var(--green-dim)','var(--green)'],
+      rejected:['REJ','var(--red-dim)','var(--red)'],published:['PUB','var(--indigo-dim)','var(--indigo)'],
+      failed:['FAIL','var(--red-dim)','var(--red)']};
+    if(d.length){
+      document.getElementById('draftList').innerHTML=d.slice(0,10).map(x=>{
+        const ch=chipMap[x.status]||['—','transparent','var(--text-mut)'];
+        return`<div class="draft-row">
+          <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
+          <span class="draft-hook">${x.hook||'—'}</span>
+          <span class="draft-chip" style="background:${ch[1]};color:${ch[2]}">${ch[0]}</span>
+          <span class="draft-time">${x.created_kst||''}</span>
+        </div>`;
+      }).join('');
+    }
   }catch(e){console.warn('flow:',e)}
 }
 
