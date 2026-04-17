@@ -676,6 +676,15 @@ class Orchestrator:
             logger.error(f"초안 없음: draft_id={draft_id}")
             return False
 
+        # Resonance fallback placeholder 초안은 텔레그램 전송 차단
+        from app.services.draft_service import is_resonance_fallback_draft
+        if is_resonance_fallback_draft(draft.body):
+            logger.warning(
+                f"[send-guard] Resonance fallback 초안 텔레그램 전송 차단: "
+                f"draft_id={draft_id}"
+            )
+            return False
+
         source_url = draft.source_item.url if draft.source_item else None
         message_id = await send_approval_card(draft, source_url, chat_id=chat_id)
 
@@ -716,7 +725,22 @@ class Orchestrator:
 
     async def _handle_approve(self, draft: Draft) -> dict:
         """승인 처리 (X 자동 게시 없음 — 수동 게시 전용)"""
-        from app.services.draft_service import is_broken_draft, broken_reason
+        from app.services.draft_service import (
+            is_broken_draft, broken_reason, is_resonance_fallback_draft,
+        )
+        # Resonance fallback placeholder 는 승인 절대 금지 — 재생성 유도
+        if is_resonance_fallback_draft(draft.body):
+            self.draft_service.update_status(draft.id, ApprovalStatus.FAILED)
+            logger.warning(
+                f"[approve-guard] Resonance fallback 차단: draft_id={draft.id}"
+            )
+            return {
+                "success": False,
+                "error": (
+                    "이 초안은 구조 누락 fallback 상태라 재생성 후 승인해야 합니다. "
+                    "🔄 재생성 버튼을 눌러 ⚠️/📌 구조가 포함된 본문을 새로 받아주세요."
+                ),
+            }
         if is_broken_draft(draft.body):
             reason = broken_reason(draft.body)
             self.draft_service.update_status(draft.id, ApprovalStatus.FAILED)

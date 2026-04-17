@@ -24,6 +24,14 @@ _BROKEN_MARKERS = [
 ]
 _REPLACEMENT_CHAR = "\ufffd"
 
+# Resonance fallback placeholder (text_cleaner.ensure_resonance_structure 가
+# ⚠️/📌 두 마커 모두 없을 때만 삽입하는 문구). 삽입 자체는 의도된 설계이지만
+# 승인/전송 경로에서는 반드시 재생성 후 다시 승인해야 한다.
+_FALLBACK_PLACEHOLDER_MARKERS = [
+    "(구조 누락 — 재생성 권장)",
+    "(structure missing — regenerate recommended)",
+]
+
 
 def is_broken_draft(body: str | None) -> bool:
     if not body or len(body.strip()) < 20:
@@ -47,6 +55,20 @@ def broken_reason(body: str | None) -> str:
     if rc > 3:
         return f"깨진 문자 {rc}개 감지"
     return ""
+
+
+def is_resonance_fallback_draft(body: str | None) -> bool:
+    """
+    Resonance fallback placeholder 가 본문에 남아 있는지 검사한다.
+    approve/send 경로에서 이 함수가 True 를 반환하면 반드시 차단해야 한다.
+
+    is_broken_draft 와 분리한 이유:
+      - 운영자에게 "재생성 후 승인" 이라는 구체적 안내 문구를 전달하기 위해
+      - is_broken_draft 의 일반 에러 메시지와 구별되는 상태
+    """
+    if not body:
+        return False
+    return any(m in body for m in _FALLBACK_PLACEHOLDER_MARKERS)
 
 
 class DraftService:

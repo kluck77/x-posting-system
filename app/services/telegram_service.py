@@ -365,6 +365,18 @@ async def send_approval_card(
     Returns:
         전송된 메시지의 message_id, 실패 시 None
     """
+    # 최후 방어선 — Resonance fallback placeholder 는 카드 렌더 단에서도 차단
+    try:
+        from app.services.draft_service import is_resonance_fallback_draft
+        if is_resonance_fallback_draft(draft.body):
+            logger.warning(
+                f"[send_approval_card] Resonance fallback 초안 차단: "
+                f"draft_id={getattr(draft, 'id', '?')}"
+            )
+            return None
+    except Exception as e:
+        logger.warning(f"[send_approval_card] fallback 체크 실패 (계속 진행): {e}")
+
     if not settings.has_telegram_config:
         logger.warning("텔레그램 설정이 없습니다. 카드 전송을 건너뜁니다.")
         logger.info(f"[MOCK 텔레그램] 승인 카드:\n{build_approval_card(draft, source_url)}")
