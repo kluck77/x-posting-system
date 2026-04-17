@@ -398,7 +398,9 @@ async def get_recent_news(limit: int = 8):
     try:
         from app.services.news_monitor import get_recent_items
         items = get_recent_items(limit=limit)
-        return [{"title": str(a.get("title", "")).strip()[:100]} for a in items if a.get("title")]
+        return [{"title": str(a.get("title", "")).strip()[:100],
+                 "time": str(a.get("added_at", ""))[11:16]}
+                for a in items if a.get("title")]
     except Exception as e:
         logger.warning(f"recent-news 오류: {e}")
         return []

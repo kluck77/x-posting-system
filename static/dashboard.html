@@ -771,7 +771,8 @@ async function loadNews(){
         const c=newsImp(n.title||'');
         return`<div class="news-row" style="animation-delay:${i*50}ms">
           <span class="news-dot" style="background:${c};box-shadow:0 0 3px ${c}"></span>
-          <span class="news-title">${n.title||'—'}</span></div>`;
+          <span class="news-title">${n.title||'—'}</span>
+          ${n.time?`<span class="draft-time">${n.time}</span>`:''}</div>`;
       }).join('');
     }
   }catch(e){console.warn('news:',e)}
