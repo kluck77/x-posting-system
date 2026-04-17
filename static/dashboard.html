@@ -740,6 +740,7 @@ async function loadFlowTrace(){
             <div class="draft-acts">
               ${x.source_url?`<a class="draft-btn" href="${x.source_url}" target="_blank" style="text-decoration:none">원문</a>`:''}
               ${canSend?`<button class="draft-btn" onclick="sendDraft(${x.id},this)">${isPending?'승인+전송':'전송'}</button>`:''}
+              ${(isPending||isApproved)?`<button class="draft-btn" style="color:var(--red)" onclick="rejectDraft(${x.id},this)">✕</button>`:''}
             </div>
           </div>
         </div>`;
@@ -817,6 +818,16 @@ function setScore(id,val){
   if(box)box.style.borderBottomColor=c;
   const bar=document.getElementById(id+'Bar');
   if(bar){bar.style.width=(val||0)+'%';bar.style.background=c}
+}
+async function rejectDraft(id,btn){
+  btn.textContent='…';btn.classList.add('sending');
+  try{
+    const r=await fetch(API+'/drafts/'+id+'/reject',{method:'POST'});
+    const d=await r.json();
+    if(d.success){btn.closest('.draft-row').style.display='none';
+      setTimeout(()=>loadFlowTrace(),500);
+    }else{btn.textContent='✕';btn.classList.remove('sending')}
+  }catch(e){btn.textContent='✕';btn.classList.remove('sending')}
 }
 async function sendDraft(id,btn){
   btn.textContent='전송 중…';btn.classList.add('sending');
