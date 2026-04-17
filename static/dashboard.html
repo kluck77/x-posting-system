@@ -595,11 +595,11 @@ async function loadEditorial(){
     const ec=document.getElementById('evalCount');if(ec)ec.textContent=d.recent_eval_count||0;
 
     // eval counts → ops
-    const ec=d.eval_counts||{};
-    document.getElementById('opsEvalMeta').textContent=ec.eval_meta||0;
-    document.getElementById('opsGold').textContent=ec.gold_eval||0;
-    document.getElementById('opsPairwise').textContent=ec.pairwise_review||0;
-    document.getElementById('opsLearning').textContent=ec.learning_record||0;
+    const evc=d.eval_counts||{};
+    document.getElementById('opsEvalMeta').textContent=evc.eval_meta||0;
+    document.getElementById('opsGold').textContent=evc.gold_eval||0;
+    document.getElementById('opsPairwise').textContent=evc.pairwise_review||0;
+    document.getElementById('opsLearning').textContent=evc.learning_record||0;
     ['opsEvalMeta','opsGold','opsPairwise','opsLearning'].forEach(id=>{
       const el=document.getElementById(id);if(!el)return;
       const v=parseInt(el.textContent)||0;
