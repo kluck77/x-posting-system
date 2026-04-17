@@ -406,6 +406,35 @@ async def get_recent_news(limit: int = 8):
         return []
 
 
+@router.get("/scored-candidates")
+async def get_scored_candidates(limit: int = 15):
+    """
+    최근 수집 기사를 키워드 점수로 정렬하여 반환합니다.
+    AI 비용 없음 — 로컬 키워드 매칭만 사용.
+    """
+    try:
+        from app.services.news_monitor import get_recent_items
+        from app.services.morning_digest import _importance_score
+        items = get_recent_items(limit=50)
+        for a in items:
+            a["_score"] = _importance_score(a)
+        items.sort(key=lambda x: x["_score"], reverse=True)
+        return [
+            {
+                "title": str(a.get("title", "")).strip()[:100],
+                "url": a.get("url", ""),
+                "summary": (a.get("summary", "") or "")[:200],
+                "score": a["_score"],
+                "category": a.get("category", ""),
+                "time": str(a.get("added_at", ""))[11:16],
+            }
+            for a in items[:limit] if a.get("title")
+        ]
+    except Exception as e:
+        logger.warning(f"scored-candidates 오류: {e}")
+        return []
+
+
 # ── Naver 할당량 ──────────────────────────────────────────────────────────────
 
 @router.get("/naver")
