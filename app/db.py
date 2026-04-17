@@ -5,7 +5,7 @@ SQLite 데이터베이스에 연결하고, 테이블을 생성하고, 세션을 
 """
 
 import logging
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import settings
 
@@ -55,6 +55,202 @@ def get_db() -> Session:
     return db
 
 
+def _get_existing_columns(conn, table_name: str) -> set:
+    """PRAGMA table_info로 기존 컬럼명 집합 반환."""
+    result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+    return {row[1] for row in result}
+
+
+def _run_schema_migrations():
+    """
+    기존 테이블에 누락된 컬럼을 안전하게 추가합니다.
+    - Base.metadata.create_all()은 기존 테이블의 컬럼을 추가하지 않으므로
+      PRAGMA table_info로 존재 여부 확인 후 ALTER TABLE 실행합니다.
+    - nullable 컬럼만 추가 (SQLite ALTER TABLE 제약)
+    """
+    migrations = [
+        {
+            "table": "drafts",
+            "column": "predicted_publish_at",
+            "ddl": "ALTER TABLE drafts ADD COLUMN predicted_publish_at DATETIME",
+        },
+        {
+            "table": "drafts",
+            "column": "prediction_reasoning",
+            "ddl": "ALTER TABLE drafts ADD COLUMN prediction_reasoning TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "community_warning",
+            "ddl": "ALTER TABLE drafts ADD COLUMN community_warning TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "reply_to_tweet_id",
+            "ddl": "ALTER TABLE drafts ADD COLUMN reply_to_tweet_id VARCHAR(50)",
+        },
+        # Phase 4: 성과 로깅 기반 필드
+        {
+            "table": "drafts",
+            "column": "content_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN content_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "topic_tags",
+            "ddl": "ALTER TABLE drafts ADD COLUMN topic_tags VARCHAR(500)",
+        },
+        {
+            "table": "drafts",
+            "column": "output_format",
+            "ddl": "ALTER TABLE drafts ADD COLUMN output_format VARCHAR(20) DEFAULT 'single'",
+        },
+        {
+            "table": "drafts",
+            "column": "manual_notes",
+            "ddl": "ALTER TABLE drafts ADD COLUMN manual_notes TEXT",
+        },
+        # Phase 5: 비즈니스 분류 + 수익화 메타데이터
+        {
+            "table": "drafts",
+            "column": "business_tags",
+            "ddl": "ALTER TABLE drafts ADD COLUMN business_tags VARCHAR(500)",
+        },
+        {
+            "table": "drafts",
+            "column": "cta_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN cta_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "monetization_score",
+            "ddl": "ALTER TABLE drafts ADD COLUMN monetization_score INTEGER",
+        },
+        {
+            "table": "drafts",
+            "column": "asset_goal",
+            "ddl": "ALTER TABLE drafts ADD COLUMN asset_goal VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "premium_reason",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_reason TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_candidate",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_candidate BOOLEAN DEFAULT 0",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_target_audience",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_target_audience VARCHAR(200)",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_use_case",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_use_case VARCHAR(200)",
+        },
+        # Phase 5-B2B: B2B 후보 파이프라인
+        {
+            "table": "drafts",
+            "column": "b2b_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_note TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_status",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_status VARCHAR(20)",
+        },
+        {
+            "table": "drafts",
+            "column": "b2b_updated_at",
+            "ddl": "ALTER TABLE drafts ADD COLUMN b2b_updated_at DATETIME",
+        },
+        # Phase 7: 이메일/리드자석 메타데이터
+        {
+            "table": "drafts",
+            "column": "lead_asset_name",
+            "ddl": "ALTER TABLE drafts ADD COLUMN lead_asset_name VARCHAR(200)",
+        },
+        {
+            "table": "drafts",
+            "column": "lead_asset_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN lead_asset_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "lead_asset_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN lead_asset_note TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "email_bucket",
+            "ddl": "ALTER TABLE drafts ADD COLUMN email_bucket VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "email_goal",
+            "ddl": "ALTER TABLE drafts ADD COLUMN email_goal VARCHAR(50)",
+        },
+        # Phase 5-3: 프리미엄 후보 파이프라인
+        {
+            "table": "drafts",
+            "column": "premium_status",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_status VARCHAR(20)",
+        },
+        {
+            "table": "drafts",
+            "column": "premium_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_note TEXT",
+        },
+        {
+            "table": "drafts",
+            "column": "premium_updated_at",
+            "ddl": "ALTER TABLE drafts ADD COLUMN premium_updated_at DATETIME",
+        },
+        {
+            "table": "drafts",
+            "column": "target_reader_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN target_reader_type VARCHAR(100)",
+        },
+        # Brief Offer 메타데이터
+        {
+            "table": "drafts",
+            "column": "brief_type",
+            "ddl": "ALTER TABLE drafts ADD COLUMN brief_type VARCHAR(50)",
+        },
+        {
+            "table": "drafts",
+            "column": "brief_price_tier",
+            "ddl": "ALTER TABLE drafts ADD COLUMN brief_price_tier VARCHAR(20)",
+        },
+        {
+            "table": "drafts",
+            "column": "brief_summary_note",
+            "ddl": "ALTER TABLE drafts ADD COLUMN brief_summary_note TEXT",
+        },
+        # CTA 카피 연결
+        {
+            "table": "drafts",
+            "column": "cta_copy_id",
+            "ddl": "ALTER TABLE drafts ADD COLUMN cta_copy_id INTEGER",
+        },
+    ]
+    with engine.connect() as conn:
+        existing_cols = _get_existing_columns(conn, "drafts")
+        for m in migrations:
+            if m["column"] not in existing_cols:
+                try:
+                    conn.execute(text(m["ddl"]))
+                    conn.commit()
+                    logger.info(f"[migration] 컬럼 추가: {m['column']}")
+                except Exception as e:
+                    logger.error(f"[migration] 오류: {m['column']} — {e}")
+            else:
+                logger.debug(f"[migration] 이미 존재: {m['column']}")
+
+
 def init_db():
     """
     데이터베이스 테이블을 생성합니다.
@@ -62,5 +258,7 @@ def init_db():
     이미 존재하는 테이블은 건너뜁니다.
     """
     from app.models.content import Base  # 순환 import 방지
+    import app.models.dedup  # noqa: F401 — 테이블 등록 (dedup + candidate pool)
     Base.metadata.create_all(bind=engine)
+    _run_schema_migrations()
     logger.info("데이터베이스 테이블 초기화 완료")

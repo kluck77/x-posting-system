@@ -6,8 +6,9 @@ AI가 생성한 포스트 초안을 데이터베이스에 저장하고 관리합
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from app.models.content import (
     Draft, SourceItem, ApprovalStatus, ContentCategory, RiskLevel
 )
@@ -169,6 +170,67 @@ class DraftService:
             draft.telegram_message_id = telegram_message_id
             self.db.commit()
 
+    def get_recent_operator_hints(self, limit: int = 3) -> list[str]:
+        """최근 Draft의 manual_notes에서 operator hints를 가져옵니다."""
+        drafts = (
+            self.db.query(Draft)
+            .filter(
+                and_(
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+            )
+            .order_by(Draft.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [d.manual_notes.strip() for d in drafts if d.manual_notes and d.manual_notes.strip()]
+
+    def cleanup_stale_drafts(
+        self,
+        pending_days: int = 7,
+        rejected_days: int = 30,
+        failed_days: int = 30,
+    ) -> dict[str, int]:
+        """
+        오래된 Draft를 자동 삭제합니다.
+
+        정책:
+        - PENDING: pending_days일 경과 시 삭제
+        - REJECTED: rejected_days일 경과 시 삭제
+        - FAILED: failed_days일 경과 시 삭제
+        - APPROVED / PUBLISHED: 삭제하지 않음
+
+        Returns:
+            {"pending": 삭제 수, "rejected": 삭제 수, "failed": 삭제 수}
+        """
+        now = datetime.now(timezone.utc)
+        counts: dict[str, int] = {}
+
+        for status, days, label in [
+            (ApprovalStatus.PENDING, pending_days, "pending"),
+            (ApprovalStatus.REJECTED, rejected_days, "rejected"),
+            (ApprovalStatus.FAILED, failed_days, "failed"),
+        ]:
+            cutoff = now - timedelta(days=days)
+            deleted = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status == status,
+                    Draft.created_at < cutoff,
+                )
+                .delete(synchronize_session="fetch")
+            )
+            counts[label] = deleted
+
+        self.db.commit()
+        total = sum(counts.values())
+        if total > 0:
+            logger.info(
+                f"[draft-cleanup] 정리 완료: {counts} (합계 {total}건 삭제)"
+            )
+        return counts
+
     def is_duplicate_text(self, text: str) -> bool:
         """
         동일한 텍스트가 이미 게시되었거나 승인 대기 중인지 확인합니다.
@@ -177,7 +239,7 @@ class DraftService:
         existing = (
             self.db.query(Draft)
             .filter(
-                Draft.body == text.strip(),
+                Draft.body == (text or "").strip(),
                 Draft.approval_status.in_([
                     ApprovalStatus.PENDING,
                     ApprovalStatus.APPROVED,

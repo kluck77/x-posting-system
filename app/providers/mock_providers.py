@@ -10,7 +10,7 @@ from app.providers.base import (
     BaseDraftWriter, BaseReviewer, BaseResearcher,
     BaseTrendHunter, BaseFactChecker,
     DraftResult, ReviewResult, ResearchResult,
-    TrendResult, FactCheckResult,
+    TrendResult, FactCheckResult, CriteriaSignals,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,24 +20,46 @@ class MockDraftWriter(BaseDraftWriter):
     """Mock 초안 작성기. API 키 없이 데모용 초안을 생성합니다."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self,
+        title: str,
+        source_text: str,
+        language: str = "en",
+        source_type: str = "manual",
+        criteria_context: str = "",
     ) -> DraftResult:
         logger.info(f"[Mock DraftWriter] 초안 생성: '{title[:50]}'")
+
+        if source_type == "community_input":
+            return DraftResult(
+                hook=f"Korean online communities are reacting strongly to this: {title[:60]}",
+                body=(
+                    f"A recurring theme in Korean online discussion right now is concern about {title[:80]}. "
+                    f"The sentiment is notably [pessimistic/skeptical] — though none of these claims are verified. "
+                    f"Follow to track how this develops."
+                ),
+                thread_continuation=(
+                    f"For non-Korean readers:\n\n"
+                    f"Korean online forums (DCInside, FMKorea) tend to surface sentiment shifts "
+                    f"before they show up in mainstream coverage. This is worth watching — but treat it as signal, not fact."
+                ),
+                category_suggestion="society",
+                tone_notes="Mock community_input mode: sentiment signal, unverified claims flagged",
+            )
+
         return DraftResult(
-            hook=f"🇰🇷 Here's what you need to know: {title[:80]}",
+            hook=f"The numbers don't add up — and that's exactly the point. {title[:60]}",
             body=(
-                f"South Korea update: {title}\n\n"
-                f"Key takeaway — understanding Korean society "
-                f"means looking beyond the surface.\n\n"
-                f"This is what many overseas observers miss."
+                f"Here's what's actually happening: {title[:100]}\n\n"
+                f"Most coverage misses the context non-Koreans need to understand why this matters. "
+                f"Follow to get Korea's economy in plain English — before it hits global headlines."
             ),
             thread_continuation=(
                 f"Context for non-Koreans:\n\n"
-                f"Korea's unique position as a rapidly developed democracy "
-                f"means these stories carry different weight."
+                f"Korea's export-driven economy means moves like this ripple outward fast. "
+                f"What looks local rarely stays local."
             ),
-            category_suggestion="society",
-            tone_notes="Mock mode: informative, accessible",
+            category_suggestion="economy",
+            tone_notes="Mock mode: number shock hook, 5-block structure",
         )
 
 
@@ -51,6 +73,7 @@ class MockReviewer(BaseReviewer):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str = "",
     ) -> ReviewResult:
         logger.info(f"[Mock Reviewer] 리뷰: '{title[:50]}'")
         return ReviewResult(
@@ -82,6 +105,12 @@ class MockResearcher(BaseResearcher):
                 "International interest is growing",
             ],
             sources=["https://example.com/mock-source-1"],
+            interpretation_gaps=["Reuters misses the structural context"],
+            fact_labels={"South Korea is the 13th largest economy globally": "confirms_common_narrative"},
+            criteria_signals=CriteriaSignals(
+                expertise={"score": None, "note": "1개 해석 갭 (mock)"},
+                context_gap={"score": None, "note": "0개 고가치 팩트 (mock)"},
+            ),
         )
 
 
@@ -97,6 +126,10 @@ class MockTrendHunter(BaseTrendHunter):
                 "South Korea birth rate",
             ],
             relevance_notes="Mock trends for demonstration",
+            criteria_signals=CriteriaSignals(
+                marketability={"score": 7.5, "note": "3개 트렌드 평균 (mock)"},
+                follower_quality={"score": 7.0, "note": "3개 트렌드 평균 follower_fit (mock)"},
+            ),
         )
 
 
@@ -111,4 +144,10 @@ class MockFactChecker(BaseFactChecker):
             corrections=[],
             sources=["https://example.com/mock-verification"],
             raw_response="Mock fact-check: no real verification performed",
+            interpretation_opportunity="medium — fact is interesting but straightforward",
+            marketability_signal="regional",
+            criteria_signals=CriteriaSignals(
+                interpretation={"score": None, "note": "medium — straightforward (mock)"},
+                marketability={"score": None, "note": "signal=regional (mock)"},
+            ),
         )
