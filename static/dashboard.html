@@ -307,9 +307,9 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .draft-risk{font-size:7px;font-weight:600;padding:1px 4px;border-radius:var(--r-sm);white-space:nowrap}
 .draft-time{font-size:8px;color:var(--text-mut);font-family:var(--mono);white-space:nowrap}
 .draft-acts{display:flex;gap:3px;flex-shrink:0}
-.draft-btn{background:var(--bg-raised);border:none;color:var(--text-sec);font-size:8px;
-  font-weight:600;padding:3px 6px;border-radius:var(--r-sm);cursor:pointer;
-  -webkit-tap-highlight-color:transparent;white-space:nowrap;min-height:24px}
+.draft-btn{background:var(--bg-raised);border:none;color:var(--text-sec);font-size:11px;
+  font-weight:600;padding:6px 12px;border-radius:var(--r-md);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;white-space:nowrap;min-height:32px}
 .draft-btn:active{background:var(--indigo-dim);color:var(--indigo)}
 .draft-btn.sent{background:var(--green-dim);color:var(--green);pointer-events:none}
 .draft-btn.fail{background:var(--red-dim);color:var(--red)}
@@ -718,7 +718,8 @@ async function loadFlowTrace(){
     if(d.length){
       const riskC={low:'var(--green)',medium:'var(--amber)',high:'var(--red)'};
       const riskL={low:'안전',medium:'주의',high:'위험'};
-      document.getElementById('draftList').innerHTML=d.slice(0,10).map((x,i)=>{
+      const visible=d.filter(x=>x.status!=='rejected'&&x.status!=='failed');
+      document.getElementById('draftList').innerHTML=visible.slice(0,10).map((x,i)=>{
         const ch=chipMap[x.status]||['—','transparent','var(--text-mut)'];
         const rc=riskC[x.risk_level]||'var(--text-mut)';
         const rl=riskL[x.risk_level]||x.risk_level||'—';
