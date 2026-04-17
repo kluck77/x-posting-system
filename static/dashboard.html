@@ -8,20 +8,51 @@
 <title>X System — Control Room</title>
 <style>
 :root{
-  --bg-void:#07080b;--bg-deep:#0d0e14;--bg-surface:#191a24;--bg-raised:#24252f;
-  --border-subtle:rgba(255,255,255,.04);--border-normal:rgba(255,255,255,.07);
+  /* ── BG: 3-layer + elevated ── */
+  --bg-void:#07080c;       /* L0: header/nav — 가장 어둡다 */
+  --bg-deep:#0c0d13;       /* L1: content area — void보다 확실히 밝다 */
+  --bg-surface:#181922;    /* L2: cards/blocks — deep과 delta 12 */
+  --bg-raised:#232430;     /* L3: hover/track/elevated — surface와 delta 11 */
+
+  /* ── BORDER ── */
+  --border-subtle:rgba(255,255,255,.04);
+  --border-normal:rgba(255,255,255,.07);
   --border-accent:rgba(129,140,248,.25);
-  --indigo:#818cf8;--indigo-dim:rgba(129,140,248,.14);
-  --green:#2dd4bf;--green-dim:rgba(45,212,191,.14);
-  --amber:#f59e0b;--amber-dim:rgba(245,158,11,.14);
-  --red:#ef4444;--red-dim:rgba(239,68,68,.14);
-  --cyan:#22d3ee;--purple:#c084fc;--purple-dim:rgba(192,132,252,.14);
-  --text-pri:rgba(255,255,255,.92);--text-sec:rgba(255,255,255,.48);
-  --text-mut:rgba(255,255,255,.18);--text-acc:#a5b4fc;
+
+  /* ── SEMANTIC COLORS (1색 1의미) ── */
+  --green:#2dd4bf;--green-dim:rgba(45,212,191,.14);       /* healthy/ok/published */
+  --amber:#f59e0b;--amber-dim:rgba(245,158,11,.14);       /* warning/pending */
+  --red:#ef4444;--red-dim:rgba(239,68,68,.14);             /* critical/blocked */
+  --indigo:#818cf8;--indigo-dim:rgba(129,140,248,.14);     /* active/working */
+  --purple:#c084fc;--purple-dim:rgba(192,132,252,.14);     /* business */
+  --cyan:#22d3ee;                                           /* accent only */
+
+  /* ── TEXT ── */
+  --text-pri:rgba(255,255,255,.93);   /* numbers, titles */
+  --text-sec:rgba(255,255,255,.50);   /* descriptions, sub */
+  --text-mut:rgba(255,255,255,.20);   /* disabled, empty, dim labels */
+  --text-acc:#a5b4fc;                 /* brand accent */
+
+  /* ── TYPOGRAPHY ── */
   --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif;
   --mono:'SF Mono','Menlo','Courier New',monospace;
+  --fs-hero:32px;  --fw-hero:800;    /* Pulse headline only */
+  --fs-h1:22px;    --fw-h1:700;      /* KPI numbers (scores) */
+  --fs-h2:18px;    --fw-h2:700;      /* metric numbers (queue, agent count) */
+  --fs-body:13px;  --fw-body:400;    /* content text */
+  --fs-label:9px;  --fw-label:600;   /* section headers — uppercase */
+  --fs-meta:8px;                      /* timestamps, providers, micro labels */
+
+  /* ── SPACING (4px grid) ── */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px;
+
+  /* ── RADIUS ── */
   --r-sm:4px;--r-md:6px;--r-lg:10px;
-  --nav-h:52px;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+
+  /* ── LAYOUT ── */
+  --nav-h:52px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-pri);
@@ -32,43 +63,44 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .topbar{position:fixed;top:0;left:0;right:0;z-index:50;
   height:calc(44px + var(--safe-t));padding-top:var(--safe-t);
   display:flex;align-items:center;justify-content:space-between;
-  padding-left:16px;padding-right:12px;
-  background:rgba(8,9,13,.94);backdrop-filter:blur(12px);
+  padding-left:var(--sp-4);padding-right:var(--sp-3);
+  background:rgba(7,8,12,.95);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border-subtle)}
-.topbar-brand{display:flex;align-items:center;gap:8px}
-.topbar-badge{font-size:8px;letter-spacing:1.5px;color:var(--text-acc);
-  background:var(--indigo-dim);border-radius:3px;padding:2px 6px;font-weight:600}
-.topbar-time{font-size:10px;color:var(--text-sec);font-family:var(--mono)}
-.topbar-refresh{background:none;border:none;color:var(--text-sec);
-  font-size:18px;cursor:pointer;padding:4px 8px;border-radius:var(--r-sm);
-  transition:color .2s}
+.topbar-brand{display:flex;align-items:center;gap:6px}
+.topbar-ico{font-size:16px;line-height:1}
+.topbar-badge{font-size:var(--fs-meta);letter-spacing:1.5px;color:var(--text-acc);
+  background:var(--indigo-dim);border-radius:var(--r-sm);padding:2px 6px;font-weight:var(--fw-label)}
+.topbar-right{display:flex;align-items:center;gap:6px}
+.topbar-sync{font-size:var(--fs-meta);color:var(--text-sec);font-family:var(--mono)}
+.topbar-time{font-size:var(--fs-label);color:var(--text-sec);font-family:var(--mono)}
+.topbar-refresh{background:none;border:none;color:var(--text-mut);
+  font-size:16px;cursor:pointer;padding:6px;border-radius:var(--r-sm);
+  -webkit-tap-highlight-color:transparent}
 .topbar-refresh:active{color:var(--indigo)}
-.topbar-right{display:flex;align-items:center;gap:8px}
-.topbar-sync{font-size:8px;color:var(--text-sec);font-family:var(--mono)}
 
 /* ── MAIN CONTENT ── */
 .main{position:fixed;top:calc(44px + var(--safe-t));left:0;right:0;
   bottom:calc(var(--nav-h) + var(--safe-b));overflow-y:auto;
   -webkit-overflow-scrolling:touch;background:var(--bg-deep)}
-.tab-pane{display:none;padding:14px 16px 16px}
+.tab-pane{display:none;padding:var(--sp-3) var(--sp-4) var(--sp-4)}
 .tab-pane.active{display:block}
 
 /* ── BOTTOM NAV ── */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:100;
   height:calc(var(--nav-h) + var(--safe-b));padding-bottom:var(--safe-b);
-  display:flex;background:rgba(8,9,13,.96);backdrop-filter:blur(16px);
+  display:flex;background:rgba(7,8,12,.97);backdrop-filter:blur(16px);
   border-top:1px solid var(--border-subtle)}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:2px;min-height:44px;background:none;border:none;
-  color:var(--text-mut);font-size:9px;letter-spacing:.3px;cursor:pointer;
+  color:var(--text-mut);font-size:var(--fs-meta);letter-spacing:.3px;cursor:pointer;
   -webkit-tap-highlight-color:transparent;transition:color .15s}
-.nav-btn.active{color:var(--indigo);position:relative}
-.nav-btn.active::before{content:'';position:absolute;top:0;left:20%;right:20%;
+.nav-btn.active{color:var(--text-pri);position:relative}
+.nav-btn.active::before{content:'';position:absolute;top:0;left:30%;right:30%;
   height:2px;background:var(--indigo);border-radius:0 0 1px 1px}
 .nav-btn .nav-icon{font-size:18px;line-height:1}
 
 /* ── SHARED ── */
-.sub{font-size:11px;color:var(--text-sec)}
+.sub{font-size:11px;color:var(--text-sec);font-family:var(--mono)}
 
 /* ── STATUS DOTS ── */
 .dots{display:flex;gap:12px}
@@ -146,8 +178,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ag-dot.blocked{animation:blink 1.5s ease-in-out infinite}
 
 /* ── SECTION HEADER ── */
-.sec-head{font-size:9px;font-weight:600;letter-spacing:1.5px;color:var(--text-mut);
-  margin:14px 0 6px;text-transform:uppercase}
+.sec-head{font-size:var(--fs-label);font-weight:var(--fw-label);letter-spacing:1.5px;
+  color:var(--text-mut);margin:var(--sp-4) 0 var(--sp-1);text-transform:uppercase}
 
 /* ── OPS ── */
 .ops-health{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;
@@ -171,7 +203,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 /* ── PULSE: STRIP + HEADLINE ── */
 .status-strip{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px}
-.pulse-hl{font-size:32px;font-weight:800;line-height:1.1;margin-bottom:12px;letter-spacing:-.5px}
+.pulse-hl{font-size:var(--fs-hero);font-weight:var(--fw-hero);line-height:1.1;
+  margin-bottom:var(--sp-3);letter-spacing:-.5px}
 .pulse-hl small{display:block;font-size:11px;font-weight:400;color:var(--text-sec);
   margin-top:3px;letter-spacing:0}
 
@@ -238,8 +271,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .draft-time{font-size:8px;color:var(--text-mut);font-family:var(--mono);white-space:nowrap}
 
 /* ── COMPACT EMPTY ── */
-.empty-sm{padding:10px;text-align:center;font-size:9px;color:var(--text-sec);
-  background:var(--bg-surface);border-radius:var(--r-md)}
+.empty-sm{padding:var(--sp-2) var(--sp-3);text-align:center;font-size:var(--fs-label);
+  color:var(--text-mut);background:var(--bg-surface);border-radius:var(--r-md)}
 
 /* ── REDUCED MOTION ── */
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{
@@ -251,7 +284,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="topbar-brand">
-    <span style="font-size:18px">🦊</span>
+    <span class="topbar-ico">🦊</span>
     <span class="topbar-badge">CONTROL ROOM</span>
   </div>
   <div class="topbar-right">
