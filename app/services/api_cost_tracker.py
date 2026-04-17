@@ -89,27 +89,21 @@ def get_usage_summary() -> str:
     with _lock:
         today_data = dict(_daily.get(today, {}))
 
-    if not today_data:
-        lines.append("  (호출 없음)")
-    else:
-        for provider in sorted(today_data.keys()):
-            d = today_data[provider]
-            calls = d["calls"]
-            in_tok = d["input_tokens"]
-            out_tok = d["output_tokens"]
+    all_providers = sorted(_PRICING.keys() - {"anthropic-haiku"})
+    for provider in all_providers:
+        d = today_data.get(provider, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
+        calls = d["calls"]
+        in_tok = d["input_tokens"]
+        out_tok = d["output_tokens"]
 
-            # 비용 추정
-            pk = _pricing_key(provider, "")
-            pricing = _PRICING.get(pk, _PRICING.get(provider, {"input": 0, "output": 0}))
-            cost = in_tok * pricing["input"] + out_tok * pricing["output"]
-            today_total_cost += cost
+        pk = _pricing_key(provider, "")
+        pricing = _PRICING.get(pk, {"input": 0, "output": 0})
+        cost = in_tok * pricing["input"] + out_tok * pricing["output"]
+        today_total_cost += cost
 
-            icon = _provider_icon(provider)
-            lines.append(
-                f"  {icon} <b>{provider}</b>: {calls}회 | "
-                f"in {_fmt_tokens(in_tok)} out {_fmt_tokens(out_tok)} | "
-                f"~${cost:.4f}"
-            )
+        icon = _provider_icon(provider)
+        status = f"{calls}회 | in {_fmt_tokens(in_tok)} out {_fmt_tokens(out_tok)} | ~${cost:.4f}" if calls else "0회 | ~$0.0000"
+        lines.append(f"  {icon} <b>{provider}</b>: {status}")
 
     lines.append(f"\n  <b>오늘 예상 합계: ~${today_total_cost:.4f}</b>")
 
@@ -128,21 +122,16 @@ def get_usage_summary() -> str:
                 w["input_tokens"] += d["input_tokens"]
                 w["output_tokens"] += d["output_tokens"]
 
-    if not week_totals:
-        lines.append("  (데이터 없음)")
-    else:
-        for provider in sorted(week_totals.keys()):
-            d = week_totals[provider]
-            pk = _pricing_key(provider, "")
-            pricing = _PRICING.get(pk, {"input": 0, "output": 0})
-            cost = d["input_tokens"] * pricing["input"] + d["output_tokens"] * pricing["output"]
-            week_total_cost += cost
+    for provider in all_providers:
+        d = week_totals.get(provider, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
+        pk = _pricing_key(provider, "")
+        pricing = _PRICING.get(pk, {"input": 0, "output": 0})
+        cost = d["input_tokens"] * pricing["input"] + d["output_tokens"] * pricing["output"]
+        week_total_cost += cost
 
-            icon = _provider_icon(provider)
-            lines.append(
-                f"  {icon} <b>{provider}</b>: {d['calls']}회 | "
-                f"~${cost:.4f}"
-            )
+        icon = _provider_icon(provider)
+        status = f"{d['calls']}회 | ~${cost:.4f}" if d["calls"] else "0회 | ~$0.0000"
+        lines.append(f"  {icon} <b>{provider}</b>: {status}")
 
         lines.append(f"\n  <b>누적 예상 합계: ~${week_total_cost:.4f}</b>")
 
