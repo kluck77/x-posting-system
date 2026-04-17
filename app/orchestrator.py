@@ -713,26 +713,36 @@ class Orchestrator:
         except Exception:
             hook, body = draft.hook or "", draft.body or ""
 
-        # 새니타이즈 후 본문이 없으면 재생성 안내
         if not body:
             return {
                 "success": True,
-                "message": (
-                    "승인 완료 — 단, 이 초안은 본문이 없습니다. "
-                    "🔄 재생성을 눌러 AI 본문을 생성하세요."
-                ),
-                "draft_id": draft.id,
-                "hook": hook,
-                "body": "",
+                "message": "승인 완료 — 단, 이 초안은 본문이 없습니다. 🔄 재생성을 눌러 AI 본문을 생성하세요.",
+                "draft_id": draft.id, "hook": hook, "body": "",
             }
 
-        return {
+        # Grok mini-pass (fail-open)
+        grok_result = {}
+        try:
+            if settings.has_grok:
+                grok_result = await self.ai.trend_hunter.quick_review(
+                    hook, body, draft.category.value if draft.category else "")
+                if grok_result.get("grok_used") and grok_result.get("verdict") == "use_grok_hook":
+                    alt = grok_result.get("hook_alt")
+                    if alt and len(alt) <= 80:
+                        logger.info(f"[Grok] hook 교체: '{hook[:30]}' → '{alt[:30]}'")
+                        hook = alt
+        except Exception as e:
+            logger.warning(f"[Grok mini-pass] 실패 (무시): {e}")
+
+        result = {
             "success": True,
             "message": "승인 완료 — 아래 내용을 복사해서 직접 게시하세요.",
-            "draft_id": draft.id,
-            "hook": hook,
-            "body": body,
+            "draft_id": draft.id, "hook": hook, "body": body,
         }
+        if grok_result.get("grok_used"):
+            result["grok_x_angle"] = grok_result.get("x_angle")
+            result["grok_resonance_note"] = grok_result.get("resonance_note")
+        return result
 
     async def _handle_regenerate(
         self, draft: Draft, chat_id: int | str | None = None,

@@ -195,3 +195,62 @@ class GrokTrendHunter(BaseTrendHunter):
         except Exception as e:
             logger.error(f"Grok TrendHunter 오류: {e}")
             raise RuntimeError(f"Grok TrendHunter 오류: {e}") from e
+
+    async def quick_review(self, hook: str, body: str, category: str = "") -> dict:
+        """전송 직전 X/트렌드 감각 보정. 본문 전체 rewrite 금지."""
+        prompt = f"""아래 X(트위터) 초안을 X/트렌드 관점에서 빠르게 점검하라.
+
+초안:
+hook: {hook}
+body: {body}
+카테고리: {category}
+
+JSON으로만 응답:
+{{
+  "hook_alt": "더 강한 첫 줄 제안 (원본이 충분하면 null)",
+  "x_angle": "X/트위터에서 먹힐 각도 1줄 (이미 좋으면 null)",
+  "resonance_note": "공명도 보정 제안 1줄 (불필요하면 null)",
+  "verdict": "use_default 또는 use_grok_hook"
+}}
+
+규칙:
+- 본문 전체 rewrite 금지
+- hook_alt는 60자 이내
+- verdict가 use_default면 원본 유지
+- 모든 출력 한국어"""
+
+        try:
+            from app.services.api_cost_tracker import record_usage
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    GROK_API_URL,
+                    headers={"Authorization": f"Bearer {settings.grok_api_key}",
+                             "Content-Type": "application/json"},
+                    json={"model": GROK_MODEL, "messages": [
+                        {"role": "user", "content": prompt}
+                    ], "temperature": 0.4, "max_tokens": 300},
+                )
+                if resp.status_code != 200:
+                    logger.warning(f"[Grok quick_review] API {resp.status_code}")
+                    return {"grok_used": False, "reason": f"API {resp.status_code}"}
+
+                data = resp.json()
+                raw = data["choices"][0]["message"]["content"]
+                usage = data.get("usage", {})
+                record_usage("grok", GROK_MODEL, "QuickReview",
+                             input_tokens=usage.get("prompt_tokens", 0),
+                             output_tokens=usage.get("completion_tokens", 0))
+
+                clean = raw.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+                import json as _json
+                result = _json.loads(clean)
+                result["grok_used"] = True
+                logger.info(f"[Grok quick_review] verdict={result.get('verdict')} hook_alt={result.get('hook_alt','')[:30]}")
+                return result
+
+        except Exception as e:
+            logger.warning(f"[Grok quick_review] 실패 (fallback): {e}")
+            return {"grok_used": False, "reason": str(e)}
