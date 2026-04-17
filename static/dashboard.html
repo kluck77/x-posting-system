@@ -8,16 +8,16 @@
 <title>X System — Control Room</title>
 <style>
 :root{
-  --bg-void:#08090d;--bg-deep:#0e0f15;--bg-surface:#14151e;--bg-raised:#1c1d28;
-  --border-subtle:rgba(255,255,255,.05);--border-normal:rgba(255,255,255,.08);
-  --border-accent:rgba(129,140,248,.30);
-  --indigo:#818cf8;--indigo-dim:rgba(129,140,248,.10);
-  --green:#2dd4bf;--green-dim:rgba(45,212,191,.10);
-  --amber:#f59e0b;--amber-dim:rgba(245,158,11,.10);
-  --red:#ef4444;--red-dim:rgba(239,68,68,.10);
-  --cyan:#22d3ee;--purple:#c084fc;--purple-dim:rgba(192,132,252,.10);
-  --text-pri:rgba(255,255,255,.88);--text-sec:rgba(255,255,255,.45);
-  --text-mut:rgba(255,255,255,.20);--text-acc:#a5b4fc;
+  --bg-void:#07080b;--bg-deep:#0d0e14;--bg-surface:#191a24;--bg-raised:#24252f;
+  --border-subtle:rgba(255,255,255,.04);--border-normal:rgba(255,255,255,.07);
+  --border-accent:rgba(129,140,248,.25);
+  --indigo:#818cf8;--indigo-dim:rgba(129,140,248,.14);
+  --green:#2dd4bf;--green-dim:rgba(45,212,191,.14);
+  --amber:#f59e0b;--amber-dim:rgba(245,158,11,.14);
+  --red:#ef4444;--red-dim:rgba(239,68,68,.14);
+  --cyan:#22d3ee;--purple:#c084fc;--purple-dim:rgba(192,132,252,.14);
+  --text-pri:rgba(255,255,255,.92);--text-sec:rgba(255,255,255,.48);
+  --text-mut:rgba(255,255,255,.18);--text-acc:#a5b4fc;
   --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif;
   --mono:'SF Mono','Menlo','Courier New',monospace;
   --r-sm:4px;--r-md:6px;--r-lg:10px;
@@ -79,9 +79,9 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 /* ── STATUS DOTS ── */
 .dots{display:flex;gap:12px}
 .dot{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-sec)}
-.dot-led{width:8px;height:8px;border-radius:50%;background:var(--text-mut)}
-.dot-led.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
-.dot-led.err{background:var(--red);box-shadow:0 0 6px var(--red);
+.dot-led{width:6px;height:6px;border-radius:50%;background:var(--text-mut)}
+.dot-led.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.dot-led.err{background:var(--red);box-shadow:0 0 5px var(--red);
   animation:blink 1.5s ease-in-out infinite}
 .dot-led.warn{background:var(--amber);box-shadow:0 0 6px var(--amber)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
@@ -91,7 +91,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .score-box{padding:8px 10px;border-radius:var(--r-md);background:var(--bg-surface)}
 .score-num{font-size:22px;font-weight:700;line-height:1;margin-bottom:2px}
 .score-label{font-size:8px;letter-spacing:1px;color:var(--text-mut);text-transform:uppercase}
-.sc-bar{height:2px;border-radius:1px;background:var(--bg-raised);margin-top:5px;overflow:hidden}
+.sc-bar{height:3px;border-radius:2px;background:var(--bg-raised);margin-top:5px;overflow:hidden}
 .sc-fill{height:100%;border-radius:1px;transition:width .6s ease-out}
 
 /* ── QUEUE BADGE ── */
@@ -176,7 +176,9 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 /* ── PULSE: STRIP + HEADLINE ── */
 .status-strip{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px}
-.pulse-hl{font-size:24px;font-weight:700;line-height:1.2;margin-bottom:10px;letter-spacing:-.3px}
+.pulse-hl{font-size:28px;font-weight:800;line-height:1.15;margin-bottom:10px;letter-spacing:-.5px}
+.pulse-hl small{display:block;font-size:11px;font-weight:400;color:var(--text-sec);
+  margin-top:3px;letter-spacing:0}
 
 /* ── PULSE: TODAY ROW ── */
 .today-row{display:flex;gap:16px;margin-bottom:8px}
@@ -185,27 +187,37 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .today-lbl{font-size:10px;color:var(--text-sec)}
 
 /* ── PULSE: QUEUE GRID ── */
-.q-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
-.q-cell{background:var(--bg-surface);border-radius:var(--r-md);padding:7px 4px;
+.q-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px}
+.q-cell{background:var(--bg-surface);border-radius:var(--r-md);padding:8px 4px;
   text-align:center}
-.q-cell.dim{opacity:.15}
+.q-cell.dim{opacity:.12}
 .q-num{font-size:18px;font-weight:700;line-height:1}
 .q-lbl{font-size:8px;color:var(--text-mut);margin-top:2px;letter-spacing:.5px;text-transform:uppercase}
 
 /* ── ALERTS: NAVER ROW ── */
-.naver-row{display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;
+.naver-row{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:10px;
   background:var(--bg-surface);border-radius:var(--r-md)}
-.naver-pct{font-size:14px;font-weight:700;min-width:36px}
-.naver-track{flex:1;height:3px;border-radius:2px;background:var(--bg-raised);overflow:hidden}
-.naver-fill{height:100%;border-radius:2px;background:var(--green)}
-.naver-rem{font-size:9px;color:var(--text-mut);white-space:nowrap}
+.naver-tag{font-size:8px;font-weight:600;color:var(--text-mut);letter-spacing:1px;text-transform:uppercase}
+.naver-pct{font-size:13px;font-weight:700;min-width:28px}
+.naver-track{flex:1;height:2px;border-radius:1px;background:var(--bg-raised);overflow:hidden}
+.naver-fill{height:100%;border-radius:1px;background:var(--green);transition:width .3s}
+.naver-rem{font-size:8px;color:var(--text-mut);white-space:nowrap}
 
 /* ── ALERTS: ITEM ── */
 .alert-item{background:var(--bg-surface);border-radius:var(--r-md);padding:8px 12px;
   margin-bottom:4px;border-left:3px solid var(--red)}
-.alert-snap{font-size:12px;margin-bottom:4px;line-height:1.4;
+.alert-snap{font-size:11px;margin-bottom:3px;line-height:1.3;color:var(--text-pri);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.alert-meta{display:flex;gap:6px;align-items:center}
+.alert-meta{display:flex;gap:4px;align-items:center}
+
+/* ── ALERTS: NEWS FEED ── */
+.news-feed{list-style:none}
+.news-row{display:flex;align-items:center;gap:6px;padding:5px 0;
+  border-bottom:1px solid var(--border-subtle);min-height:28px}
+.news-row:last-child{border-bottom:none}
+.news-dot{width:3px;height:3px;border-radius:50%;background:var(--text-mut);flex-shrink:0}
+.news-title{flex:1;font-size:11px;color:var(--text-sec);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ── PIPELINE: STAGE GRID ── */
 .stage-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:12px}
@@ -274,8 +286,9 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   </div>
 
   <div class="today-row">
-    <div class="today-item"><span class="today-val" id="todayDrafts">—</span><span class="today-lbl">오늘 처리</span></div>
+    <div class="today-item"><span class="today-val" id="todayDrafts">—</span><span class="today-lbl">처리</span></div>
     <div class="today-item"><span class="today-val" id="evalCount">—</span><span class="today-lbl">Eval</span></div>
+    <div class="today-item"><span class="today-val" id="pulseBuf">—</span><span class="today-lbl">야간버퍼</span></div>
   </div>
 
   <div class="q-grid">
@@ -293,20 +306,20 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ ALERTS TAB ═══ -->
 <section class="tab-pane" id="tab-alerts">
-  <div class="sec-head" style="margin-top:0">NAVER API</div>
   <div class="naver-row">
+    <span class="naver-tag">NAVER</span>
     <span class="naver-pct" id="naverPct">—</span>
     <div class="naver-track"><div class="naver-fill" id="naverBar" style="width:0%"></div></div>
     <span class="naver-rem" id="naverRemain"></span>
   </div>
 
-  <div class="sec-head">IMMEDIATE QUEUE</div>
+  <div class="sec-head">IMMEDIATE</div>
   <div id="immediateList"><div class="empty-sm">긴급 항목 없음</div></div>
 
-  <div class="sec-head">RECENT NEWS</div>
-  <ul class="mini-list" id="newsList">
-    <li class="empty-sm">수집 대기 중</li>
-  </ul>
+  <div class="sec-head">LIVE FEED</div>
+  <div class="news-feed" id="newsList">
+    <div class="empty-sm">수집 대기 중</div>
+  </div>
 </section>
 
 <!-- ═══ AGENTS TAB ═══ -->
@@ -410,6 +423,8 @@ async function loadStatus(){
     // news monitor
     const n=d.news||{};
     document.getElementById('fSource').textContent=n.pending_articles||0;
+    const pb=document.getElementById('pulseBuf');
+    if(pb)pb.textContent=n.overnight_buffer||0;
 
     // ops health panel
     const oh=document.getElementById('opsHealth');
@@ -542,11 +557,11 @@ async function loadFlowTrace(){
 
 async function loadNews(){
   try{
-    const r=await fetch(API+'/control/recent-news?limit=6');
+    const r=await fetch(API+'/control/recent-news?limit=10');
     const d=await r.json();
     if(d.length){
       document.getElementById('newsList').innerHTML=d.map(n=>
-        `<li class="mini-item">${n.title||'—'}</li>`
+        `<div class="news-row"><span class="news-dot"></span><span class="news-title">${n.title||'—'}</span></div>`
       ).join('');
     }
   }catch(e){console.warn('news:',e)}
@@ -593,10 +608,10 @@ function setScore(id,val){
 let _hl={dbOk:true,imm:0,today:0};
 function updateHL(){
   const el=document.getElementById('pulseHL');if(!el)return;
-  if(!_hl.dbOk){el.textContent='DB 연결 끊김';el.style.color='var(--red)';return}
-  if(_hl.imm>0){el.textContent='긴급 '+_hl.imm+'건 대기';el.style.color='var(--red)';return}
-  if(_hl.today>0){el.textContent='오늘 '+_hl.today+'건 처리';el.style.color='var(--green)';return}
-  el.textContent='시스템 대기 중';el.style.color='var(--text-sec)';
+  if(!_hl.dbOk){el.innerHTML='DB 연결 끊김<small>시스템 점검 필요</small>';el.style.color='var(--red)';return}
+  if(_hl.imm>0){el.innerHTML=`긴급 ${_hl.imm}건 대기<small>IMMEDIATE 큐 확인</small>`;el.style.color='var(--red)';return}
+  if(_hl.today>0){el.innerHTML=`오늘 ${_hl.today}건 처리<small>시스템 정상 가동</small>`;el.style.color='var(--green)';return}
+  el.innerHTML='시스템 대기 중<small>새 소스 입력 대기</small>';el.style.color='var(--text-sec)';
 }
 
 // ── LOAD ALL ──
