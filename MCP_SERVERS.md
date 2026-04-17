@@ -1,8 +1,8 @@
 # MCP 서버 설정 가이드
 
-이 프로젝트는 `.mcp.json`을 통해 **11개**의 MCP(Model Context Protocol) 서버를
-Claude Code에 연결합니다. 최초 실행 시 Claude Code가 각 서버의 사용 승인을
-요청합니다.
+이 프로젝트는 `.mcp.json`을 통해 **9개**의 MCP(Model Context Protocol) 서버를
+Claude Code에 연결합니다. **모두 무료 서버만 포함**. 최초 실행 시 Claude Code가
+각 서버의 사용 승인을 요청합니다.
 
 ---
 
@@ -33,37 +33,27 @@ Claude Code에 연결합니다. 최초 실행 시 Claude Code가 각 서버의 �
 - "대시보드 만들어줘" 같은 큰 지시:
   → `sequential-thinking`이 자동으로 "1)라우팅 설계 → 2)DB 쿼리 → 3)UI 컴포넌트 → 4)인증" 단계 분해
 
-## 3부. X 팔로워 성장·콘텐츠 품질 (키 필요)
-
-100만 팔로워 목표에는 **트렌드 탐지 + 팩트체크**가 핵심입니다.
+## 3부. X 팔로워 성장 — 트렌드 리서치 (무료 플랜)
 
 | 서버 | 패키지 | 필요 키 | 무료 플랜 |
 |------|--------|---------|-----------|
-| `brave-search` | `@modelcontextprotocol/server-brave-search` | `BRAVE_API_KEY` | 2000 쿼리/월 |
-| `perplexity-ask` | `server-perplexity-ask` | `PERPLEXITY_API_KEY` | 유료 (소액) |
+| `brave-search` | `@modelcontextprotocol/server-brave-search` | `BRAVE_API_KEY` | **2000 쿼리/월 영구 무료** |
 
 **용도 예시:**
-- "오늘 한국에서 화제인 정책 이슈 찾아줘" → `brave-search`
-- "이 통계 수치 정확한지 소스 포함해서 검증" → `perplexity-ask`
-- 현재 프로젝트 `.env.example`에 `PERPLEXITY_API_KEY`가 이미 예정되어 있음
+- "오늘 한국에서 화제인 정책 이슈 찾아줘"
+- "북한 관련 최신 외신 헤드라인 5개"
 
-**키 받기:**
-- Brave: https://brave.com/search/api/ (무료 가입)
-- Perplexity: https://www.perplexity.ai/settings/api
+**키 받기**: https://brave.com/search/api/ (신용카드 등록 시 2000/월 무료 플랜 선택 가능 — 초과해도 자동 과금되지 않음)
 
-## 4부. 대시보드·UI 생성 (키 필요)
+## 4부. 대시보드·UI 생성 (무료 플랜)
 
-| 서버 | 패키지 | 필요 키 | 용도 |
-|------|--------|---------|------|
-| `magic` | `@21st-dev/magic@latest` | `MAGIC_API_KEY` | 자연어 → React/Tailwind 컴포넌트 생성 (초보에게 강력). Safari 호환 |
+| 서버 | 패키지 | 필요 키 | 무료 플랜 |
+|------|--------|---------|-----------|
+| `magic` | `@21st-dev/magic@latest` | `MAGIC_API_KEY` | 무료 플랜 있음 (월 생성 횟수 제한) |
 
-**키 받기**: https://21st.dev/magic (무료 플랜 있음)
+**용도**: 자연어 → React/Tailwind 컴포넌트 생성. Safari 호환. 초보에게 강력.
 
-## 5부. 에러 모니터링 (선택)
-
-| 서버 | 필요 키 | 비고 |
-|------|---------|------|
-| `sentry` | `SENTRY_AUTH_TOKEN` | 현재 프로젝트는 `logging`만 사용. Sentry 도입 전까지는 유휴 상태 OK |
+**키 받기**: https://21st.dev/magic (무료 가입)
 
 ---
 
@@ -72,25 +62,23 @@ Claude Code에 연결합니다. 최초 실행 시 Claude Code가 각 서버의 �
 `.env` 파일(프로젝트 루트)에 아래와 같이 추가하면 Claude Code가 자동 인식합니다:
 
 ```bash
-# 성장/콘텐츠 품질
+# 트렌드 리서치 (무료 2000회/월)
 BRAVE_API_KEY=BSAxxxxxxxxxxxxxx
-PERPLEXITY_API_KEY=pplx-xxxxxxxx
 
-# UI 생성
+# UI 생성 (무료 플랜)
 MAGIC_API_KEY=xxxxxxxx
-
-# 에러 모니터링 (나중에)
-SENTRY_AUTH_TOKEN=sntrys_xxxxxxxx
-SENTRY_HOST=https://sentry.io
 ```
 
-키가 없으면 해당 서버만 비활성 — 다른 MCP 서버 작동에는 영향 없습니다.
+키가 없으면 해당 서버만 비활성 — 다른 7개 MCP 서버는 정상 작동합니다.
+
+**폰에서도 키가 적용되게 하려면**: `.env`는 git에 안 올라가므로, Claude Code
+웹 설정 > Secrets(또는 환경변수)에 동일하게 등록해야 합니다.
 
 ## 사전 요구사항
 
 - `uvx` (uv) — Python 서버 3개(sqlite, fetch, time) 실행용
   - 설치: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- `npx` (Node.js 18+) — JS 서버 8개 실행용
+- `npx` (Node.js 18+) — JS 서버 6개 실행용
 - 인터넷 접속 (첫 실행 시 패키지 자동 다운로드)
 
 ## 실전 사용 예시 (Claude Code 세션)
@@ -105,17 +93,19 @@ SENTRY_HOST=https://sentry.io
 "한국 정책 관련 오늘의 X 트렌드 찾아줘"
  → brave-search MCP가 실시간 검색
 
-"이 수치 팩트체크해줘: '한국 출산율 0.72'"
- → perplexity-ask MCP가 소스 포함 검증
-
 "FastAPI admin용 '오늘의 게시물' 카드 컴포넌트 만들어줘"
  → magic MCP가 React 코드 생성
 
 "대시보드가 Safari에서 제대로 보이는지 확인해줘"
  → playwright MCP가 WebKit으로 스크린샷
+
+"지금 KST로 X 게시 최적 시간대 계산해줘"
+ → time MCP가 KST 기준 시각 제공
 ```
 
-## 제외한 MCP 서버
+## 제거한 MCP 서버
 
-- **filesystem**: Claude Code 내장 Read/Write/Edit로 대체
-- **github**: 이 세션에 이미 내장됨 (`mcp__github__*`)
+- **perplexity-ask**: 유료 전용 — 제거
+- **sentry**: Sentry 계정 필요 + 현재 프로젝트 미사용 — 제거
+- **filesystem**: Claude Code 내장 Read/Write/Edit 로 대체
+- **github**: 세션 내장 (`mcp__github__*`)
