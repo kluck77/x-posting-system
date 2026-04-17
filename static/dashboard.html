@@ -83,7 +83,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   bottom:calc(var(--nav-h) + var(--safe-b));overflow-y:auto;
   -webkit-overflow-scrolling:touch;background:var(--bg-deep)}
 .tab-pane{display:none;padding:var(--sp-3) var(--sp-4) var(--sp-4)}
-.tab-pane.active{display:block}
+.tab-pane.active{display:block;animation:fadeIn .2s ease-out}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 /* ── BOTTOM NAV ── */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:100;
@@ -224,6 +225,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .q-cell{background:var(--bg-surface);border-radius:var(--r-md);padding:8px 4px;
   text-align:center}
 .q-cell.dim{opacity:.12}
+.q-cell:not(.dim){background:var(--bg-raised)}
 .q-num{font-size:18px;font-weight:700;line-height:1}
 .q-lbl{font-size:8px;color:var(--text-mut);margin-top:2px;letter-spacing:.5px;text-transform:uppercase}
 
@@ -259,7 +261,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .stage-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:10px;
   position:relative}
 .stage-grid::before{content:'';position:absolute;top:50%;left:6%;right:6%;
-  height:1px;background:var(--border-normal);transform:translateY(-50%)}
+  height:1px;background:linear-gradient(90deg,transparent,var(--indigo-dim),var(--green-dim),transparent);
+  background-size:200% 100%;animation:shimmer 4s linear infinite;transform:translateY(-50%)}
 .stage-cell{text-align:center;padding:7px 2px;background:var(--bg-surface);
   border-radius:var(--r-md);position:relative;z-index:1}
 .stage-cell.empty-stage{opacity:.25}
@@ -275,6 +278,11 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .draft-chip{font-size:7px;font-weight:600;padding:1px 4px;border-radius:var(--r-sm);
   text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
 .draft-time{font-size:8px;color:var(--text-mut);font-family:var(--mono);white-space:nowrap}
+
+/* ── TAB FOOTER ── */
+.tab-footer{margin-top:var(--sp-4);padding:var(--sp-2) var(--sp-3);
+  font-size:var(--fs-meta);color:var(--text-mut);font-family:var(--mono);
+  text-align:center;background:var(--bg-surface);border-radius:var(--r-md)}
 
 /* ── COMPACT EMPTY ── */
 .empty-sm{padding:var(--sp-2) var(--sp-3);text-align:center;font-size:var(--fs-label);
@@ -337,16 +345,17 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   </div>
 
   <div class="q-grid">
-    <div class="q-cell"><div class="q-num" style="color:var(--red)" id="qImmediate">0</div><div class="q-lbl">IMM</div></div>
-    <div class="q-cell"><div class="q-num" style="color:var(--amber)" id="qDigest">0</div><div class="q-lbl">DAY</div></div>
-    <div class="q-cell"><div class="q-num" style="color:var(--indigo)" id="qTop10">0</div><div class="q-lbl">5AM</div></div>
-    <div class="q-cell"><div class="q-num" style="color:var(--green)" id="qWeekly">0</div><div class="q-lbl">WK</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--red)" id="qImmediate">0</div><div class="q-lbl">긴급</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--amber)" id="qDigest">0</div><div class="q-lbl">일일</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--indigo)" id="qTop10">0</div><div class="q-lbl">새벽</div></div>
+    <div class="q-cell"><div class="q-num" style="color:var(--green)" id="qWeekly">0</div><div class="q-lbl">주간</div></div>
   </div>
 
-  <div class="sec-head">RECENT ALERTS</div>
+  <div class="sec-head">최근 알림</div>
   <ul class="mini-list" id="recentAlerts">
     <li class="empty-sm">긴급 알림 대기 중</li>
   </ul>
+  <div class="tab-footer" id="pulseFooter"></div>
 </section>
 
 <!-- ═══ ALERTS TAB ═══ -->
@@ -358,22 +367,23 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     <span class="naver-rem" id="naverRemain"></span>
   </div>
 
-  <div class="sec-head">IMMEDIATE</div>
+  <div class="sec-head">긴급 큐</div>
   <div id="immediateList"><div class="empty-sm">긴급 항목 없음</div></div>
 
-  <div class="sec-head">LIVE FEED</div>
+  <div class="sec-head">실시간 피드</div>
   <div class="news-feed" id="newsList">
     <div class="empty-sm">수집 대기 중</div>
   </div>
+  <div class="tab-footer" id="alertsFooter"></div>
 </section>
 
 <!-- ═══ AGENTS TAB ═══ -->
 <section class="tab-pane" id="tab-agents">
-  <div class="sec-head first">AI WORKSTATION</div>
+  <div class="sec-head first">AI 워크스테이션</div>
   <div class="ag-sum" id="agentSummary"></div>
   <div class="agent-list" id="agentCards"></div>
 
-  <div class="sec-head">PROVIDERS</div>
+  <div class="sec-head">프로바이더</div>
   <div class="prov-strip" id="providerSummary"></div>
 </section>
 
@@ -381,34 +391,34 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 <section class="tab-pane" id="tab-pipeline">
   <div class="pi-sum" id="pipeSummary"></div>
   <div class="stage-grid">
-    <div class="stage-cell"><div class="stage-num" id="fSource">—</div><div class="stage-lbl">Source</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fResearch">—</div><div class="stage-lbl">Draft</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fDraft">—</div><div class="stage-lbl">Ready</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fReview">—</div><div class="stage-lbl">Review</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fPublish">—</div><div class="stage-lbl">Pub</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fSource">—</div><div class="stage-lbl">소스</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fResearch">—</div><div class="stage-lbl">초안</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fDraft">—</div><div class="stage-lbl">준비</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fReview">—</div><div class="stage-lbl">검토</div></div>
+    <div class="stage-cell"><div class="stage-num" id="fPublish">—</div><div class="stage-lbl">발행</div></div>
   </div>
 
-  <div class="sec-head">RECENT DRAFTS</div>
+  <div class="sec-head">최근 초안</div>
   <div id="draftList"><div class="empty-sm">초안 입력 대기</div></div>
 </section>
 
 <!-- ═══ OPS TAB ═══ -->
 <section class="tab-pane" id="tab-ops">
-  <div class="sec-head first">SYSTEM HEALTH</div>
+  <div class="sec-head first">시스템 상태</div>
   <div class="ops-health" id="opsHealth"></div>
 
-  <div class="sec-head">EVAL STORE</div>
+  <div class="sec-head">평가 저장소</div>
   <div class="ops-grid">
-    <div class="ops-item"><div class="ops-val" id="opsEvalMeta">—</div><div class="ops-label">Eval Meta</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsGold">—</div><div class="ops-label">Gold Eval</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsPairwise">—</div><div class="ops-label">Pairwise</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsLearning">—</div><div class="ops-label">Learning</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsEvalMeta">—</div><div class="ops-label">메타 평가</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsGold">—</div><div class="ops-label">골드 평가</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsPairwise">—</div><div class="ops-label">쌍대 비교</div></div>
+    <div class="ops-item"><div class="ops-val" id="opsLearning">—</div><div class="ops-label">학습 기록</div></div>
   </div>
 
-  <div class="sec-head">BUSINESS</div>
+  <div class="sec-head">비즈니스</div>
   <div class="biz-grid" id="bizSummary"></div>
 
-  <div class="sec-head">QUEUE</div>
+  <div class="sec-head">큐 상태</div>
   <div class="ops-q" id="queueStatus">
     <div class="empty-sm">로딩 중</div>
   </div>
@@ -474,6 +484,18 @@ async function loadStatus(){
     document.getElementById('fSource').textContent=n.pending_articles||0;
     const pb=document.getElementById('pulseBuf');
     if(pb)pb.textContent=n.overnight_buffer||0;
+
+    // pulse footer
+    const pf=document.getElementById('pulseFooter');
+    if(pf){
+      const nextD=new Date();nextD.setHours(nextD.getHours()+9);
+      const kstH=nextD.getUTCHours();
+      const toDigest=kstH<5?(5-kstH)+'시간 후':(24-kstH+5)+'시간 후';
+      pf.textContent=`다음 다이제스트 ${toDigest} · 클러스터 ${n.story_clusters||0}개 · 30초 간격 수집`;
+    }
+    // alerts footer
+    const af=document.getElementById('alertsFooter');
+    if(af)af.textContent=`수집 클러스터 ${n.story_clusters||0}개 · 야간버퍼 ${n.overnight_buffer||0}건 · 알림 ${n.alerted_stories||0}건`;
 
     // ops health panel
     const oh=document.getElementById('opsHealth');
@@ -560,16 +582,16 @@ async function loadProviders(){
     // summary
     const act=sorted.filter(a=>a.runs_today>0).length;
     const as=document.getElementById('agentSummary');
-    if(as)as.innerHTML=`<b class="ag-s-act">${act}/${sorted.length}</b> active · <b>${today}</b> runs today`;
+    if(as)as.innerHTML=`<b class="ag-s-act">${act}/${sorted.length}</b> 작동 중 · <b>${today}</b> 오늘 실행`;
     // agent rows
     document.getElementById('agentCards').innerHTML=sorted.map(a=>{
       const working=a.runs_today>0;
       const blocked=!a.configured;
       const manual=a.role==='TrendHunter';
-      let st='',dot='idle',lbl='IDLE',clr='var(--text-sec)',lblClr='var(--text-sec)';
-      if(blocked){st='blocked';dot='blocked';lbl='BLOCKED';clr='var(--red)';lblClr='var(--red)'}
-      else if(working){st='working';dot='working';lbl='ACTIVE';clr='var(--indigo)';lblClr='var(--indigo)'}
-      else if(manual){dot='manual';lbl='MANUAL';st='idle-row';clr='var(--text-mut)'}
+      let st='',dot='idle',lbl='대기',clr='var(--text-sec)',lblClr='var(--text-sec)';
+      if(blocked){st='blocked';dot='blocked';lbl='차단';clr='var(--red)';lblClr='var(--red)'}
+      else if(working){st='working';dot='working';lbl='작동';clr='var(--indigo)';lblClr='var(--indigo)'}
+      else if(manual){dot='manual';lbl='수동';st='idle-row';clr='var(--text-mut)'}
       else{st='idle-row'}
       return`<div class="ag-row ${st}">
         <span class="ag-dot ${dot}"></span>
@@ -600,8 +622,8 @@ async function loadFlowTrace(){
     // pipeline summary
     const ps=document.getElementById('pipeSummary');
     if(ps)ps.innerHTML=ct.total?
-      `<b>${ct.total}</b> total · <b style="color:var(--amber)">${ct.pending}</b> wait · <b style="color:var(--green)">${ct.published}</b> pub`:
-      'パイプライン 입력 대기';
+      `<b>${ct.total}</b> 전체 · <b style="color:var(--amber)">${ct.pending}</b> 대기 · <b style="color:var(--green)">${ct.published}</b> 발행`:
+      '파이프라인 입력 대기';
 
     // stage grid — set numbers + colors + dim empty
     const stages=[
@@ -620,9 +642,9 @@ async function loadFlowTrace(){
 
     // draft list — dense with status chip
     const dotMap={pending:'var(--amber)',approved:'var(--green)',rejected:'var(--red)',published:'var(--indigo)',failed:'var(--text-mut)'};
-    const chipMap={pending:['WAIT','var(--amber-dim)','var(--amber)'],approved:['OK','var(--green-dim)','var(--green)'],
-      rejected:['REJ','var(--red-dim)','var(--red)'],published:['PUB','var(--indigo-dim)','var(--indigo)'],
-      failed:['FAIL','var(--red-dim)','var(--red)']};
+    const chipMap={pending:['대기','var(--amber-dim)','var(--amber)'],approved:['승인','var(--green-dim)','var(--green)'],
+      rejected:['거절','var(--red-dim)','var(--red)'],published:['발행','var(--indigo-dim)','var(--indigo)'],
+      failed:['실패','var(--red-dim)','var(--red)']};
     if(d.length){
       document.getElementById('draftList').innerHTML=d.slice(0,10).map(x=>{
         const ch=chipMap[x.status]||['—','transparent','var(--text-mut)'];
@@ -668,9 +690,9 @@ async function loadBiz(){
     const d=await r.json();
     const p=d.premium||{};const b=d.b2b||{};const n=d.newsletter||{};
     document.getElementById('bizSummary').innerHTML=
-      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${p.total||0}</div><div class="biz-lbl">Premium</div></div>`+
+      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${p.total||0}</div><div class="biz-lbl">프리미엄</div></div>`+
       `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${b.total||0}</div><div class="biz-lbl">B2B</div></div>`+
-      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${n.newsletter_total||0}</div><div class="biz-lbl">Newsletter</div></div>`;
+      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${n.newsletter_total||0}</div><div class="biz-lbl">뉴스레터</div></div>`;
   }catch(e){console.warn('biz:',e)}
 }
 
