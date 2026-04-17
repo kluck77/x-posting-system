@@ -296,14 +296,24 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .stage-lbl{font-size:7px;color:var(--text-mut);margin-top:2px;letter-spacing:.3px;text-transform:uppercase}
 
 /* ── PIPELINE: DRAFT ROW ── */
-.draft-row{display:flex;align-items:center;gap:6px;padding:6px 0;
-  border-bottom:1px solid var(--border-subtle);min-height:34px}
+.draft-row{padding:6px 0;border-bottom:1px solid var(--border-subtle)}
 .draft-row:last-child{border-bottom:none}
+.draft-top{display:flex;align-items:center;gap:6px}
 .draft-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.draft-hook{flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-hook{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.draft-bot{display:flex;align-items:center;gap:4px;margin-top:3px;padding-left:12px}
 .draft-chip{font-size:7px;font-weight:600;padding:1px 4px;border-radius:var(--r-sm);
   text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.draft-risk{font-size:7px;font-weight:600;padding:1px 4px;border-radius:var(--r-sm);white-space:nowrap}
 .draft-time{font-size:8px;color:var(--text-mut);font-family:var(--mono);white-space:nowrap}
+.draft-acts{display:flex;gap:3px;flex-shrink:0}
+.draft-btn{background:var(--bg-raised);border:none;color:var(--text-sec);font-size:8px;
+  font-weight:600;padding:3px 6px;border-radius:var(--r-sm);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;white-space:nowrap;min-height:24px}
+.draft-btn:active{background:var(--indigo-dim);color:var(--indigo)}
+.draft-btn.sent{background:var(--green-dim);color:var(--green);pointer-events:none}
+.draft-btn.fail{background:var(--red-dim);color:var(--red)}
+.draft-btn.sending{opacity:.5;pointer-events:none}
 
 /* ── TAB FOOTER ── */
 .tab-footer{margin-top:var(--sp-4);padding:var(--sp-2) var(--sp-3);
@@ -706,13 +716,32 @@ async function loadFlowTrace(){
       rejected:['거절','var(--red-dim)','var(--red)'],published:['발행','var(--indigo-dim)','var(--indigo)'],
       failed:['실패','var(--red-dim)','var(--red)']};
     if(d.length){
+      const riskC={low:'var(--green)',medium:'var(--amber)',high:'var(--red)'};
+      const riskL={low:'안전',medium:'주의',high:'위험'};
       document.getElementById('draftList').innerHTML=d.slice(0,10).map((x,i)=>{
         const ch=chipMap[x.status]||['—','transparent','var(--text-mut)'];
+        const rc=riskC[x.risk_level]||'var(--text-mut)';
+        const rl=riskL[x.risk_level]||x.risk_level||'—';
+        const ms=x.monetization_score;
+        const isPending=x.status==='pending';
+        const isApproved=x.status==='approved';
+        const canSend=isPending||isApproved;
         return`<div class="draft-row" style="animation-delay:${i*40}ms">
-          <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
-          <span class="draft-hook">${x.hook||'—'}</span>
-          <span class="draft-chip" style="background:${ch[1]};color:${ch[2]}">${ch[0]}</span>
-          <span class="draft-time">${x.created_kst||''}</span>
+          <div class="draft-top">
+            <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
+            <span class="draft-hook">${x.hook||'—'}</span>
+            <span class="draft-chip" style="background:${ch[1]};color:${ch[2]}">${ch[0]}</span>
+          </div>
+          <div class="draft-bot">
+            <span class="draft-risk" style="color:${rc};border:1px solid ${rc}">${rl}</span>
+            ${ms!=null?`<span class="draft-risk" style="color:var(--purple);border:1px solid var(--purple-dim)">💰${ms}</span>`:''}
+            <span class="draft-time">${x.created_kst||''}</span>
+            <span style="flex:1"></span>
+            <div class="draft-acts">
+              ${x.source_url?`<a class="draft-btn" href="${x.source_url}" target="_blank" style="text-decoration:none">원문</a>`:''}
+              ${canSend?`<button class="draft-btn" onclick="sendDraft(${x.id},this)">${isPending?'승인+전송':'전송'}</button>`:''}
+            </div>
+          </div>
         </div>`;
       }).join('');
     }
@@ -788,7 +817,21 @@ function setScore(id,val){
   const bar=document.getElementById(id+'Bar');
   if(bar){bar.style.width=(val||0)+'%';bar.style.background=c}
 }
-let _hl={dbOk:true,imm:0,today:0};
+async function sendDraft(id,btn){
+  btn.textContent='전송 중…';btn.classList.add('sending');
+  try{
+    const r=await fetch(API+'/drafts/'+id+'/approve',{method:'POST'});
+    const d=await r.json();
+    if(d.success){btn.textContent='✓ 완료';btn.classList.remove('sending');btn.classList.add('sent');
+      setTimeout(()=>loadFlowTrace(),1500);
+    }else{btn.textContent='실패';btn.classList.remove('sending');btn.classList.add('fail');
+      setTimeout(()=>{btn.textContent='재시도';btn.classList.remove('fail');btn.classList.remove('sending')},2000);
+    }
+  }catch(e){btn.textContent='오류';btn.classList.remove('sending');btn.classList.add('fail');
+    setTimeout(()=>{btn.textContent='재시도';btn.classList.remove('fail')},2000);
+  }
+}
+let _hl={dbOk:true,imm:0,today:0,tg:false,mock:false};
 function updateHL(){
   const el=document.getElementById('pulseHL');if(!el)return;
   if(!_hl.dbOk){el.innerHTML='DB 연결 끊김<small>데이터베이스 점검 필요</small>';el.style.color='var(--red)';return}

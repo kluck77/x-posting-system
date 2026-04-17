@@ -295,9 +295,11 @@ async def get_flow_trace(limit: int = 20):
     """
     db = get_db()
     try:
+        from sqlalchemy.orm import joinedload
         from app.models.content import Draft
         rows = (
             db.query(Draft)
+            .options(joinedload(Draft.source_item))
             .order_by(Draft.created_at.desc())
             .limit(limit)
             .all()
@@ -592,6 +594,12 @@ def _format_draft_trace(d) -> dict:
     """Draft DB 행을 플로우 트레이스 항목으로 변환."""
     kst_created = d.created_at.astimezone(KST).strftime("%m/%d %H:%M") if d.created_at else None
     kst_published = d.published_at.astimezone(KST).strftime("%m/%d %H:%M") if d.published_at else None
+    src_url = None
+    try:
+        if d.source_item and d.source_item.url:
+            src_url = d.source_item.url
+    except Exception:
+        pass
     return {
         "id": d.id,
         "hook": (d.hook or "")[:80],
@@ -603,4 +611,6 @@ def _format_draft_trace(d) -> dict:
         "published_kst": kst_published,
         "has_x_post": bool(d.x_post_id),
         "x_post_id": d.x_post_id,
+        "monetization_score": d.monetization_score,
+        "source_url": src_url,
     }
