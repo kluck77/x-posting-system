@@ -62,7 +62,7 @@ overnight_buffer: list[dict] = []
 # 최근 기사 버퍼: 수면/깨어있는 시간 무관, 항상 최근 N건 유지
 # morning_digest 후에도 비워지지 않음 → Alerts Recent News 소스
 _recent_items: list[dict] = []
-_RECENT_ITEMS_MAX = 50
+_RECENT_ITEMS_MAX = 200
 
 
 # ─── 유틸리티 ─────────────────────────────────────────────────────────────────

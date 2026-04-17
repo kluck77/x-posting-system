@@ -441,10 +441,16 @@ async def get_scored_candidates(limit: int = 15):
         finally:
             db.close()
         result = []
+        cat_counts: dict[str, int] = {}
         for a in items:
             u = (a.get("url") or "").strip()
             if u and u in used:
                 continue
+            cat = a.get("category", "기타")
+            cnt = cat_counts.get(cat, 0)
+            if cnt >= 3:
+                continue
+            cat_counts[cat] = cnt + 1
             result.append({
                 "title": str(a.get("title", "")).strip()[:100],
                 "url": u,
