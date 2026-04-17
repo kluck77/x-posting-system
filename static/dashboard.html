@@ -813,17 +813,20 @@ async function loadCandidates(){
     const cl=document.getElementById('candidateList');
     if(!cl)return;
     if(!d.length){cl.innerHTML='<div class="empty-sm">수집된 기사 없음</div>';return}
+    const catKr={crypto:'암호화폐',economy:'경제',politics:'정치',policy:'정책',tech:'기술',world:'국제',market:'시장',stock:'주식'};
     cl.innerHTML=d.map((c,i)=>{
       const sc=c.score||0;
       const sColor=sc>=15?'var(--red)':sc>=8?'var(--amber)':'var(--text-sec)';
       const sBg=sc>=15?'var(--red-dim)':sc>=8?'var(--amber-dim)':'var(--bg-raised)';
+      const cat=catKr[c.category]||c.category||'기타';
+      const displayTitle=c.summary&&c.summary.length>10?c.summary:c.title;
       return`<div class="cand-row" style="animation:slideIn .3s ease-out ${i*40}ms both">
         <div class="cand-top">
           <span class="cand-score" style="color:${sColor};background:${sBg}">${sc}</span>
-          <span class="cand-title">${c.title}</span>
+          <span class="cand-title">${displayTitle}</span>
         </div>
         <div class="cand-bot">
-          <span class="cand-meta">${c.category||''} · ${c.time||''}</span>
+          <span class="cand-meta">${cat} · ${c.time||''}</span>
           <span style="flex:1"></span>
           ${c.url?`<a class="draft-btn" href="${c.url}" target="_blank" style="text-decoration:none">원문</a>`:''}
           <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(c.title)}','${encodeURIComponent(c.url||'')}','${encodeURIComponent((c.summary||c.title))}',this)">초안 생성</button>
