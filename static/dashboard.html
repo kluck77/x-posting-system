@@ -103,7 +103,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .sub{font-size:11px;color:var(--text-sec);font-family:var(--mono)}
 
 /* ── STATUS DOTS ── */
-.dots{display:flex;gap:12px}
+.dots{display:flex;gap:var(--sp-2)}
 .dot{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-sec)}
 .dot-led{width:6px;height:6px;border-radius:50%;background:var(--text-mut)}
 .dot-led.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
@@ -116,7 +116,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .score-box{padding:8px 10px;border-radius:var(--r-md);background:var(--bg-surface);
   border-bottom:3px solid var(--bg-raised)}
-.score-num{font-size:22px;font-weight:700;line-height:1;margin-bottom:2px}
+.score-num{font-size:var(--fs-h1);font-weight:var(--fw-h1);line-height:1;margin-bottom:2px}
 .score-label{font-size:8px;letter-spacing:1px;color:var(--text-sec);text-transform:uppercase}
 .sc-bar{height:4px;border-radius:2px;background:var(--bg-raised);margin-top:5px;overflow:hidden}
 .sc-fill{height:100%;border-radius:1px;transition:width .6s ease-out}
@@ -180,25 +180,28 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 /* ── SECTION HEADER ── */
 .sec-head{font-size:var(--fs-label);font-weight:var(--fw-label);letter-spacing:1.5px;
   color:var(--text-mut);margin:var(--sp-4) 0 var(--sp-1);text-transform:uppercase}
+.sec-head:first-child,.sec-head.first{margin-top:0}
 
 /* ── OPS ── */
-.ops-health{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;
-  padding:8px 12px;background:var(--bg-surface);border-radius:var(--r-md)}
-.ops-h-item{display:flex;align-items:center;gap:3px;font-size:9px;color:var(--text-sec)}
-.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:10px}
-.ops-item{background:var(--bg-surface);border-radius:var(--r-md);padding:8px 12px;
+.ops-health{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-bottom:var(--sp-3);
+  padding:var(--sp-2) var(--sp-3);background:var(--bg-surface);border-radius:var(--r-md);
+  border-top:2px solid var(--green)}
+.ops-h-item{display:flex;align-items:center;gap:3px;font-size:var(--fs-meta);color:var(--text-sec)}
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-1);margin-bottom:var(--sp-3)}
+.ops-item{background:var(--bg-surface);border-radius:var(--r-md);padding:10px var(--sp-3);
   border-left:2px solid transparent}
 .ops-item.has-data{border-left-color:var(--green)}
-.ops-val{font-size:18px;font-weight:700}
-.ops-label{font-size:7px;color:var(--text-mut);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
-.biz-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:10px}
-.biz-cell{background:var(--bg-surface);border-radius:var(--r-md);padding:7px;
-  text-align:center;border-left:2px solid var(--purple-dim)}
-.biz-num{font-size:16px;font-weight:700;line-height:1}
-.biz-lbl{font-size:7px;color:var(--text-mut);margin-top:2px;text-transform:uppercase}
-.ops-q{background:var(--bg-surface);border-radius:var(--r-md);padding:10px 12px}
+.ops-val{font-size:var(--fs-h1);font-weight:var(--fw-h1)}
+.ops-label{font-size:var(--fs-meta);color:var(--text-mut);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.biz-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-1);margin-bottom:var(--sp-3)}
+.biz-cell{background:var(--bg-surface);border-radius:var(--r-md);padding:var(--sp-2);
+  text-align:center;border-bottom:2px solid var(--purple-dim)}
+.biz-num{font-size:var(--fs-h2);font-weight:var(--fw-h2);line-height:1}
+.biz-lbl{font-size:var(--fs-meta);color:var(--text-mut);margin-top:3px;text-transform:uppercase}
+.ops-q{background:var(--bg-surface);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);
+  border-left:2px solid var(--amber)}
 .ops-q-row{display:flex;justify-content:space-between;align-items:center;
-  padding:3px 0;font-size:12px;color:var(--text-sec)}
+  padding:3px 0;font-size:var(--fs-body);color:var(--text-sec)}
 .ops-q-row span:last-child{font-weight:600;color:var(--text-pri);font-family:var(--mono);font-size:11px}
 
 /* ── PULSE: STATUS RAIL ── */
@@ -366,7 +369,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ AGENTS TAB ═══ -->
 <section class="tab-pane" id="tab-agents">
-  <div class="sec-head" style="margin-top:0">AI WORKSTATION</div>
+  <div class="sec-head first">AI WORKSTATION</div>
   <div class="ag-sum" id="agentSummary"></div>
   <div class="agent-list" id="agentCards"></div>
 
@@ -391,7 +394,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ OPS TAB ═══ -->
 <section class="tab-pane" id="tab-ops">
-  <div class="sec-head" style="margin-top:0">SYSTEM HEALTH</div>
+  <div class="sec-head first">SYSTEM HEALTH</div>
   <div class="ops-health" id="opsHealth"></div>
 
   <div class="sec-head">EVAL STORE</div>
