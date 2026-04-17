@@ -411,6 +411,7 @@ async def get_scored_candidates(limit: int = 15):
     """
     최근 수집 기사를 키워드 점수로 정렬하여 반환합니다.
     AI 비용 없음 — 로컬 키워드 매칭만 사용.
+    이미 DB에 URL이 있는 기사는 제외합니다.
     """
     try:
         from app.services.news_monitor import get_recent_items
@@ -418,18 +419,43 @@ async def get_scored_candidates(limit: int = 15):
         items = get_recent_items(limit=50)
         for a in items:
             a["_score"] = _importance_score(a)
+            lang = a.get("region", "KR")
+            if lang == "KR":
+                a["_score"] += 5
         items.sort(key=lambda x: x["_score"], reverse=True)
-        return [
-            {
+        db = get_db()
+        try:
+            from app.models.content import SourceItem
+            existing_urls = set()
+            for a in items:
+                u = (a.get("url") or "").strip()
+                if u:
+                    existing_urls.add(u)
+            if existing_urls:
+                found = db.query(SourceItem.url).filter(
+                    SourceItem.url.in_(existing_urls)
+                ).all()
+                used = {r[0] for r in found}
+            else:
+                used = set()
+        finally:
+            db.close()
+        result = []
+        for a in items:
+            u = (a.get("url") or "").strip()
+            if u and u in used:
+                continue
+            result.append({
                 "title": str(a.get("title", "")).strip()[:100],
-                "url": a.get("url", ""),
+                "url": u,
                 "summary": (a.get("summary", "") or "")[:200],
                 "score": a["_score"],
                 "category": a.get("category", ""),
                 "time": str(a.get("added_at", ""))[11:16],
-            }
-            for a in items[:limit] if a.get("title")
-        ]
+            })
+            if len(result) >= limit:
+                break
+        return result
     except Exception as e:
         logger.warning(f"scored-candidates 오류: {e}")
         return []
