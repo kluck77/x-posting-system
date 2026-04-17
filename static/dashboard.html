@@ -172,11 +172,24 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .prov-led{width:5px;height:5px;border-radius:50%}
 .prov-led.on{background:var(--green)}.prov-led.off{background:var(--text-mut)}
 
+/* ── AGENT ICON ── */
+.ag-ico{font-size:20px;line-height:1;flex-shrink:0}
+.ag-row.working .ag-ico{animation:ag-bounce 2s ease-in-out infinite}
+.ag-row.idle-row .ag-ico{opacity:.4;filter:grayscale(1)}
+
 /* ── WORKING MOTION ── */
 @keyframes ag-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes ag-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes breathe{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
 .ag-dot.working{animation:ag-pulse 2s ease-in-out infinite}
 .ag-dot.blocked{animation:blink 1.5s ease-in-out infinite}
+.dot-led.ok{animation:breathe 3s ease-in-out infinite}
+.score-num{transition:color .3s}
+.q-num{transition:color .3s}
+.news-row{animation:slideIn .3s ease-out both}
+.draft-row{animation:slideIn .3s ease-out both}
 
 /* ── SECTION HEADER ── */
 .sec-head{font-size:var(--fs-label);font-weight:var(--fw-label);letter-spacing:1.5px;
@@ -385,6 +398,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
   <div class="sec-head">프로바이더</div>
   <div class="prov-strip" id="providerSummary"></div>
+  <div class="tab-footer" id="agentsFooter"></div>
 </section>
 
 <!-- ═══ PIPELINE TAB ═══ -->
@@ -400,6 +414,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
   <div class="sec-head">최근 초안</div>
   <div id="draftList"><div class="empty-sm">초안 입력 대기</div></div>
+  <div class="tab-footer" id="pipeFooter"></div>
 </section>
 
 <!-- ═══ OPS TAB ═══ -->
@@ -422,6 +437,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="ops-q" id="queueStatus">
     <div class="empty-sm">로딩 중</div>
   </div>
+  <div class="tab-footer" id="opsFooter"></div>
 </section>
 
 </div><!-- /main -->
@@ -496,6 +512,13 @@ async function loadStatus(){
     // alerts footer
     const af=document.getElementById('alertsFooter');
     if(af)af.textContent=`수집 클러스터 ${n.story_clusters||0}개 · 야간버퍼 ${n.overnight_buffer||0}건 · 알림 ${n.alerted_stories||0}건`;
+
+    // ops footer
+    const opf=document.getElementById('opsFooter');
+    if(opf){
+      const uptime=a.hours_idle?`마지막 활동 ${Math.round(a.hours_idle)}시간 전`:'활성 상태';
+      opf.textContent=`${uptime} · 모니터 클러스터 ${n.story_clusters||0}개 · 알림 발송 ${n.alerted_stories||0}건`;
+    }
 
     // ops health panel
     const oh=document.getElementById('opsHealth');
@@ -583,8 +606,9 @@ async function loadProviders(){
     const act=sorted.filter(a=>a.runs_today>0).length;
     const as=document.getElementById('agentSummary');
     if(as)as.innerHTML=`<b class="ag-s-act">${act}/${sorted.length}</b> 작동 중 · <b>${today}</b> 오늘 실행`;
-    // agent rows
-    document.getElementById('agentCards').innerHTML=sorted.map(a=>{
+    // agent rows with role icons
+    const icons={DraftWriter:'✍️',Reviewer:'🔍',Researcher:'🔬',FactChecker:'✅',TrendHunter:'🎯'};
+    document.getElementById('agentCards').innerHTML=sorted.map((a,i)=>{
       const working=a.runs_today>0;
       const blocked=!a.configured;
       const manual=a.role==='TrendHunter';
@@ -593,7 +617,9 @@ async function loadProviders(){
       else if(working){st='working';dot='working';lbl='작동';clr='var(--indigo)';lblClr='var(--indigo)'}
       else if(manual){dot='manual';lbl='수동';st='idle-row';clr='var(--text-mut)'}
       else{st='idle-row'}
-      return`<div class="ag-row ${st}">
+      const ico=icons[a.role]||'🤖';
+      return`<div class="ag-row ${st}" style="animation-delay:${i*60}ms">
+        <span class="ag-ico">${ico}</span>
         <span class="ag-dot ${dot}"></span>
         <div class="ag-info"><div class="ag-name">${a.role}</div><div class="ag-prov">${a.provider||'—'}</div></div>
         <div class="ag-runs"><div class="ag-count" style="color:${clr}">${a.runs_today??'—'}</div><div class="ag-label" style="color:${lblClr}">${lbl}</div></div>
@@ -601,6 +627,14 @@ async function loadProviders(){
         ${working?'<div class="ag-bar"><div class="ag-bar-fill"></div></div>':''}
       </div>`;
     }).join('');
+
+    // agents footer
+    const agf=document.getElementById('agentsFooter');
+    if(agf){
+      const totalRuns=sorted.reduce((s,a)=>s+(a.runs_today||0),0);
+      const configured=sorted.filter(a=>a.configured).length;
+      agf.textContent=`${configured}/${sorted.length} 연결됨 · 총 ${totalRuns}회 실행 · ${d.mock_mode?'MOCK 모드':'LIVE 모드'}`;
+    }
 
     // provider strip
     const provs=new Map();
@@ -646,15 +680,21 @@ async function loadFlowTrace(){
       rejected:['거절','var(--red-dim)','var(--red)'],published:['발행','var(--indigo-dim)','var(--indigo)'],
       failed:['실패','var(--red-dim)','var(--red)']};
     if(d.length){
-      document.getElementById('draftList').innerHTML=d.slice(0,10).map(x=>{
+      document.getElementById('draftList').innerHTML=d.slice(0,10).map((x,i)=>{
         const ch=chipMap[x.status]||['—','transparent','var(--text-mut)'];
-        return`<div class="draft-row">
+        return`<div class="draft-row" style="animation-delay:${i*40}ms">
           <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
           <span class="draft-hook">${x.hook||'—'}</span>
           <span class="draft-chip" style="background:${ch[1]};color:${ch[2]}">${ch[0]}</span>
           <span class="draft-time">${x.created_kst||''}</span>
         </div>`;
       }).join('');
+    }
+    // pipeline footer
+    const ppf=document.getElementById('pipeFooter');
+    if(ppf&&ct.total){
+      const rate=ct.total?Math.round((ct.approved+ct.published)/ct.total*100):0;
+      ppf.textContent=`승인율 ${rate}% · 거절 ${ct.rejected}건 · 실패 ${ct.failed}건`;
     }
   }catch(e){console.warn('flow:',e)}
 }
@@ -664,8 +704,8 @@ async function loadNews(){
     const r=await fetch(API+'/control/recent-news?limit=10');
     const d=await r.json();
     if(d.length){
-      document.getElementById('newsList').innerHTML=d.map(n=>
-        `<div class="news-row"><span class="news-dot"></span><span class="news-title">${n.title||'—'}</span></div>`
+      document.getElementById('newsList').innerHTML=d.map((n,i)=>
+        `<div class="news-row" style="animation-delay:${i*50}ms"><span class="news-dot"></span><span class="news-title">${n.title||'—'}</span></div>`
       ).join('');
     }
   }catch(e){console.warn('news:',e)}
