@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     monitor_interval_minutes: int = Field(default=1, description="모니터 폴링 간격 (분)")
     monitor_max_alerts_per_run: int = Field(default=3, description="사이클당 최대 알림 수")
     cross_verify_min_sources: int = Field(default=4, description="속보 전송 최소 교차 출처 수")
+    alert_score_threshold: int = Field(default=45, description="후보알림 전송 최소 점수 (0~100, 24h 로그로 튜닝)")
+    alert_near_miss_window: int = Field(default=10, description="near-miss 로그 창 (threshold 바로 아래 N점)")
 
     # --- 모닝 다이제스트 설정 ---
     digest_enabled: bool = Field(default=True, description="오전 5시 KST 모닝 다이제스트 활성화")

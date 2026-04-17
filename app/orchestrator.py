@@ -518,6 +518,26 @@ class Orchestrator:
         if self.draft_service.is_duplicate_text(review.body):
             logger.warning("중복 텍스트 감지!")
 
+        # Resonance 구조(⚠️/📌) 최후 방어선 — 프롬프트 실패 시에만 동작
+        try:
+            from app.services.text_cleaner import ensure_resonance_structure
+            _lang = (data.language or settings.default_language or "ko")
+            review.body, _res_status = ensure_resonance_structure(
+                review.body, language=_lang,
+            )
+            if _res_status == "injected":
+                logger.warning(
+                    f"[Resonance-fallback] ⚠️/📌 구조 누락 — placeholder 삽입. "
+                    f"프롬프트 확인 필요. title='{data.title[:40]}'"
+                )
+            elif _res_status == "partial":
+                logger.warning(
+                    f"[Resonance-fallback] ⚠️/📌 중 한 개만 존재 — 원본 유지. "
+                    f"title='{data.title[:40]}'"
+                )
+        except Exception as e:
+            logger.warning(f"[Resonance-fallback] 체크 실패 (무시): {e}")
+
         # 초안 저장
         draft = self.draft_service.create_draft(
             source_item=source_item,

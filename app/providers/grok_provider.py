@@ -219,9 +219,12 @@ JSON으로만 응답:
 - verdict가 use_default면 원본 유지
 - 모든 출력 한국어"""
 
+        import time as _time
+        _timeout_s = 20
+        _t0 = _time.monotonic()
         try:
             from app.services.api_cost_tracker import record_usage
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with httpx.AsyncClient(timeout=_timeout_s) as client:
                 resp = await client.post(
                     GROK_API_URL,
                     headers={"Authorization": f"Bearer {settings.grok_api_key}",
@@ -231,8 +234,16 @@ JSON으로만 응답:
                     ], "temperature": 0.4, "max_tokens": 300},
                 )
                 if resp.status_code != 200:
-                    logger.warning(f"[Grok quick_review] API {resp.status_code}")
-                    return {"grok_used": False, "reason": f"API {resp.status_code}"}
+                    _elapsed_ms = int((_time.monotonic() - _t0) * 1000)
+                    logger.warning(
+                        f"[Grok quick_review] API {resp.status_code} "
+                        f"elapsed={_elapsed_ms}ms"
+                    )
+                    return {
+                        "grok_used": False,
+                        "reason": f"API {resp.status_code}",
+                        "elapsed_ms": _elapsed_ms,
+                    }
 
                 data = resp.json()
                 raw = data["choices"][0]["message"]["content"]
@@ -248,9 +259,30 @@ JSON으로만 응답:
                 import json as _json
                 result = _json.loads(clean)
                 result["grok_used"] = True
-                logger.info(f"[Grok quick_review] verdict={result.get('verdict')} hook_alt={result.get('hook_alt','')[:30]}")
+                _elapsed_ms = int((_time.monotonic() - _t0) * 1000)
+                result["elapsed_ms"] = _elapsed_ms
+                # 지연이 timeout 의 70% 를 넘으면 튜닝 신호로 WARN
+                if _elapsed_ms >= int(_timeout_s * 1000 * 0.7):
+                    logger.warning(
+                        f"[Grok quick_review] 지연 과다 — verdict={result.get('verdict')} "
+                        f"elapsed={_elapsed_ms}ms (timeout={_timeout_s}s)"
+                    )
+                else:
+                    logger.info(
+                        f"[Grok quick_review] verdict={result.get('verdict')} "
+                        f"hook_alt={result.get('hook_alt','')[:30]} "
+                        f"elapsed={_elapsed_ms}ms"
+                    )
                 return result
 
         except Exception as e:
-            logger.warning(f"[Grok quick_review] 실패 (fallback): {e}")
-            return {"grok_used": False, "reason": str(e)}
+            _elapsed_ms = int((_time.monotonic() - _t0) * 1000)
+            logger.warning(
+                f"[Grok quick_review] 실패 (fallback): {e} "
+                f"elapsed={_elapsed_ms}ms"
+            )
+            return {
+                "grok_used": False,
+                "reason": str(e),
+                "elapsed_ms": _elapsed_ms,
+            }

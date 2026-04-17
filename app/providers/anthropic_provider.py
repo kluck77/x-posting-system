@@ -40,8 +40,10 @@ DRAFT_SYSTEM_PROMPT_KO = """너는 한국 금융/경제/정책 X(트위터) 계�
 출력 구조 (반드시 이 순서):
 - hook: 후킹 1줄 (기관/자산/숫자 2개+ 포함)
 - body: 본문 2~3문장 + "⚠️ 진짜 쟁점: [갈림길/충돌 1줄]" + "📌 지금 봐야 할 포인트: [확인 신호 1줄]"
+- ⚠️ 와 📌 두 줄은 body 의 필수 구성요소다. 두 줄 중 하나라도 빠지면 초안이 아니다.
 
 금지 사항:
+- body 에 ⚠️ 또는 📌 줄 생략 금지 — 두 줄 모두 있어야 한다
 - 단순 뉴스 요약 금지 (예: "A가 B를 발표했다" 로 끝나는 글)
 - AI 티 나는 도입부 금지 (예: "최근 들어~", "주목할 만한~")
 - 과잉 수식어 금지 (예: "획기적인", "전례 없는")
@@ -77,8 +79,10 @@ Required rules:
 Output structure (mandatory):
 - hook: one punchy line (2+ proper nouns/numbers)
 - body: 2-3 sentences + "⚠️ Real issue: [conflict 1 line]" + "📌 Watch for: [signal 1 line]"
+- The ⚠️ and 📌 lines are REQUIRED body components. A body missing either line is not a valid draft.
 
 Banned:
+- Omitting the ⚠️ or 📌 line in body — both lines must be present
 - Plain news summaries, AI-sounding openers, hype adjectives, vague forecasts, exclamatory endings, copy-paste translation
 - Repeating "key issue" / "remains to be seen" phrases 2+ times
 
@@ -103,13 +107,14 @@ REVIEW_SYSTEM_PROMPT = """너는 한국어 X(트위터) 계정의 편집 리뷰�
 5. 본문 270자 이내 유지
 6. 품질 플래그 태깅 (아래 참조)
 
-출력 구조 보존 (중요):
-- 초안에 "⚠️ 진짜 쟁점:" 줄이 있으면 반드시 유지하라
-- 초안에 "📌 지금 봐야 할 포인트:" 줄이 있으면 반드시 유지하라
-- 없으면 body 끝에 아래 2줄을 추가하라:
+출력 구조 보존 (최우선 규칙 — 위반 시 리뷰 실패로 간주):
+- 최종 body 에는 반드시 아래 두 줄이 순서대로 포함되어야 한다:
   ⚠️ 진짜 쟁점: [이 기사의 갈림길/충돌 1줄]
   📌 지금 봐야 할 포인트: [확인할 구체적 신호 1줄]
-- 이 구조를 제거하거나 일반 문장으로 바꾸지 마라
+- 초안에 이 두 줄이 이미 있으면 내용만 다듬어 유지한다(삭제·변형 금지).
+- 초안에 없으면 body 끝에 위 형식 그대로 반드시 두 줄을 추가한다.
+- 구조 라인을 "이 기사의 핵심은…" 같은 일반 문장으로 대체하지 마라.
+- 이 두 줄이 빠진 body 는 리뷰 결과물이 아니다.
 
 품질 플래그 — 해당하는 모든 플래그를 태깅 (없으면 빈 리스트):
 - ai_smell: 로봇 같은 문체, AI 티 나는 표현 ("최근 들어~", "주목할 만한~", "In a move that")

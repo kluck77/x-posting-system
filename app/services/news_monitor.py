@@ -139,9 +139,18 @@ _daily_alert_count = 0
 _daily_alert_date = ""
 _alert_cooldown: dict[str, float] = {}
 _DAILY_ALERT_MAX = 8
-_ALERT_THRESHOLD = 45
-_URGENT_THRESHOLD = 55
+# 긴급 임계값은 설정 임계값 위로 10점 고정(속보성 태깅에만 사용)
+_URGENT_MARGIN = 10
 _COOLDOWN_SECONDS = 3600
+
+
+def _get_alert_threshold() -> int:
+    """후보알림 임계값(설정 가능). 기본 45."""
+    return int(getattr(settings, "alert_score_threshold", 45))
+
+
+def _get_urgent_threshold() -> int:
+    return _get_alert_threshold() + _URGENT_MARGIN
 
 
 def _enhanced_score(article_dict: dict, cluster: dict | None = None) -> int:
@@ -207,7 +216,7 @@ async def _send_scored_alert(article_dict: dict, score: int, cluster: dict | Non
     url = article_dict.get("url", "")
     ah = _article_hash(url) if url else _article_hash(title)
     src_count = cluster["source_count"] if cluster else 1
-    is_urgent = score >= _URGENT_THRESHOLD and src_count >= 2
+    is_urgent = score >= _get_urgent_threshold() and src_count >= 2
 
     tag = "🔴 긴급" if is_urgent else "📰 후보"
     why = []
@@ -499,10 +508,21 @@ async def run_monitor_cycle() -> int:
                     sk = _story_key(article.title)
                     cluster = _story_clusters.get(sk)
                 score = _enhanced_score(_art_dict, cluster)
-                if score >= _ALERT_THRESHOLD:
+                _threshold = _get_alert_threshold()
+                if score >= _threshold:
                     await _send_scored_alert(_art_dict, score, cluster)
                     await asyncio.sleep(0.3)
                     alerts_sent += 1
+                else:
+                    # 24h 임계값 검증용 near-miss 로그 — threshold 직하 N점
+                    _near_window = int(getattr(
+                        settings, "alert_near_miss_window", 10,
+                    ))
+                    if _near_window > 0 and score >= max(0, _threshold - _near_window):
+                        logger.info(
+                            f"[후보알림-near-miss] [{score}점/임계={_threshold}] "
+                            f"{article.title[:40]}"
+                        )
 
         if not sleeping and alerts_sent > 0:
             logger.info(f"[Monitor] 속보 전송: {alerts_sent}건")

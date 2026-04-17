@@ -238,3 +238,64 @@ def sanitize_reasoning(text: str) -> str:
     text = re.sub(r",\s*,", ",", text)
     text = re.sub(r"\.\s*\.", ".", text)
     return text.strip().strip(",").strip()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# C. Resonance 구조(⚠️/📌) 최후 방어선
+# ─────────────────────────────────────────────────────────────────────
+#
+# 기본 해결책은 DraftWriter/Reviewer 프롬프트다. 프롬프트가 마커를 출력하면
+# 이 함수는 no-op 이다. 프롬프트가 실패한 경우(마커 0개)에만 placeholder 를
+# 삽입해 운영자가 승인 전에 재생성하도록 유도한다. 한 개만 누락된 경우는
+# 원본을 유지하고 로그만 남긴다(반쪽 구조 보존).
+
+_RES_KO_WARN = "⚠️ 진짜 쟁점:"
+_RES_KO_PIN = "📌 지금 봐야 할 포인트:"
+_RES_EN_WARN = "⚠️ Real issue:"
+_RES_EN_PIN = "📌 Watch for:"
+
+
+def _has_resonance_markers(body: str) -> tuple[bool, bool]:
+    """(has_warn, has_pin) — KO/EN 마커를 모두 커버."""
+    has_warn = (_RES_KO_WARN in body) or (_RES_EN_WARN in body)
+    has_pin = (_RES_KO_PIN in body) or (_RES_EN_PIN in body)
+    return has_warn, has_pin
+
+
+def ensure_resonance_structure(
+    body: str, language: str = "ko",
+) -> tuple[str, str]:
+    """
+    Reviewer/DraftWriter 가 ⚠️/📌 구조를 누락한 경우의 fallback.
+
+    기본 해결책은 프롬프트. 이 함수는 프롬프트 실패에만 작동.
+    - 두 마커 모두 존재 → no-op, status="ok"
+    - 한 개만 존재 → 원본 유지, status="partial" (반쪽 구조 보존 원칙)
+    - 둘 다 없음 → 구조 누락 placeholder 삽입, status="injected"
+
+    placeholder 는 "구조 누락 — 재생성 권장" 문구로 운영자가 승인 전에
+    재생성하도록 유도한다.
+
+    Returns:
+        (augmented_body, status) — status ∈ {"ok", "partial", "injected", "empty"}
+    """
+    if not body:
+        return body, "empty"
+
+    has_warn, has_pin = _has_resonance_markers(body)
+    if has_warn and has_pin:
+        return body, "ok"
+    if has_warn or has_pin:
+        return body, "partial"
+
+    if (language or "ko").lower().startswith("en"):
+        addon = (
+            "\n\n⚠️ Real issue: (structure missing — regenerate recommended)"
+            "\n📌 Watch for: (structure missing — regenerate recommended)"
+        )
+    else:
+        addon = (
+            "\n\n⚠️ 진짜 쟁점: (구조 누락 — 재생성 권장)"
+            "\n📌 지금 봐야 할 포인트: (구조 누락 — 재생성 권장)"
+        )
+    return body.rstrip() + addon, "injected"
