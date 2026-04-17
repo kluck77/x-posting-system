@@ -2327,6 +2327,105 @@ def _score_draft(draft: "FinalPost") -> int:
     return score
 
 
+# ── Resonance Score (PR 35) ──────────────────────────────────────────────────
+
+_VOICE_DUPES = [
+    "관건이다", "갈린다", "확인 가능하다", "주목된다", "눈길을 끈다",
+    "관심이 쏠린다", "시선이 모인다", "귀추가 주목",
+]
+_SOCIAL_SIGNALS = [
+    "진짜 쟁점은", "시장에선", "뉴스 본문보다", "여기서 갈린다",
+    "이 신호를 먼저", "확인 포인트가", "핵심은 이거다",
+]
+_SCAN_MARKERS = ["⚠️", "📌", "🔍", "💡"]
+
+
+def compute_resonance_score(text: str, gate_fails: list | None = None) -> dict:
+    """
+    Resonance Score (0-100). AI 비용 0.
+
+    8개 축:
+      Specificity  20 — 첫 2문장에 기관/자산/숫자 2개+
+      Scannability 15 — 문장 4개 이하 + 마커 존재
+      Tension      15 — 갈림길/충돌/합의 여부 키워드
+      ReaderReward 15 — SAVE/SHARE/FOLLOW 시그널
+      MarketStake  10 — 시장/비용/수급/정책 언급
+      BeginnerClr  10 — 무슨 일/왜 중요/뭘 봐야 구조
+      SocialCurr   10 — 남에게 말하고 싶은 문장
+      FollowWorth   5 — 맥락 정리 인상
+    """
+    if not text or len(text) < 30:
+        return {"total": 0, "breakdown": {}}
+
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    sentences = []
+    for l in lines:
+        sentences.extend([s.strip() for s in re.split(r'[.!?。]\s*', l) if s.strip()])
+    first2 = " ".join(sentences[:2]) if len(sentences) >= 2 else text[:100]
+    last_line = lines[-1] if lines else ""
+
+    scores = {}
+
+    # 1. Specificity (20) — 첫 2문장에 고유명사/숫자 2개+
+    nums = len(re.findall(r'\d[\d,.]*[%억원달러조만]?', first2))
+    propers = len(re.findall(r'[A-Z][a-z]+|[가-힣]{2,}(?:은행|전자|그룹|위원회|정부|연준|중앙|의회)', first2))
+    spec_count = nums + propers
+    scores["specificity"] = min(20, spec_count * 7)
+
+    # 2. Scannability (15) — 4문장 이하 + 스캔 마커
+    sent_count = len(sentences)
+    s_score = 10 if sent_count <= 5 else (5 if sent_count <= 7 else 0)
+    if any(m in text for m in _SCAN_MARKERS):
+        s_score += 5
+    scores["scannability"] = min(15, s_score)
+
+    # 3. Tension (15) — 갈림길/충돌 키워드
+    tension_kw = ["갈린다", "충돌", "상충", "반대", "논쟁", "분기", "합의", "결렬", "대립", "vs", "반발", "반박"]
+    t_hits = sum(1 for k in tension_kw if k in text)
+    scores["tension"] = min(15, t_hits * 8)
+
+    # 4. Reader Reward (15) — 마지막 줄에 보상
+    reward_kw = ["확인 포인트", "지금 봐야", "나오면", "안 나오면", "이 수치가", "이 신호"]
+    r_hits = sum(1 for k in reward_kw if k in last_line)
+    scores["reader_reward"] = min(15, r_hits * 8)
+
+    # 5. Market/Action Stake (10)
+    market_kw = ["시장", "비용", "수급", "정책", "금리", "환율", "주가", "거래", "자금", "유가"]
+    m_hits = sum(1 for k in market_kw if k in text)
+    scores["market_stake"] = min(10, m_hits * 5)
+
+    # 6. Beginner Clarity (10) — 무슨 일/왜/뭘 봐야 구조
+    bc = 0
+    if len(sentences) >= 1:
+        bc += 4
+    if any(k in text for k in ["때문", "이유", "배경", "영향", "결과"]):
+        bc += 3
+    if any(k in text for k in ["확인", "지표", "포인트", "신호", "나오면"]):
+        bc += 3
+    scores["beginner_clarity"] = min(10, bc)
+
+    # 7. Social Currency (10) — 공유 욕구 자극
+    sc_hits = sum(1 for s in _SOCIAL_SIGNALS if s in text)
+    scores["social_currency"] = min(10, sc_hits * 5)
+
+    # 8. Follow-Worthiness (5) — 맥락 정리 인상
+    fw = 0
+    if len(text) >= 80 and sent_count <= 5:
+        fw += 3
+    if any(k in last_line for k in ["맥락", "정리", "한 줄", "핵심"]):
+        fw += 2
+    scores["follow_worthiness"] = min(5, fw)
+
+    # Voice dupe penalty
+    dupe_hits = sum(1 for d in _VOICE_DUPES if d in text)
+    penalty = dupe_hits * 5
+
+    total = sum(scores.values()) - penalty
+    total = max(0, min(100, total))
+
+    return {"total": total, "breakdown": scores, "voice_dupe_penalty": penalty}
+
+
 def _select_best_draft(
     drafts: list["FinalPost"],
 ) -> tuple["FinalPost", int, list[int]]:
@@ -3131,6 +3230,13 @@ async def generate_final_post(
         f"trust={_editorial['trust_score']}({_editorial['trust_routing']})"
     )
     logger.info(f"[EvalMeta] {json.dumps(_eval_meta, ensure_ascii=False)}")
+
+    # PR 35: Resonance Score 계산
+    _res_text = _eval_meta.get("final_post", "")
+    _res_fails = _eval_meta.get("gate_fails", [])
+    _resonance = compute_resonance_score(_res_text, _res_fails)
+    _eval_meta["resonance_score"] = _resonance
+    logger.info(f"[ResonanceScore] total={_resonance['total']} breakdown={_resonance.get('breakdown',{})}")
     # PR 26/29: 온라인 eval 버퍼에 적재 + DB 영속화
     _feed_online_eval(_eval_meta, db=db)
 

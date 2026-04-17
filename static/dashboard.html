@@ -779,6 +779,7 @@ async function loadFlowTrace(){
           <div class="draft-bot">
             ${x.broken?'<span class="draft-risk" style="color:var(--red);border:1px solid var(--red)">AI실패</span>':''}
             <span class="draft-risk" style="color:${rc};border:1px solid ${rc}">${rl}</span>
+            ${x.resonance?`<span class="draft-risk" style="color:${x.resonance>=85?'var(--green)':x.resonance>=70?'var(--amber)':'var(--red)'};border:1px solid ${x.resonance>=85?'var(--green-dim)':x.resonance>=70?'var(--amber-dim)':'var(--red-dim)'}">공명${x.resonance}</span>`:''}
             ${ms!=null?`<span class="draft-risk" style="color:var(--purple);border:1px solid var(--purple-dim)">💰${ms}</span>`:''}
             <span class="draft-time">${x.created_kst||''}</span>
             <span style="flex:1"></span>

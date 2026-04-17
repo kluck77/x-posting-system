@@ -665,6 +665,13 @@ def _format_draft_trace(d) -> dict:
         pass
     from app.services.draft_service import is_broken_draft
     broken = is_broken_draft(d.body)
+    res_score = 0
+    try:
+        from app.services.content_pack import compute_resonance_score
+        res = compute_resonance_score(d.body or "")
+        res_score = res.get("total", 0)
+    except Exception:
+        pass
     return {
         "id": d.id,
         "hook": (d.hook or "")[:80],
@@ -679,4 +686,5 @@ def _format_draft_trace(d) -> dict:
         "monetization_score": d.monetization_score,
         "source_url": src_url,
         "broken": broken,
+        "resonance": res_score,
     }
