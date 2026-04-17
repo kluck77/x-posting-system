@@ -621,6 +621,18 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"예측 게시 시간 계산 실패 (무시): {e}")
 
+        # PR 35: Resonance Score (경로 A)
+        try:
+            from app.services.content_pack import compute_resonance_score
+            _body = (draft.hook or "") + "\n\n" + (draft.body or "")
+            _res = compute_resonance_score(_body)
+            logger.info(
+                f"[ResonanceScore] total={_res['total']} "
+                f"breakdown={_res.get('breakdown',{})}"
+            )
+        except Exception as e:
+            logger.warning(f"[ResonanceScore] 계산 실패 (무시): {e}")
+
         logger.info(
             f"=== 파이프라인 완료: draft_id={draft.id}, "
             f"category={category.value}, risk={risk_level.value} ==="
