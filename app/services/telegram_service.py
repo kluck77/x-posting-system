@@ -366,12 +366,14 @@ async def send_approval_card(
         전송된 메시지의 message_id, 실패 시 None
     """
     # 최후 방어선 — Resonance fallback placeholder 는 카드 렌더 단에서도 차단
+    # (metadata flag + 문자열 매칭 병행 — 문구 변형 우회 방지)
     try:
-        from app.services.draft_service import is_resonance_fallback_draft
-        if is_resonance_fallback_draft(draft.body):
+        from app.services.draft_service import is_resonance_fallback_signal
+        if is_resonance_fallback_signal(draft):
             logger.warning(
                 f"[send_approval_card] Resonance fallback 초안 차단: "
-                f"draft_id={getattr(draft, 'id', '?')}"
+                f"draft_id={getattr(draft, 'id', '?')} "
+                f"meta_flag={bool(getattr(draft, 'resonance_fallback_used', False))}"
             )
             return None
     except Exception as e:

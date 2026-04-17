@@ -155,6 +155,13 @@ class Draft(Base):
     # Mock 생성 판별
     generated_in_mock = Column(Boolean, default=False, comment="Mock 모드에서 생성된 초안 여부")
 
+    # Resonance fallback telemetry — ensure_resonance_structure 가 placeholder 삽입했는지 여부.
+    # 문자열 매칭(body 검사)과 병행되는 메타데이터 플래그로, 문구 변형 우회를 막는다.
+    resonance_fallback_used = Column(
+        Boolean, default=False, nullable=False,
+        comment="⚠️/📌 구조 fallback placeholder 가 삽입된 초안 여부 (승인/전송 차단 신호)",
+    )
+
     # ── Phase 4: 성과 로깅 기반 필드 ────────────────────────────────────────
     content_type = Column(
         String(50), nullable=True,

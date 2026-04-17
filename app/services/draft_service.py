@@ -59,16 +59,35 @@ def broken_reason(body: str | None) -> str:
 
 def is_resonance_fallback_draft(body: str | None) -> bool:
     """
-    Resonance fallback placeholder 가 본문에 남아 있는지 검사한다.
+    Resonance fallback placeholder 가 본문에 남아 있는지 검사한다(문자열 매칭).
     approve/send 경로에서 이 함수가 True 를 반환하면 반드시 차단해야 한다.
 
     is_broken_draft 와 분리한 이유:
       - 운영자에게 "재생성 후 승인" 이라는 구체적 안내 문구를 전달하기 위해
       - is_broken_draft 의 일반 에러 메시지와 구별되는 상태
+
+    주의: 이 함수는 문구 변형(스페이싱/번역어 변경) 에 취약하다. 운영 경로에서는
+    가급적 is_resonance_fallback_signal(draft) 를 사용해 metadata flag 도 함께 확인하라.
     """
     if not body:
         return False
     return any(m in body for m in _FALLBACK_PLACEHOLDER_MARKERS)
+
+
+def is_resonance_fallback_signal(draft) -> bool:
+    """
+    Draft 객체에 대해 fallback 신호를 OR 로 판정한다.
+      1) draft.resonance_fallback_used (metadata flag, 정확)
+      2) is_resonance_fallback_draft(draft.body) (문자열 매칭, 병행 방어선)
+
+    둘 중 하나라도 True 면 승인/전송을 차단한다. metadata 가 누락된 기존 draft
+    (마이그레이션 이전 생성분) 도 문자열 매칭으로 구제된다.
+    """
+    if draft is None:
+        return False
+    if bool(getattr(draft, "resonance_fallback_used", False)):
+        return True
+    return is_resonance_fallback_draft(getattr(draft, "body", None))
 
 
 class DraftService:
@@ -87,6 +106,7 @@ class DraftService:
         risk_reasoning: str = "",
         ai_rationale: str = "",
         thread_continuation: str | None = None,
+        resonance_fallback_used: bool = False,
     ) -> Draft:
         """
         새 초안을 생성합니다.
@@ -128,6 +148,7 @@ class DraftService:
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
             generated_in_mock=settings.is_full_mock_mode,
+            resonance_fallback_used=resonance_fallback_used,
         )
 
         self.db.add(draft)

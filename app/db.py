@@ -242,6 +242,12 @@ def _run_schema_migrations():
             "column": "generated_in_mock",
             "ddl": "ALTER TABLE drafts ADD COLUMN generated_in_mock BOOLEAN DEFAULT 0",
         },
+        # Resonance fallback telemetry
+        {
+            "table": "drafts",
+            "column": "resonance_fallback_used",
+            "ddl": "ALTER TABLE drafts ADD COLUMN resonance_fallback_used BOOLEAN DEFAULT 0 NOT NULL",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")

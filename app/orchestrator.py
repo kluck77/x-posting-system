@@ -519,6 +519,7 @@ class Orchestrator:
             logger.warning("중복 텍스트 감지!")
 
         # Resonance 구조(⚠️/📌) 최후 방어선 — 프롬프트 실패 시에만 동작
+        _resonance_fallback_used = False
         try:
             from app.services.text_cleaner import ensure_resonance_structure
             _lang = (data.language or settings.default_language or "ko")
@@ -526,14 +527,16 @@ class Orchestrator:
                 review.body, language=_lang,
             )
             if _res_status == "injected":
+                _resonance_fallback_used = True
                 logger.warning(
                     f"[Resonance-fallback] ⚠️/📌 구조 누락 — placeholder 삽입. "
-                    f"프롬프트 확인 필요. title='{data.title[:40]}'"
+                    f"프롬프트 확인 필요. title='{data.title[:40]}' "
+                    f"status={_res_status} fallback_used=True"
                 )
             elif _res_status == "partial":
                 logger.warning(
                     f"[Resonance-fallback] ⚠️/📌 중 한 개만 존재 — 원본 유지. "
-                    f"title='{data.title[:40]}'"
+                    f"title='{data.title[:40]}' status={_res_status}"
                 )
         except Exception as e:
             logger.warning(f"[Resonance-fallback] 체크 실패 (무시): {e}")
@@ -548,6 +551,7 @@ class Orchestrator:
             risk_reasoning=risk_reasoning,
             ai_rationale=review.ai_rationale,
             thread_continuation=review.thread_continuation,
+            resonance_fallback_used=_resonance_fallback_used,
         )
 
         # 커뮤니티 경고 저장
@@ -677,11 +681,13 @@ class Orchestrator:
             return False
 
         # Resonance fallback placeholder 초안은 텔레그램 전송 차단
-        from app.services.draft_service import is_resonance_fallback_draft
-        if is_resonance_fallback_draft(draft.body):
+        # (metadata flag + 문자열 매칭 병행 — 문구 변형 우회 방지)
+        from app.services.draft_service import is_resonance_fallback_signal
+        if is_resonance_fallback_signal(draft):
             logger.warning(
                 f"[send-guard] Resonance fallback 초안 텔레그램 전송 차단: "
-                f"draft_id={draft_id}"
+                f"draft_id={draft_id} "
+                f"meta_flag={bool(getattr(draft, 'resonance_fallback_used', False))}"
             )
             return False
 
@@ -726,13 +732,15 @@ class Orchestrator:
     async def _handle_approve(self, draft: Draft) -> dict:
         """승인 처리 (X 자동 게시 없음 — 수동 게시 전용)"""
         from app.services.draft_service import (
-            is_broken_draft, broken_reason, is_resonance_fallback_draft,
+            is_broken_draft, broken_reason, is_resonance_fallback_signal,
         )
         # Resonance fallback placeholder 는 승인 절대 금지 — 재생성 유도
-        if is_resonance_fallback_draft(draft.body):
+        # (metadata flag + 문자열 매칭 병행 — 문구 변형 우회 방지)
+        if is_resonance_fallback_signal(draft):
             self.draft_service.update_status(draft.id, ApprovalStatus.FAILED)
             logger.warning(
-                f"[approve-guard] Resonance fallback 차단: draft_id={draft.id}"
+                f"[approve-guard] Resonance fallback 차단: draft_id={draft.id} "
+                f"meta_flag={bool(getattr(draft, 'resonance_fallback_used', False))}"
             )
             return {
                 "success": False,
