@@ -91,8 +91,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .score-box{padding:8px 10px;border-radius:var(--r-md);background:var(--bg-surface)}
 .score-num{font-size:22px;font-weight:700;line-height:1;margin-bottom:2px}
-.score-label{font-size:8px;letter-spacing:1px;color:var(--text-mut);text-transform:uppercase}
-.sc-bar{height:3px;border-radius:2px;background:var(--bg-raised);margin-top:5px;overflow:hidden}
+.score-label{font-size:8px;letter-spacing:1px;color:var(--text-sec);text-transform:uppercase}
+.sc-bar{height:4px;border-radius:2px;background:var(--bg-raised);margin-top:5px;overflow:hidden}
 .sc-fill{height:100%;border-radius:1px;transition:width .6s ease-out}
 
 /* ── QUEUE BADGE ── */
@@ -122,7 +122,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   border:1px solid var(--border-subtle);border-left:3px solid transparent}
 .ag-row.working{border-left-color:var(--indigo)}
 .ag-row.blocked{border-left-color:var(--red)}
-.ag-row.idle-row{opacity:.7}
+.ag-row.idle-row{opacity:.85}
 .ag-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .ag-dot.idle{background:var(--text-mut)}
 .ag-dot.working{background:var(--indigo);box-shadow:0 0 6px rgba(129,140,248,.4)}
@@ -253,7 +253,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .draft-time{font-size:8px;color:var(--text-mut);font-family:var(--mono);white-space:nowrap}
 
 /* ── COMPACT EMPTY ── */
-.empty-sm{padding:8px;text-align:center;font-size:10px;color:var(--text-mut)}
+.empty-sm{padding:10px;text-align:center;font-size:9px;color:var(--text-sec);
+  background:var(--bg-surface);border-radius:var(--r-md)}
 
 /* ── REDUCED MOTION ── */
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{
@@ -539,10 +540,10 @@ async function loadProviders(){
       const working=a.runs_today>0;
       const blocked=!a.configured;
       const manual=a.role==='TrendHunter';
-      let st='',dot='idle',lbl='IDLE',clr='var(--text-mut)',lblClr='var(--text-sec)';
+      let st='',dot='idle',lbl='IDLE',clr='var(--text-sec)',lblClr='var(--text-sec)';
       if(blocked){st='blocked';dot='blocked';lbl='BLOCKED';clr='var(--red)';lblClr='var(--red)'}
       else if(working){st='working';dot='working';lbl='ACTIVE';clr='var(--indigo)';lblClr='var(--indigo)'}
-      else if(manual){dot='manual';lbl='MANUAL';st='idle-row'}
+      else if(manual){dot='manual';lbl='MANUAL';st='idle-row';clr='var(--text-mut)'}
       else{st='idle-row'}
       return`<div class="ag-row ${st}">
         <span class="ag-dot ${dot}"></span>
@@ -666,7 +667,7 @@ function updateHL(){
   if(!_hl.dbOk){el.innerHTML='DB 연결 끊김<small>시스템 점검 필요</small>';el.style.color='var(--red)';return}
   if(_hl.imm>0){el.innerHTML=`긴급 ${_hl.imm}건 대기<small>IMMEDIATE 큐 확인</small>`;el.style.color='var(--red)';return}
   if(_hl.today>0){el.innerHTML=`오늘 ${_hl.today}건 처리<small>시스템 정상 가동</small>`;el.style.color='var(--green)';return}
-  el.innerHTML='시스템 대기 중<small>새 소스 입력 대기</small>';el.style.color='var(--text-sec)';
+  el.innerHTML='시스템 대기 중<small>새 소스 입력 대기</small>';el.style.color='rgba(255,255,255,.6)';
 }
 
 // ── LOAD ALL ──
