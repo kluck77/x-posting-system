@@ -235,28 +235,112 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 /* ── PULSE: STATUS RAIL ── */
 .status-rail{display:flex;align-items:center;justify-content:space-between;
-  padding:6px var(--sp-3);margin-bottom:var(--sp-2);
-  background:var(--bg-surface);border-radius:var(--r-md)}
-.pulse-hl{font-size:30px;font-weight:800;line-height:1.15;
+  padding:8px var(--sp-3);margin-bottom:var(--sp-2);
+  background:var(--bg-surface);border-radius:var(--r-md);gap:var(--sp-2)}
+.status-rail .dots{flex:0 0 auto}
+.status-rail .rail-right{display:flex;flex-direction:column;align-items:flex-end;
+  gap:1px;font-family:var(--mono);line-height:1.1}
+.status-rail .rail-date{font-size:11px;color:var(--text-sec)}
+.status-rail .rail-sync{font-size:9px;color:var(--text-mut)}
+.status-rail .rail-refresh{background:none;border:none;color:var(--text-sec);
+  font-size:16px;cursor:pointer;padding:4px 6px;margin-left:4px;
+  -webkit-tap-highlight-color:transparent;border-radius:var(--r-sm)}
+.status-rail .rail-refresh:active{color:var(--indigo);background:var(--indigo-dim)}
+
+/* ── PULSE: HEADLINE ── */
+.pulse-hl{font-size:32px;font-weight:800;line-height:1.15;
   margin-bottom:4px;letter-spacing:-.5px}
-.pulse-hl small{display:block;font-size:14px;font-weight:400;color:var(--text-sec);
-  margin-top:4px;letter-spacing:0}
+.pulse-hl small{display:block;font-size:15px;font-weight:400;color:var(--text-sec);
+  margin-top:4px;letter-spacing:0;line-height:1.35}
+
+/* ── PULSE: TAPPABLE SHARED ── */
+.tap{cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:transform .1s ease-out,background .15s}
+.tap:active{transform:scale(.97);background:var(--bg-raised)}
+.tap::after{content:'›';position:absolute;top:6px;right:8px;
+  font-size:10px;color:var(--text-mut);line-height:1}
 
 /* ── PULSE: ACTION CARDS ── */
 .act-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:var(--sp-3) 0}
-.act-card{background:var(--bg-surface);border-radius:var(--r-md);
-  padding:12px 8px;text-align:center}
-.act-num{font-size:26px;font-weight:800;line-height:1}
-.act-lbl{font-size:12px;color:var(--text-sec);margin-top:4px}
+.act-card{position:relative;background:var(--bg-surface);border-radius:var(--r-md);
+  padding:14px 8px 12px;text-align:center;min-height:68px}
+.act-num{font-size:28px;font-weight:800;line-height:1}
+.act-lbl{font-size:12px;color:var(--text-sec);margin-top:5px;font-weight:500}
+
+/* ── PULSE: SCORE CARDS (tappable) ── */
+.score-grid .score-box{position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:background .15s}
+.score-grid .score-box:active{background:var(--bg-raised)}
+.score-grid .score-box::after{content:'›';position:absolute;top:4px;right:8px;
+  font-size:10px;color:var(--text-mut);line-height:1}
 
 /* ── PULSE: QUEUE GRID ── */
 .q-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px}
-.q-cell{background:var(--bg-surface);border-radius:var(--r-md);padding:8px 4px;
-  text-align:center}
-.q-cell.dim{opacity:.3}
+.q-cell{position:relative;background:var(--bg-surface);border-radius:var(--r-md);padding:10px 4px 8px;
+  text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:background .15s,opacity .15s}
+.q-cell:active{background:var(--bg-raised)}
+.q-cell.dim{opacity:.45}
+.q-cell.dim .q-num{color:var(--text-mut)!important}
 .q-cell:not(.dim){background:var(--bg-raised)}
-.q-num{font-size:18px;font-weight:700;line-height:1}
-.q-lbl{font-size:10px;color:var(--text-sec);margin-top:2px}
+.q-num{font-size:20px;font-weight:700;line-height:1}
+.q-lbl{font-size:11px;color:var(--text-sec);margin-top:3px;font-weight:500}
+
+/* ── PULSE: ALERT CARDS (richer) ── */
+.alert-card{display:block;padding:10px 12px;margin-bottom:4px;
+  background:var(--bg-surface);border-radius:var(--r-md);
+  border-left:3px solid var(--red);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .15s}
+.alert-card:active{background:var(--bg-raised)}
+.alert-card .ac-top{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.alert-card .ac-title{flex:1;font-size:13px;font-weight:600;color:var(--text-pri);
+  line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.alert-card .ac-time{font-size:10px;color:var(--text-sec);font-family:var(--mono);
+  white-space:nowrap;flex-shrink:0}
+.alert-card .ac-why{font-size:12px;color:var(--text-sec);line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
+.alert-card .ac-meta{display:flex;gap:6px;align-items:center;margin-top:6px}
+.alert-empty{padding:14px 14px;background:var(--bg-surface);border-radius:var(--r-md);
+  border-left:3px solid var(--bg-raised)}
+.alert-empty .ae-main{font-size:14px;color:var(--text-pri);font-weight:600;margin-bottom:3px}
+.alert-empty .ae-sub{font-size:12px;color:var(--text-sec);line-height:1.4}
+
+/* ── PULSE: NEXT SCHEDULE ── */
+.next-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:var(--sp-3)}
+.next-box{background:var(--bg-surface);border-radius:var(--r-md);padding:10px 12px}
+.next-box .nb-lbl{font-size:11px;color:var(--text-sec);margin-bottom:4px;font-weight:500}
+.next-box .nb-val{font-size:16px;font-weight:700;color:var(--text-pri);line-height:1.2;font-family:var(--mono)}
+.next-box .nb-val small{font-size:11px;font-weight:400;color:var(--text-sec);
+  font-family:var(--font);margin-left:3px}
+
+/* ── PULSE: SECTION HEADER (readable) ── */
+.sec-head.pulse-head{font-size:11px;color:var(--text-sec);font-weight:600;
+  letter-spacing:1px;text-transform:uppercase;margin:var(--sp-4) 0 var(--sp-2)}
+
+/* ── BOTTOM SHEET ── */
+.sheet-backdrop{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);
+  opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(3px)}
+.sheet-backdrop.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:201;
+  background:var(--bg-deep);border-radius:16px 16px 0 0;
+  padding:var(--sp-4) var(--sp-4) calc(var(--sp-4) + var(--safe-b));
+  max-height:72vh;overflow-y:auto;transform:translateY(100%);transition:transform .25s ease-out;
+  border-top:1px solid var(--border-normal)}
+.sheet.open{transform:translateY(0)}
+.sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--text-mut);
+  margin:0 auto var(--sp-3)}
+.sheet-title{font-size:18px;font-weight:700;margin-bottom:var(--sp-1);color:var(--text-pri)}
+.sheet-sub{font-size:13px;color:var(--text-sec);margin-bottom:var(--sp-3);line-height:1.4}
+.sheet-row{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--border-subtle);font-size:13px}
+.sheet-row:last-child{border-bottom:none}
+.sheet-row .sr-pri{flex:1;color:var(--text-pri);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sheet-row .sr-score{font-family:var(--mono);font-size:12px;color:var(--text-sec);white-space:nowrap}
+.sheet-empty{padding:16px 0;text-align:center;color:var(--text-sec);font-size:13px}
+.sheet-close{margin-top:var(--sp-3);width:100%;padding:10px;border:none;border-radius:var(--r-md);
+  background:var(--bg-surface);color:var(--text-pri);font-size:14px;font-weight:600;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sheet-close:active{background:var(--bg-raised)}
 
 /* ── ALERTS: NAVER ROW ── */
 .naver-tag{font-size:8px;font-weight:600;color:var(--text-mut);letter-spacing:1px;text-transform:uppercase}
@@ -375,51 +459,100 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       <div class="dot"><span class="dot-led" id="dot-x"></span>X</div>
       <div class="dot"><span class="dot-led" id="dot-mock"></span>MK</div>
     </div>
-    <span class="sub" id="syncTime">—</span>
+    <div class="rail-right">
+      <span class="rail-date" id="pulseDate">—</span>
+      <span class="rail-sync" id="syncTime">—</span>
+    </div>
+    <button class="rail-refresh" onclick="loadAll()" aria-label="새로고침">↻</button>
   </div>
 
   <!-- B. 메인 상태 문장 -->
   <div class="pulse-hl" id="pulseHL">시스템 확인 중</div>
   <div class="sys-diag" id="sysDiag"></div>
 
-  <!-- C. 행동 카드 3개 -->
+  <!-- C. 행동 카드 3개 (tap → 탭 전환) -->
   <div class="act-grid">
-    <div class="act-card"><div class="act-num" id="actToday">0</div><div class="act-lbl">오늘 처리</div></div>
-    <div class="act-card"><div class="act-num" style="color:var(--red)" id="actUrgent">0</div><div class="act-lbl">긴급 알림</div></div>
-    <div class="act-card"><div class="act-num" style="color:var(--green)" id="actReady">0</div><div class="act-lbl">올릴 후보</div></div>
+    <div class="act-card tap" onclick="pulseGoTo('today')">
+      <div class="act-num" id="actToday">0</div><div class="act-lbl">오늘 처리</div>
+    </div>
+    <div class="act-card tap" onclick="pulseGoTo('urgent')">
+      <div class="act-num" style="color:var(--red)" id="actUrgent">0</div><div class="act-lbl">긴급 알림</div>
+    </div>
+    <div class="act-card tap" onclick="pulseGoTo('ready')">
+      <div class="act-num" style="color:var(--green)" id="actReady">0</div><div class="act-lbl">올릴 후보</div>
+    </div>
   </div>
 
-  <!-- D. 내부 점수 (보조) -->
+  <!-- D. 내부 점수 (보조, tap → sheet) -->
   <div class="score-grid">
-    <div class="score-box">
+    <div class="score-box" onclick="openScoreSheet('postability')">
       <div class="score-num" id="avgPost">—</div>
       <div class="score-label">게시 적합도</div>
       <div class="sc-bar"><div class="sc-fill" id="avgPostBar"></div></div>
     </div>
-    <div class="score-box">
+    <div class="score-box" onclick="openScoreSheet('trust')">
       <div class="score-num" id="avgTrust">—</div>
       <div class="score-label">근거 신뢰도</div>
       <div class="sc-bar"><div class="sc-fill" id="avgTrustBar"></div></div>
     </div>
   </div>
 
-  <!-- E. 큐 상태 -->
+  <!-- E. 큐 상태 (tap → sheet) -->
   <div class="q-grid">
-    <div class="q-cell"><div class="q-num" style="color:var(--red)" id="qImmediate">0</div><div class="q-lbl">긴급</div></div>
-    <div class="q-cell"><div class="q-num" style="color:var(--amber)" id="qDigest">0</div><div class="q-lbl">일일</div></div>
-    <div class="q-cell"><div class="q-num" style="color:var(--indigo)" id="qTop10">0</div><div class="q-lbl">새벽</div></div>
-    <div class="q-cell"><div class="q-num" style="color:var(--green)" id="qWeekly">0</div><div class="q-lbl">주간</div></div>
+    <div class="q-cell" onclick="openQueueSheet('IMMEDIATE')">
+      <div class="q-num" style="color:var(--red)" id="qImmediate">0</div><div class="q-lbl">긴급</div>
+    </div>
+    <div class="q-cell" onclick="openQueueSheet('DAY_DIGEST')">
+      <div class="q-num" style="color:var(--amber)" id="qDigest">0</div><div class="q-lbl">일일</div>
+    </div>
+    <div class="q-cell" onclick="openQueueSheet('TOP10_5AM')">
+      <div class="q-num" style="color:var(--indigo)" id="qTop10">0</div><div class="q-lbl">새벽</div>
+    </div>
+    <div class="q-cell" onclick="openQueueSheet('WEEKLY_POOL')">
+      <div class="q-num" style="color:var(--green)" id="qWeekly">0</div><div class="q-lbl">주간</div>
+    </div>
   </div>
 
   <!-- F. 최근 알림 -->
-  <div class="sec-head">최근 알림</div>
-  <ul class="mini-list" id="recentAlerts">
-    <li class="empty-sm">아직 긴급 알림 없음</li>
-  </ul>
+  <div class="sec-head pulse-head">최근 알림</div>
+  <div id="recentAlerts">
+    <div class="alert-empty">
+      <div class="ae-main">아직 긴급 알림 없음</div>
+      <div class="ae-sub">새 뉴스가 들어오면 여기에 제목·시각·점수와 함께 표시됩니다.</div>
+    </div>
+  </div>
 
-  <!-- G. 하단 요약 -->
-  <div class="tab-footer" id="pulseFooter"></div>
+  <!-- G. 다음 일정 -->
+  <div class="sec-head pulse-head">다음 일정</div>
+  <div class="next-grid">
+    <div class="next-box">
+      <div class="nb-lbl">다음 다이제스트</div>
+      <div class="nb-val" id="nbDigest">—<small id="nbDigestSub"></small></div>
+    </div>
+    <div class="next-box">
+      <div class="nb-lbl">마지막 동기화</div>
+      <div class="nb-val" id="nbSync">—<small id="nbSyncSub"></small></div>
+    </div>
+    <div class="next-box">
+      <div class="nb-lbl">수집 클러스터</div>
+      <div class="nb-val" id="nbCluster">0<small>개</small></div>
+    </div>
+    <div class="next-box">
+      <div class="nb-lbl">수집 주기</div>
+      <div class="nb-val">30<small>초</small></div>
+    </div>
+  </div>
 </section>
+
+<!-- ═══ BOTTOM SHEET (shared) ═══ -->
+<div class="sheet-backdrop" id="sheetBackdrop" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="sheetTitle">—</div>
+  <div class="sheet-sub" id="sheetSub"></div>
+  <div id="sheetBody"></div>
+  <button class="sheet-close" onclick="closeSheet()">닫기</button>
+</div>
 
 <!-- ═══ ALERTS TAB ═══ -->
 <section class="tab-pane" id="tab-alerts">
@@ -575,13 +708,26 @@ async function loadStatus(){
     document.getElementById('fSource').textContent=n.pending_articles||0;
     const pb=document.getElementById('pulseBuf');if(pb)pb.textContent=n.overnight_buffer||0;
 
-    // pulse footer
-    const pf=document.getElementById('pulseFooter');
-    if(pf){
-      const nextD=new Date();nextD.setHours(nextD.getHours()+9);
-      const kstH=nextD.getUTCHours();
-      const toDigest=kstH<5?(5-kstH)+'시간 후':(24-kstH+5)+'시간 후';
-      pf.textContent=`다음 다이제스트 ${toDigest} · 클러스터 ${n.story_clusters||0}개 · 30초 간격 수집`;
+    // pulse next schedule block
+    const nextD=new Date();nextD.setHours(nextD.getHours()+9);
+    const kstH=nextD.getUTCHours();
+    const hoursToDigest=kstH<5?(5-kstH):(24-kstH+5);
+    const nbDigest=document.getElementById('nbDigest');
+    if(nbDigest)nbDigest.innerHTML=`${hoursToDigest}<small>시간 후</small>`;
+    const nbDigestSub=document.getElementById('nbDigestSub');
+    if(nbDigestSub)nbDigestSub.textContent='';
+    const nbSync=document.getElementById('nbSync');
+    if(nbSync){
+      const syncT=(d.generated_at_kst||'').substring(11,16);
+      nbSync.innerHTML=syncT?`${syncT}<small>KST</small>`:'—';
+    }
+    const nbCluster=document.getElementById('nbCluster');
+    if(nbCluster)nbCluster.innerHTML=`${n.story_clusters||0}<small>개</small>`;
+    // date rail
+    const pdate=document.getElementById('pulseDate');
+    if(pdate){
+      const dt=new Date();
+      pdate.textContent=dt.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit',weekday:'short',timeZone:'Asia/Seoul'}).replace(/\.\s*/g,'.').replace(/\.$/,'');
     }
     // alerts footer
     const af=document.getElementById('alertsFooter');
@@ -653,13 +799,36 @@ async function loadEditorial(){
         </div>`
       ).join('');
 
-      // pulse recent alerts
-      document.getElementById('recentAlerts').innerHTML=items.slice(0,3).map(i=>
-        `<li class="mini-item">
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(i.post_snapshot||'').substring(0,40)}</span>
-          <span class="mini-item-time">${(i.created_at||'').substring(11,16)}</span>
-        </li>`
-      ).join('');
+      // pulse recent alerts — richer cards with why-it-matters
+      const pulseList=document.getElementById('recentAlerts');
+      if(pulseList){
+        pulseList.innerHTML=items.slice(0,3).map(i=>{
+          const snap=(i.post_snapshot||'').trim();
+          const parts=snap.split(/\n|—|·/).map(s=>s.trim()).filter(Boolean);
+          const title=(parts[0]||snap).substring(0,60);
+          const why=(parts.slice(1).join(' · ')||'').substring(0,80);
+          const t=(i.created_at||'').substring(11,16);
+          const p=i.postability_score||0, tr=i.trust_score||0;
+          return `<div class="alert-card" onclick="pulseGoTo('urgent')">
+            <div class="ac-top">
+              <span class="ac-title">${title}</span>
+              <span class="ac-time">${t}</span>
+            </div>
+            ${why?`<div class="ac-why">${why}</div>`:''}
+            <div class="ac-meta">
+              <span class="badge badge-blue">P ${p}</span>
+              <span class="badge badge-green">T ${tr}</span>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }else{
+      const pulseList=document.getElementById('recentAlerts');
+      if(pulseList)pulseList.innerHTML=
+        `<div class="alert-empty">
+          <div class="ae-main">아직 긴급 알림 없음</div>
+          <div class="ae-sub">새 뉴스가 들어오면 여기에 제목·시각·점수와 함께 표시됩니다.</div>
+        </div>`;
     }
   }catch(e){console.warn('editorial:',e)}
 }
@@ -1003,6 +1172,101 @@ function updateActCards(){
   const au=document.getElementById('actUrgent');if(au)au.textContent=_hl.imm||0;
   const ar=document.getElementById('actReady');if(ar)ar.textContent=_hl.ready||0;
 }
+
+// ── PULSE DRILL-DOWN ──
+function switchTab(name){
+  const btn=document.querySelector(`.nav-btn[data-tab="${name}"]`);
+  if(btn)btn.click();
+}
+function pulseGoTo(kind){
+  // today → Pipeline (파이프라인에 오늘 초안 리스트)
+  // urgent → Alerts (긴급 알림 리스트)
+  // ready → Pipeline (발행 대기)
+  if(kind==='urgent'){switchTab('alerts');return}
+  switchTab('pipeline');
+}
+function openSheet(title,sub,html){
+  document.getElementById('sheetTitle').textContent=title;
+  document.getElementById('sheetSub').textContent=sub||'';
+  document.getElementById('sheetBody').innerHTML=html;
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sheetBackdrop').classList.add('open');
+}
+function closeSheet(){
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('sheetBackdrop').classList.remove('open');
+}
+async function openScoreSheet(kind){
+  const title=kind==='postability'?'게시 적합도':'근거 신뢰도';
+  const sub=kind==='postability'
+    ?'최근 초안이 X에 올리기 적합한 정도 (톤/길이/위험도 반영)'
+    :'근거의 출처·신뢰도 평균 (상반/미확인일수록 낮음)';
+  openSheet(title,sub,'<div class="sheet-empty">불러오는 중…</div>');
+  try{
+    const r=await fetch(API+'/control/flow-trace?limit=5');
+    const d=await r.json();
+    if(!d||!d.length){
+      document.getElementById('sheetBody').innerHTML='<div class="sheet-empty">최근 초안이 없습니다</div>';
+      return;
+    }
+    const rows=d.map(x=>{
+      const v=kind==='postability'?(x.postability_score??x.resonance_score??0):(x.trust_score??0);
+      const c=v>=70?'var(--green)':v>=40?'var(--amber)':'var(--red)';
+      const hook=(x.hook||x.title||'(제목 없음)').substring(0,50);
+      const risk=x.risk_level?` · ${x.risk_level}`:'';
+      return `<div class="sheet-row">
+        <span class="sr-pri">${hook}<span style="color:var(--text-mut);font-size:11px">${risk}</span></span>
+        <span class="sr-score" style="color:${c};font-weight:700">${v||'—'}</span>
+      </div>`;
+    }).join('');
+    document.getElementById('sheetBody').innerHTML=rows+
+      '<div style="margin-top:12px;padding:10px;background:var(--bg-surface);border-radius:var(--r-md);font-size:12px;color:var(--text-sec);line-height:1.45">'+
+      (kind==='postability'
+        ?'⚠️ 점수가 낮으면: 훅이 약하거나, 본문 길이/위험도 문제. Pipeline 탭에서 개별 확인.'
+        :'⚠️ 점수가 낮으면: 출처 부족·확정 불가. 초안에서 근거 태그 확인 필요.')+
+      '</div>';
+  }catch(e){
+    document.getElementById('sheetBody').innerHTML='<div class="sheet-empty">불러오기 실패</div>';
+  }
+}
+async function openQueueSheet(type){
+  const titles={IMMEDIATE:'긴급 큐',DAY_DIGEST:'일일 다이제스트',TOP10_5AM:'새벽 5시 Top10',WEEKLY_POOL:'주간 풀'};
+  const subs={
+    IMMEDIATE:'즉시 발송 대기 (텔레그램 alert)',
+    DAY_DIGEST:'일일 다이제스트로 묶여 나갈 후보',
+    TOP10_5AM:'새벽 5시 브리핑에 포함될 Top10',
+    WEEKLY_POOL:'주간 풀에 누적된 후보',
+  };
+  openSheet(titles[type]||type,subs[type]||'',
+    '<div class="sheet-empty">불러오는 중…</div>');
+  try{
+    const r=await fetch(API+'/control/editorial-summary');
+    const d=await r.json();
+    const items=(d.immediate_items||[]);
+    // 현재 API 는 IMMEDIATE 만 상세 아이템 제공. 나머지는 카운트만.
+    if(type==='IMMEDIATE'&&items.length){
+      document.getElementById('sheetBody').innerHTML=items.map(i=>
+        `<div class="sheet-row">
+          <span class="sr-pri">${(i.post_snapshot||'').substring(0,50)}</span>
+          <span class="sr-score">P${i.postability_score||0}·T${i.trust_score||0}</span>
+        </div>`).join('');
+    }else{
+      const count=(d.routing_queue||{})[type]||0;
+      document.getElementById('sheetBody').innerHTML=
+        `<div style="padding:16px;background:var(--bg-surface);border-radius:var(--r-md);text-align:center">
+          <div style="font-size:32px;font-weight:800;margin-bottom:6px">${count}</div>
+          <div style="font-size:13px;color:var(--text-sec)">건 대기 중</div>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-sec);line-height:1.45">
+          ${count?'상세 리스트는 Pipeline 탭에서 확인하세요.':'현재 이 큐에 대기 중인 항목이 없습니다.'}
+        </div>`;
+    }
+  }catch(e){
+    document.getElementById('sheetBody').innerHTML='<div class="sheet-empty">불러오기 실패</div>';
+  }
+}
+// ESC key to close sheet
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 
 // ── LOAD ALL ──
 async function loadAll(){
