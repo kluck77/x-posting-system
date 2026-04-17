@@ -832,27 +832,37 @@ function setScore(id,val){
   if(bar){bar.style.width=(val||0)+'%';bar.style.background=c}
 }
 async function rejectDraft(id,btn){
-  btn.textContent='…';btn.classList.add('sending');
+  const row=btn.closest('.draft-row');
+  btn.textContent='…';btn.disabled=true;
   try{
     const r=await fetch(API+'/drafts/'+id+'/reject',{method:'POST'});
     const d=await r.json();
-    if(d.success){btn.closest('.draft-row').style.display='none';
-      setTimeout(()=>loadFlowTrace(),500);
-    }else{btn.textContent='✕';btn.classList.remove('sending')}
-  }catch(e){btn.textContent='✕';btn.classList.remove('sending')}
+    if(d.success){
+      if(row){row.style.opacity='0';row.style.transition='opacity .3s';
+        setTimeout(()=>{row.style.display='none';loadFlowTrace()},350);}
+    }else{btn.textContent='✕';btn.disabled=false}
+  }catch(e){btn.textContent='✕';btn.disabled=false}
 }
 async function sendDraft(id,btn){
-  btn.textContent='전송 중…';btn.classList.add('sending');
+  const row=btn.closest('.draft-row');
+  const allBtns=row?row.querySelectorAll('.draft-btn'):[];
+  allBtns.forEach(b=>b.disabled=true);
+  btn.textContent='전송 중…';btn.style.background='var(--indigo-dim)';btn.style.color='var(--indigo)';
   try{
     const r=await fetch(API+'/drafts/'+id+'/approve',{method:'POST'});
     const d=await r.json();
-    if(d.success){btn.textContent='✓ 완료';btn.classList.remove('sending');btn.classList.add('sent');
+    if(d.success){
+      btn.textContent='✓ 전송됨';btn.style.background='var(--green-dim)';btn.style.color='var(--green)';
       setTimeout(()=>loadFlowTrace(),1500);
-    }else{btn.textContent='실패';btn.classList.remove('sending');btn.classList.add('fail');
-      setTimeout(()=>{btn.textContent='재시도';btn.classList.remove('fail');btn.classList.remove('sending')},2000);
+    }else{
+      btn.textContent='실패';btn.style.background='var(--red-dim)';btn.style.color='var(--red)';
+      allBtns.forEach(b=>b.disabled=false);
+      setTimeout(()=>{btn.textContent='재시도';btn.style.background='';btn.style.color=''},2000);
     }
-  }catch(e){btn.textContent='오류';btn.classList.remove('sending');btn.classList.add('fail');
-    setTimeout(()=>{btn.textContent='재시도';btn.classList.remove('fail')},2000);
+  }catch(e){
+    btn.textContent='오류';btn.style.background='var(--red-dim)';btn.style.color='var(--red)';
+    allBtns.forEach(b=>b.disabled=false);
+    setTimeout(()=>{btn.textContent='재시도';btn.style.background='';btn.style.color=''},2000);
   }
 }
 let _hl={dbOk:true,imm:0,today:0,tg:false,mock:false,ready:0};
