@@ -16,7 +16,12 @@ from app.models.content import (
 
 logger = logging.getLogger(__name__)
 
-_BROKEN_MARKERS = ["[AI 실패]", "[Gemini실패]", "[Mock]", "[재생성 후 미통과]"]
+_BROKEN_MARKERS = [
+    "[AI 실패]", "[Gemini실패]", "[Mock]", "[재생성 후 미통과]",
+    # 자동수집 레인에서 AI 파이프라인을 건너뛴 placeholder draft
+    # (orchestrator.py Lane early-return 경로, body="[CANDIDATE] 알림/적재 완료 — AI 미호출")
+    "알림/적재 완료 — AI 미호출",
+]
 _REPLACEMENT_CHAR = "\ufffd"
 
 

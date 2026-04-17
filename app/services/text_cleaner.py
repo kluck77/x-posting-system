@@ -200,6 +200,9 @@ _INTERNAL_TAG_RE = re.compile(r"^\[(BREAKING_NOW|CANDIDATE)\]\s*")
 _INTERNAL_BODY_PREFIXES = (
     "KO-only pipeline",
     "Routed to ",
+    # Lane early-return placeholder (orchestrator.py, AI 미호출)
+    "[CANDIDATE]",
+    "[BREAKING_NOW]",
 )
 
 _INTERNAL_REASONING_RES: list[re.Pattern] = [
