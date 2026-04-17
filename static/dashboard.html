@@ -862,12 +862,13 @@ async function loadLiveCandidates(){
           <span class="cand-meta">${cat} · ${c.time||''}</span>
           <span style="flex:1"></span>
           ${c.url?`<a class="draft-btn" href="${c.url}" target="_blank" style="text-decoration:none">원문</a>`:''}
-          <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(c.title)}','${encodeURIComponent(c.url||'')}','${encodeURIComponent((c.summary||c.title))}',this)">초안 생성</button>
+          <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(esc(c.title))}','${encodeURIComponent(c.url||'')}','${encodeURIComponent(esc(c.summary||c.title))}',this)">초안 생성</button>
         </div>
       </div>`;
     }).join('');
   }catch(e){console.warn('live:',e)}
 }
+function esc(s){return s.replace(/'/g,'&#39;')}
 async function loadCandidates(){
   try{
     const r=await fetch(API+'/control/scored-candidates?limit=10');
@@ -891,7 +892,7 @@ async function loadCandidates(){
           <span class="cand-meta">${cat} · ${c.time||''}</span>
           <span style="flex:1"></span>
           ${c.url?`<a class="draft-btn" href="${c.url}" target="_blank" style="text-decoration:none">원문</a>`:''}
-          <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(c.title)}','${encodeURIComponent(c.url||'')}','${encodeURIComponent((c.summary||c.title))}',this)">초안 생성</button>
+          <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(esc(c.title))}','${encodeURIComponent(c.url||'')}','${encodeURIComponent(esc(c.summary||c.title))}',this)">초안 생성</button>
         </div>
       </div>`;
     }).join('');
