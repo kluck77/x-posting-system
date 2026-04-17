@@ -48,20 +48,33 @@ class SourceService:
         """
         수동으로 소스 항목을 입력합니다.
 
+        동일 URL 이 이미 등록돼 있으면 기존 SourceItem 을 재사용한다.
+        주간 고점수 CANDIDATE 알림에서 "초안 생성" 을 누르면 news_monitor 가
+        먼저 적재해 둔 같은 URL 이 중복으로 잡혀 파이프라인 전체가 실패하던
+        회귀를 차단하기 위함. Draft 는 source_item 별로 여러 개 만들 수 있다.
+
         Args:
             data: 소스 항목 데이터 (제목, URL, 텍스트 등)
 
         Returns:
-            저장된 SourceItem 객체
-
-        Raises:
-            ValueError: 동일한 URL이 이미 등록된 경우
+            저장된 SourceItem (신규 또는 재사용)
         """
         logger.info(f"소스 수집 시작: '{data.title[:50]}...'")
 
-        # URL 중복 체크
-        if data.url and self.is_duplicate_url(data.url):
-            raise ValueError(f"이미 등록된 URL입니다: {data.url}")
+        # URL 중복 시 기존 SourceItem 재사용 (idempotent)
+        if data.url:
+            url = data.url.strip()
+            existing = (
+                self.db.query(SourceItem)
+                .filter(SourceItem.url == url)
+                .first()
+            )
+            if existing is not None:
+                logger.info(
+                    f"소스 재사용: id={existing.id}, url={url} "
+                    f"(이미 등록된 URL — 기존 source 로 파이프라인 진행)"
+                )
+                return existing
 
         # 데이터베이스에 저장할 객체 생성
         source_item = SourceItem(

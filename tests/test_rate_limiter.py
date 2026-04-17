@@ -302,3 +302,57 @@ class TestSourceDuplicateURL:
         service = SourceService(db_session)
         assert service.is_duplicate_url("") is False
         assert service.is_duplicate_url(None) is False
+
+    def test_ingest_manual_reuses_existing_url(self, db_session):
+        """
+        주간 알림 재생성 회귀 방지:
+        동일 URL 이 이미 등록돼 있으면 ingest_manual 은 예외 대신
+        기존 SourceItem 을 반환한다 (idempotent).
+        """
+        from app.services.source_service import SourceService
+        from app.models.content import SourceItemCreate
+
+        service = SourceService(db_session)
+        url = "https://decrypt.co/364725/bitcoin-stocks-surge"
+
+        existing = SourceItem(
+            title="기존 기사",
+            url=url,
+            source_text="기존 본문",
+            source_type="news",
+            language="en",
+            created_at=datetime.now(timezone.utc),
+        )
+        db_session.add(existing)
+        db_session.commit()
+        db_session.refresh(existing)
+
+        # 같은 URL 로 다시 ingest 시 기존 id 반환, 예외 없음
+        reused = service.ingest_manual(
+            SourceItemCreate(
+                title="같은 URL 재요청",
+                url=url,
+                source_text="다른 본문",
+                source_type="manual",
+                language="ko",
+            )
+        )
+        assert reused.id == existing.id
+
+    def test_ingest_manual_new_url_creates_new_source(self, db_session):
+        """새로운 URL 은 기존처럼 신규 SourceItem 을 생성한다."""
+        from app.services.source_service import SourceService
+        from app.models.content import SourceItemCreate
+
+        service = SourceService(db_session)
+        created = service.ingest_manual(
+            SourceItemCreate(
+                title="신규 기사",
+                url="https://example.com/brand-new",
+                source_text="본문",
+                source_type="manual",
+                language="ko",
+            )
+        )
+        assert created.id is not None
+        assert created.url == "https://example.com/brand-new"
