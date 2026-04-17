@@ -13,6 +13,7 @@
 
 import hashlib
 import json
+import time
 import logging
 import asyncio
 import re
@@ -133,6 +134,138 @@ def _cleanup_old_clusters(max_age_hours: int = 4) -> None:
 
 
 # ─── Telegram 전송 ────────────────────────────────────────────────────────────
+
+_daily_alert_count = 0
+_daily_alert_date = ""
+_alert_cooldown: dict[str, float] = {}
+_DAILY_ALERT_MAX = 8
+_ALERT_THRESHOLD = 45
+_URGENT_THRESHOLD = 55
+_COOLDOWN_SECONDS = 3600
+
+
+def _enhanced_score(article_dict: dict, cluster: dict | None = None) -> int:
+    """키워드 + 교차 출처 + 최신성 + 중복 패널티. AI 비용 0."""
+    from app.services.morning_digest import _importance_score
+    base = _importance_score(article_dict)
+    if article_dict.get("region") == "KR":
+        base += 5
+    bonus = 0
+    if cluster:
+        sc = cluster.get("source_count", 1)
+        if sc >= 4:
+            bonus += 15
+        elif sc >= 2:
+            bonus += 8
+    added = article_dict.get("added_at", "")
+    if added:
+        try:
+            from datetime import datetime as _dt
+            t = _dt.fromisoformat(added)
+            age_min = (datetime.now(KST) - t).total_seconds() / 60
+            if age_min <= 10:
+                bonus += 5
+            elif age_min <= 30:
+                bonus += 3
+        except Exception:
+            pass
+    url = (article_dict.get("url") or "").strip()
+    if url:
+        sk = _story_key(article_dict.get("title", ""))
+        if sk in _alert_cooldown:
+            elapsed = time.time() - _alert_cooldown[sk]
+            if elapsed < _COOLDOWN_SECONDS:
+                bonus -= 20
+    return min(base + bonus, 100)
+
+
+def _can_send_alert() -> bool:
+    global _daily_alert_count, _daily_alert_date
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    if today != _daily_alert_date:
+        _daily_alert_count = 0
+        _daily_alert_date = today
+    return _daily_alert_count < _DAILY_ALERT_MAX
+
+
+def _record_alert(story_key: str):
+    global _daily_alert_count
+    _daily_alert_count += 1
+    _alert_cooldown[story_key] = time.time()
+
+
+async def _send_scored_alert(article_dict: dict, score: int, cluster: dict | None) -> None:
+    """점수 기반 후보 알림. AI 비용 0."""
+    if not settings.has_telegram_config:
+        logger.info(f"[MOCK 후보알림] [{score}점] {article_dict.get('title','')[:50]}")
+        return
+
+    cat_map = {"crypto": "암호화폐", "economy": "경제", "politics": "정치",
+               "policy": "정책", "tech": "기술", "world": "국제", "market": "시장"}
+    cat = cat_map.get(article_dict.get("category", ""), "기타")
+    title = article_dict.get("title", "")[:80]
+    url = article_dict.get("url", "")
+    ah = _article_hash(url) if url else _article_hash(title)
+    src_count = cluster["source_count"] if cluster else 1
+    is_urgent = score >= _URGENT_THRESHOLD and src_count >= 2
+
+    tag = "🔴 긴급" if is_urgent else "📰 후보"
+    why = []
+    if src_count >= 4:
+        why.append(f"교차확인 {src_count}개 소스")
+    if score >= 50:
+        why.append("핵심 키워드 다수")
+    elif score >= 40:
+        why.append("주요 키워드 포함")
+    why_text = " · ".join(why) if why else "키워드 매칭"
+
+    text = (
+        f"{tag} <b>[{score}점]</b>\n"
+        f"{'─' * 26}\n"
+        f"📰 <b>{title}</b>\n\n"
+        f"📂 {cat} {'· 🇺🇸 US' if article_dict.get('region')=='US' else '· 🇰🇷 KR'}\n"
+        f"💡 {why_text}\n"
+        f"{'📡 '+str(src_count)+'개 출처 확인' if src_count>=2 else ''}"
+    )
+
+    keyboard = {"inline_keyboard": [[
+        {"text": "🔗 원문", "url": url} if url else {"text": "—", "callback_data": "noop"},
+        {"text": "✍️ 초안 생성", "callback_data": f"news_draft:{ah}"},
+        {"text": "⏭ 3h 무시", "callback_data": f"news_skip:{ah}"},
+    ]]}
+
+    if len(_pending_articles) >= _PENDING_ARTICLES_MAX:
+        oldest_key = next(iter(_pending_articles))
+        del _pending_articles[oldest_key]
+
+    _pending_articles[ah] = {
+        "title": article_dict.get("title", ""),
+        "url": url,
+        "summary": article_dict.get("summary", ""),
+        "category": article_dict.get("category", ""),
+        "source": article_dict.get("source", ""),
+    }
+
+    payload = {
+        "chat_id": settings.telegram_chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "reply_markup": json.dumps(keyboard),
+        "disable_web_page_preview": True,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(_get_tg_url("sendMessage"), data=payload)
+            if resp.status_code == 200:
+                sk = _story_key(article_dict.get("title", ""))
+                _record_alert(sk)
+                logger.info(f"[후보알림] [{score}점] {title[:40]} (일일 {_daily_alert_count}/{_DAILY_ALERT_MAX})")
+            else:
+                logger.warning(f"후보알림 실패 ({resp.status_code})")
+    except Exception as e:
+        logger.error(f"후보알림 오류: {e}")
+
 
 def _get_tg_url(method: str) -> str:
     return f"https://api.telegram.org/bot{settings.telegram_bot_token}/{method}"
@@ -359,60 +492,17 @@ async def run_monitor_cycle() -> int:
             # 교차 확인 클러스터 업데이트 (기존 유지)
             ready_key = _ingest_article(article)
 
-            # [DISABLED] 자동 파이프라인 — 비용 폭증 방지 (나중에 재설정)
-            # try:
-            #     from app.services.breaking_classifier import classify_article
-            #     _br = classify_article(
-            #         title=article.title,
-            #         body=article.summary or "",
-            #         url=article.url,
-            #     )
-            #     if _br.classification == "BREAKING_NOW":
-            #         # URL 사전 중복 체크 (DB) — Orchestrator 생성 전에 걸러냄
-            #         from app.db import SessionLocal
-            #         from app.models.content import SourceItem
-            #         _pre_db = SessionLocal()
-            #         try:
-            #             _url_exists = _pre_db.query(SourceItem.id).filter(
-            #                 SourceItem.url == article.url.strip()
-            #             ).first() is not None
-            #         finally:
-            #             _pre_db.close()
-            #         if _url_exists:
-            #             _db_dup_count += 1
-            #             continue
-            #
-            #         _pipeline_count += 1
-            #         from app.models.content import SourceItemCreate
-            #         from app.orchestrator import Orchestrator
-            #         from app.services.text_cleaner import clean_article_text
-            #         _raw_text = article.summary or article.title
-            #         _payload = SourceItemCreate(
-            #             title=article.title,
-            #             source_text=clean_article_text(_raw_text),
-            #             url=article.url,
-            #             source_type="naver_auto",
-            #             language="ko",
-            #         )
-            #         _orch = Orchestrator()
-            #         try:
-            #             _result = await _orch.full_pipeline(_payload)
-            #             logger.info(
-            #                 f"[Monitor→Pipeline] {article.title[:40]}: "
-            #                 f"{_br.classification}/{_br.topic_domain}"
-            #             )
-            #         finally:
-            #             _orch.close()
-            # except Exception as _e:
-            #     logger.debug(f"[Monitor→Pipeline] fail-open: {_e}")
-
-            # [DISABLED] old direct telegram alert — full_pipeline 이 대체
-            # if not sleeping and ready_key:
-            #     cluster = _story_clusters.get(ready_key)
-            #     if cluster and alerts_sent < settings.monitor_max_alerts_per_run:
-            #         await _send_news_alert(cluster)
-            #         await asyncio.sleep(0.5)
-            #         alerts_sent += 1
+            # 점수 기반 후보 알림 (AI 비용 0, 깨어있는 시간만)
+            if not sleeping and _can_send_alert():
+                cluster = _story_clusters.get(ready_key) if ready_key else None
+                if not cluster:
+                    sk = _story_key(article.title)
+                    cluster = _story_clusters.get(sk)
+                score = _enhanced_score(_art_dict, cluster)
+                if score >= _ALERT_THRESHOLD:
+                    await _send_scored_alert(_art_dict, score, cluster)
+                    await asyncio.sleep(0.3)
+                    alerts_sent += 1
 
         if not sleeping and alerts_sent > 0:
             logger.info(f"[Monitor] 속보 전송: {alerts_sent}건")
