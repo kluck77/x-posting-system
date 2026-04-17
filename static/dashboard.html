@@ -316,6 +316,12 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .draft-btn.fail{background:var(--red-dim);color:var(--red)}
 .draft-btn.sending{opacity:.5;pointer-events:none}
 
+/* ── PIPE TAB SWITCH ── */
+.pipe-tab{background:var(--bg-surface);border:none;color:var(--text-mut);
+  font-size:13px;font-weight:600;padding:8px 16px;border-radius:var(--r-md);
+  cursor:pointer;-webkit-tap-highlight-color:transparent;flex:1;text-align:center}
+.pipe-tab.active{background:var(--indigo-dim);color:var(--indigo)}
+
 /* ── CANDIDATE ROW ── */
 .cand-row{padding:8px 0;border-bottom:1px solid var(--border-subtle)}
 .cand-row:last-child{border-bottom:none}
@@ -447,8 +453,14 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ PIPELINE TAB ═══ -->
 <section class="tab-pane" id="tab-pipeline">
-  <div class="pi-sum" id="pipeSummary"></div>
-  <div class="stage-grid">
+  <div style="display:flex;gap:6px;margin-bottom:10px">
+    <button class="pipe-tab active" onclick="switchPipeView('drafts',this)">내 초안</button>
+    <button class="pipe-tab" onclick="switchPipeView('live',this)">실시간 후보</button>
+  </div>
+
+  <div id="pipeView-drafts">
+    <div class="pi-sum" id="pipeSummary"></div>
+    <div class="stage-grid">
     <div class="stage-cell"><div class="stage-num" id="fSource">—</div><div class="stage-lbl">소스</div></div>
     <div class="stage-cell"><div class="stage-num" id="fResearch">—</div><div class="stage-lbl">초안</div></div>
     <div class="stage-cell"><div class="stage-num" id="fDraft">—</div><div class="stage-lbl">준비</div></div>
@@ -456,12 +468,18 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     <div class="stage-cell"><div class="stage-num" id="fPublish">—</div><div class="stage-lbl">발행</div></div>
   </div>
 
-  <div class="sec-head">뉴스 후보 <span style="color:var(--text-sec);font-weight:400">(AI 비용 없음)</span></div>
-  <div id="candidateList"><div class="empty-sm">후보 로딩 중</div></div>
-
   <div class="sec-head">최근 초안</div>
   <div id="draftList"><div class="empty-sm">초안 입력 대기</div></div>
   <div class="tab-footer" id="pipeFooter"></div>
+  </div>
+
+  <div id="pipeView-live" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:13px;color:var(--text-sec)">점수 통과 기사 · AI 비용 없음</span>
+      <span class="cand-meta" id="liveCount"></span>
+    </div>
+    <div id="liveList"><div class="empty-sm">로딩 중</div></div>
+  </div>
 </section>
 
 <!-- ═══ OPS TAB ═══ -->
@@ -806,6 +824,48 @@ async function loadNews(){
   }catch(e){console.warn('news:',e)}
 }
 
+let _pipeView='drafts';
+let _liveTimer=null;
+function switchPipeView(view,btn){
+  _pipeView=view;
+  document.querySelectorAll('.pipe-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pipeView-drafts').style.display=view==='drafts'?'':'none';
+  document.getElementById('pipeView-live').style.display=view==='live'?'':'none';
+  if(view==='live'){loadLiveCandidates();_liveTimer=setInterval(loadLiveCandidates,10000)}
+  else{if(_liveTimer){clearInterval(_liveTimer);_liveTimer=null}}
+}
+async function loadLiveCandidates(){
+  try{
+    const r=await fetch(API+'/control/scored-candidates?limit=20');
+    const d=await r.json();
+    const ll=document.getElementById('liveList');
+    const lc=document.getElementById('liveCount');
+    if(!ll)return;
+    if(lc)lc.textContent=d.length+'건';
+    if(!d.length){ll.innerHTML='<div class="empty-sm">수집된 기사 없음 · 30초 간격 수집 중</div>';return}
+    const catKr={crypto:'암호화폐',economy:'경제',politics:'정치',policy:'정책',tech:'기술',world:'국제',market:'시장',stock:'주식'};
+    ll.innerHTML=d.map((c,i)=>{
+      const sc=c.score||0;
+      const sColor=sc>=15?'var(--red)':sc>=8?'var(--amber)':'var(--text-sec)';
+      const sBg=sc>=15?'var(--red-dim)':sc>=8?'var(--amber-dim)':'var(--bg-raised)';
+      const cat=catKr[c.category]||c.category||'기타';
+      const displayTitle=c.summary&&c.summary.length>10?c.summary:c.title;
+      return`<div class="cand-row" style="animation:slideIn .2s ease-out ${i*30}ms both">
+        <div class="cand-top">
+          <span class="cand-score" style="color:${sColor};background:${sBg}">${sc}</span>
+          <span class="cand-title">${displayTitle}</span>
+        </div>
+        <div class="cand-bot">
+          <span class="cand-meta">${cat} · ${c.time||''}</span>
+          <span style="flex:1"></span>
+          ${c.url?`<a class="draft-btn" href="${c.url}" target="_blank" style="text-decoration:none">원문</a>`:''}
+          <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(c.title)}','${encodeURIComponent(c.url||'')}','${encodeURIComponent((c.summary||c.title))}',this)">초안 생성</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){console.warn('live:',e)}
+}
 async function loadCandidates(){
   try{
     const r=await fetch(API+'/control/scored-candidates?limit=10');
@@ -945,7 +1005,7 @@ function updateActCards(){
 async function loadAll(){
   await Promise.allSettled([
     loadStatus(),loadEditorial(),loadProviders(),
-    loadFlowTrace(),loadCandidates(),loadNews(),loadNaver(),loadBiz()
+    loadFlowTrace(),loadNews(),loadNaver(),loadBiz()
   ]);
 }
 loadAll();
