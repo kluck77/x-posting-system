@@ -236,6 +236,12 @@ def _run_schema_migrations():
             "column": "cta_copy_id",
             "ddl": "ALTER TABLE drafts ADD COLUMN cta_copy_id INTEGER",
         },
+        # Mock 생성 판별
+        {
+            "table": "drafts",
+            "column": "generated_in_mock",
+            "ddl": "ALTER TABLE drafts ADD COLUMN generated_in_mock BOOLEAN DEFAULT 0",
+        },
     ]
     with engine.connect() as conn:
         existing_cols = _get_existing_columns(conn, "drafts")

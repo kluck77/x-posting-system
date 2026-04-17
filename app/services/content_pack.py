@@ -2336,6 +2336,7 @@ _VOICE_DUPES = [
 _SOCIAL_SIGNALS = [
     "진짜 쟁점은", "시장에선", "뉴스 본문보다", "여기서 갈린다",
     "이 신호를 먼저", "확인 포인트가", "핵심은 이거다",
+    "the real issue", "what markets see", "key point here", "bottom line",
 ]
 _SCAN_MARKERS = ["⚠️", "📌", "🔍", "💡"]
 
@@ -2380,17 +2381,20 @@ def compute_resonance_score(text: str, gate_fails: list | None = None) -> dict:
     scores["scannability"] = min(15, s_score)
 
     # 3. Tension (15) — 갈림길/충돌 키워드
-    tension_kw = ["갈린다", "충돌", "상충", "반대", "논쟁", "분기", "합의", "결렬", "대립", "vs", "반발", "반박"]
+    tension_kw = ["갈린다", "충돌", "상충", "반대", "논쟁", "분기", "합의", "결렬", "대립", "vs", "반발", "반박",
+                  "conflict", "clash", "dispute", "split", "divide", "opposed", "disagree", "pushback"]
     t_hits = sum(1 for k in tension_kw if k in text)
     scores["tension"] = min(15, t_hits * 8)
 
     # 4. Reader Reward (15) — 마지막 줄에 보상
-    reward_kw = ["확인 포인트", "지금 봐야", "나오면", "안 나오면", "이 수치가", "이 신호"]
+    reward_kw = ["확인 포인트", "지금 봐야", "나오면", "안 나오면", "이 수치가", "이 신호",
+                 "watch for", "if this", "signal", "checkpoint", "verify", "key metric"]
     r_hits = sum(1 for k in reward_kw if k in last_line)
     scores["reader_reward"] = min(15, r_hits * 8)
 
     # 5. Market/Action Stake (10)
-    market_kw = ["시장", "비용", "수급", "정책", "금리", "환율", "주가", "거래", "자금", "유가"]
+    market_kw = ["시장", "비용", "수급", "정책", "금리", "환율", "주가", "거래", "자금", "유가",
+                 "market", "cost", "supply", "policy", "rate", "price", "trade", "fund", "oil"]
     m_hits = sum(1 for k in market_kw if k in text)
     scores["market_stake"] = min(10, m_hits * 5)
 
@@ -2956,6 +2960,28 @@ async def generate_final_post(
 
     # ── mode별 '지시' 블록 (EXPLAIN/JUDGMENT/VERIFY 분기) ──
     user_prompt += _build_mode_finalize_instruction(mode)
+
+    # ── PR 35: Resonance 구조 강제 ──
+    user_prompt += """
+
+=== 출력 구조 강제 (공명도) ===
+final_post는 반드시 아래 구조로 출력하라:
+
+[후킹 1줄 — 기관/자산/숫자 중 2개 이상 포함]
+
+[본문 2~3문장 — 사실 + 판단 좌표]
+
+⚠️ 진짜 쟁점: [갈림길/충돌/합의 여부 1줄]
+
+📌 지금 봐야 할 포인트: [확인 신호 1줄]
+
+체크리스트:
+- 첫 줄에 기관/자산/숫자 2개+ 있는가?
+- 4문장 이하인가?
+- 갈림길/충돌이 명시돼 있는가?
+- 마지막 줄이 구체적 확인 신호인가?
+- "관건이다/갈린다/주목된다" 반복 2회 이상 금지
+"""
 
     # ── PR 11: 독자 질문 컨텍스트 삽입 (mode 지시 이후) ──
     user_prompt += _build_question_prompt_section(_reader_questions)

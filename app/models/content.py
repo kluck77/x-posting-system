@@ -152,6 +152,9 @@ class Draft(Base):
     # 댓글(reply) 대상 트윗 ID
     reply_to_tweet_id = Column(String(50), nullable=True, comment="답글 대상 트윗 ID (있으면 reply로 게시)")
 
+    # Mock 생성 판별
+    generated_in_mock = Column(Boolean, default=False, comment="Mock 모드에서 생성된 초안 여부")
+
     # ── Phase 4: 성과 로깅 기반 필드 ────────────────────────────────────────
     content_type = Column(
         String(50), nullable=True,

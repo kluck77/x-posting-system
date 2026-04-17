@@ -86,6 +86,7 @@ class DraftService:
         )
         new_version = (latest.version + 1) if latest else 1
 
+        from app.config import settings
         draft = Draft(
             source_item_id=source_item.id,
             hook=hook.strip(),
@@ -99,6 +100,7 @@ class DraftService:
             version=new_version,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
+            generated_in_mock=settings.is_full_mock_mode,
         )
 
         self.db.add(draft)

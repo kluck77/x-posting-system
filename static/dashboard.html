@@ -798,6 +798,7 @@ async function loadFlowTrace(){
       const rate=ct.total?Math.round((ct.approved+ct.published)/ct.total*100):0;
       ppf.textContent=`승인율 ${rate}% · 거절 ${ct.rejected}건 · 실패 ${ct.failed}건`;
     }
+    _hl.ready=ct.pending;updateActCards();
   }catch(e){console.warn('flow:',e)}
 }
 
