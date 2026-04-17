@@ -684,6 +684,13 @@ class Orchestrator:
 
     async def _handle_approve(self, draft: Draft) -> dict:
         """승인 처리 (X 자동 게시 없음 — 수동 게시 전용)"""
+        from app.services.draft_service import is_broken_draft, broken_reason
+        if is_broken_draft(draft.body):
+            reason = broken_reason(draft.body)
+            self.draft_service.update_status(draft.id, ApprovalStatus.FAILED)
+            logger.warning(f"[approve-guard] 깨진 초안 차단: draft_id={draft.id}, reason={reason}")
+            return {"success": False, "error": f"이 초안은 전송할 수 없습니다: {reason}"}
+
         self.draft_service.update_status(draft.id, ApprovalStatus.APPROVED)
 
         try:

@@ -6,6 +6,7 @@ AI가 생성한 포스트 초안을 데이터베이스에 저장하고 관리합
 """
 
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -14,6 +15,33 @@ from app.models.content import (
 )
 
 logger = logging.getLogger(__name__)
+
+_BROKEN_MARKERS = ["[AI 실패]", "[Gemini실패]", "[Mock]", "[재생성 후 미통과]"]
+_REPLACEMENT_CHAR = "\ufffd"
+
+
+def is_broken_draft(body: str | None) -> bool:
+    if not body or len(body.strip()) < 20:
+        return True
+    for marker in _BROKEN_MARKERS:
+        if marker in body:
+            return True
+    rc = body.count(_REPLACEMENT_CHAR)
+    if rc > 3 or (len(body) > 0 and rc / len(body) > 0.05):
+        return True
+    return False
+
+
+def broken_reason(body: str | None) -> str:
+    if not body or len(body.strip()) < 20:
+        return "본문이 비어있거나 너무 짧습니다"
+    for marker in _BROKEN_MARKERS:
+        if marker in body:
+            return f"AI 생성 실패 마커 포함: {marker}"
+    rc = body.count(_REPLACEMENT_CHAR)
+    if rc > 3:
+        return f"깨진 문자 {rc}개 감지"
+    return ""
 
 
 class DraftService:

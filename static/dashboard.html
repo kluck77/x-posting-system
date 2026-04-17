@@ -737,7 +737,7 @@ async function loadFlowTrace(){
         const ms=x.monetization_score;
         const isPending=x.status==='pending';
         const isApproved=x.status==='approved';
-        const canSend=isPending||isApproved;
+        const canSend=(isPending||isApproved)&&!x.broken;
         return`<div class="draft-row" style="animation-delay:${i*40}ms">
           <div class="draft-top">
             <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
@@ -745,6 +745,7 @@ async function loadFlowTrace(){
             <span class="draft-chip" style="background:${ch[1]};color:${ch[2]}">${ch[0]}</span>
           </div>
           <div class="draft-bot">
+            ${x.broken?'<span class="draft-risk" style="color:var(--red);border:1px solid var(--red)">AI실패</span>':''}
             <span class="draft-risk" style="color:${rc};border:1px solid ${rc}">${rl}</span>
             ${ms!=null?`<span class="draft-risk" style="color:var(--purple);border:1px solid var(--purple-dim)">💰${ms}</span>`:''}
             <span class="draft-time">${x.created_kst||''}</span>

@@ -602,6 +602,8 @@ def _format_draft_trace(d) -> dict:
             src_url = d.source_item.url
     except Exception:
         pass
+    from app.services.draft_service import is_broken_draft
+    broken = is_broken_draft(d.body)
     return {
         "id": d.id,
         "hook": (d.hook or "")[:80],
@@ -615,4 +617,5 @@ def _format_draft_trace(d) -> dict:
         "x_post_id": d.x_post_id,
         "monetization_score": d.monetization_score,
         "source_url": src_url,
+        "broken": broken,
     }
