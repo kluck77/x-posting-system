@@ -1,0 +1,390 @@
+"""
+평가 데이터 영속 저장소
+========================
+PR 27 — eval_meta / gold_eval / pairwise_review / online_eval 버퍼를
+SQLite 에 영속 저장한다. 재시작 후에도 보존.
+
+설계:
+- 기존 app/db.py 의 engine 재사용 (별도 DB 파일 아님)
+- 테이블 자동 생성 (CREATE IF NOT EXISTS)
+- 모든 레코드를 JSON text 로 저장 (스키마 변경 없이 확장 가능)
+- fail-open: 저장 실패 시 경고만 남기고 파이프라인 계속
+
+테이블:
+  eval_records — record_type + JSON payload + created_at
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+def _get_raw_conn(db):
+    """SQLAlchemy Session → raw sqlite3 connection 추출. raw면 그대로."""
+    try:
+        # SQLAlchemy Session
+        raw = db.connection().connection
+        return raw
+    except (AttributeError, Exception):
+        return db
+
+# ── 테이블 DDL ──
+_CREATE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS eval_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    record_type TEXT NOT NULL,
+    source_id TEXT DEFAULT '',
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+)
+"""
+
+_CREATE_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_eval_type_created
+ON eval_records (record_type, created_at)
+"""
+
+# PR 33: routing_queue 테이블 — editorial routing 실행 큐
+_CREATE_ROUTING_QUEUE_SQL = """
+CREATE TABLE IF NOT EXISTS routing_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    routing_type TEXT NOT NULL,
+    post_snapshot TEXT DEFAULT '',
+    short_snapshot TEXT DEFAULT '',
+    alert_score INTEGER DEFAULT 0,
+    postability_score INTEGER DEFAULT 0,
+    trust_score INTEGER DEFAULT 0,
+    alert_routing TEXT DEFAULT '',
+    postability_routing TEXT DEFAULT '',
+    trust_routing TEXT DEFAULT '',
+    dedup_key TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+)
+"""
+
+_CREATE_ROUTING_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_routing_type_created
+ON routing_queue (routing_type, created_at)
+"""
+
+_initialized_dbs: set = set()
+
+
+def _ensure_table(db) -> None:
+    """테이블 + 인덱스 자동 생성. 커넥션별 1회."""
+    db_id = id(db)
+    if db_id in _initialized_dbs:
+        return
+    try:
+        raw = _get_raw_conn(db)
+        raw.execute(_CREATE_TABLE_SQL)
+        raw.execute(_CREATE_INDEX_SQL)
+        raw.execute(_CREATE_ROUTING_QUEUE_SQL)
+        raw.execute(_CREATE_ROUTING_INDEX_SQL)
+        raw.commit()
+        _initialized_dbs.add(db_id)
+    except Exception as e:
+        logger.warning(f"[EvalStore] 테이블 생성 실패 (무시): {e}")
+        _initialized_dbs.add(db_id)  # 재시도 방지
+
+
+def save_eval_record(
+    db,
+    record_type: str,
+    payload: dict,
+    source_id: str = "",
+) -> bool:
+    """
+    eval 레코드 1건 저장.
+
+    record_type: "eval_meta" | "gold_eval" | "pairwise_review" |
+                 "learning_record" | "online_summary"
+    payload: dict (JSON 직렬화)
+    source_id: 소스 식별자 (pairwise 비교 시 동일 소스 보장용)
+
+    반환: 저장 성공 여부 (fail-open)
+    """
+    _ensure_table(db)
+    try:
+        raw = _get_raw_conn(db)
+        now = datetime.now(timezone.utc).isoformat()
+        raw.execute(
+            "INSERT INTO eval_records (record_type, source_id, payload, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (record_type, source_id, json.dumps(payload, ensure_ascii=False), now),
+        )
+        raw.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"[EvalStore] 저장 실패 (무시): {e}")
+        return False
+
+
+def load_recent_records(
+    db,
+    record_type: str,
+    limit: int = 100,
+) -> list[dict]:
+    """
+    최근 N건 레코드 조회 (최신순).
+
+    반환: payload dict 리스트 (파싱 실패 시 스킵)
+    """
+    _ensure_table(db)
+    try:
+        raw = _get_raw_conn(db)
+        rows = raw.execute(
+            "SELECT payload FROM eval_records "
+            "WHERE record_type = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (record_type, limit),
+        ).fetchall()
+        results = []
+        for (raw,) in rows:
+            try:
+                results.append(json.loads(raw))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return results
+    except Exception as e:
+        logger.warning(f"[EvalStore] 조회 실패 (무시): {e}")
+        return []
+
+
+def count_records(
+    db,
+    record_type: str,
+) -> int:
+    """record_type 별 총 건수."""
+    _ensure_table(db)
+    try:
+        raw = _get_raw_conn(db)
+        row = raw.execute(
+            "SELECT COUNT(*) FROM eval_records WHERE record_type = ?",
+            (record_type,),
+        ).fetchone()
+        return row[0] if row else 0
+    except Exception as e:
+        logger.warning(f"[EvalStore] 카운트 실패 (무시): {e}")
+        return 0
+
+
+def load_records_by_source(
+    db,
+    source_id: str,
+    record_type: Optional[str] = None,
+) -> list[dict]:
+    """
+    source_id 로 레코드 조회 (pairwise 비교용).
+
+    record_type 지정 시 해당 타입만 필터.
+    """
+    _ensure_table(db)
+    try:
+        conn = _get_raw_conn(db)
+        if record_type:
+            rows = conn.execute(
+                "SELECT payload FROM eval_records "
+                "WHERE source_id = ? AND record_type = ? "
+                "ORDER BY created_at DESC",
+                (source_id, record_type),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT payload FROM eval_records "
+                "WHERE source_id = ? "
+                "ORDER BY created_at DESC",
+                (source_id,),
+            ).fetchall()
+        results = []
+        for (payload_str,) in rows:
+            try:
+                results.append(json.loads(payload_str))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return results
+    except Exception as e:
+        logger.warning(f"[EvalStore] source 조회 실패 (무시): {e}")
+        return []
+
+
+# ── PR 31: Retention / Cleanup ──
+
+# 기본 보존 정책: 최근 90일 또는 최대 10,000건 (둘 중 먼저 도달하는 조건)
+RETENTION_DAYS = 90
+RETENTION_MAX_ROWS = 10000
+
+
+def cleanup_old_records(
+    db,
+    retention_days: int = RETENTION_DAYS,
+    max_rows: int = RETENTION_MAX_ROWS,
+) -> int:
+    """
+    PR 31 — 오래된 eval_records 정리.
+
+    1단계: retention_days 초과 레코드 삭제
+    2단계: max_rows 초과 시 오래된 순서로 삭제
+
+    반환: 삭제된 총 건수 (fail-open)
+    """
+    _ensure_table(db)
+    deleted = 0
+    try:
+        conn = _get_raw_conn(db)
+
+        # 1단계: 날짜 기준 삭제
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+        cursor = conn.execute(
+            "DELETE FROM eval_records WHERE created_at < ?",
+            (cutoff,),
+        )
+        deleted += cursor.rowcount
+
+        # 2단계: 건수 기준 삭제 (가장 오래된 것부터)
+        row = conn.execute("SELECT COUNT(*) FROM eval_records").fetchone()
+        total = row[0] if row else 0
+        if total > max_rows:
+            excess = total - max_rows
+            conn.execute(
+                "DELETE FROM eval_records WHERE id IN "
+                "(SELECT id FROM eval_records ORDER BY created_at ASC LIMIT ?)",
+                (excess,),
+            )
+            deleted += excess
+
+        conn.commit()
+        if deleted > 0:
+            logger.info(f"[EvalStore] cleanup: {deleted}건 삭제 (retention={retention_days}d, max={max_rows})")
+    except Exception as e:
+        logger.warning(f"[EvalStore] cleanup 실패 (무시): {e}")
+    return deleted
+
+
+# ── PR 33: Routing Queue API ──
+
+import hashlib
+
+ROUTING_DEDUP_WINDOW_SECONDS = 3600  # 1시간 내 동일 기사 중복 적재 방지
+
+
+def _make_dedup_key(post_snapshot: str) -> str:
+    """post 앞 100자 기반 dedup key."""
+    norm = post_snapshot[:100].strip().lower()
+    return hashlib.sha256(norm.encode()).hexdigest()[:12]
+
+
+def enqueue_routing(
+    db,
+    routing_type: str,
+    editorial_scores: dict,
+    post_snapshot: str = "",
+    short_snapshot: str = "",
+) -> bool:
+    """
+    PR 33 — routing_queue 에 1건 적재.
+
+    routing_type: IMMEDIATE / DAY_DIGEST / TOP10_5AM / WEEKLY_POOL
+    dedup: 동일 post_snapshot(앞 100자) + 동일 routing_type → 1시간 내 중복 차단.
+
+    반환: 저장 성공 여부 (False = dedup 또는 실패)
+    """
+    _ensure_table(db)
+    try:
+        conn = _get_raw_conn(db)
+        dedup_key = _make_dedup_key(post_snapshot)
+
+        # dedup 체크
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=ROUTING_DEDUP_WINDOW_SECONDS)).isoformat()
+        existing = conn.execute(
+            "SELECT id FROM routing_queue "
+            "WHERE dedup_key = ? AND routing_type = ? AND created_at > ?",
+            (dedup_key, routing_type, cutoff),
+        ).fetchone()
+        if existing:
+            logger.debug(f"[RoutingQueue] dedup skip: {routing_type} key={dedup_key}")
+            return False
+
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO routing_queue "
+            "(routing_type, post_snapshot, short_snapshot, "
+            " alert_score, postability_score, trust_score, "
+            " alert_routing, postability_routing, trust_routing, "
+            " dedup_key, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                routing_type,
+                post_snapshot[:500],
+                short_snapshot[:200],
+                editorial_scores.get("alert_score", 0),
+                editorial_scores.get("postability_score", 0),
+                editorial_scores.get("trust_score", 0),
+                editorial_scores.get("alert_routing", ""),
+                editorial_scores.get("postability_routing", ""),
+                editorial_scores.get("trust_routing", ""),
+                dedup_key,
+                now,
+            ),
+        )
+        conn.commit()
+        logger.info(f"[RoutingQueue] enqueued: {routing_type} key={dedup_key}")
+        return True
+    except Exception as e:
+        logger.warning(f"[RoutingQueue] 적재 실패 (무시): {e}")
+        return False
+
+
+def load_routing_queue(
+    db,
+    routing_type: str,
+    limit: int = 20,
+) -> list[dict]:
+    """
+    PR 33 — routing_queue 에서 특정 타입 조회 (최신순).
+    """
+    _ensure_table(db)
+    try:
+        conn = _get_raw_conn(db)
+        rows = conn.execute(
+            "SELECT post_snapshot, short_snapshot, alert_score, postability_score, "
+            "trust_score, alert_routing, postability_routing, trust_routing, created_at "
+            "FROM routing_queue WHERE routing_type = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (routing_type, limit),
+        ).fetchall()
+        return [
+            {
+                "post_snapshot": r[0], "short_snapshot": r[1],
+                "alert_score": r[2], "postability_score": r[3],
+                "trust_score": r[4], "alert_routing": r[5],
+                "postability_routing": r[6], "trust_routing": r[7],
+                "created_at": r[8],
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.warning(f"[RoutingQueue] 조회 실패 (무시): {e}")
+        return []
+
+
+def count_routing_queue(db, routing_type: str) -> int:
+    """PR 33 — routing_queue 타입별 건수."""
+    _ensure_table(db)
+    try:
+        conn = _get_raw_conn(db)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM routing_queue WHERE routing_type = ?",
+            (routing_type,),
+        ).fetchone()
+        return row[0] if row else 0
+    except Exception as e:
+        logger.warning(f"[RoutingQueue] 카운트 실패 (무시): {e}")
+        return 0

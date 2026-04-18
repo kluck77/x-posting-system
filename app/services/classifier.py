@@ -152,6 +152,113 @@ def classify_risk(title: str, text: str, category: ContentCategory) -> tuple[Ris
     return base_risk, reasoning
 
 
+# 커뮤니티 입력 전용 HIGH 리스크 트리거 키워드
+_COMMUNITY_HIGH_RISK_KEYWORDS = [
+    # 고발·폭로·법적 주장
+    "사기", "고소", "고발", "내부자", "폭로", "연루", "비리", "수사", "체포", "고소장",
+    "횡령", "배임", "불법",
+    # 코인·시장 조작 의혹
+    "작전", "펌핑", "덤핑", "세력", "주작", "물량", "시세조종", "먹튀", "러그풀",
+    "먹고튐", "상장폐지",
+    # 미확인 루머
+    "루머", "찌라시", "썰", "카더라", "설이다", "미확인", "익명",
+    # 연예인·사생활
+    "열애", "결별", "임신", "탈세", "열애설", "폭로글",
+    # 금융 미확인 주장
+    "파산", "부도", "디폴트",
+]
+
+# 커뮤니티 입력 시 HIGH를 강제하는 카테고리
+_COMMUNITY_ALWAYS_HIGH_CATEGORIES = {
+    ContentCategory.POLITICS,
+    ContentCategory.POLICY,
+}
+
+
+def classify_community_risk(
+    title: str,
+    text: str,
+    category: ContentCategory,
+    current_risk: RiskLevel,
+    current_reasoning: str,
+) -> tuple[RiskLevel, str]:
+    """
+    커뮤니티 입력(community_input)에 대한 리스크를 재평가합니다.
+
+    규칙:
+    - 최소 MEDIUM 강제 (커뮤니티 글은 미확인 정보 포함 가능)
+    - 정치/정책 카테고리 → 자동 HIGH
+    - 고발·조작·루머 키워드 감지 → HIGH
+    - 그 외 → MEDIUM 유지
+
+    Args:
+        title: 입력 제목
+        text: 입력 본문
+        category: 분류된 카테고리
+        current_risk: 현재 리스크 레벨
+        current_reasoning: 현재 판단 근거
+
+    Returns:
+        (조정된 RiskLevel, 조정된 판단 근거) 튜플
+    """
+    combined = f"{title} {text}".lower()
+    extra_reasons = ["커뮤니티 입력 — 미확인 정보 포함 가능"]
+
+    # 정치/정책은 무조건 HIGH
+    if category in _COMMUNITY_ALWAYS_HIGH_CATEGORIES:
+        extra_reasons.append(f"카테고리 '{category.value}'는 커뮤니티 입력 시 자동 HIGH")
+        final_risk = RiskLevel.HIGH
+    else:
+        # HIGH 트리거 키워드 감지
+        found = [kw for kw in _COMMUNITY_HIGH_RISK_KEYWORDS if kw in combined]
+        if found:
+            extra_reasons.append(f"커뮤니티 고위험 키워드: {', '.join(found[:4])}")
+            final_risk = RiskLevel.HIGH
+        else:
+            # 최소 MEDIUM 강제
+            final_risk = RiskLevel.HIGH if current_risk == RiskLevel.HIGH else RiskLevel.MEDIUM
+
+    combined_reasoning = "; ".join(
+        filter(None, [current_reasoning] + extra_reasons)
+    )
+    logger.info(f"커뮤니티 리스크 재평가: {final_risk.value} — {combined_reasoning}")
+    return final_risk, combined_reasoning
+
+
+def build_community_warning(
+    title: str,
+    text: str,
+    category: ContentCategory,
+    risk_level: RiskLevel,
+) -> str:
+    """
+    텔레그램 승인 카드에 표시할 커뮤니티 경고 문구를 생성합니다.
+
+    Returns:
+        경고 문구 문자열
+    """
+    combined = f"{title} {text}".lower()
+
+    lines = ["📌 출처: 한국 온라인 커뮤니티 (미확인 정보)"]
+
+    # 특이 신호 감지
+    if any(kw in combined for kw in ["작전", "펌핑", "덤핑", "세력", "시세조종", "먹튀", "러그풀"]):
+        lines.append("⚠️ 코인/주식 시장 조작 관련 주장 포함 — 게시 전 독립 검증 필수")
+    if any(kw in combined for kw in ["사기", "고소", "고발", "폭로", "수사", "체포"]):
+        lines.append("⚠️ 법적 주장 또는 고발성 내용 포함 — 사실 확인 없이 게시 금지")
+    if any(kw in combined for kw in ["루머", "찌라시", "썰", "카더라", "미확인"]):
+        lines.append("⚠️ 미확인 루머 또는 익명 주장 포함")
+    if any(kw in combined for kw in ["열애", "결별", "임신", "탈세", "폭로글"]):
+        lines.append("⚠️ 사생활 관련 미확인 정보 포함")
+
+    lines.append("ℹ️ 이 초안은 커뮤니티 반응/감정 요약용 — 사실 단정 표현 사용 금지")
+
+    if risk_level == RiskLevel.HIGH:
+        lines.append("🔴 HIGH 리스크: 게시 전 반드시 원본 출처 교차 확인 권장")
+
+    return "\n".join(lines)
+
+
 def requires_approval(risk_level: RiskLevel, category: ContentCategory, auto_post_enabled: bool = False) -> bool:
     """
     이 콘텐츠가 사람의 승인이 필요한지 판단합니다.

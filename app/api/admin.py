@@ -7,6 +7,7 @@ FastAPI 관리자/디버그 엔드포인트
 
 import logging
 from fastapi import FastAPI, HTTPException
+from sqlalchemy import text
 from app.config import settings, validate_settings
 from app.db import get_db, init_db
 from app.models.content import (
@@ -24,6 +25,19 @@ app = FastAPI(
     description="한국 이슈 영문 X 포스팅 시스템 관리 API",
     version="1.0.0",
 )
+
+# PR 34: Control Room 라우터 + Static 파일 마운트
+from app.api.control_room import router as control_router
+app.include_router(control_router)
+
+try:
+    from fastapi.staticfiles import StaticFiles
+    from pathlib import Path
+    _static = Path("static")
+    if _static.exists():
+        app.mount("/static", StaticFiles(directory="static"), name="static")
+except Exception:
+    pass
 
 
 @app.on_event("startup")
@@ -45,7 +59,7 @@ async def health_check():
     db_ok = False
     try:
         db = get_db()
-        db.execute("SELECT 1" if hasattr(db, 'execute') else None)
+        db.execute(text("SELECT 1"))
         db_ok = True
         db.close()
     except Exception:
@@ -55,7 +69,7 @@ async def health_check():
         status="ok",
         mock_mode=settings.is_full_mock_mode,
         telegram_configured=settings.has_telegram_config,
-        x_configured=settings.has_x_credentials,
+        x_configured=False,  # 자동 게시 제거됨
         database_ok=db_ok,
     )
 
@@ -79,7 +93,8 @@ async def system_status():
 async def ingest_source(data: SourceItemCreate):
     """
     소스를 입력하고 전체 AI 파이프라인을 실행합니다.
-    완료되면 텔레그램에 승인 카드가 전송됩니다.
+    분류 결과에 따라 속보 알림 / Top5 큐 적재 / 주간 즉시 알림 /
+    영어 승인 초안 생성 중 해당 경로로 처리됩니다.
     """
     orchestrator = Orchestrator()
     try:

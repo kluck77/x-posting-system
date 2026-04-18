@@ -10,6 +10,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# PR 31: 테스트 환경에서 get_db() 자동 획득 방지
+os.environ["TESTING"] = "1"
+
 # 프로젝트 루트를 경로에 추가
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -21,47 +21,132 @@ from app.providers.base import (
 logger = logging.getLogger(__name__)
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
+CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # --- Draft Writer 시스템 프롬프트 ---
-DRAFT_SYSTEM_PROMPT = """You are a draft writer for an English-language X account that explains Korean affairs to international audiences.
-Write a first draft. Keep the post body under 270 characters. Be factual and balanced.
+DRAFT_SYSTEM_PROMPT_KO = """너는 한국 금융/경제/정책 X(트위터) 계정의 초안 작성자다.
+이 계정은 뉴스 요약이 아니라 "돈의 의미 해석"을 한다.
+너의 역할은 첫 번째 초안만 쓰는 것이다. 다른 사람이 검수하고 최종 판단한다.
+
+필수 규칙:
+- 첫 문장은 바로 핵심/결론부터 시작
+- 첫 문장에 기관/자산/국가/숫자 중 2개 이상 포함
+- 모든 글에 시장/자본 관점의 의미 해석을 1줄 이상 포함
+- 숫자나 근거가 있으면 글 앞쪽에 배치
+- "왜 중요한가"가 없는 팩트 나열 금지
+- 본문은 270자 이내
+- 필요할 때만 해외 맥락을 보조적으로 추가
+
+출력 구조 (반드시 이 순서):
+- hook: 후킹 1줄 (기관/자산/숫자 2개+ 포함)
+- body: 본문 2~3문장 + "⚠️ 진짜 쟁점: [갈림길/충돌 1줄]" + "📌 지금 봐야 할 포인트: [확인 신호 1줄]"
+- ⚠️ 와 📌 두 줄은 body 의 필수 구성요소다. 두 줄 중 하나라도 빠지면 초안이 아니다.
+
+금지 사항:
+- body 에 ⚠️ 또는 📌 줄 생략 금지 — 두 줄 모두 있어야 한다
+- 단순 뉴스 요약 금지 (예: "A가 B를 발표했다" 로 끝나는 글)
+- AI 티 나는 도입부 금지 (예: "최근 들어~", "주목할 만한~")
+- 과잉 수식어 금지 (예: "획기적인", "전례 없는")
+- 모호한 전망 금지 (예: "향후 주목된다")
+- 감탄형 마무리 금지
+- 단순 번역/복붙 금지
+- "관건이다/갈린다/주목된다" 같은 표현 2회 이상 반복 금지
+
+금지 주제:
+- 정치 공방, 연예/사회 일반, 밈코인, 잡주 추천, 전망성 기사, 출처 약한 수치
+
+JSON으로만 응답:
+{
+  "hook": "핵심을 바로 전달하는 첫 문장 (기관/숫자 포함)",
+  "body": "본문 2~3문장\\n\\n⚠️ 진짜 쟁점: 갈림길 1줄\\n📌 지금 봐야 할 포인트: 확인 신호 1줄",
+  "thread_continuation": "스레드 연속 텍스트 또는 null",
+  "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
+  "tone_notes": "톤 선택 메모"
+}"""
+
+DRAFT_SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X account that explains Korean financial, economic, and policy issues to international audiences.
+This is NOT a news summary account — the focus is interpreting "what the money means."
+Write a first draft. Someone else will review and finalize.
+
+Required rules:
+- Start with the key conclusion — no preamble
+- First sentence MUST include 2+ of: institution/asset/country/number
+- Include at least one line on market/capital significance
+- Place numbers and evidence near the top
+- Never list facts without explaining why they matter
+- Keep post body under 270 characters
+
+Output structure (mandatory):
+- hook: one punchy line (2+ proper nouns/numbers)
+- body: 2-3 sentences + "⚠️ Real issue: [conflict 1 line]" + "📌 Watch for: [signal 1 line]"
+- The ⚠️ and 📌 lines are REQUIRED body components. A body missing either line is not a valid draft.
+
+Banned:
+- Omitting the ⚠️ or 📌 line in body — both lines must be present
+- Plain news summaries, AI-sounding openers, hype adjectives, vague forecasts, exclamatory endings, copy-paste translation
+- Repeating "key issue" / "remains to be seen" phrases 2+ times
 
 Respond in JSON ONLY:
 {
-  "hook": "attention-grabbing opening line",
-  "body": "main post text for X (under 270 chars)",
+  "hook": "lead with the key takeaway (include institution/numbers)",
+  "body": "2-3 sentences\\n\\n⚠️ Real issue: conflict line\\n📌 Watch for: verification signal",
   "thread_continuation": "optional thread text or null",
   "category_suggestion": "politics|policy|economy|society|kpop_culture|evergreen",
   "tone_notes": "style notes"
 }"""
 
 # --- Reviewer 시스템 프롬프트 ---
-REVIEW_SYSTEM_PROMPT = """You are the editorial reviewer and safety brain for an English-language X account about Korean affairs.
+REVIEW_SYSTEM_PROMPT = """너는 한국어 X(트위터) 계정의 편집 리뷰어이자 안전 판단 두뇌다.
+이 계정은 한국 금융/경제/정책 이슈를 다루며, "돈의 의미 해석"에 집중한다.
 
-You receive a draft and optional research/factcheck data. Your job:
-1. Verify facts where possible
-2. Flag anything unconfirmed as uncertain
-3. Assess risk: low / medium / high
-4. Refine the draft into a polished, balanced post
-5. Keep post body under 270 characters
+초안과 선택적 리서치/팩트체크 데이터를 받는다. 너의 역할:
+1. 팩트를 가능한 범위에서 검증
+2. 미확인 사항은 불확실로 표시
+3. 위험도 판단: low / medium / high
+4. 초안을 매끄럽고 균형 잡힌 포스트로 다듬기
+5. 본문 270자 이내 유지
+6. 품질 플래그 태깅 (아래 참조)
 
-STRICT SAFETY RULES:
-- Politics / policy / economy / society / K-POP controversy → always medium or high risk
-- Evergreen educational content → can be low risk
-- NEVER include unconfirmed rumors
-- NEVER sensationalize
+출력 구조 보존 (최우선 규칙 — 위반 시 리뷰 실패로 간주):
+- 최종 body 에는 반드시 아래 두 줄이 순서대로 포함되어야 한다:
+  ⚠️ 진짜 쟁점: [이 기사의 갈림길/충돌 1줄]
+  📌 지금 봐야 할 포인트: [확인할 구체적 신호 1줄]
+- 초안에 이 두 줄이 이미 있으면 내용만 다듬어 유지한다(삭제·변형 금지).
+- 초안에 없으면 body 끝에 위 형식 그대로 반드시 두 줄을 추가한다.
+- 구조 라인을 "이 기사의 핵심은…" 같은 일반 문장으로 대체하지 마라.
+- 이 두 줄이 빠진 body 는 리뷰 결과물이 아니다.
 
-Respond in JSON ONLY:
+품질 플래그 — 해당하는 모든 플래그를 태깅 (없으면 빈 리스트):
+- ai_smell: 로봇 같은 문체, AI 티 나는 표현 ("최근 들어~", "주목할 만한~", "In a move that")
+- summary_only: 관점이나 인사이트 없이 팩트만 나열
+- market_link: 시장/경제적 영향 연결이 빠짐
+- verbose: 본문 270자 초과 또는 불필요하게 장황
+- speculation: 근거 없는 예측이나 의견을 사실처럼 기술
+- banned_topic: 북한 군사작전, 아이돌 연애 루머, 자살 세부사항
+- follow_worthy: 팔로우할 이유가 되는 독특한 관점
+- actionable: 독자가 행동할 수 있는 정보 (투자, 회피, 준비)
+- banned_style: 해시태그, 이모지, "속보:", 클릭베이트 대문자
+
+엄격한 안전 규칙:
+- 정치 / 정책 / 경제 / 사회 / K-POP 논란 → 반드시 medium 또는 high
+- 에버그린 교육 콘텐츠 → low 가능
+- 미확인 루머 절대 포함 금지
+- 선정적 표현 절대 금지
+
+hook과 body는 반드시 한국어로 작성하라. 단, 입력이 영어(language=en)인 경우에만 영어로 작성.
+risk_reasoning과 ai_rationale은 항상 한국어로 작성하라.
+
+JSON으로만 응답:
 {
-  "hook": "final hook",
-  "body": "final post body (under 270 chars)",
-  "thread_continuation": "optional or null",
+  "hook": "최종 훅 (한국어, 기관/숫자 포함)",
+  "body": "본문 2~3문장\\n\\n⚠️ 진짜 쟁점: 갈림길 1줄\\n📌 지금 봐야 할 포인트: 확인 신호 1줄",
+  "thread_continuation": "스레드 연속 또는 null",
   "category": "politics|policy|economy|society|kpop_culture|evergreen",
   "risk_level": "low|medium|high",
-  "risk_reasoning": "why this risk level",
-  "ai_rationale": "why this draft serves the audience well",
-  "recommended_action": "approve|review|reject"
+  "risk_reasoning": "이 위험도를 선택한 이유 (한국어)",
+  "ai_rationale": "이 초안이 독자에게 가치 있는 이유 (한국어)",
+  "recommended_action": "approve|review|reject",
+  "quality_flags": ["flag1", "flag2"]
 }"""
 
 
@@ -69,17 +154,27 @@ class AnthropicDraftWriter(BaseDraftWriter):
     """Claude를 사용한 초안 작성기 (대안 드래프트 역할)."""
 
     async def generate_draft(
-        self, title: str, source_text: str, language: str = "en",
+        self, title: str, source_text: str, language: str = "ko",
+        source_type: str = "manual", criteria_context: str | None = None,
     ) -> DraftResult:
-        logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}'")
+        logger.info(f"[Claude DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 
-        user_msg = (
-            f"Write an X post draft.\n\n"
-            f"Title: {title}\nSource:\n{source_text[:2000]}\n"
-            f"Language: {language}\nRespond in JSON only."
-        )
+        if language == "ko":
+            system_prompt = DRAFT_SYSTEM_PROMPT_KO
+            user_msg = (
+                f"아래 소스를 바탕으로 X 포스트 초안을 작성하라.\n\n"
+                f"제목: {title}\n소스:\n{source_text[:2000]}\n"
+                f"JSON으로만 응답."
+            )
+        else:
+            system_prompt = DRAFT_SYSTEM_PROMPT_EN
+            user_msg = (
+                f"Write an X post draft.\n\n"
+                f"Title: {title}\nSource:\n{source_text[:2000]}\n"
+                f"Respond in JSON only."
+            )
 
-        content = await self._call_claude(DRAFT_SYSTEM_PROMPT, user_msg)
+        content = await self._call_claude(system_prompt, user_msg)
         data = json.loads(content)
         return DraftResult(
             hook=data.get("hook", title),
@@ -106,7 +201,21 @@ class AnthropicDraftWriter(BaseDraftWriter):
                 },
             )
             resp.raise_for_status()
-            return resp.json()["content"][0]["text"]
+            resp_data = resp.json()
+            usage = resp_data.get("usage", {})
+            logger.info(
+                f"[API-COST] anthropic {CLAUDE_MODEL} "
+                f"in={usage.get('input_tokens', '?')} "
+                f"out={usage.get('output_tokens', '?')} "
+                f"caller=DraftWriter"
+            )
+            try:
+                from app.services.api_cost_tracker import record_usage
+                record_usage("anthropic", CLAUDE_MODEL, "DraftWriter",
+                             usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+            except Exception:
+                pass
+            return resp_data["content"][0]["text"]
 
 
 class AnthropicReviewer(BaseReviewer):
@@ -119,6 +228,7 @@ class AnthropicReviewer(BaseReviewer):
         draft: DraftResult,
         research: ResearchResult | None = None,
         factcheck: FactCheckResult | None = None,
+        criteria_context: str | None = None,
     ) -> ReviewResult:
         logger.info(f"[Claude Reviewer] 리뷰: '{title[:50]}'")
 
@@ -138,7 +248,7 @@ class AnthropicReviewer(BaseReviewer):
                 f"## Fact Check\nVerified: {factcheck.verified}\n"
                 f"Corrections: {'; '.join(factcheck.corrections[:3])}\n\n"
             )
-        user_msg += "Review and refine. Respond in JSON only."
+        user_msg += "리뷰하고 다듬어라. JSON으로만 응답. hook과 body는 한국어로 작성."
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:
@@ -157,10 +267,38 @@ class AnthropicReviewer(BaseReviewer):
                     },
                 )
                 resp.raise_for_status()
-                content = resp.json()["content"][0]["text"]
-                data = json.loads(content)
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                logger.info(
+                    f"[API-COST] anthropic {CLAUDE_MODEL} "
+                    f"in={usage.get('input_tokens', '?')} "
+                    f"out={usage.get('output_tokens', '?')} "
+                    f"caller=Reviewer"
+                )
+                try:
+                    from app.services.api_cost_tracker import record_usage
+                    record_usage("anthropic", CLAUDE_MODEL, "Reviewer",
+                                 usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+                except Exception:
+                    pass
+                content = resp_data["content"][0]["text"]
+                try:
+                    data = json.loads(content)
+                except json.JSONDecodeError:
+                    # Claude가 JSON 앞뒤에 텍스트를 붙인 경우 추출 시도
+                    import re
+                    match = re.search(r'\{.*\}', content, re.DOTALL)
+                    if match:
+                        data = json.loads(match.group())
+                    else:
+                        raise
 
             logger.info(f"[Claude Reviewer] 완료: risk={data.get('risk_level')}")
+            quality_flags = data.get("quality_flags", [])
+            rationale = data.get("ai_rationale", "")
+            if quality_flags:
+                rationale += f" [flags: {','.join(quality_flags)}]"
+
             return ReviewResult(
                 hook=data.get("hook", draft.hook),
                 body=data.get("body", draft.body),
@@ -168,7 +306,7 @@ class AnthropicReviewer(BaseReviewer):
                 category=data.get("category", "evergreen"),
                 risk_level=data.get("risk_level", "medium"),
                 risk_reasoning=data.get("risk_reasoning", ""),
-                ai_rationale=data.get("ai_rationale", ""),
+                ai_rationale=rationale,
                 recommended_action=data.get("recommended_action", "review"),
             )
         except Exception as e:
