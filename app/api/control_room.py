@@ -725,6 +725,93 @@ async def get_scored_candidates(limit: int = 15, min_score: int = 0):
         return []
 
 
+@router.get("/candidates-meta")
+async def get_candidates_meta(min_score: int = 28):
+    """
+    실시간 후보 풀 진단 메타데이터.
+    "왜 1시간째 새 후보가 안 올라오나" 를 풀 기반으로 분해해서 보여준다.
+    """
+    try:
+        from app.services.news_monitor import get_recent_items, _RECENT_ITEMS_MAX
+        from app.services.morning_digest import _importance_score
+        from datetime import datetime, timezone
+
+        items = get_recent_items(limit=_RECENT_ITEMS_MAX)
+        pool_size = len(items)
+
+        last_added: str | None = None
+        eligible_urls: list[str] = []
+        below = 0
+        for a in items:
+            added = a.get("added_at", "")
+            if added and (last_added is None or added > last_added):
+                last_added = added
+            s = _importance_score(a)
+            if a.get("region", "KR") == "KR":
+                s += 5
+            if s < min_score:
+                below += 1
+            else:
+                u = (a.get("url") or "").strip()
+                if u:
+                    eligible_urls.append(u)
+
+        eligible = pool_size - below
+
+        # 경과 시간 (현재 시각과 added_at 비교)
+        seconds_since: int | None = None
+        if last_added:
+            try:
+                dt = datetime.fromisoformat(last_added)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                now = datetime.now(dt.tzinfo)
+                seconds_since = max(0, int((now - dt).total_seconds()))
+            except Exception:
+                seconds_since = None
+
+        # 수집 루프는 1분 주기 — 상태 레벨
+        if seconds_since is None:
+            status = "unknown"
+        elif seconds_since < 120:
+            status = "live"
+        elif seconds_since < 300:
+            status = "idle"
+        elif seconds_since < 900:
+            status = "stale"
+        else:
+            status = "dead"
+
+        # 점수 통과 항목 중 이미 DB 에 있는(초안화 완료) 건수
+        already_drafted = 0
+        if eligible_urls:
+            db = get_db()
+            try:
+                from app.models.content import SourceItem
+                found = db.query(SourceItem.url).filter(
+                    SourceItem.url.in_(eligible_urls)
+                ).all()
+                already_drafted = len(found)
+            finally:
+                db.close()
+
+        return {
+            "last_ingested_at": last_added,
+            "seconds_since_ingestion": seconds_since,
+            "status": status,
+            "pool_size": pool_size,
+            "pool_max": _RECENT_ITEMS_MAX,
+            "below_threshold": below,
+            "eligible": eligible,
+            "already_drafted": already_drafted,
+            "new_candidates": max(0, eligible - already_drafted),
+            "min_score": min_score,
+        }
+    except Exception as e:
+        logger.warning(f"candidates-meta 오류: {e}")
+        return {"error": str(e)}
+
+
 # ── Premium 텔레그램 발송 ─────────────────────────────────────────────────────
 
 @router.post("/premium/{draft_id}/send-telegram")

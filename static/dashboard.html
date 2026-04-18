@@ -344,6 +344,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pp2-chip.amber{color:var(--amber);border-color:rgba(245,158,11,.28)}
 .pp2-chip.green{color:var(--green);border-color:rgba(52,211,153,.28)}
 .pp2-chip.red{color:var(--red);border-color:rgba(239,68,68,.28)}
+.pp2-meta-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-subtle)}
 
 .pp2-filters{display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;
   scrollbar-width:none;-ms-overflow-style:none}
@@ -1943,6 +1944,14 @@ function _ppRiskClass(r){return{low:'risk-low',medium:'risk-med',high:'risk-high
 function _ppRiskL(r){return{low:'안전',medium:'주의',high:'위험'}[r]||(r||'—')}
 function _ppResClass(v){return v>=85?'res-hi':v>=70?'res-mi':'res-lo'}
 function _ppSevCand(sc){return sc>=15?'hi':sc>=8?'mi':'lo'}
+function _ppMetaAge(sec){
+  if(sec==null)return '';
+  if(sec<60)return '방금 수집';
+  const m=Math.round(sec/60);
+  if(m<60)return '마지막 수집 '+m+'분 전';
+  const h=Math.round(m/60);
+  return '마지막 수집 '+h+'시간 전';
+}
 function _ppCandAge(addedAt){
   // added_at: KST ISO 문자열 → {label, stale} 반환
   if(!addedAt)return {label:'',stale:false};
@@ -2104,10 +2113,25 @@ function _ppRenderLive(){
   const hi=d.filter(x=>(x.score||0)>=50).length;
   const s=document.getElementById('ppSummary');
   if(s){
-    s.innerHTML=d.length?
+    const m=_ppCache.liveMeta;
+    let metaLine='';
+    if(m&&!m.error){
+      const stLabel={live:'수집 정상',idle:'수집 지연',stale:'수집 멈춤',dead:'수집 중단',unknown:'미상'}[m.status]||'';
+      const stCls={live:'',idle:'amber',stale:'amber',dead:'red',unknown:''}[m.status]||'';
+      const ageLbl=_ppMetaAge(m.seconds_since_ingestion);
+      metaLine=
+        `<div class="pp2-meta-row">`+
+          `<span class="pp2-chip ${stCls}">● ${stLabel}${ageLbl?' · '+ageLbl:''}</span>`+
+          `<span class="pp2-chip">풀 ${m.pool_size}/${m.pool_max}</span>`+
+          `<span class="pp2-chip">&lt;${m.min_score}점 ${m.below_threshold}건 필터</span>`+
+          `<span class="pp2-chip">초안화 ${m.already_drafted}건</span>`+
+          `<span class="pp2-chip">신규 <b>${m.new_candidates}</b>건</span>`+
+        `</div>`;
+    }
+    s.innerHTML=(d.length?
       `<div class="pp2-sum-main">실시간 후보 <b>${d.length}</b>건 · 특고점수 <b class="amber">${hi}</b>건</div>`+
       `<div class="pp2-sum-sub"><span class="pp2-chip">≥28점만 노출 · 키워드 스코어링</span>${hi?`<span class="pp2-chip amber">즉시 확인 ${hi}</span>`:''}</div>`
-    :'<div class="pp2-sum-main">≥28점 신규 후보 없음 · 30초 간격 폴링</div>';
+    :'<div class="pp2-sum-main">≥28점 신규 후보 없음 · 10초 간격 폴링</div>')+metaLine;
   }
 
   const ll=document.getElementById('liveList');if(!ll)return;
@@ -2304,9 +2328,14 @@ function switchPipeView(view,btn){
 }
 async function loadLiveCandidates(){
   try{
-    const r=await fetch(API+'/control/scored-candidates?limit=30&min_score=28');
-    const d=await r.json();
+    const [r1,r2]=await Promise.all([
+      fetch(API+'/control/scored-candidates?limit=30&min_score=28'),
+      fetch(API+'/control/candidates-meta?min_score=28'),
+    ]);
+    const d=await r1.json();
+    const m=await r2.json().catch(()=>null);
     _ppCache.live=d||[];
+    _ppCache.liveMeta=m||null;
     if(_pipeView==='live'){_ppRenderLive()}
     else{const nL=document.getElementById('ppNLive');if(nL)nL.textContent=(d||[]).length}
   }catch(e){console.warn('live:',e)}
