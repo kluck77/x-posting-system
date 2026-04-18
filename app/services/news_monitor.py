@@ -203,8 +203,78 @@ def _record_alert(story_key: str):
     _alert_cooldown[story_key] = time.time()
 
 
+def _has_existing_draft(url: str, title: str) -> tuple[bool, str]:
+    """
+    이 기사와 관련된 초안이 DB 에 이미 있는지 확인.
+
+    1) 동일 URL 을 가진 SourceItem 에 Draft 가 연결돼 있으면 True
+    2) 최근 SourceItem 중 제목 story_key 가 같은 것에 Draft 가 있으면 True
+       (동일 기사의 URL 변형 — 트래킹 파라미터 등 — 대응)
+
+    Returns:
+        (True, reason)  이미 처리됨 — 알림 skip
+        (False, "")    새 기사
+
+    fail-open: DB 오류 시 False 반환 (알림 흐름 유지)
+    """
+    if not url and not title:
+        return False, ""
+    try:
+        from app.db import SessionLocal
+        from app.models.content import SourceItem, Draft
+
+        with SessionLocal() as s:
+            # (1) URL 완전 일치
+            if url:
+                hit = (
+                    s.query(Draft.id)
+                    .join(SourceItem, SourceItem.id == Draft.source_item_id)
+                    .filter(SourceItem.url == url)
+                    .first()
+                )
+                if hit:
+                    return True, "same-url"
+
+            # (2) 제목 story_key 기반 매칭 (URL 변형 방어)
+            if title:
+                target_key = _story_key(title)
+                if target_key:
+                    recent = (
+                        s.query(SourceItem.id, SourceItem.title)
+                        .order_by(SourceItem.created_at.desc())
+                        .limit(150)
+                        .all()
+                    )
+                    for src_id, src_title in recent:
+                        if not src_title:
+                            continue
+                        if _story_key(src_title) == target_key:
+                            has_draft = (
+                                s.query(Draft.id)
+                                .filter(Draft.source_item_id == src_id)
+                                .first()
+                            )
+                            if has_draft:
+                                return True, "same-story"
+        return False, ""
+    except Exception as e:
+        logger.warning(f"[draft-dedup] 체크 실패 (fail-open): {e}")
+        return False, ""
+
+
 async def _send_scored_alert(article_dict: dict, score: int, cluster: dict | None) -> None:
     """점수 기반 후보 알림. AI 비용 0."""
+    # DB dedup: 이 기사로 이미 초안이 만들어졌다면 다시 알리지 않는다
+    _url_raw = article_dict.get("url", "") or ""
+    _title_raw = article_dict.get("title", "") or ""
+    _drafted, _dedup_reason = _has_existing_draft(_url_raw, _title_raw)
+    if _drafted:
+        logger.info(
+            f"[후보알림-skip] 이미 초안 있음({_dedup_reason}): "
+            f"{_title_raw[:40]}"
+        )
+        return
+
     if not settings.has_telegram_config:
         logger.info(f"[MOCK 후보알림] [{score}점] {article_dict.get('title','')[:50]}")
         return

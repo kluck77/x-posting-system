@@ -418,6 +418,58 @@ async def get_recent_news(limit: int = 8):
         return []
 
 
+@router.get("/rejected-drafts")
+async def get_rejected_drafts(limit: int = 20):
+    """
+    최근 거절된 초안 목록을 반환합니다.
+    대시보드 "거절 이력" 섹션에서 소비 — AI 가 거절한 초안과
+    사용자가 거절한 초안을 동일 목록에 시간 역순으로 보여준다.
+
+    응답 필드:
+      id            draft id
+      title         source 제목
+      url           원문 URL (있으면)
+      body          초안 본문 미리보기 (최대 100자)
+      hook          초안 hook
+      rejected_at   거절된 시각 (updated_at)
+      fallback      resonance fallback 사용 여부 (AI 구조 실패 신호)
+    """
+    from app.db import SessionLocal
+    from app.models.content import Draft, SourceItem, ApprovalStatus
+
+    s = SessionLocal()
+    try:
+        rows = (
+            s.query(Draft, SourceItem)
+            .outerjoin(SourceItem, SourceItem.id == Draft.source_item_id)
+            .filter(Draft.approval_status == ApprovalStatus.REJECTED)
+            .order_by(Draft.updated_at.desc().nullslast(), Draft.id.desc())
+            .limit(limit)
+            .all()
+        )
+        out = []
+        for d, src in rows:
+            body = (d.body or "").strip()
+            out.append({
+                "id": d.id,
+                "title": (src.title if src else "") or "",
+                "url": (src.url if src else "") or "",
+                "hook": (d.hook or "")[:80],
+                "body": body[:100] + ("…" if len(body) > 100 else ""),
+                "rejected_at": (
+                    d.updated_at.isoformat() if d.updated_at else
+                    (d.created_at.isoformat() if d.created_at else "")
+                ),
+                "fallback": bool(getattr(d, "resonance_fallback_used", False)),
+            })
+        return out
+    except Exception as e:
+        logger.warning(f"rejected-drafts 오류: {e}")
+        return []
+    finally:
+        s.close()
+
+
 @router.get("/scored-candidates")
 async def get_scored_candidates(limit: int = 15):
     """
