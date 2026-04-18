@@ -352,6 +352,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   background:var(--bg-surface);border:1px solid var(--border-subtle);
   color:var(--text-sec);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
 .pp2-fbtn.active{background:var(--indigo-dim);border-color:var(--indigo);color:var(--indigo);font-weight:700}
+.pp2-fbtn.dim{opacity:.38;pointer-events:none}
+.pp2-fbtn-n{margin-left:5px;font-size:10px;font-weight:700;color:var(--text-mut);
+  padding:1px 6px;border-radius:10px;background:rgba(255,255,255,.08)}
+.pp2-fbtn.active .pp2-fbtn-n{color:var(--indigo);background:rgba(99,102,241,.22)}
 .pp2-fbtn:not(.active):active{background:var(--bg-raised)}
 
 /* ── Draft row v2 ── */
@@ -1493,14 +1497,26 @@ function _ppRenderFilters(){
   if(!box)return;
   if(_pipeView==='drafts'){
     const f=_ppDraftFilter;
+    const d=_ppCache.drafts||[];
+    const ct={all:d.filter(x=>x.status!=='rejected').length,pending:0,approved:0,published:0,failed:0};
+    d.forEach(x=>{if(ct.hasOwnProperty(x.status))ct[x.status]++});
     box.innerHTML=[
       ['all','전체'],['pending','대기만'],['approved','승인'],['published','발행'],['failed','실패'],
-    ].map(([v,l])=>`<button class="pp2-fbtn ${f===v?'active':''}" onclick="setPpDraftFilter('${v}',this)">${l}</button>`).join('');
+    ].map(([v,l])=>{
+      const n=ct[v]||0;const dim=(v!=='all'&&n===0)?'dim':'';
+      return`<button class="pp2-fbtn ${f===v?'active':''} ${dim}" onclick="setPpDraftFilter('${v}',this)">${l}<span class="pp2-fbtn-n">${n}</span></button>`;
+    }).join('');
   }else{
     const c=_ppLiveCat;
+    const d=_ppCache.live||[];
+    const ct={all:d.length};
+    d.forEach(x=>{const k=x.category||'기타';ct[k]=(ct[k]||0)+1});
     box.innerHTML=[
       ['all','전체'],['crypto','암호화폐'],['economy','경제'],['politics','정치'],['policy','정책'],['tech','기술'],['world','국제'],
-    ].map(([v,l])=>`<button class="pp2-fbtn ${c===v?'active':''}" onclick="setPpLiveCat('${v}',this)">${l}</button>`).join('');
+    ].map(([v,l])=>{
+      const n=ct[v]||0;const dim=(v!=='all'&&n===0)?'dim':'';
+      return`<button class="pp2-fbtn ${c===v?'active':''} ${dim}" onclick="setPpLiveCat('${v}',this)">${l}<span class="pp2-fbtn-n">${n}</span></button>`;
+    }).join('');
   }
 }
 
