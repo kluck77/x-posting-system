@@ -101,6 +101,17 @@ def _safe_premium(db) -> dict:
         counts = svc.count_by_status()
         # limit=20 로 상향 — 시트 스크롤로 전체 후보 브라우징 가능
         top = svc.get_candidates(limit=20)
+
+        def _iso_utc(dt):
+            # DB 는 naive UTC 로 저장되므로 JS 가 로컬 시각으로 오인하지 않게
+            # 명시적으로 Z 타임존을 붙인 ISO 문자열로 반환한다.
+            if not dt:
+                return None
+            from datetime import timezone as _tz
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_tz.utc)
+            return dt.isoformat()
+
         return {
             "total": sum(counts.values()),
             "status": counts,
@@ -110,6 +121,7 @@ def _safe_premium(db) -> dict:
                     "hook": (d.hook or "")[:70],
                     "status": d.premium_status or "new",
                     "score": d.monetization_score,
+                    "created_at": _iso_utc(d.created_at),
                 }
                 for d in top
             ],
