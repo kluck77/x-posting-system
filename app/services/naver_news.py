@@ -30,6 +30,22 @@ logger = logging.getLogger(__name__)
 
 NAVER_API_URL = "https://openapi.naver.com/v1/search/news.json"
 
+# SEO 스팸 도메인 차단 — 가습기·맛집·레시피 블로그가 "코인 가상화폐" 검색에
+# 키워드 스터핑으로 잡혀 들어오는 사례 다수. 정식 뉴스 도메인만 받는다.
+_BLOCKED_URL_PATTERNS: tuple[str, ...] = (
+    "blog.naver.com", "m.blog.naver.com",
+    "cafe.naver.com", "m.cafe.naver.com",
+    "post.naver.com",
+    ".tistory.com", "brunch.co.kr",
+)
+
+
+def _is_blocked_url(url: str) -> bool:
+    if not url:
+        return True
+    u = url.lower()
+    return any(p in u for p in _BLOCKED_URL_PATTERNS)
+
 # 탐지 키워드 — 한국 경제/정치/정책/크립토 속보 핵심어
 SEARCH_KEYWORDS: list[dict] = [
     {"keyword": "환율 달러",   "category": "economy"},
@@ -228,11 +244,15 @@ async def search_keyword(keyword: str, category: str, display: int = 5) -> list[
             record_call(1)
 
         articles = []
+        blocked = 0
         for item in data.get("items", []):
             title  = _strip(item.get("title", ""))
             url    = item.get("originallink") or item.get("link", "")
             summary = _strip(item.get("description", ""))
             if not title or not url:
+                continue
+            if _is_blocked_url(url):
+                blocked += 1
                 continue
             articles.append(RssArticle(
                 title=title[:300],
@@ -241,6 +261,8 @@ async def search_keyword(keyword: str, category: str, display: int = 5) -> list[
                 category=category,
                 source=f"Naver/{keyword}",
             ))
+        if blocked:
+            logger.debug(f"Naver '{keyword}': SEO 도메인 {blocked}건 제외")
         _record_keyword_fetch(keyword, articles)
         return articles
 
