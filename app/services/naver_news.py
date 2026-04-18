@@ -37,6 +37,9 @@ _BLOCKED_URL_PATTERNS: tuple[str, ...] = (
     "cafe.naver.com", "m.cafe.naver.com",
     "post.naver.com",
     ".tistory.com", "brunch.co.kr",
+    # coindeskkorea.com 은 과거 정식 크립토 매체였으나 2026 기준 SEO 팜으로 변질.
+    # Naver "코인 가상화폐" 검색에서도 이 도메인이 잡히면 안 되므로 차단.
+    "coindeskkorea.com",
 )
 
 
