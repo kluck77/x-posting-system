@@ -2083,13 +2083,13 @@ function _ppRenderLive(){
   if(_ppLiveCat!=='all')visible=visible.filter(x=>(x.category||'')===_ppLiveCat);
   if(_ppLiveSort==='score')visible.sort((a,b)=>(b.score||0)-(a.score||0));
 
-  const hi=d.filter(x=>(x.score||0)>=15).length;
+  const hi=d.filter(x=>(x.score||0)>=50).length;
   const s=document.getElementById('ppSummary');
   if(s){
     s.innerHTML=d.length?
-      `<div class="pp2-sum-main">실시간 후보 <b>${d.length}</b>건 · 고점수 <b class="amber">${hi}</b>건</div>`+
-      `<div class="pp2-sum-sub"><span class="pp2-chip">AI 비용 0 · 키워드 스코어링</span>${hi?`<span class="pp2-chip amber">즉시 확인 ${hi}</span>`:''}</div>`
-    :'<div class="pp2-sum-main">수집 대기 중 · 30초 간격 폴링</div>';
+      `<div class="pp2-sum-main">실시간 후보 <b>${d.length}</b>건 · 특고점수 <b class="amber">${hi}</b>건</div>`+
+      `<div class="pp2-sum-sub"><span class="pp2-chip">≥35점만 노출 · 키워드 스코어링</span>${hi?`<span class="pp2-chip amber">즉시 확인 ${hi}</span>`:''}</div>`
+    :'<div class="pp2-sum-main">≥35점 신규 후보 없음 · 30초 간격 폴링</div>';
   }
 
   const ll=document.getElementById('liveList');if(!ll)return;
@@ -2119,8 +2119,8 @@ function _ppRenderLive(){
     const topCat=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,2);
     const avgSc=d.length?Math.round(d.reduce((a,b)=>a+(b.score||0),0)/d.length):0;
     op.innerHTML=
-      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">평균 점수</div><div class="pp2-ops-val ${avgSc>=15?'warn':''}">${avgSc}</div><div class="pp2-ops-sub">0-100</div></div>`+
-      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">고점수</div><div class="pp2-ops-val ${hi?'warn':''}">${hi}건</div><div class="pp2-ops-sub">≥15</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">평균 점수</div><div class="pp2-ops-val ${avgSc>=45?'warn':''}">${avgSc}</div><div class="pp2-ops-sub">≥35 필터</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">특고점수</div><div class="pp2-ops-val ${hi?'warn':''}">${hi}건</div><div class="pp2-ops-sub">≥50</div></div>`+
       `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">가장 많은 카테고리</div><div class="pp2-ops-val" style="font-size:13px">${topCat[0]?_ppCatKr(topCat[0][0]):'—'}</div><div class="pp2-ops-sub">${topCat[0]?topCat[0][1]+'건':''}</div></div>`+
       `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">다음 수집</div><div class="pp2-ops-val" style="font-size:13px">30초 주기</div><div class="pp2-ops-sub">자동 폴링</div></div>`;
   }
@@ -2284,7 +2284,7 @@ function switchPipeView(view,btn){
 }
 async function loadLiveCandidates(){
   try{
-    const r=await fetch(API+'/control/scored-candidates?limit=30');
+    const r=await fetch(API+'/control/scored-candidates?limit=30&min_score=35');
     const d=await r.json();
     _ppCache.live=d||[];
     if(_pipeView==='live'){_ppRenderLive()}

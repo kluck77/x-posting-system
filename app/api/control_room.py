@@ -654,16 +654,21 @@ async def get_rejected_drafts(limit: int = 20):
 
 
 @router.get("/scored-candidates")
-async def get_scored_candidates(limit: int = 15):
+async def get_scored_candidates(limit: int = 15, min_score: int = 0):
     """
     최근 수집 기사를 키워드 점수로 정렬하여 반환합니다.
     AI 비용 없음 — 로컬 키워드 매칭만 사용.
     이미 DB에 URL이 있는 기사는 제외합니다.
+
+    min_score: 지정 시 해당 점수 이상만 반환 (대시보드 실시간 후보에서 활용).
+               min_score>0 이면 카테고리당 3건 제한을 해제해 고점수 위주로 내려준다.
     """
     try:
         from app.services.news_monitor import get_recent_items
         from app.services.morning_digest import _importance_score
-        items = get_recent_items(limit=50)
+        # 고점수 필터가 있으면 더 깊은 풀에서 뽑아야 30건이 채워진다
+        pool_size = 200 if min_score > 0 else 50
+        items = get_recent_items(limit=pool_size)
         for a in items:
             a["_score"] = _importance_score(a)
             lang = a.get("region", "KR")
@@ -689,13 +694,16 @@ async def get_scored_candidates(limit: int = 15):
             db.close()
         result = []
         cat_counts: dict[str, int] = {}
+        per_cat_cap = 9999 if min_score > 0 else 3
         for a in items:
+            if a["_score"] < min_score:
+                continue
             u = (a.get("url") or "").strip()
             if u and u in used:
                 continue
             cat = a.get("category", "기타")
             cnt = cat_counts.get(cat, 0)
-            if cnt >= 3:
+            if cnt >= per_cat_cap:
                 continue
             cat_counts[cat] = cnt + 1
             # 기사 원본 발행 시각(published_at) 우선, 없으면 수집 시각(added_at)
