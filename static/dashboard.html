@@ -461,12 +461,15 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pp2-sheet-mask.open{display:block;animation:fadeIn .2s ease-out}
 .pp2-sheet{display:none;position:fixed;left:0;right:0;bottom:0;z-index:101;
   background:var(--bg-surface);border-top-left-radius:20px;border-top-right-radius:20px;
-  max-height:82vh;overflow-y:auto;padding:6px 16px 24px;
-  padding-bottom:max(24px,env(safe-area-inset-bottom));
-  box-shadow:0 -4px 24px rgba(0,0,0,.5)}
-.pp2-sheet.open{display:block;animation:sheetIn .28s cubic-bezier(.2,.8,.2,1)}
+  max-height:85vh;overflow:hidden;padding:6px 0 0;
+  box-shadow:0 -4px 24px rgba(0,0,0,.5);
+  flex-direction:column}
+.pp2-sheet.open{display:flex;animation:sheetIn .28s cubic-bezier(.2,.8,.2,1)}
 .pp2-sheet-grab{width:36px;height:4px;border-radius:2px;background:var(--text-mut);
-  opacity:.5;margin:8px auto 12px}
+  opacity:.5;margin:8px auto 12px;flex-shrink:0}
+.pp2-sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;padding:0 16px 24px;
+  padding-bottom:max(24px,env(safe-area-inset-bottom))}
 @keyframes sheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .pp2-sh-title{font-size:15px;font-weight:700;color:var(--text-pri);line-height:1.35;margin-bottom:10px;
@@ -2233,49 +2236,122 @@ function openEvalSheet(k){
 }
 window.openEvalSheet=openEvalSheet;
 
+const _ops2B2bAudLabels={
+  supply_chain:'공급망·물류', finance:'금융·자본',
+  defense:'방산·안보', retail:'유통·리테일',
+  tech:'기술·IT', healthcare:'의료·헬스케어',
+  energy:'에너지', manufacturing:'제조',
+  consulting:'컨설팅', media:'미디어',
+  government:'공공·정부', startup:'스타트업',
+  enterprise:'엔터프라이즈', smb:'중소기업',
+};
+const _ops2B2bUseLabels={
+  briefing:'임원 브리핑', trend_report:'트렌드 리포트',
+  intel:'시장 인텔리전스', training:'사내 교육자료',
+  sales_deck:'세일즈 덱', risk_memo:'리스크 메모',
+  newsletter:'뉴스레터 소재', white_paper:'백서',
+};
+const _ops2NewsBucketLabels={
+  weekly_free:'주간 무료 레터', weekly_premium:'주간 프리미엄',
+  premium_teaser:'프리미엄 티저', daily_digest:'데일리 다이제스트',
+  breaking:'속보 뉴스레터', analysis:'심층 분석',
+  lead_magnet:'리드 자석', onboarding:'온보딩 시퀀스',
+};
+const _ops2NewsLeadLabels={
+  cta_click:'CTA 클릭', signup:'신규 구독',
+  conversion:'유료 전환', referral:'지인 추천',
+  reply:'회신 유도', share:'SNS 공유',
+};
+function _ops2Humanize(s){return (s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
+function _ops2Label(map,key){return map[key]||_ops2Humanize(key);}
+function _ops2KvRows(map,src,accent){
+  const entries=Object.entries(src||{}).sort((a,b)=>(b[1]||0)-(a[1]||0));
+  if(!entries.length)return '<div style="color:var(--text-mut);font-size:12px;padding:4px 0">데이터 없음</div>';
+  const max=Math.max(...entries.map(([,c])=>c||0),1);
+  return entries.map(([n,c])=>{
+    const pct=Math.round(((c||0)/max)*100);
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="color:var(--text-pri)">${_ops2Esc(_ops2Label(map,n))}</span>
+        <span style="color:${accent};font-weight:700;font-variant-numeric:tabular-nums">${c}</span>
+      </div>
+      <div style="height:3px;background:var(--bg-raised);border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${accent};border-radius:2px"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function openBizSheet(k){
   const d=_ops.biz||{};
   const src={premium:d.premium||{},b2b:d.b2b||{},newsletter:d.newsletter||{}}[k]||{};
   const title={premium:'프리미엄',b2b:'B2B',newsletter:'뉴스레터'}[k]||k;
   const body=document.getElementById('opsSheetBody');
-  let topHtml='<div class="pp2-sh-v" style="color:var(--text-mut)">후보 없음</div>';
-  if(k==='premium'&&(src.top||[]).length){
-    topHtml=src.top.map(t=>{
-      const st=t.status||'new';
-      const isReady=(st==='new'||st==='ready'||st==='pending'||st==='approved');
-      const isPub=(st==='published');
-      const scoreColor=t.score>=90?'var(--green)':t.score>=70?'var(--amber)':'var(--text-sec)';
-      const acts=isPub
-        ? '<span class="ops2-topa done">✓ 발행됨</span>'
-        : (isReady
-            ? `<button class="ops2-topa send" onclick="opsSendPremium(${t.id},this)">📤 텔레그램 발송</button>`
-            : `<span class="ops2-topa" style="color:var(--text-mut)">${_ops2Esc(st)}</span>`);
-      return `<div class="ops2-topi" id="ops2-topi-${t.id}">
-        <div class="ops2-topi-body">
-          <div class="ops2-topi-title">${_ops2Esc(t.hook||'—')}</div>
-          <div class="ops2-topi-meta">
-            <span class="ops2-topi-st ${st}">${_ops2Esc(st)}</span>
-            <span style="color:${scoreColor};font-weight:700">수익 ${t.score??'—'}</span>
-          </div>
-        </div>
-        <div class="ops2-topi-acts">${acts}</div>
-      </div>`;
-    }).join('');
+  let html='';
+  if(k==='premium'){
+    const top=src.top||[];
+    const st=src.status||{};
+    const statusRow=Object.keys(st).length
+      ? `<div class="pp2-sh-row"><div class="pp2-sh-k">상태</div><div class="pp2-sh-v" style="font-size:11px;color:var(--text-sec)">${Object.entries(st).map(([n,c])=>`${_ops2Esc(n)} ${c}`).join(' · ')}</div></div>`
+      : '';
+    const topHtml=top.length
+      ? top.map(t=>{
+          const s=t.status||'new';
+          const isReady=(s==='new'||s==='ready'||s==='pending'||s==='approved');
+          const isPub=(s==='published');
+          const scoreColor=t.score>=90?'var(--green)':t.score>=70?'var(--amber)':'var(--text-sec)';
+          const acts=isPub
+            ? '<span class="ops2-topa done">✓ 발행됨</span>'
+            : (isReady
+                ? `<button class="ops2-topa send" onclick="opsSendPremium(${t.id},this)">📤 텔레그램 발송</button>`
+                : `<span class="ops2-topa" style="color:var(--text-mut)">${_ops2Esc(s)}</span>`);
+          return `<div class="ops2-topi" id="ops2-topi-${t.id}">
+            <div class="ops2-topi-body">
+              <div class="ops2-topi-title">${_ops2Esc(t.hook||'—')}</div>
+              <div class="ops2-topi-meta">
+                <span class="ops2-topi-st ${s}">${_ops2Esc(s)}</span>
+                <span style="color:${scoreColor};font-weight:700">수익 ${t.score??'—'}</span>
+              </div>
+            </div>
+            <div class="ops2-topi-acts">${acts}</div>
+          </div>`;
+        }).join('')
+      : '<div style="color:var(--text-mut);font-size:12px;padding:4px 0">후보 없음</div>';
+    html=
+      `<div class="pp2-sh-title">프리미엄 후보</div>`+
+      `<div class="pp2-sh-scores"><div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.total||0}</div><div class="pp2-sh-sc-l">전체</div></div></div>`+
+      `<div class="ops2-hint">💡 수익 점수 높은 항목은 바로 텔레그램으로 발송할 수 있다</div>`+
+      statusRow+
+      `<div class="pp2-sh-row"><div class="pp2-sh-k">상위 항목</div><div class="pp2-sh-v">${topHtml}</div></div>`;
   }else if(k==='b2b'){
-    const aud=Object.entries(src.audience||{});
-    if(aud.length)topHtml=aud.slice(0,5).map(([n,c])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${_ops2Esc(n)}</span><span style="color:var(--purple);font-weight:700">${c}</span></div>`).join('');
+    const st=src.status||{};
+    const statusText=Object.keys(st).length
+      ? Object.entries(st).map(([n,c])=>`${_ops2Esc(n)} ${c}`).join(' · ')
+      : '—';
+    html=
+      `<div class="pp2-sh-title">B2B 인텔리전스</div>`+
+      `<div class="pp2-sh-scores"><div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.total||0}</div><div class="pp2-sh-sc-l">전체</div></div></div>`+
+      `<div style="color:var(--text-sec);font-size:12px;line-height:1.5;margin-bottom:10px;padding:10px;background:var(--bg-raised);border-radius:10px">기업/기관 대상 인텔리전스 콘텐츠. 타겟 오디언스와 활용처를 기준으로 분류된다.</div>`+
+      `<div class="pp2-sh-row"><div class="pp2-sh-k">상태</div><div class="pp2-sh-v" style="font-size:11px;color:var(--text-sec)">${statusText}</div></div>`+
+      `<div style="font-size:11px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin:12px 0 6px">타겟 오디언스</div>`+
+      _ops2KvRows(_ops2B2bAudLabels,src.audience,'var(--purple)')+
+      `<div style="font-size:11px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin:14px 0 6px">활용처</div>`+
+      _ops2KvRows(_ops2B2bUseLabels,src.use_case,'#60a5fa');
   }else if(k==='newsletter'){
-    const bk=Object.entries(src.bucket||{});
-    if(bk.length)topHtml=bk.map(([n,c])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${_ops2Esc(n)}</span><span style="color:var(--purple);font-weight:700">${c}</span></div>`).join('');
+    html=
+      `<div class="pp2-sh-title">뉴스레터 루틴</div>`+
+      `<div class="pp2-sh-scores">`+
+        `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.newsletter_total||0}</div><div class="pp2-sh-sc-l">뉴스레터</div></div>`+
+        `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#60a5fa">${src.lead_total||0}</div><div class="pp2-sh-sc-l">리드</div></div>`+
+      `</div>`+
+      `<div style="color:var(--text-sec);font-size:12px;line-height:1.5;margin-bottom:10px;padding:10px;background:var(--bg-raised);border-radius:10px">주간/데일리 레터와 리드 자석 자동화 현황. 버킷은 콘텐츠 유형, 리드는 전환 행동 유형이다.</div>`+
+      `<div style="font-size:11px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin:12px 0 6px">버킷별 콘텐츠</div>`+
+      _ops2KvRows(_ops2NewsBucketLabels,src.bucket,'var(--purple)')+
+      `<div style="font-size:11px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin:14px 0 6px">리드 액션</div>`+
+      _ops2KvRows(_ops2NewsLeadLabels,src.lead_types,'#60a5fa');
   }
-  const hint=k==='premium'?'<div class="ops2-hint">💡 높은 수익 점수 항목은 바로 텔레그램으로 발송할 수 있다</div>':'';
-  body.innerHTML=
-    `<div class="pp2-sh-title">${title}</div>`+
-    `<div class="pp2-sh-scores">`+
-      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.total||src.newsletter_total||0}</div><div class="pp2-sh-sc-l">전체</div></div>`+
-    `</div>`+
-    hint+
-    `<div class="pp2-sh-row"><div class="pp2-sh-k">상위 항목</div><div class="pp2-sh-v">${topHtml}</div></div>`;
+  body.innerHTML=html;
+  body.dataset.sheet='biz:'+k;
   openOpsSheet();
 }
 window.openBizSheet=openBizSheet;
@@ -2287,7 +2363,15 @@ async function opsSendPremium(id,btn){
     const d=await r.json();
     if(d.success){
       btn.textContent='✓ 전송됨';btn.classList.remove('loading');btn.classList.add('done');
-      setTimeout(()=>{loadBiz();loadFlowTrace()},1200);
+      const row=document.getElementById('ops2-topi-'+id);
+      if(row){
+        const meta=row.querySelector('.ops2-topi-st');
+        if(meta){meta.className='ops2-topi-st published';meta.textContent='published';}
+      }
+      await loadBiz();
+      loadFlowTrace();
+      const body=document.getElementById('opsSheetBody');
+      if(body&&body.dataset.sheet==='biz:premium'){openBizSheet('premium');}
     }else{
       btn.textContent='실패';btn.classList.remove('loading');btn.classList.add('fail');btn.disabled=false;
       setTimeout(()=>{btn.textContent='📤 재시도';btn.classList.remove('fail')},2000);
