@@ -150,7 +150,7 @@ async def get_approved_drafts():
 
 @app.get("/drafts/failed")
 async def get_failed_drafts():
-    """게시 실패한 초안 목록"""
+    """승인 처리 중 실패(가드 차단 등)로 FAILED 상태가 된 초안 목록"""
     db = get_db()
     try:
         service = DraftService(db)
@@ -201,7 +201,7 @@ async def get_draft_detail(draft_id: int):
 
 @app.post("/drafts/{draft_id}/approve")
 async def approve_draft(draft_id: int):
-    """초안을 수동으로 승인하고 X에 게시합니다."""
+    """초안을 승인 처리합니다. 게시용 본문을 응답으로 반환하며, 실제 X 게시는 수동으로 진행합니다."""
     orchestrator = Orchestrator()
     try:
         result = await orchestrator.handle_approval(draft_id, "approve")
@@ -223,7 +223,7 @@ async def reject_draft(draft_id: int):
 
 @app.post("/drafts/{draft_id}/retry")
 async def retry_draft(draft_id: int):
-    """실패한 게시를 재시도합니다."""
+    """FAILED 상태 초안을 APPROVED 로 되돌려 승인 플로우를 다시 실행합니다. 성공 시 수동 게시용 본문을 반환합니다."""
     orchestrator = Orchestrator()
     try:
         result = await orchestrator.retry_failed(draft_id)
