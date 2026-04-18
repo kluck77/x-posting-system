@@ -543,6 +543,146 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   padding:3px 0;font-size:var(--fs-body);color:var(--text-sec)}
 .ops-q-row span:last-child{font-weight:600;color:var(--text-pri);font-family:var(--mono);font-size:11px}
 
+/* ═════════ OPS v2 (감사판 + 상태판 + 행동 패널) ═════════ */
+/* 1) 상태 strip */
+.ops2-status{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;
+  background:var(--bg-surface);border-radius:var(--r-md);padding:10px 12px;
+  border:1px solid var(--border-subtle)}
+.ops2-pill{display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px 4px 8px;border-radius:12px;background:var(--bg-raised);
+  border:1px solid rgba(255,255,255,.08);
+  font-size:11px;color:var(--text-sec);font-weight:600;white-space:nowrap}
+.ops2-pill.ok{background:rgba(52,199,89,.14);border-color:rgba(52,199,89,.3);color:var(--green)}
+.ops2-pill.warn{background:rgba(255,176,32,.14);border-color:rgba(255,176,32,.3);color:var(--amber)}
+.ops2-pill.bad{background:rgba(255,82,82,.14);border-color:rgba(255,82,82,.34);color:var(--red)}
+.ops2-pill .ops2-dot{width:7px;height:7px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 0 2px rgba(0,0,0,.15)}
+.ops2-pill.bad .ops2-dot{animation:ops2pulse 1.6s ease-in-out infinite}
+@keyframes ops2pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.86)}}
+.ops2-pill b{font-weight:800;color:currentColor}
+.ops2-sync{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  margin:0 2px 14px;font-size:10.5px;color:var(--text-mut);font-family:var(--mono)}
+.ops2-sync b{color:var(--text-sec);font-weight:600}
+
+/* 2) 평가 저장소 */
+.ops2-eval{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+.ops2-ec{position:relative;background:var(--bg-surface);border-radius:var(--r-md);
+  padding:12px 12px 11px;border:1px solid var(--border-subtle);
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:background .15s,border-color .15s,transform .12s}
+.ops2-ec:active{transform:scale(.985);background:var(--bg-raised)}
+.ops2-ec.has{border-color:rgba(99,102,241,.38)}
+.ops2-ec.zero{opacity:.82}
+.ops2-ec::after{content:'›';position:absolute;top:9px;right:11px;font-size:14px;color:var(--text-mut);line-height:1}
+.ops2-ec-top{display:flex;align-items:baseline;gap:6px}
+.ops2-ec-n{font-size:24px;font-weight:800;line-height:1;color:var(--text-pri);
+  font-variant-numeric:tabular-nums}
+.ops2-ec.zero .ops2-ec-n{color:var(--text-mut)}
+.ops2-ec-unit{font-size:11px;color:var(--text-mut);font-weight:600}
+.ops2-ec-lbl{font-size:12px;color:var(--text-sec);font-weight:600;margin-top:6px}
+.ops2-ec-desc{font-size:10px;color:var(--text-mut);margin-top:2px;letter-spacing:.2px}
+
+/* 3) 비즈니스 */
+.ops2-biz{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}
+.ops2-bc{position:relative;background:linear-gradient(160deg,rgba(167,139,250,.08),var(--bg-surface) 60%);
+  border-radius:var(--r-md);padding:12px 10px 11px;
+  border:1px solid rgba(167,139,250,.22);
+  cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s}
+.ops2-bc:active{transform:scale(.985)}
+.ops2-bc::after{content:'›';position:absolute;top:8px;right:9px;font-size:13px;color:rgba(167,139,250,.6);line-height:1}
+.ops2-bc-n{font-size:22px;font-weight:800;line-height:1;color:#a78bfa;
+  font-variant-numeric:tabular-nums}
+.ops2-bc-lbl{font-size:11px;color:var(--text-sec);font-weight:700;margin-top:6px;
+  text-transform:uppercase;letter-spacing:.4px}
+.ops2-bc-sub{font-size:10px;color:var(--text-mut);margin-top:3px}
+
+/* 4) 큐 상태 */
+.ops2-queue{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;
+  background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--r-md);
+  padding:10px 12px}
+.ops2-qc{display:flex;flex-direction:column;gap:3px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ops2-qc:active{opacity:.7}
+.ops2-qc .ops2-qc-n{font-size:18px;font-weight:800;line-height:1;
+  color:var(--text-pri);font-variant-numeric:tabular-nums}
+.ops2-qc.warn .ops2-qc-n{color:var(--amber)}
+.ops2-qc.ok .ops2-qc-n{color:var(--green)}
+.ops2-qc .ops2-qc-lbl{font-size:10.5px;color:var(--text-mut);font-weight:600;
+  text-transform:uppercase;letter-spacing:.4px}
+.ops2-qc .ops2-qc-sub{font-size:10px;color:var(--text-sec);margin-top:1px}
+
+/* 5) 거절 이력 (compact feed) */
+.ops2-rejc{font-size:10px;color:var(--text-mut);font-weight:500;
+  margin-left:6px;letter-spacing:0;text-transform:none}
+.ops2-rej{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.ops2-rr{display:block;padding:8px 10px;border-radius:var(--r-md);
+  background:var(--bg-surface);border-left:2px solid var(--text-mut);
+  text-decoration:none;color:inherit;
+  -webkit-tap-highlight-color:transparent;transition:background .15s}
+.ops2-rr.ai{border-left-color:var(--amber)}
+.ops2-rr.user{border-left-color:rgba(255,255,255,.24)}
+.ops2-rr:active{background:var(--bg-raised)}
+.ops2-rr-t{font-size:12.5px;font-weight:600;color:var(--text-pri);line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ops2-rr-m{display:flex;gap:8px;align-items:center;margin-top:4px;
+  font-size:10px;color:var(--text-mut);font-family:var(--mono);flex-wrap:wrap}
+.ops2-rr-chip{font-size:9.5px;font-weight:700;padding:1.5px 6px;border-radius:8px;
+  background:var(--bg-raised);color:var(--text-sec);letter-spacing:.3px;text-transform:uppercase;
+  font-family:inherit}
+.ops2-rr-chip.ai{background:var(--amber-dim);color:var(--amber)}
+.ops2-rr-chip.user{background:rgba(255,255,255,.08);color:var(--text-sec)}
+
+/* 6) 오늘 API 호출 */
+.ops2-api{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.ops2-ac{background:var(--bg-surface);border-radius:var(--r-md);
+  padding:9px 11px;border:1px solid var(--border-subtle);
+  display:flex;align-items:center;gap:10px}
+.ops2-ac.off{opacity:.55}
+.ops2-ac-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ops2-ac-dot.openai{background:#10b981}.ops2-ac-dot.anthropic{background:#a78bfa}
+.ops2-ac-dot.gemini{background:#60a5fa}.ops2-ac-dot.grok{background:#e5e7eb}
+.ops2-ac-dot.perplexity{background:#fb923c}
+.ops2-ac-name{font-size:11px;font-weight:700;color:var(--text-pri);letter-spacing:.2px;
+  text-transform:capitalize}
+.ops2-ac-calls{flex:1;text-align:right;font-family:var(--mono);
+  font-size:12px;font-weight:700;color:var(--text-sec)}
+.ops2-ac.on .ops2-ac-calls{color:var(--text-pri)}
+
+/* 최근 운영 활동 */
+.ops2-act{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.ops2-al{display:flex;align-items:center;gap:8px;padding:7px 10px;
+  background:var(--bg-surface);border-radius:var(--r-md);
+  border-left:2px solid var(--indigo);
+  animation:ops2In .22s ease-out both}
+.ops2-al.pub{border-left-color:var(--green)}
+.ops2-al.rej{border-left-color:var(--amber)}
+.ops2-al.fail{border-left-color:var(--red)}
+@keyframes ops2In{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.ops2-al-t{font-size:10px;font-family:var(--mono);color:var(--text-mut);
+  width:36px;flex-shrink:0}
+.ops2-al-a{font-size:10.5px;font-weight:700;color:var(--text-sec);
+  flex-shrink:0;letter-spacing:.3px;text-transform:uppercase}
+.ops2-al-a.pub{color:var(--green)}.ops2-al-a.rej{color:var(--amber)}
+.ops2-al-a.fail{color:var(--red)}
+.ops2-al-title{flex:1;font-size:12px;color:var(--text-pri);line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 구성 상태 */
+.ops2-cfg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.ops2-cf{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 11px;background:var(--bg-surface);border-radius:var(--r-md);
+  border:1px solid var(--border-subtle)}
+.ops2-cf-k{font-size:10.5px;color:var(--text-mut);font-weight:600;
+  text-transform:uppercase;letter-spacing:.4px}
+.ops2-cf-v{font-size:12px;font-weight:700;color:var(--text-pri);font-family:var(--mono)}
+.ops2-cf-v.live{color:var(--green)}
+.ops2-cf-v.mock{color:var(--amber)}
+
+/* Sheet reuse: ops uses same bottom-sheet as pipeline */
+@media (prefers-reduced-motion:reduce){
+  .ops2-pill.bad .ops2-dot,.ops2-al{animation:none!important}
+}
+
 /* ── OPS: REJECTED LOG ── */
 .rej-list{display:flex;flex-direction:column;gap:5px}
 .rej-row{display:block;padding:9px 10px;border-radius:var(--r-md);
@@ -995,31 +1135,45 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ OPS TAB ═══ -->
 <section class="tab-pane" id="tab-ops">
-  <div class="sec-head first">시스템 상태</div>
-  <div class="ops-health" id="opsHealth"></div>
+  <!-- 1) 시스템 상태 strip -->
+  <div class="ops2-status" id="ops2Status"></div>
+  <div class="ops2-sync" id="ops2Sync"></div>
 
-  <div class="sec-head">평가 저장소</div>
-  <div class="ops-grid">
-    <div class="ops-item"><div class="ops-val" id="opsEvalMeta">—</div><div class="ops-label">메타 평가</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsGold">—</div><div class="ops-label">골드 평가</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsPairwise">—</div><div class="ops-label">쌍대 비교</div></div>
-    <div class="ops-item"><div class="ops-val" id="opsLearning">—</div><div class="ops-label">학습 기록</div></div>
-  </div>
+  <!-- 2) 평가 저장소 -->
+  <div class="sec-head first">평가 저장소</div>
+  <div class="ops2-eval" id="ops2Eval"></div>
 
+  <!-- 3) 비즈니스 -->
   <div class="sec-head">비즈니스</div>
-  <div class="biz-grid" id="bizSummary"></div>
+  <div class="ops2-biz" id="ops2Biz"></div>
 
+  <!-- 4) 큐 상태 -->
   <div class="sec-head">큐 상태</div>
-  <div class="ops-q" id="queueStatus">
-    <div class="empty-sm">로딩 중</div>
-  </div>
+  <div class="ops2-queue" id="ops2Queue"></div>
 
-  <div class="sec-head">거절 이력</div>
-  <div class="rej-list" id="rejectedList">
-    <div class="empty-sm">로딩 중</div>
-  </div>
+  <!-- 5) 거절 이력 -->
+  <div class="sec-head">거절 이력 <span class="ops2-rejc" id="ops2RejC"></span></div>
+  <div class="ops2-rej" id="ops2Rej"><div class="empty-sm">로딩 중</div></div>
+
+  <!-- 6) 빈 공간: API 호출 / 운영 액션 / 구성 상태 -->
+  <div class="sec-head">오늘 API 호출</div>
+  <div class="ops2-api" id="ops2Api"></div>
+
+  <div class="sec-head">최근 운영 활동</div>
+  <div class="ops2-act" id="ops2Act"><div class="empty-sm">로딩 중</div></div>
+
+  <div class="sec-head">구성 상태</div>
+  <div class="ops2-cfg" id="ops2Cfg"></div>
+
   <div class="tab-footer" id="opsFooter"></div>
 </section>
+
+<!-- Ops drill-down bottom sheet -->
+<div class="pp2-sheet-mask" id="opsSheetMask" onclick="closeOpsSheet()"></div>
+<div class="pp2-sheet" id="opsSheet">
+  <div class="pp2-sheet-grab"></div>
+  <div class="pp2-sheet-body" id="opsSheetBody"></div>
+</div>
 
 </div><!-- /main -->
 
@@ -1075,15 +1229,11 @@ async function loadStatus(){
     const hs=document.getElementById('headerSync');
     if(hs)hs.textContent='sync '+(d.generated_at_kst||'').substring(11,16);
 
-    // queue + activity → ops
+    // queue + activity → Ops v2
     const q=d.queue||{};
     const a=d.activity||{};
-    const idleC=a.is_idle?'var(--amber)':'var(--green)';
-    const idleT=a.is_idle?`유휴 ${a.hours_idle||0}h`:'활성';
-    document.getElementById('queueStatus').innerHTML=
-      `<div class="ops-q-row"><span>Post 대기</span><span>${q.pending_count||0}</span></div>`+
-      `<div class="ops-q-row"><span>Post 전체</span><span>${q.total_count||0}</span></div>`+
-      `<div class="ops-q-row"><span>활동</span><span style="color:${idleC}">${idleT}</span></div>`;
+    _ops.status=d;
+    _ops2RenderQueue(q,a);
     if(a.is_idle)document.getElementById('syncTime').style.color='var(--amber)';
 
     // news monitor
@@ -1123,17 +1273,9 @@ async function loadStatus(){
       opf.textContent=`${uptime} · 모니터 클러스터 ${n.story_clusters||0}개 · 알림 발송 ${n.alerted_stories||0}건`;
     }
 
-    // ops health panel
-    const oh=document.getElementById('opsHealth');
-    if(oh){
-      oh.innerHTML=[
-        {l:'DB',ok:h.db_ok},{l:'TG',ok:h.telegram_configured},
-        {l:'Mock',ok:!h.mock_mode,t:h.mock_mode?'ON':'OFF'},
-        {l:'버퍼',ok:true,t:(n.overnight_buffer||0)},
-        {l:'클러스터',ok:true,t:n.story_clusters||0},
-        {l:'알림',ok:true,t:n.alerted_stories||0},
-      ].map(i=>`<div class="ops-h-item"><span class="prov-led ${i.ok?'on':'off'}"></span>${i.l}${i.t!==undefined?' '+i.t:''}</div>`).join('');
-    }
+    // Ops v2: 시스템 상태 strip + 구성
+    _ops2RenderStatus(h,n,d);
+    _ops2RenderCfg(h,n);
   }catch(e){console.warn('status:',e)}
 }
 
@@ -1155,18 +1297,9 @@ async function loadEditorial(){
     setScore('avgPost',ap);setScore('avgTrust',at);
     const ec=document.getElementById('evalCount');if(ec)ec.textContent=d.recent_eval_count||0;
 
-    // eval counts → ops
-    const evc=d.eval_counts||{};
-    document.getElementById('opsEvalMeta').textContent=evc.eval_meta||0;
-    document.getElementById('opsGold').textContent=evc.gold_eval||0;
-    document.getElementById('opsPairwise').textContent=evc.pairwise_review||0;
-    document.getElementById('opsLearning').textContent=evc.learning_record||0;
-    ['opsEvalMeta','opsGold','opsPairwise','opsLearning'].forEach(id=>{
-      const el=document.getElementById(id);if(!el)return;
-      const v=parseInt(el.textContent)||0;
-      el.style.color=v?'var(--text-pri)':'var(--text-mut)';
-      el.closest('.ops-item')?.classList.toggle('has-data',v>0);
-    });
+    // eval counts → Ops v2
+    _ops.editorial=d;
+    _ops2RenderEval(d.eval_counts||{},d.recent_eval_count||0,d.avg_postability||0,d.avg_trust||0);
 
     // immediate items → alerts
     const items=d.immediate_items||[];
@@ -1872,11 +2005,8 @@ async function loadBiz(){
   try{
     const r=await fetch(API+'/control/business-summary');
     const d=await r.json();
-    const p=d.premium||{};const b=d.b2b||{};const n=d.newsletter||{};
-    document.getElementById('bizSummary').innerHTML=
-      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${p.total||0}</div><div class="biz-lbl">프리미엄</div></div>`+
-      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${b.total||0}</div><div class="biz-lbl">B2B</div></div>`+
-      `<div class="biz-cell"><div class="biz-num" style="color:var(--purple)">${n.newsletter_total||0}</div><div class="biz-lbl">뉴스레터</div></div>`;
+    _ops.biz=d;
+    _ops2RenderBiz(d);
   }catch(e){console.warn('biz:',e)}
 }
 
@@ -1884,26 +2014,246 @@ async function loadRejected(){
   try{
     const r=await fetch(API+'/control/rejected-drafts?limit=15');
     const d=await r.json();
-    const el=document.getElementById('rejectedList');
-    if(!el)return;
-    if(!d.length){el.innerHTML='<div class="empty-sm">거절 이력 없음</div>';return}
-    el.innerHTML=d.map(x=>{
-      const t=_feedEsc(x.title||x.hook||'—');
-      const url=x.url||'';
-      const tag=url?'a':'div';
-      const attrs=url?` href="${_feedEsc(url)}" target="_blank" rel="noopener noreferrer"`:'';
-      const fb=x.fallback?'has-fallback':'';
-      const reason=x.fallback
-        ? '<span class="rej-reason ai">AI 구조 실패</span>'
-        : '<span class="rej-reason user">사용자 거절</span>';
-      const when=(x.rejected_at||'').replace('T',' ').substring(5,16);
-      return `<${tag} class="rej-row ${fb}"${attrs}>
-        <div class="rej-title">${t}</div>
-        <div class="rej-meta">${reason}<span>${_feedEsc(when)}</span></div>
-      </${tag}>`;
-    }).join('');
+    _ops.rejected=d||[];
+    _ops2RenderRejected(_ops.rejected);
   }catch(e){console.warn('rejected:',e)}
 }
+async function loadOpsExtras(){
+  try{
+    const r=await fetch(API+'/control/providers');
+    const d=await r.json();
+    _ops.providers=d||{};
+    _ops2RenderApi(d.provider_health||[]);
+    _ops2RenderAct(d.activity||[]);
+  }catch(e){console.warn('ops extras:',e)}
+}
+
+/* ═════════ OPS v2 RENDERERS ═════════ */
+let _ops={status:null,editorial:null,biz:null,rejected:[],providers:null};
+
+function _ops2Esc(s){return String(s||'').replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c]))}
+
+function _ops2RenderStatus(h,n,d){
+  const el=document.getElementById('ops2Status');if(!el)return;
+  const pills=[];
+  pills.push({l:'DB',ok:h.db_ok,t:h.db_ok?'연결':'끊김',lvl:h.db_ok?'ok':'bad'});
+  pills.push({l:'Telegram',ok:h.telegram_configured,t:h.telegram_configured?'연결':'미설정',lvl:h.telegram_configured?'ok':'bad'});
+  pills.push({l:'X',ok:h.x_configured,t:h.x_configured?'연결':'미설정',lvl:h.x_configured?'ok':'warn'});
+  pills.push({l:'모드',ok:!h.mock_mode,t:h.mock_mode?'MOCK':'LIVE',lvl:h.mock_mode?'warn':'ok'});
+  pills.push({l:'버퍼',ok:true,t:(n.overnight_buffer||0)+'건',lvl:'ok'});
+  pills.push({l:'클러스터',ok:true,t:(n.story_clusters||0)+'개',lvl:(n.story_clusters||0)?'ok':''});
+  pills.push({l:'알림',ok:true,t:(n.alerted_stories||0)+'건',lvl:(n.alerted_stories||0)?'ok':''});
+  el.innerHTML=pills.map(p=>`<span class="ops2-pill ${p.lvl||''}"><span class="ops2-dot"></span>${p.l} <b>${p.t}</b></span>`).join('');
+
+  const sync=document.getElementById('ops2Sync');
+  if(sync){
+    const a=d.activity||{};
+    const idleT=a.is_idle?`유휴 ${a.hours_idle||0}h`:'활성';
+    const last=a.last_activity_kst||'—';
+    sync.innerHTML=`<span>sync <b>${_ops2Esc((d.generated_at_kst||'').substring(11,16)||'—')}</b></span>`+
+      `<span>마지막 활동 <b>${_ops2Esc(last)}</b> · ${idleT}</span>`;
+  }
+}
+
+function _ops2RenderEval(ec,recentN,avgPost,avgTrust){
+  const el=document.getElementById('ops2Eval');if(!el)return;
+  const cards=[
+    {k:'eval_meta',l:'메타 평가',d:'최근 초안 편집 채점',v:ec.eval_meta||0,unit:'건'},
+    {k:'gold_eval',l:'골드 평가',d:'수동 검증 샘플',v:ec.gold_eval||0,unit:'건'},
+    {k:'pairwise_review',l:'쌍대 비교',d:'두 초안 중 우위 선택',v:ec.pairwise_review||0,unit:'건'},
+    {k:'learning_record',l:'학습 기록',d:'편집 이력 학습 소스',v:ec.learning_record||0,unit:'건'},
+  ];
+  el.innerHTML=cards.map(c=>{
+    const has=c.v>0;
+    return `<div class="ops2-ec ${has?'has':'zero'}" onclick="openEvalSheet('${c.k}')">
+      <div class="ops2-ec-top"><span class="ops2-ec-n">${c.v}</span><span class="ops2-ec-unit">${c.unit}</span></div>
+      <div class="ops2-ec-lbl">${c.l}</div>
+      <div class="ops2-ec-desc">${c.d}</div>
+    </div>`;
+  }).join('');
+  _ops._evalMeta={recent:recentN,avgPost,avgTrust};
+}
+
+function _ops2RenderBiz(d){
+  const el=document.getElementById('ops2Biz');if(!el)return;
+  const p=d.premium||{},b=d.b2b||{},n=d.newsletter||{};
+  const cells=[
+    {k:'premium',l:'프리미엄',n:p.total||0,sub:`top ${(p.top||[]).length}건`},
+    {k:'b2b',l:'B2B',n:b.total||0,sub:Object.keys(b.audience||{}).length?`${Object.keys(b.audience).length} 청중`:'후보 없음'},
+    {k:'newsletter',l:'뉴스레터',n:n.newsletter_total||0,sub:n.lead_total?`리드 ${n.lead_total}건`:'리드 0건'},
+  ];
+  el.innerHTML=cells.map(c=>`<div class="ops2-bc" onclick="openBizSheet('${c.k}')">
+    <div class="ops2-bc-n">${c.n}</div>
+    <div class="ops2-bc-lbl">${c.l}</div>
+    <div class="ops2-bc-sub">${c.sub}</div>
+  </div>`).join('');
+}
+
+function _ops2RenderQueue(q,a){
+  const el=document.getElementById('ops2Queue');if(!el)return;
+  const pending=q.pending_count||0,total=q.total_count||0;
+  const idle=a.is_idle,idleH=a.hours_idle||0;
+  const actCls=idle?'warn':'ok';
+  const actL=idle?`${idleH}h 유휴`:'활성';
+  el.innerHTML=
+    `<div class="ops2-qc ${pending?'warn':''}" onclick="openQueueSheet()">
+      <div class="ops2-qc-n">${pending}</div><div class="ops2-qc-lbl">대기</div><div class="ops2-qc-sub">발행 예약</div></div>`+
+    `<div class="ops2-qc" onclick="openQueueSheet()">
+      <div class="ops2-qc-n">${total}</div><div class="ops2-qc-lbl">전체</div><div class="ops2-qc-sub">오늘 큐</div></div>`+
+    `<div class="ops2-qc ${actCls}" onclick="openQueueSheet()">
+      <div class="ops2-qc-n" style="font-size:14px">${actL}</div><div class="ops2-qc-lbl">활동</div>
+      <div class="ops2-qc-sub">${a.last_activity_kst||'—'}</div></div>`;
+}
+
+function _ops2RenderRejected(d){
+  const el=document.getElementById('ops2Rej');const c=document.getElementById('ops2RejC');
+  if(c)c.textContent=d.length?`· ${d.length}건`:'';
+  if(!el)return;
+  if(!d.length){el.innerHTML='<div class="empty-sm">거절 이력 없음</div>';return}
+  el.innerHTML=d.map((x,i)=>{
+    const t=_ops2Esc(x.title||x.hook||'—');
+    const url=x.url||'';
+    const ai=!!x.fallback;
+    const cls=ai?'ai':'user';
+    const reason=ai?'AI 구조 실패':'사용자 거절';
+    const when=(x.rejected_at||'').replace('T',' ').substring(5,16);
+    const tag=url?'a':'div';
+    const attrs=url?` href="${_ops2Esc(url)}" target="_blank" rel="noopener noreferrer"`:'';
+    return `<${tag} class="ops2-rr ${cls}"${attrs} style="animation:ops2In .2s ease-out ${i*20}ms both">
+      <div class="ops2-rr-t">${t}</div>
+      <div class="ops2-rr-m">
+        <span class="ops2-rr-chip ${cls}">${reason}</span>
+        <span>${_ops2Esc(when)}</span>
+        ${url?'<span style="color:var(--indigo)">원문 ›</span>':''}
+      </div>
+    </${tag}>`;
+  }).join('');
+}
+
+function _ops2RenderApi(health){
+  const el=document.getElementById('ops2Api');if(!el)return;
+  if(!health.length){el.innerHTML='<div class="empty-sm">프로바이더 정보 없음</div>';return}
+  const order=['openai','anthropic','gemini','grok','perplexity'];
+  const byName={};health.forEach(p=>{byName[p.name]=p});
+  el.innerHTML=order.filter(n=>byName[n]).map(n=>{
+    const p=byName[n];
+    const on=!!p.configured;
+    const calls=p.calls_today||0;
+    return `<div class="ops2-ac ${on?'on':'off'}">
+      <span class="ops2-ac-dot ${n}"></span>
+      <span class="ops2-ac-name">${n}</span>
+      <span class="ops2-ac-calls">${on?(calls+'회'):'미설정'}</span>
+    </div>`;
+  }).join('');
+}
+
+function _ops2RenderAct(activity){
+  const el=document.getElementById('ops2Act');if(!el)return;
+  if(!activity.length){el.innerHTML='<div class="empty-sm">최근 활동 없음</div>';return}
+  const mapA={pending:{a:'초안',c:''},approved:{a:'승인',c:'pub'},
+              published:{a:'발행',c:'pub'},rejected:{a:'거절',c:'rej'},failed:{a:'실패',c:'fail'}};
+  el.innerHTML=activity.slice(0,6).map((x,i)=>{
+    const s=x.status||'pending';
+    const m=mapA[s]||{a:s,c:''};
+    const title=_ops2Esc(x.title||x.action||'—');
+    return `<div class="ops2-al ${m.c}" style="animation-delay:${i*30}ms">
+      <span class="ops2-al-t">${_ops2Esc(x.time||'')}</span>
+      <span class="ops2-al-a ${m.c}">${m.a}</span>
+      <span class="ops2-al-title">${title}</span>
+    </div>`;
+  }).join('');
+}
+
+function _ops2RenderCfg(h,n){
+  const el=document.getElementById('ops2Cfg');if(!el)return;
+  const mode=h.mock_mode?'MOCK':'LIVE';
+  const modeCls=h.mock_mode?'mock':'live';
+  el.innerHTML=
+    `<div class="ops2-cf"><span class="ops2-cf-k">Mode</span><span class="ops2-cf-v ${modeCls}">${mode}</span></div>`+
+    `<div class="ops2-cf"><span class="ops2-cf-k">Alert threshold</span><span class="ops2-cf-v">score ≥ 15</span></div>`+
+    `<div class="ops2-cf"><span class="ops2-cf-k">Digest top N</span><span class="ops2-cf-v">10</span></div>`+
+    `<div class="ops2-cf"><span class="ops2-cf-k">야간 버퍼</span><span class="ops2-cf-v">${n.overnight_buffer||0}건</span></div>`;
+}
+
+/* ── Ops drill-down bottom sheet ── */
+function openOpsSheet(){document.getElementById('opsSheetMask').classList.add('open');document.getElementById('opsSheet').classList.add('open')}
+function closeOpsSheet(){document.getElementById('opsSheetMask').classList.remove('open');document.getElementById('opsSheet').classList.remove('open')}
+window.closeOpsSheet=closeOpsSheet;
+
+function openEvalSheet(k){
+  const ec=(_ops.editorial&&_ops.editorial.eval_counts)||{};
+  const m=_ops._evalMeta||{recent:0,avgPost:0,avgTrust:0};
+  const info={
+    eval_meta:{t:'메타 평가',d:'AI 편집기가 초안을 postability/trust 기준으로 자동 채점한 기록.',use:'각 초안이 발행 가능한 품질인지 판단.'},
+    gold_eval:{t:'골드 평가',d:'사용자가 수동으로 검증한 레퍼런스 초안.',use:'학습용 정답 샘플 — 낮을수록 모델 개선 근거 부족.'},
+    pairwise_review:{t:'쌍대 비교',d:'두 초안 중 어느 쪽이 나은지 사용자가 선택한 기록.',use:'훅/본문 스타일 선호도 학습.'},
+    learning_record:{t:'학습 기록',d:'편집자 피드백 + 원본 변경점 누적.',use:'향후 fine-tune 또는 rule 개선 소스.'},
+  }[k]||{t:k,d:'',use:''};
+  const body=document.getElementById('opsSheetBody');
+  body.innerHTML=
+    `<div class="pp2-sh-title">${info.t}</div>`+
+    `<div class="pp2-sh-scores">`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--indigo)">${ec[k]||0}</div><div class="pp2-sh-sc-l">총 건수</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--green)">${m.avgPost||'—'}</div><div class="pp2-sh-sc-l">평균 Post</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#60a5fa">${m.avgTrust||'—'}</div><div class="pp2-sh-sc-l">평균 Trust</div></div>`+
+    `</div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">설명</div><div class="pp2-sh-v">${info.d}</div></div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">용도</div><div class="pp2-sh-v">${info.use}</div></div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">최근 샘플</div><div class="pp2-sh-v">${m.recent||0}건 (최근 20 기준)</div></div>`;
+  openOpsSheet();
+}
+window.openEvalSheet=openEvalSheet;
+
+function openBizSheet(k){
+  const d=_ops.biz||{};
+  const src={premium:d.premium||{},b2b:d.b2b||{},newsletter:d.newsletter||{}}[k]||{};
+  const title={premium:'프리미엄',b2b:'B2B',newsletter:'뉴스레터'}[k]||k;
+  const body=document.getElementById('opsSheetBody');
+  let topHtml='<div class="pp2-sh-v" style="color:var(--text-mut)">후보 없음</div>';
+  if(k==='premium'&&(src.top||[]).length){
+    topHtml=src.top.map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">
+      <div style="font-size:13px;color:var(--text-pri);line-height:1.35">${_ops2Esc(t.hook||'—')}</div>
+      <div style="font-size:10px;color:var(--text-mut);margin-top:3px;font-family:var(--mono)">
+        ${_ops2Esc(t.status||'—')} · 수익 ${t.score??'—'}</div>
+    </div>`).join('');
+  }else if(k==='b2b'){
+    const aud=Object.entries(src.audience||{});
+    if(aud.length)topHtml=aud.slice(0,5).map(([n,c])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${_ops2Esc(n)}</span><span style="color:var(--purple);font-weight:700">${c}</span></div>`).join('');
+  }else if(k==='newsletter'){
+    const bk=Object.entries(src.bucket||{});
+    if(bk.length)topHtml=bk.map(([n,c])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${_ops2Esc(n)}</span><span style="color:var(--purple);font-weight:700">${c}</span></div>`).join('');
+  }
+  body.innerHTML=
+    `<div class="pp2-sh-title">${title}</div>`+
+    `<div class="pp2-sh-scores">`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.total||src.newsletter_total||0}</div><div class="pp2-sh-sc-l">전체</div></div>`+
+    `</div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">상위 항목</div><div class="pp2-sh-v">${topHtml}</div></div>`;
+  openOpsSheet();
+}
+window.openBizSheet=openBizSheet;
+
+function openQueueSheet(){
+  const q=(_ops.status&&_ops.status.queue)||{};
+  const items=q.pending_items||[];
+  const body=document.getElementById('opsSheetBody');
+  const list=items.length
+    ?items.map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--border-subtle)">
+      <div style="font-size:12.5px;color:var(--text-pri);line-height:1.35">${_ops2Esc(p.text||'—')}</div>
+      <div style="font-size:10px;color:var(--text-mut);margin-top:3px;font-family:var(--mono)">
+        ${_ops2Esc((p.added_at||'').replace('T',' ').substring(5,16))}${p.notified?' · 알림 발송':' · 대기'}</div>
+    </div>`).join('')
+    :'<div class="pp2-sh-v" style="color:var(--text-mut)">대기 항목 없음</div>';
+  body.innerHTML=
+    `<div class="pp2-sh-title">발행 큐</div>`+
+    `<div class="pp2-sh-scores">`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--amber)">${q.pending_count||0}</div><div class="pp2-sh-sc-l">대기</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--text-pri)">${q.total_count||0}</div><div class="pp2-sh-sc-l">전체</div></div>`+
+    `</div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">최근 대기</div><div class="pp2-sh-v">${list}</div></div>`;
+  openOpsSheet();
+}
+window.openQueueSheet=openQueueSheet;
 
 // ── HELPERS ──
 function setLed(id,ok){
@@ -2069,7 +2419,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 async function loadAll(){
   await Promise.allSettled([
     loadStatus(),loadEditorial(),loadProviders(),
-    loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),loadBiz(),loadRejected()
+    loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),
+    loadBiz(),loadRejected(),loadOpsExtras()
   ]);
 }
 loadAll();
