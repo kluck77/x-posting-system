@@ -1313,8 +1313,8 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <!-- LIVE CANDIDATES VIEW -->
   <div id="pipeView-live" style="display:none">
     <div class="pp2-live-tools">
-      <button class="pp2-tool-btn" onclick="dismissCurrentCandidates(this)" title="현재 보이는 후보들을 목록에서 제외하고 풀의 다음 후보들을 채워 넣는다">다음 30개 ▶</button>
-      <button class="pp2-tool-btn ghost" onclick="resetDismissedCandidates(this)" title="제외 목록을 비우고 처음부터 다시 보여준다">↻ 리셋</button>
+      <button class="pp2-tool-btn" id="ppLiveNextBtn" onclick="dismissCurrentCandidates(this)" title="현재 보이는 후보들을 목록에서 제외하고 풀의 다음 후보들을 채워 넣는다">다음 30개 ▶</button>
+      <button class="pp2-tool-btn ghost" id="ppLiveResetBtn" onclick="resetDismissedCandidates(this)" disabled title="제외 목록을 비우고 처음부터 다시 보여준다">↻ 리셋</button>
       <span class="pp2-tool-hint" id="ppLiveToolsHint"></span>
     </div>
     <div id="liveList"><div class="empty-sm">로딩 중</div></div>
@@ -2124,6 +2124,24 @@ function _ppRenderLive(){
   if(_ppLiveSort==='score')visible.sort((a,b)=>(b.score||0)-(a.score||0));
 
   const hi=d.filter(x=>(x.score||0)>=50).length;
+
+  // 버튼 상태 동기화 — 제외 가능한 후보 없으면 "다음 30개" 비활성,
+  // dismissed 0 건이면 "리셋" 비활성.
+  const m0=_ppCache.liveMeta||{};
+  const remaining=Math.max(0,(m0.new_candidates||0)-d.length);
+  const nextBtn=document.getElementById('ppLiveNextBtn');
+  if(nextBtn){
+    const canNext=d.length>0;
+    nextBtn.disabled=!canNext;
+    nextBtn.textContent=remaining>0?`다음 30개 ▶ (${remaining}건 남음)`:'다음 30개 ▶';
+  }
+  const resetBtn=document.getElementById('ppLiveResetBtn');
+  if(resetBtn){
+    const dc=m0.dismissed_count||0;
+    resetBtn.disabled=dc===0;
+    resetBtn.textContent=dc>0?`↻ 리셋 (${dc}건)`:'↻ 리셋';
+  }
+
   const s=document.getElementById('ppSummary');
   if(s){
     const m=_ppCache.liveMeta;
@@ -2380,15 +2398,23 @@ async function dismissCurrentCandidates(btn){
 window.dismissCurrentCandidates=dismissCurrentCandidates;
 
 async function resetDismissedCandidates(btn){
+  const dc=(_ppCache.liveMeta||{}).dismissed_count||0;
+  const h=document.getElementById('ppLiveToolsHint');
+  if(dc===0){
+    if(h){h.textContent='제외된 후보가 없습니다 · 먼저 [다음 30개 ▶] 를 눌러야 함';setTimeout(()=>{h.textContent=''},3500)}
+    return;
+  }
   if(btn)btn.disabled=true;
   try{
     const r=await fetch(API+'/control/candidates/reset',{method:'POST'});
     const j=await r.json().catch(()=>({}));
-    const h=document.getElementById('ppLiveToolsHint');
     if(h){h.textContent=`${j.cleared||0}건 복구 · 리셋 완료`;setTimeout(()=>{h.textContent=''},3000)}
     await loadLiveCandidates();
   }catch(e){console.warn('reset:',e)}
-  finally{if(btn)btn.disabled=false}
+  finally{
+    // loadLiveCandidates → _ppRenderLive 가 dismissed_count 기반으로 다시 비활성화 처리함.
+    if(btn&&!btn.disabled)btn.disabled=false;
+  }
 }
 window.resetDismissedCandidates=resetDismissedCandidates;
 function esc(s){return s.replace(/'/g,'&#39;')}
