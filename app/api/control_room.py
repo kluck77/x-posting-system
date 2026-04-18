@@ -392,9 +392,13 @@ async def get_providers():
                         "title": title,
                         "status": str(d.approval_status.value) if d.approval_status else "",
                     })
+            # 작업 큐 = 오늘 생성됐지만 아직 승인 안 된 초안 (누적 backlog 제외)
+            from datetime import datetime as _dt, timedelta as _td
+            today_kst_start = _dt.now(tz=KST).replace(hour=0, minute=0, second=0, microsecond=0)
             pending_count = (
                 db.query(Draft)
                 .filter(Draft.approval_status == ApprovalStatus.PENDING)
+                .filter(Draft.created_at >= today_kst_start.astimezone(timezone.utc))
                 .count()
             )
         finally:

@@ -1050,10 +1050,10 @@ async function loadProviders(){
       const pend=stats.pending??0;
       const lastAgo=stats.last_run?_agoKR(stats.last_run):'';
       head.innerHTML=
-        `<div class="ws-h-line">지금 <b>${act}</b>개 작동 중 · 오늘 <b>${runs}</b>회 실행 · 대기 <b>${pend}</b>건</div>`+
+        `<div class="ws-h-line">지금 <b>${act}</b>개 작동 중 · 오늘 <b>${runs}</b>회 실행 · 오늘 미승인 <b>${pend}</b>건</div>`+
         `<div class="ws-h-line">`+
           `<span class="ws-h-chip act">${act}/${total} 활성</span>`+
-          (pend>0?`<span class="ws-h-chip pend">대기 ${pend}</span>`:'')+
+          (pend>0?`<span class="ws-h-chip pend">미승인 ${pend}</span>`:'')+
           `<span class="ws-h-chip ${d.mock_mode?'mock':'live'}">${d.mock_mode?'MOCK':'LIVE'}</span>`+
           (lastAgo?`<span style="color:var(--text-mut);margin-left:auto;font-size:10px">마지막 ${lastAgo}</span>`:'')+
         `</div>`+
@@ -1095,7 +1095,7 @@ async function loadProviders(){
       const total=stats.today_runs??today;
       q.innerHTML=[
         {n:act,c:act>0?'on':'mut',l:'진행 중'},
-        {n:pend,c:pend>0?'amber':'mut',l:'대기'},
+        {n:pend,c:pend>0?'amber':'mut',l:'오늘 미승인'},
         {n:total,c:total>0?'on':'mut',l:'오늘 총계'},
       ].map(x=>`<div class="ws-q-cell"><div class="ws-q-num ${x.c}">${x.n}</div><div class="ws-q-lbl">${x.l}</div></div>`).join('');
     }
