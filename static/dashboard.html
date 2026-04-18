@@ -346,6 +346,14 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pp2-chip.red{color:var(--red);border-color:rgba(239,68,68,.28)}
 .pp2-meta-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-subtle)}
 
+.pp2-live-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.pp2-tool-btn{min-height:32px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;
+  cursor:pointer;background:var(--indigo-dim);border:1px solid var(--indigo);color:var(--indigo)}
+.pp2-tool-btn.ghost{background:var(--bg-surface);border-color:var(--border-subtle);color:var(--text-sec);font-weight:600}
+.pp2-tool-btn:disabled{opacity:.5;pointer-events:none}
+.pp2-tool-btn:active{transform:scale(.97)}
+.pp2-tool-hint{font-size:11px;color:var(--text-mut);margin-left:4px}
+
 .pp2-filters{display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;
   scrollbar-width:none;-ms-overflow-style:none}
 .pp2-filters::-webkit-scrollbar{display:none}
@@ -1304,6 +1312,11 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
   <!-- LIVE CANDIDATES VIEW -->
   <div id="pipeView-live" style="display:none">
+    <div class="pp2-live-tools">
+      <button class="pp2-tool-btn" onclick="dismissCurrentCandidates(this)" title="현재 보이는 후보들을 목록에서 제외하고 풀의 다음 후보들을 채워 넣는다">다음 30개 ▶</button>
+      <button class="pp2-tool-btn ghost" onclick="resetDismissedCandidates(this)" title="제외 목록을 비우고 처음부터 다시 보여준다">↻ 리셋</button>
+      <span class="pp2-tool-hint" id="ppLiveToolsHint"></span>
+    </div>
     <div id="liveList"><div class="empty-sm">로딩 중</div></div>
     <div class="pp2-ops" id="ppLiveOps"></div>
   </div>
@@ -2119,6 +2132,7 @@ function _ppRenderLive(){
       const stLabel={live:'수집 정상',idle:'수집 지연',stale:'수집 멈춤',dead:'수집 중단',unknown:'미상'}[m.status]||'';
       const stCls={live:'',idle:'amber',stale:'amber',dead:'red',unknown:''}[m.status]||'';
       const ageLbl=_ppMetaAge(m.seconds_since_ingestion);
+      const dismissedChip=(m.dismissed_count>0)?`<span class="pp2-chip amber">제외 ${m.dismissed_count}건 보관</span>`:'';
       metaLine=
         `<div class="pp2-meta-row">`+
           `<span class="pp2-chip ${stCls}">● ${stLabel}${ageLbl?' · '+ageLbl:''}</span>`+
@@ -2126,6 +2140,7 @@ function _ppRenderLive(){
           `<span class="pp2-chip">&lt;${m.min_score}점 ${m.below_threshold}건 필터</span>`+
           `<span class="pp2-chip">초안화 ${m.already_drafted}건</span>`+
           `<span class="pp2-chip">신규 <b>${m.new_candidates}</b>건</span>`+
+          dismissedChip+
         `</div>`;
     }
     s.innerHTML=(d.length?
@@ -2340,6 +2355,42 @@ async function loadLiveCandidates(){
     else{const nL=document.getElementById('ppNLive');if(nL)nL.textContent=(d||[]).length}
   }catch(e){console.warn('live:',e)}
 }
+
+async function dismissCurrentCandidates(btn){
+  const d=_ppCache.live||[];
+  const urls=d.map(x=>x.url).filter(Boolean);
+  if(!urls.length){
+    const h=document.getElementById('ppLiveToolsHint');
+    if(h){h.textContent='제외할 후보가 없습니다';setTimeout(()=>{h.textContent=''},2000)}
+    return;
+  }
+  if(btn)btn.disabled=true;
+  try{
+    const r=await fetch(API+'/control/candidates/dismiss',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({urls})
+    });
+    const j=await r.json().catch(()=>({}));
+    const h=document.getElementById('ppLiveToolsHint');
+    if(h){h.textContent=`${j.added||0}건 제외 · 총 ${j.dismissed_total||0}건 보관`;setTimeout(()=>{h.textContent=''},3000)}
+    await loadLiveCandidates();
+  }catch(e){console.warn('dismiss:',e)}
+  finally{if(btn)btn.disabled=false}
+}
+window.dismissCurrentCandidates=dismissCurrentCandidates;
+
+async function resetDismissedCandidates(btn){
+  if(btn)btn.disabled=true;
+  try{
+    const r=await fetch(API+'/control/candidates/reset',{method:'POST'});
+    const j=await r.json().catch(()=>({}));
+    const h=document.getElementById('ppLiveToolsHint');
+    if(h){h.textContent=`${j.cleared||0}건 복구 · 리셋 완료`;setTimeout(()=>{h.textContent=''},3000)}
+    await loadLiveCandidates();
+  }catch(e){console.warn('reset:',e)}
+  finally{if(btn)btn.disabled=false}
+}
+window.resetDismissedCandidates=resetDismissedCandidates;
 function esc(s){return s.replace(/'/g,'&#39;')}
 async function loadCandidates(){
   try{

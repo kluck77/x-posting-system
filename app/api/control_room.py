@@ -7,6 +7,7 @@ Control Room API
 """
 
 import logging
+import threading
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -15,6 +16,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from pydantic import BaseModel
+
 from sqlalchemy import text
 
 from app.config import settings
@@ -22,6 +25,17 @@ from app.db import get_db
 
 logger = logging.getLogger(__name__)
 KST = ZoneInfo("Asia/Seoul")
+
+# ─── 후보 dismiss 트래커 ──────────────────────────────────────────────────────
+# 사용자가 "다음 30개 ▶" 를 누르면 현재 노출 URL 이 여기 쌓여 다음 조회에서 제외됨.
+# 서버 메모리 only — 재시작(deploy-x) 하면 자동 리셋.
+_dismissed_urls: set[str] = set()
+_dismissed_lock = threading.Lock()
+
+
+def _is_dismissed(url: str) -> bool:
+    with _dismissed_lock:
+        return url in _dismissed_urls
 
 router = APIRouter(prefix="/control", tags=["control-room"])
 
@@ -701,6 +715,8 @@ async def get_scored_candidates(limit: int = 15, min_score: int = 0):
             u = (a.get("url") or "").strip()
             if u and u in used:
                 continue
+            if u and _is_dismissed(u):
+                continue
             cat = a.get("category", "기타")
             cnt = cat_counts.get(cat, 0)
             if cnt >= per_cat_cap:
@@ -723,6 +739,38 @@ async def get_scored_candidates(limit: int = 15, min_score: int = 0):
     except Exception as e:
         logger.warning(f"scored-candidates 오류: {e}")
         return []
+
+
+class DismissRequest(BaseModel):
+    urls: list[str]
+
+
+@router.post("/candidates/dismiss")
+async def dismiss_candidates(req: DismissRequest):
+    """
+    전달된 URL 들을 dismiss 목록에 등록해 /scored-candidates 응답에서 제외한다.
+    대시보드 "다음 30개 ▶" 버튼이 호출. 서버 재시작 시 자동 비움.
+    """
+    added = 0
+    with _dismissed_lock:
+        for u in req.urls:
+            u = (u or "").strip()
+            if u and u not in _dismissed_urls:
+                _dismissed_urls.add(u)
+                added += 1
+        total = len(_dismissed_urls)
+    return {"ok": True, "added": added, "dismissed_total": total}
+
+
+@router.post("/candidates/reset")
+async def reset_candidates():
+    """
+    dismiss 목록을 비운다. "↻ 리셋" 버튼이 호출 — 200건 풀을 처음부터 다시 훑고 싶을 때.
+    """
+    with _dismissed_lock:
+        n = len(_dismissed_urls)
+        _dismissed_urls.clear()
+    return {"ok": True, "cleared": n}
 
 
 @router.get("/candidates-meta")
@@ -795,6 +843,9 @@ async def get_candidates_meta(min_score: int = 28):
             finally:
                 db.close()
 
+        with _dismissed_lock:
+            dismissed_count = len(_dismissed_urls)
+
         return {
             "last_ingested_at": last_added,
             "seconds_since_ingestion": seconds_since,
@@ -806,6 +857,7 @@ async def get_candidates_meta(min_score: int = 28):
             "already_drafted": already_drafted,
             "new_candidates": max(0, eligible - already_drafted),
             "min_score": min_score,
+            "dismissed_count": dismissed_count,
         }
     except Exception as e:
         logger.warning(f"candidates-meta 오류: {e}")
