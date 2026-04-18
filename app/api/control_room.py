@@ -786,6 +786,211 @@ async def get_naver_quota():
     return get_status()
 
 
+@router.get("/pulse-overview")
+async def get_pulse_overview():
+    """
+    Pulse 탭 전용 통합 데이터.
+
+    1초 안에 "지금 뭐 해야 하나?" 답이 나오게끔 설계:
+      today_count / yesterday_count / delta  — 오늘 vs 어제 트렌드
+      hourly_bars[24]                        — 최근 24시간 시간별 초안 처리량
+      top_pick                               — 지금 가장 액션 가치 있는 후보 1건
+      activity_stream[]                      — 최근 활동 8건 (초안·수집 혼합)
+      last_ingestion_at / seconds_since_ing  — 수집 파이프라인 최종 호흡
+      next_digest_kst / hours_to_digest      — 다음 다이제스트까지
+    """
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from app.models.content import Draft, ApprovalStatus
+    from app.services.naver_news import get_live_status as _naver_live
+
+    now_utc = _dt.now(_tz.utc)
+    now_kst = now_utc.astimezone(KST)
+    today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    yday_start_kst = today_start_kst - _td(days=1)
+
+    today_count = 0
+    yesterday_count = 0
+    hourly_bars = [0] * 24
+    activity_drafts: list[dict] = []
+    top_pick: dict | None = None
+
+    db = get_db()
+    try:
+        from sqlalchemy.orm import joinedload
+        # today / yesterday count
+        today_count = (
+            db.query(Draft)
+            .filter(Draft.created_at >= today_start_kst.astimezone(_tz.utc))
+            .count()
+        )
+        yesterday_count = (
+            db.query(Draft)
+            .filter(Draft.created_at >= yday_start_kst.astimezone(_tz.utc))
+            .filter(Draft.created_at < today_start_kst.astimezone(_tz.utc))
+            .count()
+        )
+
+        # 최근 24시간 시간별 bars (KST 기준)
+        since_24h = now_utc - _td(hours=24)
+        recent_24h = (
+            db.query(Draft.created_at)
+            .filter(Draft.created_at >= since_24h)
+            .all()
+        )
+        for (ca,) in recent_24h:
+            if ca is None:
+                continue
+            dt = ca if ca.tzinfo else ca.replace(tzinfo=_tz.utc)
+            hours_ago = int((now_utc - dt).total_seconds() // 3600)
+            if 0 <= hours_ago < 24:
+                # index 0 = 가장 오래된(23시간 전), index 23 = 방금
+                hourly_bars[23 - hours_ago] += 1
+
+        # 최근 초안 5건 (activity stream 재료)
+        recent_drafts = (
+            db.query(Draft)
+            .options(joinedload(Draft.source_item))
+            .order_by(Draft.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        for d in recent_drafts:
+            if not d.created_at:
+                continue
+            ca = d.created_at if d.created_at.tzinfo else d.created_at.replace(tzinfo=_tz.utc)
+            try:
+                ttl = (d.source_item.title if d.source_item and d.source_item.title else "").strip()[:48]
+            except Exception:
+                ttl = ""
+            status = ""
+            try:
+                status = str(d.approval_status.value) if d.approval_status else ""
+            except Exception:
+                pass
+            icon = "✍️"
+            text = f"초안 생성"
+            if status == "approved":
+                icon = "✅"; text = "승인 완료"
+            elif status == "published":
+                icon = "📤"; text = "게시 완료"
+            elif status == "rejected":
+                icon = "✖"; text = "거절"
+            activity_drafts.append({
+                "at": ca.isoformat(),
+                "at_ts": ca.timestamp(),
+                "kind": "draft",
+                "icon": icon,
+                "text": text,
+                "title": ttl,
+            })
+
+        # TOP PICK: premium_candidate 중 가장 임팩트 큰 1건
+        try:
+            from app.services.premium_candidate_service import PremiumCandidateService
+            import math
+            svc = PremiumCandidateService(db)
+            cands = svc.get_candidates(limit=50)
+            # status="new" (아직 텔레그램 전송 안 된 것) 우선, 없으면 전체
+            def _age_h(d):
+                if not d.created_at:
+                    return 1e9
+                u = d.created_at if d.created_at.tzinfo else d.created_at.replace(tzinfo=_tz.utc)
+                return (now_utc - u).total_seconds() / 3600
+            new_cands = [c for c in cands if (c.premium_status or "new") == "new" and _age_h(c) <= 24 * 7]
+            pool = new_cands if new_cands else [c for c in cands if _age_h(c) <= 24 * 3]
+            if pool:
+                def _compound(c):
+                    return (c.monetization_score or 0) * math.exp(-_age_h(c) / 24 / 10)
+                pool.sort(key=_compound, reverse=True)
+                best = pool[0]
+                top_pick = {
+                    "kind": "premium",
+                    "id": best.id,
+                    "hook": (best.hook or "")[:90],
+                    "score": best.monetization_score or 0,
+                    "age_hours": round(_age_h(best), 1),
+                    "status": best.premium_status or "new",
+                    "action": "send_premium",
+                    "endpoint": f"/control/premium/{best.id}/send-telegram",
+                }
+        except Exception as e:
+            logger.warning(f"pulse top_pick 오류: {e}")
+    except Exception as e:
+        logger.warning(f"pulse-overview 오류: {e}")
+    finally:
+        db.close()
+
+    # 네이버 라이브 상태에서 최근 수집 이벤트 병합
+    activity_ingest: list[dict] = []
+    last_ingestion_at = None
+    seconds_since_ing = None
+    try:
+        nlive = _naver_live()
+        last_ingestion_at = nlive.get("last_cycle_at")
+        seconds_since_ing = nlive.get("seconds_since_last")
+        for it in (nlive.get("recent_items") or [])[:5]:
+            fa = it.get("fetched_at")
+            if not fa:
+                continue
+            try:
+                dt = _dt.fromisoformat(fa.replace("Z", "+00:00"))
+                activity_ingest.append({
+                    "at": fa,
+                    "at_ts": dt.timestamp(),
+                    "kind": "ingest",
+                    "icon": "📰",
+                    "text": f"네이버 수집 · {it.get('keyword', '')}",
+                    "title": (it.get("title") or "")[:48],
+                })
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # stream 합치고 시간 내림차순
+    stream = activity_drafts + activity_ingest
+    stream.sort(key=lambda x: x.get("at_ts", 0), reverse=True)
+    stream = stream[:8]
+    # at_ts 제거 (응답 크기 축소)
+    for s in stream:
+        s.pop("at_ts", None)
+        ca = s.get("at")
+        if ca:
+            try:
+                dt = _dt.fromisoformat(ca.replace("Z", "+00:00")).astimezone(KST)
+                s["time_kst"] = dt.strftime("%H:%M")
+            except Exception:
+                s["time_kst"] = ""
+
+    # 다음 다이제스트 (05:00 KST)
+    nd = now_kst.replace(hour=5, minute=0, second=0, microsecond=0)
+    if now_kst >= nd:
+        nd = nd + _td(days=1)
+    hours_to_digest = int((nd - now_kst).total_seconds() // 3600)
+    minutes_to_digest = int((nd - now_kst).total_seconds() // 60) % 60
+
+    delta = today_count - yesterday_count
+    delta_pct = 0
+    if yesterday_count > 0:
+        delta_pct = round((delta / yesterday_count) * 100)
+
+    return {
+        "today_count": today_count,
+        "yesterday_count": yesterday_count,
+        "delta": delta,
+        "delta_pct": delta_pct,
+        "hourly_bars": hourly_bars,
+        "hourly_max": max(hourly_bars) if hourly_bars else 0,
+        "top_pick": top_pick,
+        "activity_stream": stream,
+        "last_ingestion_at": last_ingestion_at,
+        "seconds_since_ingestion": seconds_since_ing,
+        "next_digest_kst": nd.strftime("%m/%d 05:00"),
+        "hours_to_digest": hours_to_digest,
+        "minutes_to_digest": minutes_to_digest,
+    }
+
+
 @router.get("/naver/live")
 async def get_naver_live():
     """

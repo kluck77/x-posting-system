@@ -816,6 +816,76 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pulse-hl small{display:block;font-size:15px;font-weight:400;color:var(--text-sec);
   margin-top:4px;letter-spacing:0;line-height:1.35}
 
+/* ── PULSE: HERO CARD (큰 숫자 + 델타 + 24h 스파크라인) ── */
+.p-hero{background:linear-gradient(165deg,rgba(129,140,248,.10),var(--bg-surface) 55%);
+  border:1px solid var(--border-subtle);border-radius:var(--r-md);
+  padding:14px 14px 12px;margin:0 0 10px;position:relative;overflow:hidden}
+.p-hero.ok{border-color:rgba(45,212,191,.22);
+  background:linear-gradient(165deg,rgba(45,212,191,.10),var(--bg-surface) 55%)}
+.p-hero-top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.p-hero-num{font-size:44px;font-weight:800;line-height:1;color:var(--text-pri);
+  font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.p-hero-unit{font-size:13px;color:var(--text-sec);font-weight:600}
+.p-hero-delta{margin-left:auto;display:inline-flex;align-items:center;gap:4px;
+  padding:4px 9px;border-radius:12px;font-size:11px;font-weight:800;font-family:var(--mono);
+  background:var(--bg-raised);color:var(--text-mut)}
+.p-hero-delta.up{background:rgba(45,212,191,.14);color:var(--green)}
+.p-hero-delta.down{background:rgba(239,68,68,.14);color:var(--red)}
+.p-hero-delta.flat{background:var(--bg-raised);color:var(--text-mut)}
+.p-hero-sub{font-size:12px;color:var(--text-sec);margin-bottom:10px;line-height:1.35}
+.p-hero-sub b{color:var(--text-pri);font-weight:700}
+.p-spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin:0 0 4px}
+.p-spark-bar{flex:1;background:rgba(129,140,248,.3);border-radius:1.5px 1.5px 0 0;
+  min-height:2px;transition:height .4s ease-out}
+.p-spark-bar.now{background:var(--indigo);box-shadow:0 0 6px rgba(129,140,248,.4)}
+.p-spark-bar.zero{background:rgba(255,255,255,.06)}
+.p-spark-axis{display:flex;justify-content:space-between;font-size:9px;color:var(--text-mut);
+  font-family:var(--mono);letter-spacing:.2px;margin-top:2px}
+
+/* ── PULSE: TOP PICK 카드 (가장 임팩트 큰 추천) ── */
+.p-pick{background:linear-gradient(165deg,rgba(192,132,252,.12),var(--bg-surface) 55%);
+  border:1px solid rgba(192,132,252,.28);border-radius:var(--r-md);
+  padding:12px 13px 11px;margin:0 0 10px;position:relative}
+.p-pick.none{background:var(--bg-surface);border-color:var(--border-subtle)}
+.p-pick-head{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.p-pick-ico{font-size:14px;line-height:1;filter:drop-shadow(0 0 6px rgba(192,132,252,.5))}
+.p-pick-lbl{font-size:10.5px;font-weight:800;color:#c084fc;letter-spacing:1.2px;
+  text-transform:uppercase;flex:1}
+.p-pick.none .p-pick-lbl{color:var(--text-mut)}
+.p-pick-score{font-size:11px;font-weight:800;font-family:var(--mono);
+  padding:2px 8px;border-radius:10px;background:rgba(192,132,252,.18);color:#c084fc}
+.p-pick-title{font-size:13px;font-weight:600;color:var(--text-pri);line-height:1.4;
+  margin-bottom:9px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.p-pick-meta{display:flex;align-items:center;gap:10px;font-size:10.5px;color:var(--text-mut);
+  font-family:var(--mono);margin-bottom:9px}
+.p-pick-meta .sep{color:var(--border-strong)}
+.p-pick-actions{display:flex;gap:6px}
+.p-pick-btn{flex:1;padding:9px 10px;border-radius:8px;border:0;
+  background:#c084fc;color:#1a0930;font-size:12px;font-weight:800;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:transform .1s,opacity .15s}
+.p-pick-btn:active{transform:scale(.97)}
+.p-pick-btn:disabled{opacity:.55;cursor:default}
+.p-pick-btn.sec{background:var(--bg-raised);color:var(--text-pri);font-weight:600}
+.p-pick-empty{font-size:12px;color:var(--text-sec);line-height:1.5;text-align:center;
+  padding:4px 0 2px}
+.p-pick-empty b{color:var(--text-pri);font-weight:700}
+
+/* ── PULSE: ACTIVITY STREAM (최근 활동) ── */
+.p-stream{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--r-md);padding:8px 0 4px}
+.p-stream-row{display:flex;align-items:center;gap:9px;padding:7px 12px;
+  border-bottom:1px dashed rgba(255,255,255,.05)}
+.p-stream-row:last-child{border-bottom:0}
+.p-stream-ico{font-size:13px;width:18px;text-align:center;flex-shrink:0;opacity:.85}
+.p-stream-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.p-stream-act{font-size:11px;color:var(--text-sec);font-weight:600}
+.p-stream-ttl{font-size:11.5px;color:var(--text-pri);line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-stream-ttl.empty{color:var(--text-mut);font-style:italic;font-size:11px}
+.p-stream-time{font-size:10px;color:var(--text-mut);font-family:var(--mono);flex-shrink:0}
+.p-stream-empty{padding:18px 14px;text-align:center;color:var(--text-mut);font-size:12px}
+
 /* ── PULSE: TAPPABLE SHARED ── */
 .tap{cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:transform .1s ease-out,background .15s}
@@ -1068,6 +1138,21 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="pulse-hl" id="pulseHL">시스템 확인 중</div>
   <div class="sys-diag" id="sysDiag"></div>
 
+  <!-- B.5 HERO: 오늘의 처리량 + 델타 + 24h 스파크라인 -->
+  <div class="p-hero" id="pHero">
+    <div class="p-hero-top">
+      <span class="p-hero-num" id="pHeroNum">—</span>
+      <span class="p-hero-unit">건 오늘 처리</span>
+      <span class="p-hero-delta flat" id="pHeroDelta">—</span>
+    </div>
+    <div class="p-hero-sub" id="pHeroSub">데이터 로딩 중…</div>
+    <div class="p-spark" id="pSpark"></div>
+    <div class="p-spark-axis"><span>-24h</span><span>-12h</span><span>지금</span></div>
+  </div>
+
+  <!-- B.7 TOP PICK: 지금 최우선 액션 (자동 추천) -->
+  <div id="pPickMount"></div>
+
   <!-- C. 행동 카드 3개 (tap → 탭 전환) -->
   <div class="act-grid">
     <div class="act-card tap" onclick="pulseGoTo('today')">
@@ -1111,13 +1196,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     </div>
   </div>
 
-  <!-- F. 최근 알림 -->
-  <div class="sec-head pulse-head">최근 알림</div>
+  <!-- F. 최근 알림 / 활동 스트림 -->
+  <div class="sec-head pulse-head" id="recentAlertsHead">최근 활동</div>
   <div id="recentAlerts">
-    <div class="alert-empty">
-      <div class="ae-main">아직 긴급 알림 없음</div>
-      <div class="ae-sub">새 뉴스가 들어오면 여기에 제목·시각·점수와 함께 표시됩니다.</div>
-    </div>
+    <div class="p-stream"><div class="p-stream-empty">활동 기록 불러오는 중…</div></div>
   </div>
 
   <!-- G. 다음 일정 -->
@@ -1404,6 +1486,9 @@ async function loadEditorial(){
 
     // immediate items → alerts
     const items=d.immediate_items||[];
+    _pulseUrgent=items.length>0;
+    const alertsHead=document.getElementById('recentAlertsHead');
+    if(alertsHead)alertsHead.textContent=items.length?'긴급 알림':'최근 활동';
     const immInline=document.getElementById('immInline');
     const immCount=document.getElementById('immCount');
     const immList=document.getElementById('immediateList');
@@ -1448,14 +1533,160 @@ async function loadEditorial(){
       if(immInline){immInline.classList.remove('has-urgent')}
       if(immCount){immCount.textContent='0건'}
       if(immList){immList.innerHTML=''}
-      const pulseList=document.getElementById('recentAlerts');
-      if(pulseList)pulseList.innerHTML=
-        `<div class="alert-empty">
-          <div class="ae-main">아직 긴급 알림 없음</div>
-          <div class="ae-sub">새 뉴스가 들어오면 여기에 제목·시각·점수와 함께 표시됩니다.</div>
-        </div>`;
+      // 긴급 알림 없을 때는 활동 스트림 표시 — _pulseRenderStream 이 채움
+      // (빈 placeholder 남기지 않음 — loadPulseOverview 가 곧 덮어쓴다)
     }
   }catch(e){console.warn('editorial:',e)}
+}
+
+/* ═════════ PULSE OVERVIEW (hero + top pick + activity stream) ═════════ */
+let _pulseUrgent=false;  // 긴급 알림 떠있을 때는 스트림 자리 비켜주기
+function _pulseFmtAge(h){
+  if(h==null)return '';
+  if(h<1)return Math.max(1,Math.round(h*60))+'분 전';
+  if(h<24)return Math.round(h)+'시간 전';
+  return Math.floor(h/24)+'일 전';
+}
+function _pulseRenderHero(d){
+  const hero=document.getElementById('pHero');if(!hero)return;
+  const num=d.today_count||0;
+  const delta=d.delta||0;
+  const dpct=d.delta_pct||0;
+  const y=d.yesterday_count||0;
+  document.getElementById('pHeroNum').textContent=num;
+  const dEl=document.getElementById('pHeroDelta');
+  dEl.classList.remove('up','down','flat');
+  if(delta>0){dEl.classList.add('up');dEl.textContent=`▲ +${delta} (${dpct}%)`}
+  else if(delta<0){dEl.classList.add('down');dEl.textContent=`▼ ${delta} (${dpct}%)`}
+  else{dEl.classList.add('flat');dEl.textContent=y>0?'= 어제와 동일':'첫 처리 대기'}
+  const sub=document.getElementById('pHeroSub');
+  if(y===0 && num===0){
+    sub.innerHTML='아직 오늘 처리된 초안이 없습니다. 새 기사가 들어오면 여기에 반영됩니다.';
+  }else{
+    sub.innerHTML=`어제 <b>${y}건</b> · 최근 24시간 시간별 처리량`;
+  }
+  // 스파크라인
+  const bars=d.hourly_bars||[];
+  const mx=Math.max(1,d.hourly_max||0);
+  const sp=document.getElementById('pSpark');
+  sp.innerHTML=bars.map((v,i)=>{
+    const h=Math.round((v/mx)*100);
+    const cls=v===0?'zero':(i===bars.length-1?'now':'');
+    return `<span class="p-spark-bar ${cls}" style="height:${Math.max(6,h)}%" title="${v}건"></span>`;
+  }).join('');
+  // hero 상태 색
+  hero.classList.toggle('ok',delta>0||num>=10);
+}
+function _pulseRenderTopPick(d){
+  const mount=document.getElementById('pPickMount');if(!mount)return;
+  const pk=d.top_pick;
+  if(!pk){
+    const ing=d.seconds_since_ingestion;
+    const ingT=ing!=null?(ing<60?ing+'초 전':Math.floor(ing/60)+'분 전'):'—';
+    mount.innerHTML=`<div class="p-pick none">
+      <div class="p-pick-head">
+        <span class="p-pick-ico">💤</span>
+        <span class="p-pick-lbl">지금 최우선 — 대기 중</span>
+      </div>
+      <div class="p-pick-empty">승격할 후보가 없습니다.<br>
+        마지막 수집 <b>${ingT}</b> · 파이프라인에서 후보가 올라오면 여기에 뜹니다.</div>
+    </div>`;
+    return;
+  }
+  const hook=_ops2Esc(pk.hook||'(제목 없음)');
+  const age=_pulseFmtAge(pk.age_hours);
+  const score=pk.score||0;
+  const status=pk.status||'new';
+  const statusLbl={new:'대기',reviewing:'전송됨',approved:'승인',sent:'전송완료'}[status]||status;
+  const canSend=status==='new';
+  mount.innerHTML=`<div class="p-pick">
+    <div class="p-pick-head">
+      <span class="p-pick-ico">🎯</span>
+      <span class="p-pick-lbl">지금 최우선 — 프리미엄 후보</span>
+      <span class="p-pick-score">${score}점</span>
+    </div>
+    <div class="p-pick-title">${hook}</div>
+    <div class="p-pick-meta">
+      <span>${age}</span>
+      <span class="sep">·</span>
+      <span>상태 ${statusLbl}</span>
+    </div>
+    <div class="p-pick-actions">
+      <button class="p-pick-btn" ${canSend?'':'disabled'} onclick="_pulseSendPick(${pk.id},this)">
+        ${canSend?'📨 텔레그램 전송':'이미 전송됨'}
+      </button>
+      <button class="p-pick-btn sec" onclick="pulseGoTo('ready')">전체 보기</button>
+    </div>
+  </div>`;
+}
+async function _pulseSendPick(id,btn){
+  if(!id)return;
+  const orig=btn.textContent;
+  btn.disabled=true;btn.textContent='전송 중…';
+  try{
+    const r=await fetch(`${API}/control/premium/${id}/send-telegram`,{method:'POST'});
+    if(r.ok){
+      btn.textContent='✓ 전송 완료';
+      setTimeout(()=>loadPulseOverview(),1500);
+    }else{
+      btn.textContent='실패';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},2000);
+    }
+  }catch(e){
+    btn.textContent='오류';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},2000);
+  }
+}
+function _pulseRenderStream(d){
+  if(_pulseUrgent)return;  // 긴급 알림 카드가 자리 차지 중이면 건드리지 않음
+  const mount=document.getElementById('recentAlerts');if(!mount)return;
+  const head=document.getElementById('recentAlertsHead');
+  if(head)head.textContent='최근 활동';
+  const items=d.activity_stream||[];
+  if(items.length===0){
+    mount.innerHTML=`<div class="p-stream"><div class="p-stream-empty">
+      활동 기록 없음 — 첫 사이클 대기 중
+    </div></div>`;
+    return;
+  }
+  const rows=items.map(it=>{
+    const ttl=it.title?_ops2Esc(it.title):'';
+    return `<div class="p-stream-row">
+      <span class="p-stream-ico">${it.icon||'•'}</span>
+      <div class="p-stream-body">
+        <span class="p-stream-act">${_ops2Esc(it.text||'')}</span>
+        <span class="p-stream-ttl ${ttl?'':'empty'}">${ttl||'(제목 없음)'}</span>
+      </div>
+      <span class="p-stream-time">${it.time_kst||''}</span>
+    </div>`;
+  }).join('');
+  mount.innerHTML=`<div class="p-stream">${rows}</div>`;
+}
+async function loadPulseOverview(){
+  try{
+    const r=await fetch(API+'/control/pulse-overview');
+    const d=await r.json();
+    _pulseRenderHero(d);
+    _pulseRenderTopPick(d);
+    _pulseRenderStream(d);
+
+    // 다음 일정 블록 fallback — 더 정확한 hours_to_digest
+    const h=d.hours_to_digest, m=d.minutes_to_digest;
+    const nbDigest=document.getElementById('nbDigest');
+    if(nbDigest){
+      if(h!=null){
+        const txt=h>0?`${h}<small>시간 ${m||0}분 후</small>`:`${m||0}<small>분 후</small>`;
+        nbDigest.innerHTML=txt;
+      }
+    }
+    const nbDigestSub=document.getElementById('nbDigestSub');
+    if(nbDigestSub)nbDigestSub.textContent='';
+    // 마지막 동기화 = 마지막 수집
+    const nbSync=document.getElementById('nbSync');
+    if(nbSync && d.seconds_since_ingestion!=null){
+      const s=d.seconds_since_ingestion;
+      const t=s<60?`${s}<small>초 전</small>`:(s<3600?`${Math.floor(s/60)}<small>분 전</small>`:`${Math.floor(s/3600)}<small>시간 전</small>`);
+      nbSync.innerHTML=t;
+    }
+  }catch(e){console.warn('pulse-overview:',e)}
 }
 
 function _agoKR(iso){
@@ -2890,6 +3121,7 @@ async function loadAll(){
   await Promise.allSettled([
     loadStatus(),loadEditorial(),loadProviders(),
     loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),loadNaverLive(),
+    loadPulseOverview(),
     loadBiz(),loadRejected(),loadOpsExtras()
   ]);
 }
@@ -2897,6 +3129,8 @@ loadAll();
 setInterval(loadAll,30000);
 // 네이버 라이브 카드는 더 자주 갱신 (15초) — "지금 돌고 있나" 가시성 유지
 setInterval(loadNaverLive,15000);
+// Pulse 히어로/스트림도 20초마다 — 첫 화면 살아있는 느낌
+setInterval(loadPulseOverview,20000);
 </script>
 </body>
 </html>
