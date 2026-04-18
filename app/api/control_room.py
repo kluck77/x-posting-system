@@ -653,11 +653,16 @@ async def send_premium_to_telegram(draft_id: int):
     """
     프리미엄 후보 초안을 텔레그램 승인 카드로 전송합니다.
     대시보드에서 "텔레그램 발송" 버튼을 눌렀을 때 호출됨.
+
+    Hook/본문이 영문이면 Gemini 로 한국어 번역해서 카드에 표시한다.
+    한국 독자/운영자가 카드만 보고 빠르게 판단할 수 있게 하기 위함.
     """
     db = get_db()
     try:
         from app.services.premium_candidate_service import PremiumCandidateService
-        from app.services.telegram_service import send_approval_card
+        from app.services.telegram_service import (
+            send_approval_card, _is_korean, _translate_to_korean,
+        )
         svc = PremiumCandidateService(db)
         draft = svc.get_candidate_by_id(draft_id)
         if not draft:
@@ -668,13 +673,28 @@ async def send_premium_to_telegram(draft_id: int):
                 source_url = draft.source_item.url
         except Exception:
             pass
-        msg_id = await send_approval_card(draft, source_url=source_url)
+
+        # 영문 → 한국어 번역 (실패하면 원문 그대로 전송)
+        hook_ko = None
+        body_ko = None
+        orig_hook = draft.hook or ""
+        orig_body = draft.body or ""
+        if orig_hook and not _is_korean(orig_hook):
+            hook_ko = await _translate_to_korean(orig_hook) or orig_hook
+        if orig_body and not _is_korean(orig_body):
+            body_ko = await _translate_to_korean(orig_body) or orig_body
+
+        msg_id = await send_approval_card(
+            draft, source_url=source_url,
+            hook_override=hook_ko, body_override=body_ko,
+        )
         if msg_id:
             svc.update_status(draft_id, "reviewing")
             return {
                 "success": True,
                 "message_id": msg_id,
                 "draft_id": draft_id,
+                "translated": bool(hook_ko or body_ko),
             }
         return {
             "success": False,

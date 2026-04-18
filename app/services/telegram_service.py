@@ -148,13 +148,21 @@ def _recommended_action(
     return "✅ 승인 가능"
 
 
-def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
+def build_approval_card(
+    draft: Draft,
+    source_url: str | None = None,
+    hook_override: str | None = None,
+    body_override: str | None = None,
+) -> str:
     """
     텔레그램으로 보낼 승인 카드 텍스트를 생성합니다.
 
     Args:
         draft: 검토할 초안
         source_url: 원본 소스 URL
+        hook_override: 카드에 표시할 훅 텍스트 (None이면 draft.hook 사용).
+            한국어 독자용 번역본을 보일 때 사용.
+        body_override: 카드에 표시할 본문 텍스트 (None이면 draft.body 사용).
 
     Returns:
         마크다운 포맷의 카드 텍스트
@@ -176,11 +184,13 @@ def build_approval_card(draft: Draft, source_url: str | None = None) -> str:
         logger.debug("[Card] 5-criteria 평가 실패", exc_info=True)
 
     # 내부 라우팅 문구 새니타이즈 (DB 기존 레코드 방어, fail-safe)
+    _src_hook = hook_override if hook_override is not None else (draft.hook or "")
+    _src_body = body_override if body_override is not None else (draft.body or "")
     try:
         from app.services.text_cleaner import sanitize_internal_tags, sanitize_reasoning
-        _hook, _body = sanitize_internal_tags(draft.hook or "", draft.body or "")
+        _hook, _body = sanitize_internal_tags(_src_hook, _src_body)
     except Exception:
-        _hook, _body = draft.hook or "", draft.body or ""
+        _hook, _body = _src_hook, _src_body
 
     # HTML 특수문자 이스케이프 (< > & 등이 있으면 Telegram 400 에러)
     _hook = html_mod.escape(_hook)
@@ -353,6 +363,8 @@ async def send_approval_card(
     draft: Draft,
     source_url: str | None = None,
     chat_id: int | str | None = None,
+    hook_override: str | None = None,
+    body_override: str | None = None,
 ) -> int | None:
     """
     텔레그램으로 승인 카드를 전송합니다.
@@ -385,7 +397,10 @@ async def send_approval_card(
         return None
 
     target_chat = chat_id or settings.telegram_chat_id
-    card_text = build_approval_card(draft, source_url)
+    card_text = build_approval_card(
+        draft, source_url,
+        hook_override=hook_override, body_override=body_override,
+    )
     keyboard = build_inline_keyboard(draft.id)
 
     payload = {
