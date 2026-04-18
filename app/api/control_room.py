@@ -317,9 +317,14 @@ async def get_flow_trace(limit: int = 20):
 @router.get("/providers")
 async def get_providers():
     """
-    AI 역할별 프로바이더 현황을 반환합니다.
-    실제 구성 정보 + 오늘 생성된 초안 수를 기반으로 활동 여부를 추정합니다.
-    개별 API 호출 횟수는 추적되지 않으므로 초안 수로 대리 지표를 사용합니다.
+    AI 워크스테이션 뷰: 역할별 상태 + 최근 작업 + provider health + activity feed.
+
+    구조:
+      roles[]            각 AI 역할 (DraftWriter, Reviewer, Researcher, FactChecker,
+                         TrendHunter=수동, HookReviewer=자동 Grok)
+      activity[]         최근 처리된 Draft 5건 (활동 피드)
+      provider_health[]  provider별 configured + 오늘 호출수
+      stats              대기/활성/마지막 활동 요약
     """
     ai_status = settings.ai_status_summary()
     effective = {
@@ -338,49 +343,152 @@ async def get_providers():
         "naver":       bool(settings.naver_client_id and settings.naver_client_secret),
     }
 
-    # 오늘 초안 수 → 모든 파이프라인 역할이 최소 이만큼 실행됐음을 의미
     today_drafts = _today_draft_count()
 
+    # provider별 실제 호출수 (api_cost_tracker, 재시작 시 리셋)
+    try:
+        from app.services.api_cost_tracker import get_today_provider_stats
+        prov_stats = get_today_provider_stats()
+    except Exception:
+        prov_stats = {}
+
+    # 최근 Draft 5건 → last_run / last_task / activity feed / 대기열
+    last_run_iso = None
+    last_task = None
+    pending_count = 0
+    activity: list[dict] = []
+    try:
+        from app.models.content import Draft, ApprovalStatus
+        from sqlalchemy.orm import joinedload
+        db = get_db()
+        try:
+            recent = (
+                db.query(Draft)
+                .options(joinedload(Draft.source_item))
+                .order_by(Draft.created_at.desc())
+                .limit(5)
+                .all()
+            )
+            if recent:
+                top = recent[0]
+                if top.created_at:
+                    last_run_iso = top.created_at.astimezone(KST).isoformat()
+                try:
+                    if top.source_item and top.source_item.title:
+                        last_task = top.source_item.title[:70]
+                except Exception:
+                    pass
+                for d in recent:
+                    if not d.created_at:
+                        continue
+                    try:
+                        title = (d.source_item.title if d.source_item and d.source_item.title else "").strip()[:60]
+                    except Exception:
+                        title = ""
+                    activity.append({
+                        "time": d.created_at.astimezone(KST).strftime("%H:%M"),
+                        "role": "DraftWriter",
+                        "action": "초안 생성",
+                        "title": title,
+                        "status": str(d.approval_status.value) if d.approval_status else "",
+                    })
+            pending_count = (
+                db.query(Draft)
+                .filter(Draft.approval_status == ApprovalStatus.PENDING)
+                .count()
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"[providers] recent/pending 조회 실패: {e}")
+
+    # Grok auto (HookReviewer) 추정: api_cost_tracker grok calls - 수동 추적이 없으므로 전체로 처리
+    grok_calls_today = int(prov_stats.get("grok", {}).get("calls", 0))
+
+    def _mkrole(
+        role: str, role_kr: str, role_desc: str, provider: str,
+        conf: bool, runs: int, note: str, manual: bool = False,
+        track_last: bool = True,
+    ):
+        status = "blocked" if not conf else ("manual" if manual else ("working" if runs > 0 else "idle"))
+        return {
+            "role": role,
+            "role_kr": role_kr,
+            "role_desc": role_desc,
+            "provider": provider,
+            "configured": conf,
+            "runs_today": None if manual else runs,
+            "runs_today_manual": 0 if manual else None,
+            "last_run": last_run_iso if (track_last and runs > 0) else None,
+            "last_task": last_task if (track_last and runs > 0) else None,
+            "status": status,
+            "note": note,
+        }
+
     roles = [
-        {
-            "role": "DraftWriter",
-            "provider": effective["draft_writer"],
-            "configured": configured.get(effective["draft_writer"], False),
-            "runs_today": today_drafts,
-            "note": "초안 1개 = 1 실행" if today_drafts else "오늘 활동 없음",
-        },
-        {
-            "role": "Reviewer",
-            "provider": "anthropic (Claude)",
-            "configured": configured["anthropic"],
-            "runs_today": today_drafts,
-            "note": "초안 1개 = 1 리뷰" if today_drafts else "오늘 활동 없음",
-        },
-        {
-            "role": "Researcher",
-            "provider": effective["researcher"],
-            "configured": configured.get(effective["researcher"], False),
-            "runs_today": today_drafts,
-            "note": "초안 1개 = 1 리서치" if today_drafts else "오늘 활동 없음",
-        },
-        {
-            "role": "FactChecker",
-            "provider": effective["fact_checker"],
-            "configured": configured.get(effective["fact_checker"], False),
-            "runs_today": today_drafts,
-            "note": "초안 1개 = 1 팩트체크" if today_drafts else "오늘 활동 없음",
-        },
-        {
-            "role": "TrendHunter",
-            "provider": "grok",
-            "configured": configured["grok"],
-            "runs_today": None,
-            "note": "/trends 명령으로만 실행됨 — 자동 카운트 없음",
-        },
+        _mkrole(
+            "DraftWriter", "초안 작성가", "기사 → X 초안 변환",
+            effective["draft_writer"], configured.get(effective["draft_writer"], False),
+            today_drafts,
+            f"{today_drafts}건 처리" if today_drafts else "대기 중",
+        ),
+        _mkrole(
+            "Reviewer", "검토가", "Resonance + 리스크 평가",
+            "anthropic (Claude)", configured["anthropic"],
+            today_drafts,
+            f"{today_drafts}건 검토" if today_drafts else "대기 중",
+        ),
+        _mkrole(
+            "Researcher", "리서처", "사실 수집 및 컨텍스트 보강",
+            effective["researcher"], configured.get(effective["researcher"], False),
+            today_drafts,
+            f"{today_drafts}건 리서치" if today_drafts else "대기 중",
+        ),
+        _mkrole(
+            "FactChecker", "팩트체커", "인용/수치 검증",
+            effective["fact_checker"], configured.get(effective["fact_checker"], False),
+            today_drafts,
+            f"{today_drafts}건 체크" if today_drafts else "대기 중",
+        ),
+        _mkrole(
+            "HookReviewer", "훅 감각 검토", "전송 직전 X 감각 자동 평가",
+            "grok", configured["grok"],
+            grok_calls_today,
+            f"{grok_calls_today}회 평가" if grok_calls_today else "대기 중",
+            track_last=bool(grok_calls_today),
+        ),
+        _mkrole(
+            "TrendHunter", "트렌드 탐색", "/trends 수동 — X 트렌드 조회",
+            "grok", configured["grok"],
+            0, "/trends 명령 전용",
+            manual=True, track_last=False,
+        ),
     ]
+
+    # provider health strip (실제 호출수 기반)
+    provider_health = []
+    for p in ("openai", "anthropic", "gemini", "perplexity", "grok"):
+        provider_health.append({
+            "name": p,
+            "configured": configured.get(p, False),
+            "calls_today": int(prov_stats.get(p, {}).get("calls", 0)),
+        })
+
+    active_count = sum(1 for r in roles if r["status"] == "working")
+    total_runs = sum((r.get("runs_today") or 0) for r in roles)
 
     return {
         "roles": roles,
+        "activity": activity,
+        "provider_health": provider_health,
+        "stats": {
+            "active_count": active_count,
+            "total_roles": len(roles),
+            "today_runs": total_runs,
+            "pending": pending_count,
+            "last_run": last_run_iso,
+            "last_task": last_task,
+        },
         "ai_status_summary": ai_status,
         "mock_mode": settings.is_full_mock_mode,
         "today_draft_count": today_drafts,

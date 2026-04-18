@@ -143,7 +143,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ag-sum{font-size:11px;color:var(--text-sec);margin-bottom:8px}
 .ag-sum b{font-weight:700}
 .ag-sum .ag-s-act{color:var(--indigo)}
-.agent-list{display:flex;flex-direction:column;gap:4px}
+.agent-list{display:flex;flex-direction:column;gap:6px}
 .ag-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:10px;row-gap:3px;
   padding:10px 12px;background:var(--bg-surface);border-radius:var(--r-md);
   border:1px solid var(--border-subtle);border-left:3px solid transparent}
@@ -178,6 +178,93 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ag-row.working .ag-av{animation:ag-bounce 2s ease-in-out infinite;
   box-shadow:0 0 8px rgba(129,140,248,.3)}
 .ag-row.idle-row .ag-av{opacity:.35}
+
+/* ── AGENTS v2 (workstation) ── */
+.ws-head{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.ws-h-line{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text-sec)}
+.ws-h-line b{color:var(--text-pri);font-weight:700}
+.ws-h-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;
+  background:var(--bg-surface);border:1px solid var(--border-subtle);font-size:10px}
+.ws-h-chip.act{color:var(--indigo);border-color:rgba(129,140,248,.25)}
+.ws-h-chip.pend{color:var(--amber);border-color:rgba(245,158,11,.25)}
+.ws-h-chip.live{color:var(--green)}.ws-h-chip.mock{color:var(--amber)}
+.ws-h-task{font-size:10px;color:var(--text-mut);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:100%;font-style:italic}
+
+.ag-row-v2{display:grid;grid-template-columns:32px 1fr auto;column-gap:10px;row-gap:4px;
+  padding:10px 12px;background:var(--bg-surface);border-radius:var(--r-md);
+  border:1px solid var(--border-subtle);border-left:3px solid transparent;
+  animation:slideIn .3s ease-out both;cursor:pointer;
+  transition:background .15s,border-color .15s}
+.ag-row-v2:active{background:var(--bg-raised)}
+.ag-row-v2.working{border-left-color:var(--indigo)}
+.ag-row-v2.blocked{border-left-color:var(--red)}
+.ag-row-v2.delayed{border-left-color:var(--amber)}
+.ag-row-v2.error{border-left-color:var(--red)}
+.ag-row-v2.manual{border-left-color:rgba(167,139,250,.55)}
+.ag-row-v2.idle{opacity:.78}
+.ag-body{min-width:0}
+.ag-name-row{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;line-height:1.2}
+.ag-name-kr{color:var(--text-pri)}
+.ag-name-en{color:var(--text-mut);font-size:9px;font-weight:600;letter-spacing:.3px}
+.ag-desc{font-size:10px;color:var(--text-sec);line-height:1.3;margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag-task{font-size:10px;color:var(--text-mut);line-height:1.3;margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}
+.ag-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.ag-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;
+  font-size:9px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
+.ag-pill.working{background:rgba(129,140,248,.14);color:var(--indigo)}
+.ag-pill.idle{background:var(--bg-raised);color:var(--text-mut)}
+.ag-pill.blocked{background:var(--red-dim);color:var(--red)}
+.ag-pill.manual{background:rgba(167,139,250,.14);color:#a78bfa}
+.ag-pill.delayed{background:var(--amber-dim);color:var(--amber)}
+.ag-pill.error{background:var(--red-dim);color:var(--red)}
+.ag-pill-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.ag-pill.working .ag-pill-dot{animation:ag-pulse 1.6s ease-in-out infinite}
+.ag-pill.error .ag-pill-dot{animation:blink 1s ease-in-out infinite}
+.ag-metric{font-size:15px;font-weight:800;line-height:1;color:var(--text-pri);font-variant-numeric:tabular-nums}
+.ag-metric-lbl{font-size:8px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
+.ag-metric.on-c{color:var(--indigo)}
+.ag-metric.off-c{color:var(--text-mut)}
+.ag-rail{grid-column:1/-1;height:2px;border-radius:1px;background:var(--bg-raised);overflow:hidden;margin-top:2px}
+.ag-rail-fill{height:100%;border-radius:1px;
+  background:linear-gradient(90deg,var(--indigo),var(--cyan),var(--indigo));
+  background-size:200% 100%;animation:shimmer 2.5s linear infinite}
+.ag-time{grid-column:1/-1;font-size:9px;color:var(--text-mut);margin-top:2px;
+  display:flex;justify-content:space-between;font-family:var(--mono)}
+
+/* ── ACTIVITY FEED ── */
+.ws-feed{display:flex;flex-direction:column;gap:2px}
+.ws-feed-row{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:var(--bg-surface);border-radius:var(--r-sm);font-size:11px;
+  animation:slideIn .3s ease-out both}
+.ws-feed-time{font-size:9px;color:var(--text-mut);font-family:var(--mono);
+  white-space:nowrap;flex-shrink:0;min-width:32px}
+.ws-feed-role{font-size:9px;font-weight:700;color:var(--indigo);
+  padding:1px 5px;border-radius:6px;background:rgba(129,140,248,.12);
+  white-space:nowrap;flex-shrink:0}
+.ws-feed-title{color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-size:10px}
+
+/* ── PROVIDER HEALTH STRIP v2 ── */
+.ws-prov{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px}
+.ws-prov-cell{display:flex;flex-direction:column;padding:7px 8px;
+  background:var(--bg-surface);border-radius:var(--r-sm);
+  border:1px solid var(--border-subtle)}
+.ws-prov-cell.ok{border-color:rgba(52,211,153,.18)}
+.ws-prov-cell.off{opacity:.55}
+.ws-prov-cell-h{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-pri);font-weight:600}
+.ws-prov-cell-c{font-size:14px;font-weight:800;color:var(--text-pri);line-height:1;margin-top:3px;font-variant-numeric:tabular-nums}
+.ws-prov-cell-l{font-size:8px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
+
+/* ── WORK QUEUE MINI PANEL ── */
+.ws-queue{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ws-q-cell{padding:8px 10px;background:var(--bg-surface);border-radius:var(--r-sm);
+  border:1px solid var(--border-subtle);text-align:center}
+.ws-q-num{font-size:18px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.ws-q-num.on{color:var(--indigo)}.ws-q-num.amber{color:var(--amber)}.ws-q-num.mut{color:var(--text-mut)}
+.ws-q-lbl{font-size:9px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
 
 /* ── WORKING MOTION ── */
 @keyframes ag-pulse{0%,100%{opacity:1}50%{opacity:.35}}
@@ -630,11 +717,17 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 <!-- ═══ AGENTS TAB ═══ -->
 <section class="tab-pane" id="tab-agents">
   <div class="sec-head first">AI 워크스테이션</div>
-  <div class="ag-sum" id="agentSummary"></div>
+  <div class="ws-head" id="wsHead"></div>
   <div class="agent-list" id="agentCards"></div>
 
+  <div class="sec-head">작업 큐</div>
+  <div class="ws-queue" id="wsQueue"></div>
+
+  <div class="sec-head">최근 활동</div>
+  <div class="ws-feed" id="wsFeed"><div class="empty-sm">활동 대기 중</div></div>
+
   <div class="sec-head">프로바이더</div>
-  <div class="prov-strip" id="providerSummary"></div>
+  <div class="ws-prov" id="providerSummary"></div>
   <div class="tab-footer" id="agentsFooter"></div>
 </section>
 
@@ -900,64 +993,150 @@ async function loadEditorial(){
   }catch(e){console.warn('editorial:',e)}
 }
 
+function _agoKR(iso){
+  if(!iso)return '';
+  try{
+    const t=new Date(iso).getTime();if(isNaN(t))return '';
+    const m=Math.max(0,Math.floor((Date.now()-t)/60000));
+    if(m<1)return '방금';
+    if(m<60)return `${m}분 전`;
+    const h=Math.floor(m/60);if(h<24)return `${h}시간 전`;
+    return `${Math.floor(h/24)}일 전`;
+  }catch(_){return ''}
+}
+function _agLetters(role){
+  return {DraftWriter:'D',Reviewer:'R',Researcher:'S',FactChecker:'F',TrendHunter:'T',HookReviewer:'G'}[role]||'?';
+}
+function _agColor(role){
+  return {DraftWriter:'var(--indigo)',Reviewer:'var(--green)',Researcher:'var(--cyan)',FactChecker:'var(--amber)',TrendHunter:'#a78bfa',HookReviewer:'#a78bfa'}[role]||'var(--indigo)';
+}
+function _agStatusLabel(s){
+  return {working:'작동 중',idle:'대기',blocked:'차단',manual:'수동',delayed:'지연',error:'오류'}[s]||'대기';
+}
+function _agShowDetail(a){
+  const lines=[
+    `${a.role_kr||a.role} · ${a.provider||'—'}`,
+    a.role_desc?`역할: ${a.role_desc}`:'',
+    a.configured?'상태: 연결됨':'상태: API 키 미설정',
+    (a.runs_today!=null)?`오늘 실행: ${a.runs_today}회`:'',
+    (a.runs_today_manual!=null)?`수동 실행: ${a.runs_today_manual}회`:'',
+    a.last_run?`마지막 실행: ${_agoKR(a.last_run)}`:'',
+    a.last_task?`최근 작업: ${a.last_task}`:'',
+    a.note?`메모: ${a.note}`:'',
+  ].filter(Boolean).join('\n');
+  try{alert(lines)}catch(_){}
+}
+window._agShowDetail=_agShowDetail;
+
 async function loadProviders(){
   try{
     const r=await fetch(API+'/control/providers');
     const d=await r.json();
     const roles=d.roles||[];
+    const stats=d.stats||{};
+    const activity=d.activity||[];
+    const health=d.provider_health||[];
     const today=d.today_draft_count||0;
     const td=document.getElementById('todayDrafts')||document.getElementById('actToday');
     if(td)td.textContent=today;
     _hl.today=today;updateHL();updateActCards();
 
-    // sort: working first, then idle, then manual
-    const sorted=[...roles].sort((a,b)=>{
-      const w=x=>x.runs_today>0?0:!x.configured?1:x.role==='TrendHunter'?3:2;
-      return w(a)-w(b);
-    });
-    // summary
-    const act=sorted.filter(a=>a.runs_today>0).length;
-    const as=document.getElementById('agentSummary');
-    if(as)as.innerHTML=`<b class="ag-s-act">${act}/${sorted.length}</b> 작동 중 · <b>${today}</b> 오늘 실행`;
-    // agent rows with CSS avatars
-    const avColors={DraftWriter:'var(--indigo)',Reviewer:'var(--green)',Researcher:'var(--cyan)',FactChecker:'var(--amber)',TrendHunter:'var(--purple)'};
-    const avLetters={DraftWriter:'D',Reviewer:'R',Researcher:'S',FactChecker:'F',TrendHunter:'T'};
+    // ── 상단 요약 바 ──
+    const head=document.getElementById('wsHead');
+    if(head){
+      const act=stats.active_count??roles.filter(a=>a.status==='working').length;
+      const total=stats.total_roles??roles.length;
+      const runs=stats.today_runs??today;
+      const pend=stats.pending??0;
+      const lastAgo=stats.last_run?_agoKR(stats.last_run):'';
+      head.innerHTML=
+        `<div class="ws-h-line">지금 <b>${act}</b>개 작동 중 · 오늘 <b>${runs}</b>회 실행 · 대기 <b>${pend}</b>건</div>`+
+        `<div class="ws-h-line">`+
+          `<span class="ws-h-chip act">${act}/${total} 활성</span>`+
+          (pend>0?`<span class="ws-h-chip pend">대기 ${pend}</span>`:'')+
+          `<span class="ws-h-chip ${d.mock_mode?'mock':'live'}">${d.mock_mode?'MOCK':'LIVE'}</span>`+
+          (lastAgo?`<span style="color:var(--text-mut);margin-left:auto;font-size:10px">마지막 ${lastAgo}</span>`:'')+
+        `</div>`+
+        (stats.last_task?`<div class="ws-h-task">최근: ${stats.last_task}</div>`:'');
+    }
+
+    // ── 에이전트 카드 정렬: working → delayed → idle → blocked → manual ──
+    const rank={working:0,delayed:1,error:2,idle:3,blocked:4,manual:5};
+    const sorted=[...roles].sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9));
+
     document.getElementById('agentCards').innerHTML=sorted.map((a,i)=>{
-      const working=a.runs_today>0;
-      const blocked=!a.configured;
-      const manual=a.role==='TrendHunter';
-      let st='',dot='idle',lbl='대기',clr='var(--text-sec)',lblClr='var(--text-sec)';
-      if(blocked){st='blocked';dot='blocked';lbl='차단';clr='var(--red)';lblClr='var(--red)'}
-      else if(working){st='working';dot='working';lbl='작동';clr='var(--indigo)';lblClr='var(--indigo)'}
-      else if(manual){dot='manual';lbl='수동';st='idle-row';clr='var(--text-mut)'}
-      else{st='idle-row'}
-      const avC=avColors[a.role]||'var(--indigo)';
-      const avL=avLetters[a.role]||'?';
-      return`<div class="ag-row ${st}" style="animation-delay:${i*60}ms">
-        <span class="ag-av" style="background:${avC}">${avL}</span>
-        <span class="ag-dot ${dot}"></span>
-        <div class="ag-info"><div class="ag-name">${a.role}</div><div class="ag-prov">${a.provider||'—'}</div></div>
-        <div class="ag-runs"><div class="ag-count" style="color:${clr}">${a.runs_today??'—'}</div><div class="ag-label" style="color:${lblClr}">${lbl}</div></div>
-        ${a.note?`<div class="ag-note">${a.note}</div>`:''}
-        ${working?'<div class="ag-bar"><div class="ag-bar-fill"></div></div>':''}
+      const st=a.status||'idle';
+      const runs=(a.runs_today!=null)?a.runs_today:(a.runs_today_manual??0);
+      const mc=st==='working'?'on-c':(st==='blocked'||st==='error'?'off-c':'');
+      const lastAgo=a.last_run?_agoKR(a.last_run):'';
+      const safe=s=>String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+      return`<div class="ag-row-v2 ${st}" style="animation-delay:${i*50}ms" onclick='_agShowDetail(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
+        <span class="ag-av" style="background:${_agColor(a.role)}">${_agLetters(a.role)}</span>
+        <div class="ag-body">
+          <div class="ag-name-row"><span class="ag-name-kr">${safe(a.role_kr||a.role)}</span><span class="ag-name-en">${safe(a.role)}</span></div>
+          <div class="ag-desc">${safe(a.role_desc||'')} · <span style="color:var(--text-mut)">${safe(a.provider||'')}</span></div>
+          ${a.last_task?`<div class="ag-task">최근: ${safe(a.last_task)}</div>`:''}
+        </div>
+        <div class="ag-right">
+          <span class="ag-pill ${st}"><span class="ag-pill-dot"></span>${_agStatusLabel(st)}</span>
+          <div class="ag-metric ${mc}">${runs}</div>
+          <div class="ag-metric-lbl">${st==='manual'?'수동':'오늘'}</div>
+        </div>
+        ${st==='working'?'<div class="ag-rail"><div class="ag-rail-fill"></div></div>':''}
+        ${lastAgo?`<div class="ag-time"><span>${lastAgo}</span><span>${safe(a.note||'')}</span></div>`:(a.note?`<div class="ag-time"><span></span><span>${safe(a.note)}</span></div>`:'')}
       </div>`;
     }).join('');
 
-    // agents footer
-    const agf=document.getElementById('agentsFooter');
-    if(agf){
-      const totalRuns=sorted.reduce((s,a)=>s+(a.runs_today||0),0);
-      const configured=sorted.filter(a=>a.configured).length;
-      agf.textContent=`${configured}/${sorted.length} 연결됨 · 총 ${totalRuns}회 실행 · ${d.mock_mode?'MOCK 모드':'LIVE 모드'}`;
+    // ── Work queue ──
+    const q=document.getElementById('wsQueue');
+    if(q){
+      const act=stats.active_count??0;
+      const pend=stats.pending??0;
+      const total=stats.today_runs??today;
+      q.innerHTML=[
+        {n:act,c:act>0?'on':'mut',l:'진행 중'},
+        {n:pend,c:pend>0?'amber':'mut',l:'대기'},
+        {n:total,c:total>0?'on':'mut',l:'오늘 총계'},
+      ].map(x=>`<div class="ws-q-cell"><div class="ws-q-num ${x.c}">${x.n}</div><div class="ws-q-lbl">${x.l}</div></div>`).join('');
     }
 
-    // provider strip
-    const provs=new Map();
-    roles.forEach(a=>{const p=String(a.provider||'').replace(/\s*\(.+\)/,'');if(p&&p!=='—')provs.set(p,a.configured)});
-    document.getElementById('providerSummary').innerHTML=
-      Array.from(provs).map(([p,ok])=>`<div class="prov-tag"><span class="prov-led ${ok?'on':'off'}"></span>${p}</div>`).join('')+
-      (d.mock_mode?'<div class="prov-tag" style="margin-left:auto;color:var(--amber)">MOCK</div>':'');
+    // ── Activity feed ──
+    const feed=document.getElementById('wsFeed');
+    if(feed){
+      if(!activity.length){
+        feed.innerHTML='<div class="empty-sm">활동 대기 중</div>';
+      }else{
+        feed.innerHTML=activity.map((e,i)=>{
+          const safe=s=>String(s||'').replace(/</g,'&lt;');
+          return `<div class="ws-feed-row" style="animation-delay:${i*40}ms">
+            <span class="ws-feed-time">${safe(e.time)}</span>
+            <span class="ws-feed-role">${safe(e.role)}</span>
+            <span class="ws-feed-title">${safe(e.action)} · ${safe(e.title||'—')}</span>
+          </div>`;
+        }).join('');
+      }
+    }
 
+    // ── Provider health strip v2 ──
+    const ps=document.getElementById('providerSummary');
+    if(ps){
+      ps.innerHTML=health.map(p=>{
+        const calls=p.calls_today||0;
+        return `<div class="ws-prov-cell ${p.configured?'ok':'off'}">
+          <div class="ws-prov-cell-h"><span class="prov-led ${p.configured?'on':'off'}"></span>${p.name}</div>
+          <div class="ws-prov-cell-c">${calls}</div>
+          <div class="ws-prov-cell-l">오늘 호출</div>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Footer ──
+    const agf=document.getElementById('agentsFooter');
+    if(agf){
+      const totalRuns=stats.today_runs??0;
+      const configured=health.filter(p=>p.configured).length;
+      agf.textContent=`${configured}/${health.length} 연결됨 · 총 ${totalRuns}회 실행 · ${d.mock_mode?'MOCK':'LIVE'} 모드`;
+    }
   }catch(e){console.warn('providers:',e)}
 }
 

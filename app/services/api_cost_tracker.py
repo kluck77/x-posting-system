@@ -143,6 +143,17 @@ def get_usage_summary() -> str:
     return "\n".join(lines)
 
 
+def get_today_provider_stats() -> dict[str, dict]:
+    """오늘 provider별 누적 호출수/토큰을 복사본으로 반환 (대시보드 Agents 탭용)."""
+    key = _today()
+    with _lock:
+        src = dict(_daily.get(key, {}))
+    return {
+        p: {"calls": d["calls"], "input_tokens": d["input_tokens"], "output_tokens": d["output_tokens"]}
+        for p, d in src.items()
+    }
+
+
 def _fmt_tokens(n: int) -> str:
     """토큰 수를 읽기 좋게 포맷."""
     if n >= 1_000_000:
