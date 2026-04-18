@@ -179,6 +179,62 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   box-shadow:0 0 8px rgba(129,140,248,.3)}
 .ag-row.idle-row .ag-av{opacity:.35}
 
+/* ── AGENT SVG AVATAR (workstation v2) ── */
+.ag-av-svg{width:48px;height:48px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--bg-raised);border:1px solid var(--border-subtle);
+  overflow:hidden;position:relative;transition:transform .2s}
+.ag-av-svg svg{width:100%;height:100%;display:block}
+.ag-row-v2.idle .ag-av-svg,.ag-row-v2.blocked .ag-av-svg,.ag-row-v2.manual .ag-av-svg{opacity:.55}
+.ag-row-v2.working .ag-av-svg{border-color:rgba(129,140,248,.35);
+  box-shadow:0 0 0 1px rgba(129,140,248,.15),0 0 10px rgba(129,140,248,.18)}
+.ag-row-v2:active .ag-av-svg{transform:scale(.96)}
+
+/* DraftWriter — caret blink + line grow */
+@keyframes dw-caret{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes dw-linegrow{0%,100%{transform:scaleX(.55)}50%{transform:scaleX(1)}}
+.ag-row-v2.working .dw-caret{animation:dw-caret 1s steps(2,end) infinite}
+.ag-row-v2.working .dw-line3{transform-origin:left;animation:dw-linegrow 2.4s ease-in-out infinite}
+
+/* Reviewer — checkbox fill sequence */
+@keyframes rv-check2{0%,30%{opacity:0}35%,100%{opacity:1}}
+@keyframes rv-check3{0%,65%{opacity:0}70%,100%{opacity:1}}
+@keyframes rv-reset{0%,90%{opacity:1}95%,100%{opacity:0}}
+.ag-row-v2.working .rv-c2{animation:rv-check2 3s ease-out infinite,rv-reset 3s ease-out infinite}
+.ag-row-v2.working .rv-c3{animation:rv-check3 3s ease-out infinite,rv-reset 3s ease-out infinite}
+
+/* Researcher — magnifier scan */
+@keyframes rs-scan{0%,100%{transform:translate(0,0)}25%{transform:translate(-3px,-2px)}50%{transform:translate(2px,-3px)}75%{transform:translate(3px,1px)}}
+.ag-row-v2.working .rs-lens{animation:rs-scan 3s ease-in-out infinite;transform-origin:center}
+
+/* FactChecker — tick sequence */
+@keyframes fc-tick{0%,20%{opacity:.15;stroke-dashoffset:12}30%,100%{opacity:1;stroke-dashoffset:0}}
+.fc-tick1,.fc-tick2,.fc-tick3{stroke-dasharray:12;stroke-dashoffset:0}
+.ag-row-v2.working .fc-tick1{animation:fc-tick 2.4s ease-out infinite}
+.ag-row-v2.working .fc-tick2{animation:fc-tick 2.4s ease-out infinite .4s}
+.ag-row-v2.working .fc-tick3{animation:fc-tick 2.4s ease-out infinite .8s}
+
+/* HookReviewer — star pulse + spin */
+@keyframes hk-pulse{0%,100%{transform:scale(.9);opacity:.7}50%{transform:scale(1.08);opacity:1}}
+.ag-row-v2.working .hk-star{transform-origin:center;animation:hk-pulse 1.8s ease-in-out infinite}
+
+/* TrendHunter — bar grow */
+@keyframes th-grow{0%,100%{transform:scaleY(.55)}50%{transform:scaleY(1)}}
+.ag-row-v2.working .th-b1{transform-origin:bottom;animation:th-grow 2s ease-in-out infinite}
+.ag-row-v2.working .th-b2{transform-origin:bottom;animation:th-grow 2s ease-in-out infinite .15s}
+.ag-row-v2.working .th-b3{transform-origin:bottom;animation:th-grow 2s ease-in-out infinite .3s}
+.ag-row-v2.working .th-b4{transform-origin:bottom;animation:th-grow 2s ease-in-out infinite .45s}
+
+/* Reduced motion — 정적 */
+@media (prefers-reduced-motion: reduce){
+  .ag-row-v2.working .dw-caret,.ag-row-v2.working .dw-line3,
+  .ag-row-v2.working .rv-c2,.ag-row-v2.working .rv-c3,
+  .ag-row-v2.working .rs-lens,
+  .ag-row-v2.working [class^="fc-tick"],
+  .ag-row-v2.working .hk-star,
+  .ag-row-v2.working [class^="th-b"]{animation:none}
+}
+
 /* ── AGENTS v2 (workstation) ── */
 .ws-head{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .ws-h-line{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--text-sec)}
@@ -191,7 +247,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ws-h-task{font-size:10px;color:var(--text-mut);white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;max-width:100%;font-style:italic}
 
-.ag-row-v2{display:grid;grid-template-columns:32px 1fr auto;column-gap:10px;row-gap:4px;
+.ag-row-v2{display:grid;grid-template-columns:48px 1fr auto;column-gap:10px;row-gap:4px;
   padding:10px 12px;background:var(--bg-surface);border-radius:var(--r-md);
   border:1px solid var(--border-subtle);border-left:3px solid transparent;
   animation:slideIn .3s ease-out both;cursor:pointer;
@@ -1010,6 +1066,76 @@ function _agLetters(role){
 function _agColor(role){
   return {DraftWriter:'var(--indigo)',Reviewer:'var(--green)',Researcher:'var(--cyan)',FactChecker:'var(--amber)',TrendHunter:'#a78bfa',HookReviewer:'#a78bfa'}[role]||'var(--indigo)';
 }
+function _agIcon(role){
+  // 순수 inline SVG — 이모지/외부 에셋 금지. 각 역할의 실제 작업을 시각화.
+  const s = {
+    // DraftWriter — 미니 에디터 창 + 점멸 커서 + 마지막 라인 확장
+    DraftWriter: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="9" width="38" height="30" rx="4" fill="rgba(129,140,248,.12)" stroke="#818cf8" stroke-width="1.3"/>
+      <rect x="5" y="9" width="38" height="7" rx="4" fill="rgba(129,140,248,.22)"/>
+      <circle cx="10" cy="12.5" r="1.1" fill="#818cf8"/>
+      <circle cx="14" cy="12.5" r="1.1" fill="#818cf8"/>
+      <circle cx="18" cy="12.5" r="1.1" fill="#818cf8"/>
+      <rect x="10" y="20" width="22" height="1.8" rx=".9" fill="rgba(255,255,255,.42)"/>
+      <rect x="10" y="25" width="18" height="1.8" rx=".9" fill="rgba(255,255,255,.28)"/>
+      <rect class="dw-line3" x="10" y="30" width="16" height="1.8" rx=".9" fill="rgba(255,255,255,.22)"/>
+      <rect class="dw-caret" x="27" y="29" width="1.4" height="4.5" fill="#818cf8"/>
+    </svg>`,
+    // Reviewer — 체크리스트 + 순차 체크
+    Reviewer: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="7" width="36" height="34" rx="4" fill="rgba(52,211,153,.1)" stroke="#34d399" stroke-width="1.3"/>
+      <rect x="11" y="13" width="6" height="6" rx="1.3" fill="#34d399"/>
+      <path d="M12.5 16 L14 17.4 L16 14.8" stroke="#0a0a0f" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="20" y="14.5" width="18" height="1.8" rx=".9" fill="rgba(255,255,255,.4)"/>
+      <rect x="11" y="22" width="6" height="6" rx="1.3" fill="rgba(52,211,153,.25)" stroke="#34d399" stroke-width=".9"/>
+      <path class="rv-c2" d="M12.5 25 L14 26.4 L16 23.8" stroke="#34d399" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="20" y="23.5" width="15" height="1.8" rx=".9" fill="rgba(255,255,255,.28)"/>
+      <rect x="11" y="31" width="6" height="6" rx="1.3" fill="rgba(52,211,153,.25)" stroke="#34d399" stroke-width=".9"/>
+      <path class="rv-c3" d="M12.5 34 L14 35.4 L16 32.8" stroke="#34d399" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="20" y="32.5" width="13" height="1.8" rx=".9" fill="rgba(255,255,255,.24)"/>
+    </svg>`,
+    // Researcher — 문서 + 돋보기 스캔
+    Researcher: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="9" width="24" height="31" rx="2.5" fill="rgba(34,211,238,.12)" stroke="#22d3ee" stroke-width="1.2"/>
+      <rect x="10" y="15" width="15" height="1.6" rx=".8" fill="rgba(255,255,255,.36)"/>
+      <rect x="10" y="19" width="12" height="1.6" rx=".8" fill="rgba(255,255,255,.26)"/>
+      <rect x="10" y="23" width="13" height="1.6" rx=".8" fill="rgba(255,255,255,.26)"/>
+      <rect x="10" y="27" width="10" height="1.6" rx=".8" fill="rgba(255,255,255,.2)"/>
+      <g class="rs-lens">
+        <circle cx="33" cy="28" r="8" fill="rgba(10,10,15,.55)" stroke="#22d3ee" stroke-width="1.6"/>
+        <circle cx="33" cy="28" r="5.5" fill="rgba(34,211,238,.08)"/>
+        <line x1="39" y1="34" x2="43" y2="39" stroke="#22d3ee" stroke-width="2.2" stroke-linecap="round"/>
+      </g>
+    </svg>`,
+    // FactChecker — 문서 + 순차 체크 마크
+    FactChecker: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect x="9" y="6" width="30" height="36" rx="3" fill="rgba(245,158,11,.1)" stroke="#f59e0b" stroke-width="1.3"/>
+      <path class="fc-tick1" d="M13 14.5 L15.5 17 L19.5 12.5" stroke="#f59e0b" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="22" y="14" width="13" height="1.7" rx=".85" fill="rgba(255,255,255,.38)"/>
+      <path class="fc-tick2" d="M13 23.5 L15.5 26 L19.5 21.5" stroke="#f59e0b" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="22" y="23" width="12" height="1.7" rx=".85" fill="rgba(255,255,255,.3)"/>
+      <path class="fc-tick3" d="M13 32.5 L15.5 35 L19.5 30.5" stroke="#f59e0b" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="22" y="32" width="10" height="1.7" rx=".85" fill="rgba(255,255,255,.26)"/>
+    </svg>`,
+    // HookReviewer — 별 펄스 (X 감각 평가 "sense")
+    HookReviewer: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="24" cy="24" r="17" fill="rgba(167,139,250,.12)" stroke="#a78bfa" stroke-width="1.3"/>
+      <path class="hk-star" d="M24 11 L26.6 20.4 L36 21.2 L28.7 27.4 L31 37 L24 31.9 L17 37 L19.3 27.4 L12 21.2 L21.4 20.4 Z" fill="#a78bfa" opacity=".92"/>
+      <circle cx="24" cy="24" r=".9" fill="#0a0a0f"/>
+    </svg>`,
+    // TrendHunter — 바 차트 + 꺾은선
+    TrendHunter: `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5" y="8" width="38" height="32" rx="3" fill="rgba(167,139,250,.1)" stroke="#a78bfa" stroke-width="1.3"/>
+      <rect class="th-b1" x="11" y="26" width="5" height="10" rx=".8" fill="#a78bfa" opacity=".55"/>
+      <rect class="th-b2" x="18" y="22" width="5" height="14" rx=".8" fill="#a78bfa" opacity=".7"/>
+      <rect class="th-b3" x="25" y="18" width="5" height="18" rx=".8" fill="#a78bfa" opacity=".85"/>
+      <rect class="th-b4" x="32" y="13" width="5" height="23" rx=".8" fill="#a78bfa"/>
+      <path d="M13.5 26 L20.5 22 L27.5 18 L34.5 13" stroke="#a78bfa" stroke-width="1.1" fill="none" opacity=".65" stroke-linecap="round"/>
+      <circle cx="34.5" cy="13" r="1.6" fill="#a78bfa"/>
+    </svg>`,
+  };
+  return s[role] || `<svg viewBox="0 0 48 48"><rect x="4" y="4" width="40" height="40" rx="8" fill="${_agColor(role)}" opacity=".3"/><text x="24" y="30" text-anchor="middle" font-size="18" font-weight="800" fill="${_agColor(role)}">${_agLetters(role)}</text></svg>`;
+}
 function _agStatusLabel(s){
   return {working:'작동 중',idle:'대기',blocked:'차단',manual:'수동',delayed:'지연',error:'오류'}[s]||'대기';
 }
@@ -1071,7 +1197,7 @@ async function loadProviders(){
       const lastAgo=a.last_run?_agoKR(a.last_run):'';
       const safe=s=>String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       return`<div class="ag-row-v2 ${st}" style="animation-delay:${i*50}ms" onclick='_agShowDetail(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
-        <span class="ag-av" style="background:${_agColor(a.role)}">${_agLetters(a.role)}</span>
+        <span class="ag-av-svg">${_agIcon(a.role)}</span>
         <div class="ag-body">
           <div class="ag-name-row"><span class="ag-name-kr">${safe(a.role_kr||a.role)}</span><span class="ag-name-en">${safe(a.role)}</span></div>
           <div class="ag-desc">${safe(a.role_desc||'')} · <span style="color:var(--text-mut)">${safe(a.provider||'')}</span></div>
