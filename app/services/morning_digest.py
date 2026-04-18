@@ -55,6 +55,15 @@ _MEDIUM_IMPORTANCE: list[str] = [
 def _importance_score(article: dict) -> int:
     """기사의 중요도 점수를 계산합니다 (0~100)."""
     title_lower = (article.get("title", "") + " " + article.get("summary", "")).lower()
+    # Naver 검색어 에코 차단 — Naver news.json 응답 description 에는 검색 쿼리가
+    # 그대로 포함돼 모든 결과가 자동으로 +15 (HIGH 매치) 부풀려지던 버그.
+    # 검색 키워드 토큰을 haystack 에서 제거해 에코 점수를 끊는다.
+    src = article.get("source") or ""
+    if src.startswith("Naver/"):
+        for tok in src[len("Naver/"):].split():
+            t = tok.lower().strip()
+            if t:
+                title_lower = title_lower.replace(t, " ")
     score = 0
 
     # 고중요도 키워드
