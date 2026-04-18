@@ -28,9 +28,9 @@
   --cyan:#22d3ee;                                           /* accent only */
 
   /* ── TEXT ── */
-  --text-pri:rgba(255,255,255,.93);   /* numbers, titles */
-  --text-sec:rgba(255,255,255,.50);   /* descriptions, sub */
-  --text-mut:rgba(255,255,255,.20);   /* disabled, empty, dim labels */
+  --text-pri:rgba(255,255,255,.98);   /* numbers, titles */
+  --text-sec:rgba(255,255,255,.78);   /* descriptions, sub — 옥외/직사광 대비 */
+  --text-mut:rgba(255,255,255,.58);   /* dim labels — 읽을 수 있어야 함 */
   --text-acc:#a5b4fc;                 /* brand accent */
 
   /* ── TYPOGRAPHY ── */
@@ -185,7 +185,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   background:var(--bg-raised);border:1px solid var(--border-subtle);
   overflow:hidden;position:relative;transition:transform .2s}
 .ag-av-svg svg{width:100%;height:100%;display:block}
-.ag-row-v2.idle .ag-av-svg,.ag-row-v2.blocked .ag-av-svg,.ag-row-v2.manual .ag-av-svg{opacity:.55}
+.ag-row-v2.idle .ag-av-svg,.ag-row-v2.blocked .ag-av-svg,.ag-row-v2.manual .ag-av-svg{opacity:.82}
 .ag-row-v2.working .ag-av-svg{border-color:rgba(129,140,248,.35);
   box-shadow:0 0 0 1px rgba(129,140,248,.15),0 0 10px rgba(129,140,248,.18)}
 .ag-row-v2:active .ag-av-svg{transform:scale(.96)}
@@ -258,7 +258,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ag-row-v2.delayed{border-left-color:var(--amber)}
 .ag-row-v2.error{border-left-color:var(--red)}
 .ag-row-v2.manual{border-left-color:rgba(167,139,250,.55)}
-.ag-row-v2.idle{opacity:.78}
+.ag-row-v2.idle{opacity:.94}
 .ag-body{min-width:0}
 .ag-name-row{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;line-height:1.2}
 .ag-name-kr{color:var(--text-pri)}
@@ -309,7 +309,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   background:var(--bg-surface);border-radius:var(--r-sm);
   border:1px solid var(--border-subtle)}
 .ws-prov-cell.ok{border-color:rgba(52,211,153,.18)}
-.ws-prov-cell.off{opacity:.55}
+.ws-prov-cell.off{opacity:.78}
 .ws-prov-cell-h{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-pri);font-weight:600}
 .ws-prov-cell-c{font-size:14px;font-weight:800;color:var(--text-pri);line-height:1;margin-top:3px;font-variant-numeric:tabular-nums}
 .ws-prov-cell-l{font-size:8px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
