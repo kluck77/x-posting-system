@@ -2337,28 +2337,39 @@ function setScore(id,val){
   if(bar){bar.style.width=(val||0)+'%';bar.style.background=c}
 }
 async function rejectDraft(id,btn){
-  const row=btn.closest('.draft-row');
+  const row=btn.closest('.pp2-draft')||btn.closest('.draft-row');
   btn.textContent='…';btn.disabled=true;
   try{
     const r=await fetch(API+'/drafts/'+id+'/reject',{method:'POST'});
     const d=await r.json();
     if(d.success){
-      if(row){row.style.opacity='0';row.style.transition='opacity .3s';
-        setTimeout(()=>{row.style.display='none';loadFlowTrace()},350);}
+      // 낙관적 제거 — 캐시에서도 바로 삭제해서 재렌더 시 돌아오지 않게
+      if(_ppCache&&Array.isArray(_ppCache.drafts)){
+        _ppCache.drafts=_ppCache.drafts.filter(x=>x.id!==id);
+      }
+      if(row){row.style.opacity='0';row.style.transition='opacity .25s';
+        setTimeout(()=>{row.style.display='none';loadFlowTrace()},280);}
+      else{loadFlowTrace()}
     }else{btn.textContent='✕';btn.disabled=false}
   }catch(e){btn.textContent='✕';btn.disabled=false}
 }
 async function sendDraft(id,btn){
-  const row=btn.closest('.draft-row');
-  const allBtns=row?row.querySelectorAll('.draft-btn'):[];
-  allBtns.forEach(b=>b.disabled=true);
+  const row=btn.closest('.pp2-draft')||btn.closest('.draft-row');
+  const allBtns=row?row.querySelectorAll('button,a'):[];
+  allBtns.forEach(b=>{if(b!==btn)b.disabled=true});
+  btn.disabled=true;
   btn.textContent='전송 중…';btn.style.background='var(--indigo-dim)';btn.style.color='var(--indigo)';
   try{
     const r=await fetch(API+'/drafts/'+id+'/approve',{method:'POST'});
     const d=await r.json();
     if(d.success){
       btn.textContent='✓ 전송됨';btn.style.background='var(--green-dim)';btn.style.color='var(--green)';
-      setTimeout(()=>loadFlowTrace(),1500);
+      // 낙관적 상태 업데이트 + 즉시 재렌더
+      if(_ppCache&&Array.isArray(_ppCache.drafts)){
+        const t=_ppCache.drafts.find(x=>x.id===id);
+        if(t)t.status='published';
+      }
+      setTimeout(()=>loadFlowTrace(),1200);
     }else{
       btn.textContent='실패';btn.style.background='var(--red-dim)';btn.style.color='var(--red)';
       allBtns.forEach(b=>b.disabled=false);
