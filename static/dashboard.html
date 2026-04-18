@@ -356,15 +356,50 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .alert-meta{display:flex;gap:4px;align-items:center}
 
-/* ── ALERTS: NEWS FEED ── */
-.news-feed{border-left:2px solid var(--border-normal);padding-left:var(--sp-2)}
-.news-row{display:flex;align-items:flex-start;gap:6px;padding:6px 0;
-  border-bottom:1px solid var(--border-subtle);min-height:34px}
-.news-row:last-child{border-bottom:none}
-.news-dot{width:4px;height:4px;border-radius:50%;background:var(--text-mut);
-  flex-shrink:0;margin-top:5px}
-.news-title{flex:1;font-size:13px;color:var(--text-pri);line-height:1.35;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* ── ALERTS: NEWS FEED (v2 — 읽기 + 즉시 행동) ── */
+.alerts-head{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.naver-row{margin-bottom:0}
+.imm-inline{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:7px 12px;border-radius:var(--r-md);background:var(--bg-surface);
+  font-size:12px;color:var(--text-sec);border-left:2px solid var(--border-normal)}
+.imm-inline.has-urgent{border-left-color:var(--red);background:var(--red-dim);color:var(--text-pri)}
+.imm-inline .imm-label{font-weight:600;letter-spacing:.3px}
+.imm-inline .imm-count{font-size:11px;color:var(--text-mut);font-family:var(--mono)}
+.imm-inline.has-urgent .imm-count{color:var(--red);font-weight:700}
+
+.news-feed-v2{display:flex;flex-direction:column;gap:6px}
+.feed-row{display:flex;align-items:flex-start;gap:10px;padding:11px 10px 11px 12px;
+  border-radius:var(--r-md);background:var(--bg-surface);text-decoration:none;color:inherit;
+  border-left:3px solid transparent;position:relative;
+  transition:background .15s ease,transform .1s ease;
+  animation:feedIn .3s ease-out both;
+  -webkit-tap-highlight-color:transparent}
+.feed-row:active{background:var(--bg-raised);transform:scale(.99)}
+.feed-row.sev-hi{border-left-color:var(--red)}
+.feed-row.sev-mi{border-left-color:var(--amber)}
+.feed-row.sev-lo{border-left-color:var(--border-normal)}
+
+.feed-dot{width:6px;height:6px;border-radius:50%;background:var(--text-mut);
+  flex-shrink:0;margin-top:7px}
+.feed-row.sev-hi .feed-dot{background:var(--red);animation:pulseDot 2.2s ease-in-out infinite}
+.feed-row.sev-mi .feed-dot{background:var(--amber)}
+
+.feed-body{flex:1;min-width:0}
+.feed-title{font-size:15px;font-weight:600;color:var(--text-pri);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  word-break:break-word}
+.feed-meta{display:flex;gap:8px;align-items:center;margin-top:5px;
+  font-size:11px;color:var(--text-mut)}
+.feed-cat{text-transform:uppercase;letter-spacing:.5px;font-weight:600;color:var(--text-sec);
+  font-size:10px}
+.feed-time{font-family:var(--mono);color:var(--text-mut);font-size:11px}
+.feed-ext{color:var(--text-mut);font-size:14px;flex-shrink:0;margin-top:5px;opacity:.55;
+  transition:opacity .15s}
+.feed-row:active .feed-ext{opacity:1;color:var(--text-sec)}
+
+@keyframes feedIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}
+  50%{box-shadow:0 0 0 4px rgba(239,68,68,0)}}
 
 /* ── PIPELINE ── */
 .pi-sum{font-size:11px;color:var(--text-sec);margin-bottom:8px}
@@ -556,21 +591,24 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ ALERTS TAB ═══ -->
 <section class="tab-pane" id="tab-alerts">
-  <div class="naver-row">
-    <span class="naver-tag">NAVER</span>
-    <span class="naver-pct" id="naverPct">—</span>
-    <div class="naver-track"><div class="naver-fill" id="naverBar" style="width:0%"></div></div>
-    <span class="naver-rem" id="naverRemain"></span>
+  <div class="alerts-head">
+    <div class="naver-row">
+      <span class="naver-tag">NAVER</span>
+      <span class="naver-pct" id="naverPct">—</span>
+      <div class="naver-track"><div class="naver-fill" id="naverBar" style="width:0%"></div></div>
+      <span class="naver-rem" id="naverRemain"></span>
+    </div>
+    <div class="imm-inline" id="immInline">
+      <span class="imm-label">🚨 긴급 큐</span>
+      <span class="imm-count" id="immCount">대기 중…</span>
+    </div>
   </div>
 
-  <div class="sec-head">긴급 큐</div>
-  <div id="immediateList"><div class="empty-sm">긴급 항목 없음</div></div>
+  <div id="immediateList"></div>
 
-  <div class="sec-head">실시간 피드</div>
-  <div class="news-feed" id="newsList">
+  <div class="news-feed-v2" id="newsList">
     <div class="empty-sm">수집 대기 중</div>
   </div>
-  <div class="tab-footer" id="alertsFooter"></div>
 </section>
 
 <!-- ═══ AGENTS TAB ═══ -->
@@ -787,8 +825,13 @@ async function loadEditorial(){
 
     // immediate items → alerts
     const items=d.immediate_items||[];
+    const immInline=document.getElementById('immInline');
+    const immCount=document.getElementById('immCount');
+    const immList=document.getElementById('immediateList');
     if(items.length){
-      document.getElementById('immediateList').innerHTML=items.map(i=>
+      if(immInline){immInline.classList.add('has-urgent')}
+      if(immCount){immCount.textContent=items.length+'건 · '+(items[0].created_at||'').substring(11,16)}
+      if(immList)immList.innerHTML=items.map(i=>
         `<div class="alert-item">
           <div class="alert-snap">${(i.post_snapshot||'').substring(0,60)}</div>
           <div class="alert-meta">
@@ -823,6 +866,9 @@ async function loadEditorial(){
         }).join('');
       }
     }else{
+      if(immInline){immInline.classList.remove('has-urgent')}
+      if(immCount){immCount.textContent='0건'}
+      if(immList){immList.innerHTML=''}
       const pulseList=document.getElementById('recentAlerts');
       if(pulseList)pulseList.innerHTML=
         `<div class="alert-empty">
@@ -979,19 +1025,41 @@ function newsImp(t){
   if(mi.some(k=>l.includes(k)))return'var(--amber)';
   return'var(--text-mut)';
 }
+function _feedSev(title){
+  const l=(title||'').toLowerCase();
+  const hi=['금리','전쟁','폭락','급등','긴급','속보','비트코인','bitcoin','fed','etf','파산','계엄','환율','제재','충돌','테러'];
+  const mi=['경제','투자','주식','유가','반도체','삼성','테슬라','코스피','나스닥','무역','관세','실적','인플레'];
+  if(hi.some(k=>l.includes(k)))return'sev-hi';
+  if(mi.some(k=>l.includes(k)))return'sev-mi';
+  return'sev-lo';
+}
+function _feedEsc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function _feedCat(c){
+  const m={economy:'경제',politics:'정치',crypto:'암호화폐',tech:'기술',world:'국제',policy:'정책',market:'시장',stock:'주식'};
+  return m[c]||c||'';
+}
 async function loadNews(){
   try{
-    const r=await fetch(API+'/control/recent-news?limit=12');
+    const r=await fetch(API+'/control/recent-news?limit=20');
     const d=await r.json();
-    if(d.length){
-      document.getElementById('newsList').innerHTML=d.map((n,i)=>{
-        const c=newsImp(n.title||'');
-        return`<div class="news-row" style="animation-delay:${i*50}ms">
-          <span class="news-dot" style="background:${c};box-shadow:0 0 3px ${c}"></span>
-          <span class="news-title">${n.title||'—'}</span>
-          ${n.time?`<span class="draft-time">${n.time}</span>`:''}</div>`;
-      }).join('');
-    }
+    const el=document.getElementById('newsList');
+    if(!d.length){el.innerHTML='<div class="empty-sm">수집 대기 중</div>';return}
+    el.innerHTML=d.map((n,i)=>{
+      const sev=_feedSev(n.title||'');
+      const cat=_feedCat(n.category);
+      const t=_feedEsc(n.title||'—');
+      const url=n.url||'';
+      const tag=url?'a':'div';
+      const attrs=url?` href="${_feedEsc(url)}" target="_blank" rel="noopener noreferrer"`:'';
+      return `<${tag} class="feed-row ${sev}"${attrs} style="animation-delay:${Math.min(i*40,400)}ms">
+        <span class="feed-dot"></span>
+        <div class="feed-body">
+          <div class="feed-title">${t}</div>
+          <div class="feed-meta">${cat?`<span class="feed-cat">${_feedEsc(cat)}</span>`:''}${n.time?`<span class="feed-time">${_feedEsc(n.time)}</span>`:''}</div>
+        </div>
+        ${url?'<span class="feed-ext">↗</span>':''}
+      </${tag}>`;
+    }).join('');
   }catch(e){console.warn('news:',e)}
 }
 

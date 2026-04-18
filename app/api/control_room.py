@@ -392,15 +392,27 @@ async def get_providers():
 @router.get("/recent-news")
 async def get_recent_news(limit: int = 8):
     """
-    최근 수집된 기사 제목 목록을 반환합니다.
+    최근 수집된 기사 목록을 반환합니다.
     _recent_items 버퍼 기반 — overnight_buffer 클리어와 독립.
+
+    응답 필드:
+      title     기사 제목
+      time      수집 시각 HH:MM
+      url       원문 URL (Alerts 탭 피드 행 탭 → 새 탭 열기용)
+      category  네이버 카테고리 (배지 표시용)
     """
     try:
         from app.services.news_monitor import get_recent_items
         items = get_recent_items(limit=limit)
-        return [{"title": str(a.get("title", "")).strip()[:100],
-                 "time": str(a.get("added_at", ""))[11:16]}
-                for a in items if a.get("title")]
+        return [
+            {
+                "title": str(a.get("title", "")).strip()[:120],
+                "time": str(a.get("added_at", ""))[11:16],
+                "url": a.get("url") or "",
+                "category": a.get("category") or "",
+            }
+            for a in items if a.get("title")
+        ]
     except Exception as e:
         logger.warning(f"recent-news 오류: {e}")
         return []
