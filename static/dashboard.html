@@ -2352,9 +2352,55 @@ function openBizSheet(k){
   if(k==='premium'){
     const top=src.top||[];
     const st=src.status||{};
+    const fb=src.fresh_buckets||{};
+    const latestIso=src.latest_created_at;
+    const latestAgeH=latestIso?((Date.now()-new Date(latestIso).getTime())/3600000):null;
+    // 파이프라인 건강 판정: 최신 후보 연령 기준
+    let health;
+    if(latestAgeH==null) health={lbl:'데이터 없음',color:'var(--text-mut)',icon:'○'};
+    else if(latestAgeH<=24) health={lbl:'활발',color:'var(--green)',icon:'●'};
+    else if(latestAgeH<=72) health={lbl:'주의',color:'var(--amber)',icon:'●'};
+    else health={lbl:'정체 — 파이프라인 점검 필요',color:'var(--red)',icon:'●'};
+    const healthBanner=
+      `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:10px;`+
+        `background:var(--bg-raised);border-left:3px solid ${health.color};border-radius:8px">`+
+        `<span style="color:${health.color};font-size:14px">${health.icon}</span>`+
+        `<div style="flex:1;font-size:12px">`+
+          `<div style="color:var(--text-pri);font-weight:600">프리미엄 파이프라인: ${health.lbl}</div>`+
+          `<div style="color:var(--text-mut);font-size:11px;margin-top:2px">`+
+            (latestIso?`마지막 후보 ${_ops2RelTime(latestIso)}`:'후보 미생성')+
+          `</div>`+
+        `</div>`+
+      `</div>`;
+    const freshRow=
+      `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">`+
+        `<div style="padding:8px;background:var(--bg-raised);border-radius:8px;text-align:center">`+
+          `<div style="font-size:18px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums">${fb['24h']||0}</div>`+
+          `<div style="font-size:9px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">24시간</div>`+
+        `</div>`+
+        `<div style="padding:8px;background:var(--bg-raised);border-radius:8px;text-align:center">`+
+          `<div style="font-size:18px;font-weight:800;color:var(--amber);font-variant-numeric:tabular-nums">${fb['7d']||0}</div>`+
+          `<div style="font-size:9px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">7일</div>`+
+        `</div>`+
+        `<div style="padding:8px;background:var(--bg-raised);border-radius:8px;text-align:center">`+
+          `<div style="font-size:18px;font-weight:800;color:var(--text-sec);font-variant-numeric:tabular-nums">${fb['30d']||0}</div>`+
+          `<div style="font-size:9px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">30일</div>`+
+        `</div>`+
+        `<div style="padding:8px;background:var(--bg-raised);border-radius:8px;text-align:center">`+
+          `<div style="font-size:18px;font-weight:800;color:var(--text-mut);font-variant-numeric:tabular-nums">${fb['older']||0}</div>`+
+          `<div style="font-size:9px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">이전</div>`+
+        `</div>`+
+      `</div>`;
     const statusRow=Object.keys(st).length
       ? `<div class="pp2-sh-row"><div class="pp2-sh-k">상태</div><div class="pp2-sh-v" style="font-size:11px;color:var(--text-sec)">${Object.entries(st).map(([n,c])=>`${_ops2Esc(n)} ${c}`).join(' · ')}</div></div>`
       : '';
+    // 신선도 배지 (item 별)
+    const freshBadge=(ah)=>{
+      if(ah==null) return '';
+      if(ah<=24) return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;background:rgba(45,212,191,.15);color:var(--green);font-size:9px;font-weight:700;letter-spacing:.3px">FRESH</span>`;
+      if(ah<=168) return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;background:rgba(245,158,11,.15);color:var(--amber);font-size:9px;font-weight:700;letter-spacing:.3px">주간</span>`;
+      return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;background:var(--bg-surface);color:var(--text-mut);font-size:9px;font-weight:700;letter-spacing:.3px">STALE</span>`;
+    };
     const topHtml=top.length
       ? top.map(t=>{
           const s=t.status||'new';
@@ -2362,6 +2408,8 @@ function openBizSheet(k){
           const isPub=(s==='published'||s==='promoted');
           const isSent=(s==='reviewing'||s==='shortlisted');
           const scoreColor=t.score>=90?'var(--green)':t.score>=70?'var(--amber)':'var(--text-sec)';
+          const stale=(t.age_hours!=null&&t.age_hours>168);
+          const rowStyle=stale?'opacity:.6':'';
           const acts=isPub
             ? '<span class="ops2-topa done">✓ 발행됨</span>'
             : (isSent
@@ -2370,10 +2418,11 @@ function openBizSheet(k){
                     ? `<button class="ops2-topa send" onclick="opsSendPremium(${t.id},this)">📤 텔레그램 발송</button>`
                     : `<span class="ops2-topa" style="color:var(--text-mut)">${_ops2Esc(s)}</span>`));
           const rel=_ops2RelTime(t.created_at);
-          return `<div class="ops2-topi" id="ops2-topi-${t.id}">
+          return `<div class="ops2-topi" id="ops2-topi-${t.id}" style="${rowStyle}">
             <div class="ops2-topi-body">
               <div class="ops2-topi-title">${_ops2Esc(t.hook||'—')}</div>
-              <div class="ops2-topi-meta">
+              <div class="ops2-topi-meta" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                ${freshBadge(t.age_hours)}
                 <span class="ops2-topi-st ${s}">${_ops2Esc(s)}</span>
                 <span style="color:${scoreColor};font-weight:700">수익 ${t.score??'—'}</span>
                 ${rel?`<span style="color:var(--text-mut);font-size:10px">${rel}</span>`:''}
@@ -2382,11 +2431,16 @@ function openBizSheet(k){
             <div class="ops2-topi-acts">${acts}</div>
           </div>`;
         }).join('')
-      : '<div style="color:var(--text-mut);font-size:12px;padding:4px 0">후보 없음</div>';
+      : '<div style="color:var(--text-mut);font-size:12px;padding:12px 4px;text-align:center">최근 30일 내 프리미엄 후보 없음</div>';
     html=
       `<div class="pp2-sh-title">프리미엄 후보</div>`+
-      `<div class="pp2-sh-scores"><div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.total||0}</div><div class="pp2-sh-sc-l">전체</div></div></div>`+
-      `<div class="ops2-hint">💡 수익 점수 높은 항목은 바로 텔레그램으로 발송할 수 있다</div>`+
+      healthBanner+
+      `<div class="pp2-sh-scores">`+
+        `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${src.total||0}</div><div class="pp2-sh-sc-l">전체</div></div>`+
+        `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--green)">${src.total_recent??0}</div><div class="pp2-sh-sc-l">30일 내</div></div>`+
+      `</div>`+
+      freshRow+
+      `<div class="ops2-hint">💡 최신성 가중 정렬 — 최근 후보가 점수 낮아도 우선 노출된다</div>`+
       statusRow+
       `<div class="pp2-sh-row"><div class="pp2-sh-k">상위 항목</div><div class="pp2-sh-v">${topHtml}</div></div>`;
   }else if(k==='b2b'){

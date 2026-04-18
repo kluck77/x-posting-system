@@ -95,26 +95,79 @@ async def get_business_summary():
 
 
 def _safe_premium(db) -> dict:
+    """
+    프리미엄 후보 집계.
+
+    기존에는 monetization_score 내림차순만 쓰다 보니 7~10일 지난 낡은
+    기사가 최신 기사를 가리는 문제가 있었다. 이제:
+
+    1) 30일 이상 된 후보는 아예 제외 (노이즈).
+    2) 남은 후보는 신선도 가중 점수로 재정렬:
+       compound = score * exp(-age_days / 10)
+       → 7일 지나면 가중치 0.5, 30일 지나면 0.05
+    3) 신선도 버킷 카운트(24h / 7d / 30d / older) 와 최신 후보
+       created_at 을 같이 반환해 UI 가 파이프라인 건강 상태를 표시.
+    """
     try:
         from app.services.premium_candidate_service import PremiumCandidateService
+        from datetime import datetime as _dt, timezone as _tz
+        import math
         svc = PremiumCandidateService(db)
         counts = svc.count_by_status()
-        # limit=20 로 상향 — 시트 스크롤로 전체 후보 브라우징 가능
-        top = svc.get_candidates(limit=20)
+        # 재정렬용으로 넉넉히 가져옴 (DB 질의는 monetization_score desc).
+        all_cands = svc.get_candidates(limit=200)
+        now_utc = _dt.now(_tz.utc)
+
+        def _to_utc(dt):
+            if dt is None:
+                return None
+            return dt if dt.tzinfo else dt.replace(tzinfo=_tz.utc)
 
         def _iso_utc(dt):
-            # DB 는 naive UTC 로 저장되므로 JS 가 로컬 시각으로 오인하지 않게
-            # 명시적으로 Z 타임존을 붙인 ISO 문자열로 반환한다.
-            if not dt:
-                return None
-            from datetime import timezone as _tz
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=_tz.utc)
-            return dt.isoformat()
+            u = _to_utc(dt)
+            return u.isoformat() if u else None
+
+        def _age_hours(d):
+            u = _to_utc(d.created_at)
+            if u is None:
+                return 1e9
+            return (now_utc - u).total_seconds() / 3600
+
+        # 30일 이내만 대상
+        recent = [d for d in all_cands if _age_hours(d) <= 24 * 30]
+
+        def _compound(d):
+            base = d.monetization_score or 0
+            age_d = _age_hours(d) / 24
+            return base * math.exp(-age_d / 10)
+
+        recent.sort(key=_compound, reverse=True)
+        top = recent[:20]
+
+        # 신선도 버킷 (전체 후보 기준)
+        buckets = {"24h": 0, "7d": 0, "30d": 0, "older": 0}
+        for d in all_cands:
+            h = _age_hours(d)
+            if h <= 24:
+                buckets["24h"] += 1
+            elif h <= 24 * 7:
+                buckets["7d"] += 1
+            elif h <= 24 * 30:
+                buckets["30d"] += 1
+            else:
+                buckets["older"] += 1
+
+        latest_dt = max(
+            (_to_utc(d.created_at) for d in all_cands if d.created_at),
+            default=None,
+        )
 
         return {
             "total": sum(counts.values()),
+            "total_recent": len(recent),
             "status": counts,
+            "fresh_buckets": buckets,
+            "latest_created_at": latest_dt.isoformat() if latest_dt else None,
             "top": [
                 {
                     "id": d.id,
@@ -122,13 +175,18 @@ def _safe_premium(db) -> dict:
                     "status": d.premium_status or "new",
                     "score": d.monetization_score,
                     "created_at": _iso_utc(d.created_at),
+                    "age_hours": round(_age_hours(d), 1),
                 }
                 for d in top
             ],
         }
     except Exception as e:
         logger.warning(f"business-summary premium 오류: {e}")
-        return {"total": 0, "status": {}, "top": []}
+        return {
+            "total": 0, "total_recent": 0, "status": {},
+            "fresh_buckets": {"24h": 0, "7d": 0, "30d": 0, "older": 0},
+            "latest_created_at": None, "top": [],
+        }
 
 
 def _safe_brief(db) -> dict:
