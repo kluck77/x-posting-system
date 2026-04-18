@@ -365,7 +365,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   border-left:3px solid transparent;transition:border-color .15s}
 .pp2-draft.st-pending{border-left-color:var(--amber)}
 .pp2-draft.st-approved{border-left-color:var(--green)}
-.pp2-draft.st-published{border-left-color:var(--indigo)}
+.pp2-draft.st-published{border-left-color:var(--green)} /* 레거시 — 완료와 동일 */
 .pp2-draft.st-failed{border-left-color:var(--red)}
 .pp2-draft:active{background:var(--bg-raised)}
 
@@ -373,7 +373,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pp2-d-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
 .pp2-d-dot.pending{background:var(--amber);animation:ag-pulse 2s ease-in-out infinite}
 .pp2-d-dot.approved{background:var(--green)}
-.pp2-d-dot.published{background:var(--indigo)}
+.pp2-d-dot.published{background:var(--green)} /* 레거시 */
 .pp2-d-dot.failed{background:var(--red)}
 .pp2-d-title{flex:1;min-width:0;font-size:14px;font-weight:600;line-height:1.35;
   color:var(--text-pri);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
@@ -381,7 +381,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pp2-d-stchip{flex-shrink:0;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
 .pp2-d-stchip.pending{background:var(--amber-dim);color:var(--amber)}
 .pp2-d-stchip.approved{background:var(--green-dim);color:var(--green)}
-.pp2-d-stchip.published{background:var(--indigo-dim);color:var(--indigo)}
+.pp2-d-stchip.published{background:var(--green-dim);color:var(--green)} /* 레거시 */
 .pp2-d-stchip.failed{background:var(--red-dim);color:var(--red)}
 
 .pp2-d-meta{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:10px}
@@ -1965,10 +1965,14 @@ function _ppRenderFilters(){
     const d=_ppCache.drafts||[];
     const ct={all:d.filter(x=>x.status!=='rejected').length,pending:0,approved:0,published:0,failed:0};
     d.forEach(x=>{if(ct.hasOwnProperty(x.status))ct[x.status]++});
+    // X 자동게시 제거됨 — 'approved' 가 최종 상태 (=완료).
+    // published 는 레거시 데이터를 approved 로 합산해서 보여줌.
+    const doneCount=(ct.approved||0)+(ct.published||0);
     box.innerHTML=[
-      ['all','전체'],['pending','대기만'],['approved','승인'],['published','발행'],['failed','실패'],
+      ['all','전체'],['pending','대기만'],['approved','완료'],['failed','실패'],
     ].map(([v,l])=>{
-      const n=ct[v]||0;const dim=(v!=='all'&&n===0)?'dim':'';
+      const n=v==='approved'?doneCount:(ct[v]||0);
+      const dim=(v!=='all'&&n===0)?'dim':'';
       return`<button class="pp2-fbtn ${f===v?'active':''} ${dim}" onclick="setPpDraftFilter('${v}',this)">${l}<span class="pp2-fbtn-n">${n}</span></button>`;
     }).join('');
   }else{
@@ -1991,16 +1995,17 @@ function _ppRenderDrafts(){
   d.forEach(x=>{if(ct.hasOwnProperty(x.status))ct[x.status]++});
 
   // 상단 summary
-  const nD=document.getElementById('ppNDrafts');if(nD)nD.textContent=ct.pending+ct.approved;
-  const readyNow=ct.pending+ct.approved;
+  // "내 초안" 배지 = 아직 손댈 게 남은 것 (=pending). 완료된 건 숫자에서 빠짐.
+  const doneCount=ct.approved+ct.published;
+  const nD=document.getElementById('ppNDrafts');if(nD)nD.textContent=ct.pending;
   const s=document.getElementById('ppSummary');
   if(s){
-    s.innerHTML=readyNow?
-      `<div class="pp2-sum-main">오늘 바로 처리 <b class="amber">${readyNow}</b>건 · 발행 <b class="green">${ct.published}</b>건</div>`+
+    const anyWork=ct.pending||doneCount;
+    s.innerHTML=anyWork?
+      `<div class="pp2-sum-main">오늘 바로 처리 <b class="amber">${ct.pending}</b>건 · 완료 <b class="green">${doneCount}</b>건</div>`+
       `<div class="pp2-sum-sub">`+
-        `<span class="pp2-chip amber">대기 <b>${ct.pending}</b></span>`+
-        (ct.approved?`<span class="pp2-chip green">승인됨 <b>${ct.approved}</b></span>`:'')+
-        (ct.published?`<span class="pp2-chip indigo">발행 <b>${ct.published}</b></span>`:'')+
+        (ct.pending?`<span class="pp2-chip amber">대기 <b>${ct.pending}</b></span>`:'')+
+        (doneCount?`<span class="pp2-chip green">완료 <b>${doneCount}</b></span>`:'')+
         `<span class="pp2-chip">전체 <b>${ct.total}</b></span>`+
       `</div>`
     :'<div class="pp2-sum-main">파이프라인 대기 중</div>';
@@ -2008,8 +2013,14 @@ function _ppRenderDrafts(){
 
   // 필터 적용
   let visible=d.slice();
-  if(_ppDraftFilter!=='all')visible=visible.filter(x=>x.status===_ppDraftFilter);
-  else visible=visible.filter(x=>x.status!=='rejected');  // 기본 거절 숨김
+  if(_ppDraftFilter==='approved'){
+    // "완료" = approved + published(레거시)
+    visible=visible.filter(x=>x.status==='approved'||x.status==='published');
+  }else if(_ppDraftFilter!=='all'){
+    visible=visible.filter(x=>x.status===_ppDraftFilter);
+  }else{
+    visible=visible.filter(x=>x.status!=='rejected');  // 기본 거절 숨김
+  }
   if(_ppDraftSort==='resonance')visible.sort((a,b)=>(b.resonance||0)-(a.resonance||0));
 
   const dl=document.getElementById('draftList');
@@ -2020,9 +2031,12 @@ function _ppRenderDrafts(){
     const st=x.status||'pending';
     const rc=_ppRiskClass(x.risk_level);
     const rl=_ppRiskL(x.risk_level);
-    const stL={pending:'대기',approved:'승인',published:'발행',failed:'실패',rejected:'거절'}[st]||st;
-    const isPending=st==='pending',isApproved=st==='approved';
-    const canSend=(isPending||isApproved)&&!x.broken;
+    // X 자동 게시 제거됨 — approved 가 최종 상태 (= 완료).
+    // published 는 레거시 데이터 호환용.
+    const stL={pending:'대기',approved:'완료',published:'완료',failed:'실패',rejected:'거절'}[st]||st;
+    const isPending=st==='pending';
+    const isDone=(st==='approved'||st==='published');
+    const canApprove=isPending&&!x.broken;
     const title=(x.hook||x.title||'제목 없음').replace(/</g,'&lt;');
     return`<div class="pp2-draft st-${st}" style="animation-delay:${i*30}ms" onclick="openDraftSheet(${x.id})">
       <div class="pp2-d-top">
@@ -2039,8 +2053,9 @@ function _ppRenderDrafts(){
       </div>
       <div class="pp2-d-acts" onclick="event.stopPropagation()">
         ${x.source_url?`<a class="btn-secondary" href="${x.source_url}" target="_blank" rel="noopener">원문</a>`:''}
-        ${canSend?`<button class="btn-primary send" onclick="sendDraft(${x.id},this)">${isPending?'승인+전송':'전송'}</button>`:(st==='published'?'<div class="btn-secondary" style="flex:1;pointer-events:none;opacity:.7">완료</div>':'')}
-        ${(isPending||isApproved)?`<button class="btn-destructive" onclick="rejectDraft(${x.id},this)" aria-label="거절">✕</button>`:''}
+        ${canApprove?`<button class="btn-primary send" onclick="approveDraft(${x.id},this)">승인 완료</button>`:''}
+        ${isDone?`<button class="btn-secondary" style="flex:1" onclick="copyDraftBody(${x.id},this)">📋 본문 복사</button><div class="btn-secondary" style="pointer-events:none;opacity:.75;flex:0 0 auto;padding:8px 10px;color:var(--green)">✓ 완료</div>`:''}
+        ${isPending?`<button class="btn-destructive" onclick="rejectDraft(${x.id},this)" aria-label="거절">✕</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -2137,14 +2152,15 @@ function openDraftSheet(id){
   if(!x)return;
   const body=document.getElementById('ppSheetBody');
   const rl=_ppRiskL(x.risk_level),rc=_ppRiskClass(x.risk_level);
-  const st={pending:'대기',approved:'승인',published:'발행',failed:'실패',rejected:'거절'}[x.status]||x.status;
+  const st={pending:'대기',approved:'완료',published:'완료',failed:'실패',rejected:'거절'}[x.status]||x.status;
   const reasons=[];
   if(x.broken)reasons.push('AI 출력 구조 깨짐 (broken draft)');
-  if(x.risk_level==='high')reasons.push('고위험 분류 — 검토 후 전송');
+  if(x.risk_level==='high')reasons.push('고위험 분류 — 검토 후 승인');
   if(x.resonance&&x.resonance<70)reasons.push('공명 점수가 낮음 — 훅/본문 개선 여지');
   if(!reasons.length)reasons.push('추가 경고 없음');
-  const isPending=x.status==='pending',isApproved=x.status==='approved';
-  const canSend=(isPending||isApproved)&&!x.broken;
+  const isPending=x.status==='pending';
+  const isDone=(x.status==='approved'||x.status==='published');
+  const canApprove=isPending&&!x.broken;
   body.innerHTML=
     `<div class="pp2-sh-title">${(x.hook||x.title||'제목 없음').replace(/</g,'&lt;')}</div>`+
     `<div class="pp2-sh-scores">`+
@@ -2152,14 +2168,15 @@ function openDraftSheet(id){
       `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${x.monetization_score??'—'}</div><div class="pp2-sh-sc-l">수익</div></div>`+
       `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--${x.risk_level==='high'?'red':x.risk_level==='medium'?'amber':'green'})">${rl}</div><div class="pp2-sh-sc-l">위험</div></div>`+
     `</div>`+
-    `<div class="pp2-sh-row"><div class="pp2-sh-k">상태</div><div class="pp2-sh-v">${st}</div></div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">상태</div><div class="pp2-sh-v">${st}${isDone?' <span style="color:var(--green);font-size:11px">· X 게시는 본문 복사 후 수동</span>':''}</div></div>`+
     `<div class="pp2-sh-row"><div class="pp2-sh-k">생성</div><div class="pp2-sh-v">${x.created_kst||'—'}</div></div>`+
     (x.source_url?`<div class="pp2-sh-row"><div class="pp2-sh-k">출처</div><div class="pp2-sh-v"><a href="${x.source_url}" target="_blank" style="color:var(--indigo);word-break:break-all">${x.source_url.length>50?x.source_url.slice(0,50)+'…':x.source_url}</a></div></div>`:'')+
     `<div class="pp2-sh-row"><div class="pp2-sh-k">경고</div><div class="pp2-sh-v">${reasons.map(r=>`<div style="margin:2px 0">• ${r}</div>`).join('')}</div></div>`+
     `<div class="pp2-sh-acts">`+
       (x.source_url?`<a class="btn-secondary" href="${x.source_url}" target="_blank" rel="noopener">원문</a>`:'')+
-      (canSend?`<button class="btn-primary send" onclick="sendDraft(${x.id},this);closePipeSheet()">${isPending?'승인+전송':'전송'}</button>`:'')+
-      ((isPending||isApproved)?`<button class="btn-destructive" onclick="rejectDraft(${x.id},this);closePipeSheet()" aria-label="거절">✕</button>`:'')+
+      (canApprove?`<button class="btn-primary send" onclick="approveDraft(${x.id},this);closePipeSheet()">승인 완료</button>`:'')+
+      (isDone?`<button class="btn-primary" onclick="copyDraftBody(${x.id},this)">📋 본문 복사</button>`:'')+
+      (isPending?`<button class="btn-destructive" onclick="rejectDraft(${x.id},this);closePipeSheet()" aria-label="거절">✕</button>`:'')+
     `</div>`;
   openPipeSheet();
 }
@@ -2977,21 +2994,22 @@ async function rejectDraft(id,btn){
     }else{btn.textContent='✕';btn.disabled=false}
   }catch(e){btn.textContent='✕';btn.disabled=false}
 }
-async function sendDraft(id,btn){
+async function approveDraft(id,btn){
+  // X 자동 게시는 제거됨 — /drafts/:id/approve 는 상태만 APPROVED 로 찍고 끝.
+  // 실제 X 게시는 사용자가 "📋 본문 복사" 후 직접 수행.
   const row=btn.closest('.pp2-draft')||btn.closest('.draft-row');
   const allBtns=row?row.querySelectorAll('button,a'):[];
   allBtns.forEach(b=>{if(b!==btn)b.disabled=true});
   btn.disabled=true;
-  btn.textContent='전송 중…';btn.style.background='var(--indigo-dim)';btn.style.color='var(--indigo)';
+  btn.textContent='처리 중…';btn.style.background='var(--indigo-dim)';btn.style.color='var(--indigo)';
   try{
     const r=await fetch(API+'/drafts/'+id+'/approve',{method:'POST'});
     const d=await r.json();
     if(d.success){
-      btn.textContent='✓ 전송됨';btn.style.background='var(--green-dim)';btn.style.color='var(--green)';
-      // 낙관적 상태 업데이트 + 즉시 재렌더
+      btn.textContent='✓ 완료';btn.style.background='var(--green-dim)';btn.style.color='var(--green)';
       if(_ppCache&&Array.isArray(_ppCache.drafts)){
         const t=_ppCache.drafts.find(x=>x.id===id);
-        if(t)t.status='published';
+        if(t)t.status='approved';
       }
       setTimeout(()=>loadFlowTrace(),1200);
     }else{
@@ -3005,6 +3023,35 @@ async function sendDraft(id,btn){
     setTimeout(()=>{btn.textContent='재시도';btn.style.background='';btn.style.color=''},2000);
   }
 }
+// 레거시 호환 — 혹시 다른 곳에서 sendDraft 호출하면 approveDraft 로 연결
+window.sendDraft=approveDraft;
+window.approveDraft=approveDraft;
+
+async function copyDraftBody(id,btn){
+  const orig=btn.textContent;
+  btn.disabled=true;btn.textContent='복사 중…';
+  try{
+    const r=await fetch(API+'/drafts/'+id);
+    if(!r.ok)throw new Error('fetch failed');
+    const d=await r.json();
+    const hook=(d.hook||'').trim();
+    const body=(d.body||'').trim();
+    const text=hook&&body?`${hook}\n\n${body}`:(body||hook||'');
+    if(!text){btn.textContent='본문 없음';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},1500);return}
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+    }else{
+      // 폴백: textarea + execCommand
+      const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);
+      ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    }
+    btn.textContent='✓ 복사됨';btn.style.background='var(--green-dim)';btn.style.color='var(--green)';
+    setTimeout(()=>{btn.textContent=orig;btn.style.background='';btn.style.color='';btn.disabled=false},1800);
+  }catch(e){
+    btn.textContent='복사 실패';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},1500);
+  }
+}
+window.copyDraftBody=copyDraftBody;
 let _hl={dbOk:true,imm:0,today:0,tg:false,mock:false,ready:0};
 function updateHL(){
   const el=document.getElementById('pulseHL');if(!el)return;
