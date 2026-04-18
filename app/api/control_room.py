@@ -99,7 +99,8 @@ def _safe_premium(db) -> dict:
         from app.services.premium_candidate_service import PremiumCandidateService
         svc = PremiumCandidateService(db)
         counts = svc.count_by_status()
-        top = svc.get_candidates(limit=3)
+        # limit=20 로 상향 — 시트 스크롤로 전체 후보 브라우징 가능
+        top = svc.get_candidates(limit=20)
         return {
             "total": sum(counts.values()),
             "status": counts,
@@ -627,13 +628,15 @@ async def get_scored_candidates(limit: int = 15):
             if cnt >= 3:
                 continue
             cat_counts[cat] = cnt + 1
+            # 기사 원본 발행 시각(published_at) 우선, 없으면 수집 시각(added_at)
+            pub = a.get("published_at") or a.get("added_at") or ""
             result.append({
                 "title": str(a.get("title", "")).strip()[:100],
                 "url": u,
                 "summary": (a.get("summary", "") or "")[:200],
                 "score": a["_score"],
                 "category": a.get("category", ""),
-                "time": str(a.get("added_at", ""))[11:16],
+                "time": str(pub)[11:16],
             })
             if len(result) >= limit:
                 break
@@ -641,6 +644,47 @@ async def get_scored_candidates(limit: int = 15):
     except Exception as e:
         logger.warning(f"scored-candidates 오류: {e}")
         return []
+
+
+# ── Premium 텔레그램 발송 ─────────────────────────────────────────────────────
+
+@router.post("/premium/{draft_id}/send-telegram")
+async def send_premium_to_telegram(draft_id: int):
+    """
+    프리미엄 후보 초안을 텔레그램 승인 카드로 전송합니다.
+    대시보드에서 "텔레그램 발송" 버튼을 눌렀을 때 호출됨.
+    """
+    db = get_db()
+    try:
+        from app.services.premium_candidate_service import PremiumCandidateService
+        from app.services.telegram_service import send_approval_card
+        svc = PremiumCandidateService(db)
+        draft = svc.get_candidate_by_id(draft_id)
+        if not draft:
+            return {"success": False, "error": f"premium 후보 없음: {draft_id}"}
+        source_url = None
+        try:
+            if draft.source_item:
+                source_url = draft.source_item.url
+        except Exception:
+            pass
+        msg_id = await send_approval_card(draft, source_url=source_url)
+        if msg_id:
+            svc.update_status(draft_id, "reviewing")
+            return {
+                "success": True,
+                "message_id": msg_id,
+                "draft_id": draft_id,
+            }
+        return {
+            "success": False,
+            "error": "텔레그램 전송 실패 (설정/네트워크 확인)",
+        }
+    except Exception as e:
+        logger.warning(f"premium send-telegram 오류: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 # ── Naver 할당량 ──────────────────────────────────────────────────────────────

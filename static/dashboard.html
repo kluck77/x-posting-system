@@ -2298,13 +2298,16 @@ function openBizSheet(k){
       ? top.map(t=>{
           const s=t.status||'new';
           const isReady=(s==='new'||s==='ready'||s==='pending'||s==='approved');
-          const isPub=(s==='published');
+          const isPub=(s==='published'||s==='promoted');
+          const isSent=(s==='reviewing'||s==='shortlisted');
           const scoreColor=t.score>=90?'var(--green)':t.score>=70?'var(--amber)':'var(--text-sec)';
           const acts=isPub
             ? '<span class="ops2-topa done">✓ 발행됨</span>'
-            : (isReady
-                ? `<button class="ops2-topa send" onclick="opsSendPremium(${t.id},this)">📤 텔레그램 발송</button>`
-                : `<span class="ops2-topa" style="color:var(--text-mut)">${_ops2Esc(s)}</span>`);
+            : (isSent
+                ? '<span class="ops2-topa done">✓ 텔레그램 발송됨</span>'
+                : (isReady
+                    ? `<button class="ops2-topa send" onclick="opsSendPremium(${t.id},this)">📤 텔레그램 발송</button>`
+                    : `<span class="ops2-topa" style="color:var(--text-mut)">${_ops2Esc(s)}</span>`));
           return `<div class="ops2-topi" id="ops2-topi-${t.id}">
             <div class="ops2-topi-body">
               <div class="ops2-topi-title">${_ops2Esc(t.hook||'—')}</div>
@@ -2359,26 +2362,26 @@ window.openBizSheet=openBizSheet;
 async function opsSendPremium(id,btn){
   btn.disabled=true;btn.textContent='전송 중…';btn.classList.add('loading');
   try{
-    const r=await fetch(API+'/drafts/'+id+'/approve',{method:'POST'});
+    const r=await fetch(API+'/control/premium/'+id+'/send-telegram',{method:'POST'});
     const d=await r.json();
     if(d.success){
-      btn.textContent='✓ 전송됨';btn.classList.remove('loading');btn.classList.add('done');
+      btn.textContent='✓ 텔레그램 발송됨';btn.classList.remove('loading');btn.classList.add('done');
       const row=document.getElementById('ops2-topi-'+id);
       if(row){
         const meta=row.querySelector('.ops2-topi-st');
-        if(meta){meta.className='ops2-topi-st published';meta.textContent='published';}
+        if(meta){meta.className='ops2-topi-st reviewing';meta.textContent='reviewing';}
       }
       await loadBiz();
       loadFlowTrace();
       const body=document.getElementById('opsSheetBody');
       if(body&&body.dataset.sheet==='biz:premium'){openBizSheet('premium');}
     }else{
-      btn.textContent='실패';btn.classList.remove('loading');btn.classList.add('fail');btn.disabled=false;
-      setTimeout(()=>{btn.textContent='📤 재시도';btn.classList.remove('fail')},2000);
+      btn.textContent='실패 — '+(d.error||'').slice(0,20);btn.classList.remove('loading');btn.classList.add('fail');btn.disabled=false;
+      setTimeout(()=>{btn.textContent='📤 재시도';btn.classList.remove('fail')},3000);
     }
   }catch(e){
-    btn.textContent='오류';btn.classList.remove('loading');btn.classList.add('fail');btn.disabled=false;
-    setTimeout(()=>{btn.textContent='📤 재시도';btn.classList.remove('fail')},2000);
+    btn.textContent='네트워크 오류';btn.classList.remove('loading');btn.classList.add('fail');btn.disabled=false;
+    setTimeout(()=>{btn.textContent='📤 재시도';btn.classList.remove('fail')},3000);
   }
 }
 window.opsSendPremium=opsSendPremium;

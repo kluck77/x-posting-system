@@ -549,14 +549,26 @@ async def run_monitor_cycle() -> int:
         _db_dup_count = 0
         _pipeline_count = 0
         for article in new_articles:
+            # 기사 원본 published_at 을 KST 로 노출 — 대시보드 시각 표기용.
+            # published_at 이 없거나 naive 면 added_at 로 폴백한다.
+            pub_dt = getattr(article, "published_at", None)
+            pub_kst = None
+            if pub_dt is not None:
+                try:
+                    if pub_dt.tzinfo is None:
+                        pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+                    pub_kst = pub_dt.astimezone(KST).isoformat()
+                except Exception:
+                    pub_kst = None
             _art_dict = {
-                "title":    article.title,
-                "url":      article.url,
-                "summary":  article.summary,
-                "category": article.category,
-                "source":   article.source,
-                "region":   getattr(article, "region", "KR"),
-                "added_at": datetime.now(KST).isoformat(),
+                "title":        article.title,
+                "url":          article.url,
+                "summary":      article.summary,
+                "category":     article.category,
+                "source":       article.source,
+                "region":       getattr(article, "region", "KR"),
+                "added_at":     datetime.now(KST).isoformat(),
+                "published_at": pub_kst,
             }
 
             # 최근 기사 버퍼 (항상 유지, morning_digest와 독립)
