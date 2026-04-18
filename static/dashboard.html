@@ -16,6 +16,7 @@
 
   /* ── BORDER ── */
   --border-subtle:rgba(255,255,255,.04);
+  --border-strong:rgba(255,255,255,.16);
   --border-normal:rgba(255,255,255,.07);
   --border-accent:rgba(129,140,248,.25);
 
@@ -313,6 +314,168 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .ws-prov-cell-h{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-pri);font-weight:600}
 .ws-prov-cell-c{font-size:14px;font-weight:800;color:var(--text-pri);line-height:1;margin-top:3px;font-variant-numeric:tabular-nums}
 .ws-prov-cell-l{font-size:8px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
+
+/* ── PIPELINE v2 ─────────────────────────────────────────────── */
+.pp2-seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;
+  padding:3px;background:var(--bg-surface);border-radius:12px;margin-bottom:10px;
+  border:1px solid var(--border-subtle)}
+.pp2-seg-btn{display:flex;align-items:center;justify-content:center;gap:6px;
+  min-height:44px;background:transparent;border:none;border-radius:9px;
+  color:var(--text-sec);font-size:13px;font-weight:700;cursor:pointer;
+  transition:background .15s,color .15s}
+.pp2-seg-btn.active{background:var(--indigo);color:#0a0a0f;
+  box-shadow:0 1px 6px rgba(129,140,248,.25)}
+.pp2-seg-btn:not(.active):active{background:var(--bg-raised)}
+.pp2-seg-n{font-size:11px;font-weight:800;padding:1px 7px;border-radius:9px;
+  background:rgba(0,0,0,.18);color:inherit;min-width:18px;text-align:center}
+.pp2-seg-btn:not(.active) .pp2-seg-n{background:var(--bg-raised);color:var(--text-pri)}
+
+.pp2-sum{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.pp2-sum-main{font-size:15px;font-weight:700;color:var(--text-pri)}
+.pp2-sum-main b{color:var(--indigo)}
+.pp2-sum-main b.amber{color:var(--amber)}
+.pp2-sum-main b.green{color:var(--green)}
+.pp2-sum-sub{display:flex;flex-wrap:wrap;gap:5px;font-size:11px}
+.pp2-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:11px;
+  background:var(--bg-surface);border:1px solid var(--border-subtle);color:var(--text-sec);
+  font-size:11px;font-weight:600}
+.pp2-chip b{color:var(--text-pri);font-weight:800}
+.pp2-chip.indigo{color:var(--indigo);border-color:rgba(129,140,248,.28)}
+.pp2-chip.amber{color:var(--amber);border-color:rgba(245,158,11,.28)}
+.pp2-chip.green{color:var(--green);border-color:rgba(52,211,153,.28)}
+.pp2-chip.red{color:var(--red);border-color:rgba(239,68,68,.28)}
+
+.pp2-filters{display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;
+  scrollbar-width:none;-ms-overflow-style:none}
+.pp2-filters::-webkit-scrollbar{display:none}
+.pp2-fbtn{flex-shrink:0;min-height:32px;padding:5px 12px;border-radius:16px;
+  background:var(--bg-surface);border:1px solid var(--border-subtle);
+  color:var(--text-sec);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.pp2-fbtn.active{background:var(--indigo-dim);border-color:var(--indigo);color:var(--indigo);font-weight:700}
+.pp2-fbtn:not(.active):active{background:var(--bg-raised)}
+
+/* ── Draft row v2 ── */
+.pp2-draft{display:flex;flex-direction:column;gap:8px;padding:11px 12px;
+  background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:12px;
+  margin-bottom:8px;animation:slideIn .3s ease-out both;cursor:pointer;
+  border-left:3px solid transparent;transition:border-color .15s}
+.pp2-draft.st-pending{border-left-color:var(--amber)}
+.pp2-draft.st-approved{border-left-color:var(--green)}
+.pp2-draft.st-published{border-left-color:var(--indigo)}
+.pp2-draft.st-failed{border-left-color:var(--red)}
+.pp2-draft:active{background:var(--bg-raised)}
+
+.pp2-d-top{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.pp2-d-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.pp2-d-dot.pending{background:var(--amber);animation:ag-pulse 2s ease-in-out infinite}
+.pp2-d-dot.approved{background:var(--green)}
+.pp2-d-dot.published{background:var(--indigo)}
+.pp2-d-dot.failed{background:var(--red)}
+.pp2-d-title{flex:1;min-width:0;font-size:14px;font-weight:600;line-height:1.35;
+  color:var(--text-pri);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-word}
+.pp2-d-stchip{flex-shrink:0;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.pp2-d-stchip.pending{background:var(--amber-dim);color:var(--amber)}
+.pp2-d-stchip.approved{background:var(--green-dim);color:var(--green)}
+.pp2-d-stchip.published{background:var(--indigo-dim);color:var(--indigo)}
+.pp2-d-stchip.failed{background:var(--red-dim);color:var(--red)}
+
+.pp2-d-meta{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:10px}
+.pp2-d-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:8px;
+  font-size:10px;font-weight:700;letter-spacing:.2px}
+.pp2-d-badge.risk-low{background:var(--green-dim);color:var(--green)}
+.pp2-d-badge.risk-med{background:var(--amber-dim);color:var(--amber)}
+.pp2-d-badge.risk-high{background:var(--red-dim);color:var(--red)}
+.pp2-d-badge.res-hi{background:var(--green-dim);color:var(--green)}
+.pp2-d-badge.res-mi{background:var(--amber-dim);color:var(--amber)}
+.pp2-d-badge.res-lo{background:var(--red-dim);color:var(--red)}
+.pp2-d-badge.money{background:rgba(167,139,250,.16);color:#a78bfa}
+.pp2-d-badge.broken{background:var(--red-dim);color:var(--red);border:1px solid var(--red)}
+.pp2-d-time{margin-left:auto;color:var(--text-mut);font-size:10px;font-family:var(--mono)}
+
+/* ── Buttons (Apple HIG style) ── */
+.pp2-d-acts{display:flex;gap:6px;align-items:stretch}
+.btn-primary{flex:1;min-height:40px;padding:0 14px;border-radius:10px;border:none;
+  background:var(--indigo);color:#0a0a0f;font-size:13px;font-weight:800;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  box-shadow:0 1px 4px rgba(129,140,248,.25);transition:transform .08s,opacity .15s;
+  text-decoration:none}
+.btn-primary:active{transform:scale(.97);opacity:.9}
+.btn-primary.send{background:var(--green)}
+.btn-secondary{min-height:40px;padding:0 14px;border-radius:10px;
+  background:transparent;border:1px solid var(--border-strong);color:var(--text-pri);
+  font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;
+  justify-content:center;text-decoration:none;transition:background .12s}
+.btn-secondary:active{background:var(--bg-raised)}
+.btn-destructive{min-width:40px;min-height:40px;padding:0 10px;border-radius:10px;
+  background:transparent;border:1px solid rgba(239,68,68,.45);color:var(--red);
+  font-size:13px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;
+  justify-content:center;transition:background .12s}
+.btn-destructive:active{background:var(--red-dim)}
+.btn-primary:disabled,.btn-secondary:disabled{opacity:.45;cursor:not-allowed}
+
+/* ── Live candidate row v2 ── */
+.pp2-cand{display:grid;grid-template-columns:44px 1fr;column-gap:10px;row-gap:6px;
+  padding:11px 12px;background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:12px;margin-bottom:8px;animation:slideIn .3s ease-out both;cursor:pointer;
+  border-left:3px solid transparent}
+.pp2-cand.hi{border-left-color:var(--red)}
+.pp2-cand.mi{border-left-color:var(--amber)}
+.pp2-cand.lo{border-left-color:var(--text-mut)}
+.pp2-cand:active{background:var(--bg-raised)}
+.pp2-c-score{grid-row:span 3;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;width:44px;min-height:44px;border-radius:10px;
+  background:var(--bg-raised);font-weight:800;font-size:18px;line-height:1;font-variant-numeric:tabular-nums}
+.pp2-c-score.hi{background:var(--red-dim);color:var(--red)}
+.pp2-c-score.mi{background:var(--amber-dim);color:var(--amber)}
+.pp2-c-score.lo{background:var(--bg-raised);color:var(--text-sec)}
+.pp2-c-score-lbl{font-size:7px;margin-top:2px;font-weight:600;letter-spacing:.4px;opacity:.75}
+.pp2-c-title{font-size:13.5px;font-weight:600;line-height:1.35;color:var(--text-pri);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  word-break:break-word}
+.pp2-c-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:var(--text-sec);align-items:center}
+.pp2-c-cat{padding:1px 7px;border-radius:8px;background:var(--bg-raised);font-weight:700;color:var(--text-pri)}
+.pp2-c-time{font-family:var(--mono);color:var(--text-mut)}
+.pp2-c-why{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--amber);
+  background:var(--amber-dim);padding:4px 8px;border-radius:8px;line-height:1.3}
+.pp2-c-why-ic{font-size:10px;line-height:1}
+.pp2-c-acts{grid-column:2;display:flex;gap:6px;margin-top:2px}
+
+/* ── Ops panel (filter summary + action log) ── */
+.pp2-ops{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:14px;margin-bottom:10px}
+.pp2-ops-cell{padding:10px 11px;background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:10px}
+.pp2-ops-lbl{font-size:10px;color:var(--text-mut);text-transform:uppercase;letter-spacing:.3px;
+  margin-bottom:4px}
+.pp2-ops-val{font-size:15px;font-weight:800;color:var(--text-pri);line-height:1.1;font-variant-numeric:tabular-nums}
+.pp2-ops-val.ok{color:var(--green)}.pp2-ops-val.warn{color:var(--amber)}.pp2-ops-val.bad{color:var(--red)}
+.pp2-ops-sub{font-size:9px;color:var(--text-mut);margin-top:2px}
+
+/* ── Bottom sheet ── */
+.pp2-sheet-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.pp2-sheet-mask.open{display:block;animation:fadeIn .2s ease-out}
+.pp2-sheet{display:none;position:fixed;left:0;right:0;bottom:0;z-index:101;
+  background:var(--bg-surface);border-top-left-radius:20px;border-top-right-radius:20px;
+  max-height:82vh;overflow-y:auto;padding:6px 16px 24px;
+  padding-bottom:max(24px,env(safe-area-inset-bottom));
+  box-shadow:0 -4px 24px rgba(0,0,0,.5)}
+.pp2-sheet.open{display:block;animation:sheetIn .28s cubic-bezier(.2,.8,.2,1)}
+.pp2-sheet-grab{width:36px;height:4px;border-radius:2px;background:var(--text-mut);
+  opacity:.5;margin:8px auto 12px}
+@keyframes sheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.pp2-sh-title{font-size:15px;font-weight:700;color:var(--text-pri);line-height:1.35;margin-bottom:10px;
+  word-break:break-word}
+.pp2-sh-scores{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.pp2-sh-sc{padding:10px;background:var(--bg-raised);border-radius:10px;text-align:center}
+.pp2-sh-sc-n{font-size:20px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.pp2-sh-sc-l{font-size:9px;color:var(--text-mut);margin-top:3px;text-transform:uppercase;letter-spacing:.3px}
+.pp2-sh-row{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-subtle);font-size:12px}
+.pp2-sh-row:last-of-type{border-bottom:none}
+.pp2-sh-k{min-width:72px;color:var(--text-mut);font-size:11px}
+.pp2-sh-v{flex:1;color:var(--text-pri);word-break:break-word}
+.pp2-sh-acts{display:flex;gap:6px;margin-top:14px}
 
 /* ── WORK QUEUE MINI PANEL ── */
 .ws-queue{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -789,34 +952,42 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 
 <!-- ═══ PIPELINE TAB ═══ -->
 <section class="tab-pane" id="tab-pipeline">
-  <div style="display:flex;gap:6px;margin-bottom:10px">
-    <button class="pipe-tab active" onclick="switchPipeView('drafts',this)">내 초안</button>
-    <button class="pipe-tab" onclick="switchPipeView('live',this)">실시간 후보</button>
+  <!-- Segmented control (44pt+) -->
+  <div class="pp2-seg">
+    <button class="pp2-seg-btn active" id="ppSegDrafts" onclick="switchPipeView('drafts',this)">
+      <span class="pp2-seg-lbl">내 초안</span><span class="pp2-seg-n" id="ppNDrafts">—</span>
+    </button>
+    <button class="pp2-seg-btn" id="ppSegLive" onclick="switchPipeView('live',this)">
+      <span class="pp2-seg-lbl">실시간 후보</span><span class="pp2-seg-n" id="ppNLive">—</span>
+    </button>
   </div>
 
+  <!-- Action-focused summary -->
+  <div class="pp2-sum" id="ppSummary"></div>
+
+  <!-- Filter/sort chips -->
+  <div class="pp2-filters" id="ppFilters"></div>
+
+  <!-- DRAFTS VIEW -->
   <div id="pipeView-drafts">
-    <div class="pi-sum" id="pipeSummary"></div>
-    <div class="stage-grid">
-    <div class="stage-cell"><div class="stage-num" id="fSource">—</div><div class="stage-lbl">소스</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fResearch">—</div><div class="stage-lbl">초안</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fDraft">—</div><div class="stage-lbl">준비</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fReview">—</div><div class="stage-lbl">검토</div></div>
-    <div class="stage-cell"><div class="stage-num" id="fPublish">—</div><div class="stage-lbl">발행</div></div>
+    <div id="draftList"><div class="empty-sm">초안 입력 대기</div></div>
+    <div class="pp2-ops" id="ppOps"></div>
+    <div class="tab-footer" id="pipeFooter"></div>
   </div>
 
-  <div class="sec-head">최근 초안</div>
-  <div id="draftList"><div class="empty-sm">초안 입력 대기</div></div>
-  <div class="tab-footer" id="pipeFooter"></div>
-  </div>
-
+  <!-- LIVE CANDIDATES VIEW -->
   <div id="pipeView-live" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:13px;color:var(--text-sec)">점수 통과 기사 · AI 비용 없음</span>
-      <span class="cand-meta" id="liveCount"></span>
-    </div>
     <div id="liveList"><div class="empty-sm">로딩 중</div></div>
+    <div class="pp2-ops" id="ppLiveOps"></div>
   </div>
 </section>
+
+<!-- Pipeline bottom sheet detail -->
+<div class="pp2-sheet-mask" id="ppSheetMask" onclick="closePipeSheet()"></div>
+<div class="pp2-sheet" id="ppSheet">
+  <div class="pp2-sheet-grab"></div>
+  <div class="pp2-sheet-body" id="ppSheetBody"></div>
+</div>
 
 <!-- ═══ OPS TAB ═══ -->
 <section class="tab-pane" id="tab-ops">
@@ -1266,82 +1437,289 @@ async function loadProviders(){
   }catch(e){console.warn('providers:',e)}
 }
 
+/* ── Pipeline v2 state ────────────────────────────────────────── */
+let _ppDraftFilter='all';      // all | pending | approved | published | failed
+let _ppDraftSort='latest';     // latest | resonance
+let _ppLiveSort='score';       // score | latest
+let _ppLiveCat='all';          // all | crypto | economy | politics | policy | tech | world
+let _ppCache={drafts:[],live:[]};
+
+function _ppWhyItMatters(title,category,score){
+  const t=(title||'').toLowerCase();
+  const m=[
+    [/(호르무즈|중동|이란|이스라엘|원유|유가)/,'중동·유가 충격 연동'],
+    [/(fed|금리|연준|기준금리|fomc)/,'통화정책 충격 가능'],
+    [/(환율|원\/달러|달러|달러화)/,'환율 민감자산 영향'],
+    [/(etf|spot etf|상장지수)/,'ETF 기대감 재점화'],
+    [/(비트코인|bitcoin|btc|이더리움|ethereum|솔라나|solana|xrp|리플)/,'암호화폐 급변동 가능'],
+    [/(급락|폭락|급등|폭등|반등|패닉)/,'시장 변동성 경고'],
+    [/(관세|trade|무역|제재|sanction|ban)/,'무역·제재 충격 가능'],
+    [/(실적|earnings|매출|영업이익)/,'실적 쇼크 리스크'],
+    [/(ai|openai|nvidia|엔비디아|반도체|chip|tsmc)/,'AI·반도체 테마'],
+    [/(대통령|탄핵|계엄|의회|정책|법안)/,'정치·정책 충격 가능'],
+    [/(삼성|sk하이닉스|lg|현대차|코스피|코스닥)/,'한국 대형주 영향'],
+  ];
+  for(const[re,msg] of m){if(re.test(t))return msg}
+  if(score>=35)return'점수 기준 핵심 뉴스';
+  if(category==='crypto')return'암호화폐 관심사';
+  if(category==='economy')return'거시 경제 지표';
+  if(category==='politics')return'정책 방향 변화';
+  return'주목할 만한 뉴스';
+}
+
+function _ppRiskClass(r){return{low:'risk-low',medium:'risk-med',high:'risk-high'}[r]||'risk-med'}
+function _ppRiskL(r){return{low:'안전',medium:'주의',high:'위험'}[r]||(r||'—')}
+function _ppResClass(v){return v>=85?'res-hi':v>=70?'res-mi':'res-lo'}
+function _ppSevCand(sc){return sc>=15?'hi':sc>=8?'mi':'lo'}
+function _ppCatKr(c){
+  return{crypto:'암호화폐',economy:'경제',politics:'정치',policy:'정책',tech:'기술',world:'국제',market:'시장',stock:'주식'}[c]||c||'기타';
+}
+
+function setPpDraftFilter(v,btn){
+  _ppDraftFilter=v;
+  document.querySelectorAll('#ppFilters .pp2-fbtn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  _ppRenderDrafts();
+}
+function setPpLiveCat(v,btn){
+  _ppLiveCat=v;
+  document.querySelectorAll('#ppFilters .pp2-fbtn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  _ppRenderLive();
+}
+
+function _ppRenderFilters(){
+  const box=document.getElementById('ppFilters');
+  if(!box)return;
+  if(_pipeView==='drafts'){
+    const f=_ppDraftFilter;
+    box.innerHTML=[
+      ['all','전체'],['pending','대기만'],['approved','승인'],['published','발행'],['failed','실패'],
+    ].map(([v,l])=>`<button class="pp2-fbtn ${f===v?'active':''}" onclick="setPpDraftFilter('${v}',this)">${l}</button>`).join('');
+  }else{
+    const c=_ppLiveCat;
+    box.innerHTML=[
+      ['all','전체'],['crypto','암호화폐'],['economy','경제'],['politics','정치'],['policy','정책'],['tech','기술'],['world','국제'],
+    ].map(([v,l])=>`<button class="pp2-fbtn ${c===v?'active':''}" onclick="setPpLiveCat('${v}',this)">${l}</button>`).join('');
+  }
+}
+
+function _ppRenderDrafts(){
+  const d=_ppCache.drafts||[];
+  const ct={total:d.length,pending:0,approved:0,published:0,rejected:0,failed:0};
+  d.forEach(x=>{if(ct.hasOwnProperty(x.status))ct[x.status]++});
+
+  // 상단 summary
+  const nD=document.getElementById('ppNDrafts');if(nD)nD.textContent=ct.pending+ct.approved;
+  const readyNow=ct.pending+ct.approved;
+  const s=document.getElementById('ppSummary');
+  if(s){
+    s.innerHTML=readyNow?
+      `<div class="pp2-sum-main">오늘 바로 처리 <b class="amber">${readyNow}</b>건 · 발행 <b class="green">${ct.published}</b>건</div>`+
+      `<div class="pp2-sum-sub">`+
+        `<span class="pp2-chip amber">대기 <b>${ct.pending}</b></span>`+
+        (ct.approved?`<span class="pp2-chip green">승인됨 <b>${ct.approved}</b></span>`:'')+
+        (ct.published?`<span class="pp2-chip indigo">발행 <b>${ct.published}</b></span>`:'')+
+        `<span class="pp2-chip">전체 <b>${ct.total}</b></span>`+
+      `</div>`
+    :'<div class="pp2-sum-main">파이프라인 대기 중</div>';
+  }
+
+  // 필터 적용
+  let visible=d.slice();
+  if(_ppDraftFilter!=='all')visible=visible.filter(x=>x.status===_ppDraftFilter);
+  else visible=visible.filter(x=>x.status!=='rejected');  // 기본 거절 숨김
+  if(_ppDraftSort==='resonance')visible.sort((a,b)=>(b.resonance||0)-(a.resonance||0));
+
+  const dl=document.getElementById('draftList');
+  if(!dl)return;
+  if(!visible.length){dl.innerHTML='<div class="empty-sm">해당 조건에 맞는 초안 없음</div>';return}
+
+  dl.innerHTML=visible.slice(0,20).map((x,i)=>{
+    const st=x.status||'pending';
+    const rc=_ppRiskClass(x.risk_level);
+    const rl=_ppRiskL(x.risk_level);
+    const stL={pending:'대기',approved:'승인',published:'발행',failed:'실패',rejected:'거절'}[st]||st;
+    const isPending=st==='pending',isApproved=st==='approved';
+    const canSend=(isPending||isApproved)&&!x.broken;
+    const title=(x.hook||x.title||'제목 없음').replace(/</g,'&lt;');
+    return`<div class="pp2-draft st-${st}" style="animation-delay:${i*30}ms" onclick="openDraftSheet(${x.id})">
+      <div class="pp2-d-top">
+        <span class="pp2-d-dot ${st}"></span>
+        <div class="pp2-d-title">${title}</div>
+        <span class="pp2-d-stchip ${st}">${stL}</span>
+      </div>
+      <div class="pp2-d-meta">
+        ${x.broken?'<span class="pp2-d-badge broken">AI 실패</span>':''}
+        <span class="pp2-d-badge ${rc}">${rl}</span>
+        ${x.resonance?`<span class="pp2-d-badge ${_ppResClass(x.resonance)}">공명 ${x.resonance}</span>`:''}
+        ${x.monetization_score!=null?`<span class="pp2-d-badge money">수익 ${x.monetization_score}</span>`:''}
+        <span class="pp2-d-time">${x.created_kst||''}</span>
+      </div>
+      <div class="pp2-d-acts" onclick="event.stopPropagation()">
+        ${x.source_url?`<a class="btn-secondary" href="${x.source_url}" target="_blank" rel="noopener">원문</a>`:''}
+        ${canSend?`<button class="btn-primary send" onclick="sendDraft(${x.id},this)">${isPending?'승인+전송':'전송'}</button>`:(st==='published'?'<div class="btn-secondary" style="flex:1;pointer-events:none;opacity:.7">완료</div>':'')}
+        ${(isPending||isApproved)?`<button class="btn-destructive" onclick="rejectDraft(${x.id},this)" aria-label="거절">✕</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Ops panel (하단 요약)
+  const op=document.getElementById('ppOps');
+  if(op){
+    const totalRate=ct.total?Math.round((ct.approved+ct.published)/ct.total*100):0;
+    const avgRes=(()=>{const rs=d.map(x=>x.resonance||0).filter(v=>v>0);return rs.length?Math.round(rs.reduce((a,b)=>a+b,0)/rs.length):0})();
+    op.innerHTML=
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">승인율</div><div class="pp2-ops-val ${totalRate>=50?'ok':totalRate>=20?'warn':'bad'}">${totalRate}%</div><div class="pp2-ops-sub">${ct.approved+ct.published}/${ct.total}</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">평균 공명</div><div class="pp2-ops-val ${avgRes>=70?'ok':avgRes>=50?'warn':'bad'}">${avgRes||'—'}</div><div class="pp2-ops-sub">0-100</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">거절</div><div class="pp2-ops-val ${ct.rejected?'warn':''}">${ct.rejected}건</div><div class="pp2-ops-sub">오늘</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">실패</div><div class="pp2-ops-val ${ct.failed?'bad':''}">${ct.failed}건</div><div class="pp2-ops-sub">AI/전송</div></div>`;
+  }
+  const ppf=document.getElementById('pipeFooter');
+  if(ppf)ppf.textContent=ct.total?`전체 ${ct.total}건 · 거절 ${ct.rejected}건 · 실패 ${ct.failed}건`:'';
+  _hl.ready=ct.pending;updateActCards();
+}
+
+function _ppRenderLive(){
+  const d=_ppCache.live||[];
+  const nL=document.getElementById('ppNLive');if(nL)nL.textContent=d.length;
+  let visible=d.slice();
+  if(_ppLiveCat!=='all')visible=visible.filter(x=>(x.category||'')===_ppLiveCat);
+  if(_ppLiveSort==='score')visible.sort((a,b)=>(b.score||0)-(a.score||0));
+
+  const hi=d.filter(x=>(x.score||0)>=15).length;
+  const s=document.getElementById('ppSummary');
+  if(s){
+    s.innerHTML=d.length?
+      `<div class="pp2-sum-main">실시간 후보 <b>${d.length}</b>건 · 고점수 <b class="amber">${hi}</b>건</div>`+
+      `<div class="pp2-sum-sub"><span class="pp2-chip">AI 비용 0 · 키워드 스코어링</span>${hi?`<span class="pp2-chip amber">즉시 확인 ${hi}</span>`:''}</div>`
+    :'<div class="pp2-sum-main">수집 대기 중 · 30초 간격 폴링</div>';
+  }
+
+  const ll=document.getElementById('liveList');if(!ll)return;
+  if(!visible.length){ll.innerHTML='<div class="empty-sm">해당 카테고리에 맞는 후보 없음</div>';return}
+
+  ll.innerHTML=visible.slice(0,30).map((c,i)=>{
+    const sev=_ppSevCand(c.score||0);
+    const cat=_ppCatKr(c.category);
+    const displayTitle=(c.summary&&c.summary.length>10?c.summary:c.title||'—').replace(/</g,'&lt;');
+    const why=_ppWhyItMatters(c.title+' '+(c.summary||''),c.category,c.score||0);
+    const idx=d.indexOf(c);
+    return`<div class="pp2-cand ${sev}" style="animation-delay:${i*25}ms" onclick="openCandSheet(${idx})">
+      <div class="pp2-c-score ${sev}">${c.score||0}<div class="pp2-c-score-lbl">점수</div></div>
+      <div class="pp2-c-title">${displayTitle}</div>
+      <div class="pp2-c-meta"><span class="pp2-c-cat">${cat}</span><span class="pp2-c-time">${c.time||''}</span></div>
+      <div class="pp2-c-why"><span class="pp2-c-why-ic">●</span>${why}</div>
+      <div class="pp2-c-acts" onclick="event.stopPropagation()">
+        ${c.url?`<a class="btn-secondary" href="${c.url}" target="_blank" rel="noopener">원문</a>`:''}
+        <button class="btn-primary" onclick="createDraft('${encodeURIComponent(esc(c.title))}','${encodeURIComponent(c.url||'')}','${encodeURIComponent(esc(c.summary||c.title))}',this)">초안 생성</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const op=document.getElementById('ppLiveOps');
+  if(op){
+    const byCat={};d.forEach(x=>{const k=x.category||'기타';byCat[k]=(byCat[k]||0)+1});
+    const topCat=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,2);
+    const avgSc=d.length?Math.round(d.reduce((a,b)=>a+(b.score||0),0)/d.length):0;
+    op.innerHTML=
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">평균 점수</div><div class="pp2-ops-val ${avgSc>=15?'warn':''}">${avgSc}</div><div class="pp2-ops-sub">0-100</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">고점수</div><div class="pp2-ops-val ${hi?'warn':''}">${hi}건</div><div class="pp2-ops-sub">≥15</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">가장 많은 카테고리</div><div class="pp2-ops-val" style="font-size:13px">${topCat[0]?_ppCatKr(topCat[0][0]):'—'}</div><div class="pp2-ops-sub">${topCat[0]?topCat[0][1]+'건':''}</div></div>`+
+      `<div class="pp2-ops-cell"><div class="pp2-ops-lbl">다음 수집</div><div class="pp2-ops-val" style="font-size:13px">30초 주기</div><div class="pp2-ops-sub">자동 폴링</div></div>`;
+  }
+}
+
 async function loadFlowTrace(){
   try{
     const r=await fetch(API+'/control/flow-trace?limit=20');
     const d=await r.json();
-    const ct={total:d.length,pending:0,approved:0,published:0,rejected:0,failed:0};
-    d.forEach(x=>{if(ct.hasOwnProperty(x.status))ct[x.status]++});
-
-    // pipeline summary
-    const ps=document.getElementById('pipeSummary');
-    if(ps)ps.innerHTML=ct.total?
-      `<b>${ct.total}</b> 전체 · <b style="color:var(--amber)">${ct.pending}</b> 대기 · <b style="color:var(--green)">${ct.published}</b> 발행`:
-      '파이프라인 입력 대기';
-
-    // stage grid — set numbers + colors + dim empty
-    const stages=[
-      {id:'fSource',v:ct.total,c:'var(--text-pri)'},
-      {id:'fResearch',v:ct.approved+ct.pending,c:'var(--indigo)'},
-      {id:'fDraft',v:ct.approved,c:'var(--indigo)'},
-      {id:'fReview',v:ct.pending,c:'var(--amber)'},
-      {id:'fPublish',v:ct.published,c:'var(--green)'},
-    ];
-    stages.forEach(s=>{
-      const el=document.getElementById(s.id);if(!el)return;
-      el.textContent=s.v;
-      el.style.color=s.v?s.c:'var(--text-mut)';
-      el.closest('.stage-cell')?.classList.toggle('empty-stage',s.v===0);
-    });
-
-    // draft list — dense with status chip
-    const dotMap={pending:'var(--amber)',approved:'var(--green)',rejected:'var(--red)',published:'var(--indigo)',failed:'var(--text-mut)'};
-    const chipMap={pending:['대기','var(--amber-dim)','var(--amber)'],approved:['승인','var(--green-dim)','var(--green)'],
-      rejected:['거절','var(--red-dim)','var(--red)'],published:['발행','var(--indigo-dim)','var(--indigo)'],
-      failed:['실패','var(--red-dim)','var(--red)']};
-    if(d.length){
-      const riskC={low:'var(--green)',medium:'var(--amber)',high:'var(--red)'};
-      const riskL={low:'안전',medium:'주의',high:'위험'};
-      const visible=d.filter(x=>x.status!=='rejected'&&x.status!=='failed');
-      document.getElementById('draftList').innerHTML=visible.slice(0,10).map((x,i)=>{
-        const ch=chipMap[x.status]||['—','transparent','var(--text-mut)'];
-        const rc=riskC[x.risk_level]||'var(--text-mut)';
-        const rl=riskL[x.risk_level]||x.risk_level||'—';
-        const ms=x.monetization_score;
-        const isPending=x.status==='pending';
-        const isApproved=x.status==='approved';
-        const canSend=(isPending||isApproved)&&!x.broken;
-        return`<div class="draft-row" style="animation-delay:${i*40}ms">
-          <div class="draft-top">
-            <span class="draft-dot" style="background:${dotMap[x.status]||'var(--text-mut)'}"></span>
-            <span class="draft-hook">${x.hook||'—'}</span>
-            <span class="draft-chip" style="background:${ch[1]};color:${ch[2]}">${ch[0]}</span>
-          </div>
-          <div class="draft-bot">
-            ${x.broken?'<span class="draft-risk" style="color:var(--red);border:1px solid var(--red)">AI실패</span>':''}
-            <span class="draft-risk" style="color:${rc};border:1px solid ${rc}">${rl}</span>
-            ${x.resonance?`<span class="draft-risk" style="color:${x.resonance>=85?'var(--green)':x.resonance>=70?'var(--amber)':'var(--red)'};border:1px solid ${x.resonance>=85?'var(--green-dim)':x.resonance>=70?'var(--amber-dim)':'var(--red-dim)'}">공명${x.resonance}</span>`:''}
-            ${ms!=null?`<span class="draft-risk" style="color:var(--purple);border:1px solid var(--purple-dim)">💰${ms}</span>`:''}
-            <span class="draft-time">${x.created_kst||''}</span>
-            <span style="flex:1"></span>
-            <div class="draft-acts">
-              ${x.source_url?`<a class="draft-btn" href="${x.source_url}" target="_blank" style="text-decoration:none">원문</a>`:''}
-              ${canSend?`<button class="draft-btn" onclick="sendDraft(${x.id},this)">${isPending?'승인+전송':'전송'}</button>`:''}
-              ${(isPending||isApproved)?`<button class="draft-btn" style="color:var(--red)" onclick="rejectDraft(${x.id},this)">✕</button>`:''}
-            </div>
-          </div>
-        </div>`;
-      }).join('');
-    }
-    // pipeline footer
-    const ppf=document.getElementById('pipeFooter');
-    if(ppf&&ct.total){
-      const rate=ct.total?Math.round((ct.approved+ct.published)/ct.total*100):0;
-      ppf.textContent=`승인율 ${rate}% · 거절 ${ct.rejected}건 · 실패 ${ct.failed}건`;
-    }
-    _hl.ready=ct.pending;updateActCards();
+    _ppCache.drafts=d||[];
+    if(_pipeView==='drafts'){_ppRenderFilters();_ppRenderDrafts()}
+    else{const nD=document.getElementById('ppNDrafts');if(nD){const c=(d||[]).filter(x=>x.status==='pending'||x.status==='approved').length;nD.textContent=c}}
   }catch(e){console.warn('flow:',e)}
 }
+
+/* ── Bottom sheet ── */
+function openPipeSheet(){
+  document.getElementById('ppSheetMask').classList.add('open');
+  document.getElementById('ppSheet').classList.add('open');
+}
+function closePipeSheet(){
+  document.getElementById('ppSheetMask').classList.remove('open');
+  document.getElementById('ppSheet').classList.remove('open');
+}
+window.closePipeSheet=closePipeSheet;
+
+function openDraftSheet(id){
+  const x=(_ppCache.drafts||[]).find(r=>r.id===id);
+  if(!x)return;
+  const body=document.getElementById('ppSheetBody');
+  const rl=_ppRiskL(x.risk_level),rc=_ppRiskClass(x.risk_level);
+  const st={pending:'대기',approved:'승인',published:'발행',failed:'실패',rejected:'거절'}[x.status]||x.status;
+  const reasons=[];
+  if(x.broken)reasons.push('AI 출력 구조 깨짐 (broken draft)');
+  if(x.risk_level==='high')reasons.push('고위험 분류 — 검토 후 전송');
+  if(x.resonance&&x.resonance<70)reasons.push('공명 점수가 낮음 — 훅/본문 개선 여지');
+  if(!reasons.length)reasons.push('추가 경고 없음');
+  const isPending=x.status==='pending',isApproved=x.status==='approved';
+  const canSend=(isPending||isApproved)&&!x.broken;
+  body.innerHTML=
+    `<div class="pp2-sh-title">${(x.hook||x.title||'제목 없음').replace(/</g,'&lt;')}</div>`+
+    `<div class="pp2-sh-scores">`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:${x.resonance>=85?'var(--green)':x.resonance>=70?'var(--amber)':'var(--red)'}">${x.resonance||'—'}</div><div class="pp2-sh-sc-l">공명</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:#a78bfa">${x.monetization_score??'—'}</div><div class="pp2-sh-sc-l">수익</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--${x.risk_level==='high'?'red':x.risk_level==='medium'?'amber':'green'})">${rl}</div><div class="pp2-sh-sc-l">위험</div></div>`+
+    `</div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">상태</div><div class="pp2-sh-v">${st}</div></div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">생성</div><div class="pp2-sh-v">${x.created_kst||'—'}</div></div>`+
+    (x.source_url?`<div class="pp2-sh-row"><div class="pp2-sh-k">출처</div><div class="pp2-sh-v"><a href="${x.source_url}" target="_blank" style="color:var(--indigo);word-break:break-all">${x.source_url.length>50?x.source_url.slice(0,50)+'…':x.source_url}</a></div></div>`:'')+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">경고</div><div class="pp2-sh-v">${reasons.map(r=>`<div style="margin:2px 0">• ${r}</div>`).join('')}</div></div>`+
+    `<div class="pp2-sh-acts">`+
+      (x.source_url?`<a class="btn-secondary" href="${x.source_url}" target="_blank" rel="noopener">원문</a>`:'')+
+      (canSend?`<button class="btn-primary send" onclick="sendDraft(${x.id},this);closePipeSheet()">${isPending?'승인+전송':'전송'}</button>`:'')+
+      ((isPending||isApproved)?`<button class="btn-destructive" onclick="rejectDraft(${x.id},this);closePipeSheet()" aria-label="거절">✕</button>`:'')+
+    `</div>`;
+  openPipeSheet();
+}
+window.openDraftSheet=openDraftSheet;
+
+function openCandSheet(idx){
+  const c=(_ppCache.live||[])[idx];
+  if(!c)return;
+  const body=document.getElementById('ppSheetBody');
+  const sev=_ppSevCand(c.score||0);
+  const sevL={hi:'고점수 — 즉시 확인 권장',mi:'중간 점수 — 검토 권장',lo:'낮은 점수 — 참고용'}[sev];
+  const why=_ppWhyItMatters(c.title+' '+(c.summary||''),c.category,c.score||0);
+  const breakdown=[];
+  const t=(c.title+' '+(c.summary||'')).toLowerCase();
+  const hiKw=['금리','전쟁','폭락','급등','비트코인','bitcoin','fed','etf','파산','계엄','환율'];
+  const miKw=['경제','투자','주식','유가','반도체','관세','무역'];
+  const hiHit=hiKw.filter(k=>t.includes(k.toLowerCase()));
+  const miHit=miKw.filter(k=>t.includes(k.toLowerCase()));
+  if(hiHit.length)breakdown.push(`고중요 키워드 (+15): ${hiHit.slice(0,3).join(', ')}`);
+  if(miHit.length)breakdown.push(`중간 키워드 (+${Math.min(miHit.length,2)*5}): ${miHit.slice(0,3).join(', ')}`);
+  if(c.category==='crypto')breakdown.push('암호화폐 보너스 (+8)');
+  if(!breakdown.length)breakdown.push('특정 키워드 매칭 없음 · 기본 점수');
+  body.innerHTML=
+    `<div class="pp2-sh-title">${(c.title||'—').replace(/</g,'&lt;')}</div>`+
+    `<div class="pp2-sh-scores">`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="color:var(--${sev==='hi'?'red':sev==='mi'?'amber':'text-sec'})">${c.score||0}</div><div class="pp2-sh-sc-l">점수</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="font-size:13px">${_ppCatKr(c.category)}</div><div class="pp2-sh-sc-l">카테고리</div></div>`+
+      `<div class="pp2-sh-sc"><div class="pp2-sh-sc-n" style="font-size:13px">${c.time||'—'}</div><div class="pp2-sh-sc-l">수집</div></div>`+
+    `</div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">판정</div><div class="pp2-sh-v">${sevL}</div></div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">봐야 할 이유</div><div class="pp2-sh-v">${why}</div></div>`+
+    `<div class="pp2-sh-row"><div class="pp2-sh-k">점수 근거</div><div class="pp2-sh-v">${breakdown.map(b=>`<div style="margin:2px 0">• ${b}</div>`).join('')}</div></div>`+
+    (c.summary?`<div class="pp2-sh-row"><div class="pp2-sh-k">요약</div><div class="pp2-sh-v">${c.summary.replace(/</g,'&lt;').slice(0,280)}</div></div>`:'')+
+    (c.url?`<div class="pp2-sh-row"><div class="pp2-sh-k">출처</div><div class="pp2-sh-v"><a href="${c.url}" target="_blank" style="color:var(--indigo);word-break:break-all">${c.url.length>50?c.url.slice(0,50)+'…':c.url}</a></div></div>`:'')+
+    `<div class="pp2-sh-acts">`+
+      (c.url?`<a class="btn-secondary" href="${c.url}" target="_blank" rel="noopener">원문</a>`:'')+
+      `<button class="btn-primary" onclick="createDraft('${encodeURIComponent(esc(c.title))}','${encodeURIComponent(c.url||'')}','${encodeURIComponent(esc(c.summary||c.title))}',this);closePipeSheet()">초안 생성</button>`+
+    `</div>`;
+  openPipeSheet();
+}
+window.openCandSheet=openCandSheet;
 
 function newsImp(t){
   const l=t.toLowerCase();
@@ -1393,42 +1771,26 @@ let _pipeView='drafts';
 let _liveTimer=null;
 function switchPipeView(view,btn){
   _pipeView=view;
-  document.querySelectorAll('.pipe-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
+  document.querySelectorAll('.pp2-seg-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
   document.getElementById('pipeView-drafts').style.display=view==='drafts'?'':'none';
   document.getElementById('pipeView-live').style.display=view==='live'?'':'none';
-  if(view==='live'){loadLiveCandidates();_liveTimer=setInterval(loadLiveCandidates,10000)}
-  else{if(_liveTimer){clearInterval(_liveTimer);_liveTimer=null}}
+  _ppRenderFilters();
+  if(view==='drafts'){
+    if(_liveTimer){clearInterval(_liveTimer);_liveTimer=null}
+    _ppRenderDrafts();
+  }else{
+    loadLiveCandidates();
+    _liveTimer=setInterval(loadLiveCandidates,10000);
+  }
 }
 async function loadLiveCandidates(){
   try{
-    const r=await fetch(API+'/control/scored-candidates?limit=20');
+    const r=await fetch(API+'/control/scored-candidates?limit=30');
     const d=await r.json();
-    const ll=document.getElementById('liveList');
-    const lc=document.getElementById('liveCount');
-    if(!ll)return;
-    if(lc)lc.textContent=d.length+'건';
-    if(!d.length){ll.innerHTML='<div class="empty-sm">수집된 기사 없음 · 30초 간격 수집 중</div>';return}
-    const catKr={crypto:'암호화폐',economy:'경제',politics:'정치',policy:'정책',tech:'기술',world:'국제',market:'시장',stock:'주식'};
-    ll.innerHTML=d.map((c,i)=>{
-      const sc=c.score||0;
-      const sColor=sc>=15?'var(--red)':sc>=8?'var(--amber)':'var(--text-sec)';
-      const sBg=sc>=15?'var(--red-dim)':sc>=8?'var(--amber-dim)':'var(--bg-raised)';
-      const cat=catKr[c.category]||c.category||'기타';
-      const displayTitle=c.summary&&c.summary.length>10?c.summary:c.title;
-      return`<div class="cand-row" style="animation:slideIn .2s ease-out ${i*30}ms both">
-        <div class="cand-top">
-          <span class="cand-score" style="color:${sColor};background:${sBg}">${sc}</span>
-          <span class="cand-title">${displayTitle}</span>
-        </div>
-        <div class="cand-bot">
-          <span class="cand-meta">${cat} · ${c.time||''}</span>
-          <span style="flex:1"></span>
-          ${c.url?`<a class="draft-btn" href="${c.url}" target="_blank" style="text-decoration:none">원문</a>`:''}
-          <button class="draft-btn" style="color:var(--indigo)" onclick="createDraft('${encodeURIComponent(esc(c.title))}','${encodeURIComponent(c.url||'')}','${encodeURIComponent(esc(c.summary||c.title))}',this)">초안 생성</button>
-        </div>
-      </div>`;
-    }).join('');
+    _ppCache.live=d||[];
+    if(_pipeView==='live'){_ppRenderLive()}
+    else{const nL=document.getElementById('ppNLive');if(nL)nL.textContent=(d||[]).length}
   }catch(e){console.warn('live:',e)}
 }
 function esc(s){return s.replace(/'/g,'&#39;')}
@@ -1691,7 +2053,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 async function loadAll(){
   await Promise.allSettled([
     loadStatus(),loadEditorial(),loadProviders(),
-    loadFlowTrace(),loadNews(),loadNaver(),loadBiz(),loadRejected()
+    loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),loadBiz(),loadRejected()
   ]);
 }
 loadAll();
