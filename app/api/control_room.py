@@ -786,6 +786,27 @@ async def get_naver_quota():
     return get_status()
 
 
+@router.get("/naver/live")
+async def get_naver_live():
+    """
+    네이버 인제스천 라이브 상태 — 대시보드 Ops 탭 상단 카드에서 15초마다 폴링.
+
+    필드:
+      status            : live / idle / stale / dead
+      seconds_since_last: 마지막 사이클 이후 초
+      cycles_60m        : 최근 60분 사이클 수
+      items_60m         : 최근 60분 수집 기사 수
+      per_keyword[]     : 5개 키워드별 60분 적중 / 마지막 적중 시각
+      recent_items[]    : 최근 20건 수집 아이템 (타이틀 + 키워드)
+      configured        : NAVER_CLIENT_ID/SECRET 설정 여부
+    """
+    from app.services.naver_news import get_live_status
+    from app.services.naver_usage import get_status as _quota
+    live = get_live_status()
+    live["quota"] = _quota()
+    return live
+
+
 @router.get("/editorial-summary")
 async def get_editorial_summary():
     """

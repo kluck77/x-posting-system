@@ -14,6 +14,10 @@ API 등록: https://developers.naver.com/apps/#/register
 
 import logging
 import re
+import threading
+import time
+from collections import deque
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 
 import httpx
@@ -34,6 +38,137 @@ SEARCH_KEYWORDS: list[dict] = [
     {"keyword": "국회 법안",    "category": "politics"},
     {"keyword": "대통령 경제",  "category": "policy"},
 ]
+
+
+# ─── 라이브 상태 트래킹 ───────────────────────────────────────────────────────
+# 대시보드에서 "네이버 지금 돌고 있나?" 실시간 확인용.
+# 순수 관측만 — search 로직 자체는 건드리지 않는다.
+_live_lock = threading.Lock()
+_live_state: dict = {
+    "last_cycle_at": None,      # ISO UTC string (Z suffix)
+    "last_cycle_items": 0,
+    "last_cycle_ms": 0,
+    "cycles_total": 0,
+    "items_total": 0,
+    "cycle_history": deque(maxlen=120),  # (epoch_ts, items) — 최근 2시간치
+    "per_keyword": {
+        # keyword: {hits_total, last_hit_at, last_fetch_at, last_fetch_items, hit_history: deque}
+    },
+    "recent_items": deque(maxlen=30),    # {title, keyword, category, url, fetched_at}
+}
+
+
+def _now_iso_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _record_keyword_fetch(keyword: str, items: list["RssArticle"]) -> None:
+    """search_keyword() 성공 시 호출. 키워드별 적중 기록 + 최근 아이템 링버퍼."""
+    now_iso = _now_iso_utc()
+    now_ts = time.time()
+    with _live_lock:
+        per = _live_state["per_keyword"].setdefault(keyword, {
+            "hits_total": 0,
+            "last_hit_at": None,
+            "last_fetch_at": None,
+            "last_fetch_items": 0,
+            "hit_history": deque(maxlen=120),  # (epoch_ts, items)
+        })
+        per["last_fetch_at"] = now_iso
+        per["last_fetch_items"] = len(items)
+        per["hit_history"].append((now_ts, len(items)))
+        if items:
+            per["hits_total"] += len(items)
+            per["last_hit_at"] = now_iso
+            # 최근 아이템 스트림에 추가 (키워드 상관없이 전역 타임라인)
+            for a in items[:3]:  # 키워드당 최대 3건만 담아서 타임라인 오염 방지
+                _live_state["recent_items"].append({
+                    "title": a.title,
+                    "keyword": keyword,
+                    "category": a.category,
+                    "url": a.url,
+                    "fetched_at": now_iso,
+                })
+
+
+def _record_cycle(total_items: int, duration_ms: int) -> None:
+    """search_all_keywords() 한 사이클 끝날 때마다 호출."""
+    now_iso = _now_iso_utc()
+    now_ts = time.time()
+    with _live_lock:
+        _live_state["last_cycle_at"] = now_iso
+        _live_state["last_cycle_items"] = total_items
+        _live_state["last_cycle_ms"] = duration_ms
+        _live_state["cycles_total"] += 1
+        _live_state["items_total"] += total_items
+        _live_state["cycle_history"].append((now_ts, total_items))
+
+
+def get_live_status() -> dict:
+    """대시보드용 네이버 라이브 상태 스냅샷."""
+    now_ts = time.time()
+    with _live_lock:
+        last_at = _live_state["last_cycle_at"]
+        # 최근 60분 집계
+        cutoff_60 = now_ts - 3600
+        cycles_60m = sum(1 for ts, _ in _live_state["cycle_history"] if ts >= cutoff_60)
+        items_60m = sum(n for ts, n in _live_state["cycle_history"] if ts >= cutoff_60)
+
+        # seconds_since_last 계산
+        seconds_since = None
+        if last_at:
+            try:
+                dt = datetime.fromisoformat(last_at.replace("Z", "+00:00"))
+                seconds_since = int((datetime.now(timezone.utc) - dt).total_seconds())
+            except Exception:
+                seconds_since = None
+
+        # 상태 레벨
+        if seconds_since is None:
+            status = "dead"
+        elif seconds_since < 180:
+            status = "live"
+        elif seconds_since < 900:
+            status = "idle"
+        elif seconds_since < 3600:
+            status = "stale"
+        else:
+            status = "dead"
+
+        # 키워드별 60분 집계
+        per_keyword = []
+        for spec in SEARCH_KEYWORDS:
+            kw = spec["keyword"]
+            p = _live_state["per_keyword"].get(kw, {})
+            hist = p.get("hit_history", [])
+            hits_60m = sum(n for ts, n in hist if ts >= cutoff_60)
+            per_keyword.append({
+                "keyword": kw,
+                "category": spec["category"],
+                "hits_total": p.get("hits_total", 0),
+                "hits_60m": hits_60m,
+                "last_hit_at": p.get("last_hit_at"),
+                "last_fetch_at": p.get("last_fetch_at"),
+                "last_fetch_items": p.get("last_fetch_items", 0),
+            })
+
+        recent = list(_live_state["recent_items"])
+        recent.reverse()  # 최신순
+
+        return {
+            "status": status,
+            "last_cycle_at": last_at,
+            "seconds_since_last": seconds_since,
+            "last_cycle_items": _live_state["last_cycle_items"],
+            "last_cycle_ms": _live_state["last_cycle_ms"],
+            "cycles_60m": cycles_60m,
+            "items_60m": items_60m,
+            "cycles_total": _live_state["cycles_total"],
+            "items_total": _live_state["items_total"],
+            "per_keyword": per_keyword,
+            "recent_items": recent[:20],
+            "configured": bool(settings.naver_client_id and settings.naver_client_secret),
+        }
 
 
 class _HtmlStripper(HTMLParser):
@@ -106,10 +241,12 @@ async def search_keyword(keyword: str, category: str, display: int = 5) -> list[
                 category=category,
                 source=f"Naver/{keyword}",
             ))
+        _record_keyword_fetch(keyword, articles)
         return articles
 
     except Exception as e:
         logger.warning(f"Naver API 오류 ('{keyword}'): {e}")
+        _record_keyword_fetch(keyword, [])
         return []
 
 
@@ -121,6 +258,7 @@ async def search_all_keywords() -> list[RssArticle]:
         logger.debug("Naver API 키 없음 — 건너뜁니다")
         return []
 
+    t0 = time.time()
     tasks = [
         search_keyword(k["keyword"], k["category"])
         for k in SEARCH_KEYWORDS
@@ -130,5 +268,7 @@ async def search_all_keywords() -> list[RssArticle]:
     for r in results:
         if isinstance(r, list):
             articles.extend(r)
-    logger.info(f"Naver 검색 완료: {len(articles)}개 기사")
+    duration_ms = int((time.time() - t0) * 1000)
+    _record_cycle(len(articles), duration_ms)
+    logger.info(f"Naver 검색 완료: {len(articles)}개 기사 ({duration_ms}ms)")
     return articles

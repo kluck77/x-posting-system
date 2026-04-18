@@ -567,6 +567,71 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   margin:0 2px 14px;font-size:10.5px;color:var(--text-mut);font-family:var(--mono)}
 .ops2-sync b{color:var(--text-sec);font-weight:600}
 
+/* 1.5) 네이버 라이브 카드 — "지금 돌고 있나?" 관측 전용 */
+.nvl-card{background:linear-gradient(160deg,rgba(3,199,90,.07),var(--bg-surface) 55%);
+  border:1px solid var(--border-subtle);border-radius:var(--r-md);
+  padding:12px 12px 11px;margin:0 0 10px}
+.nvl-card.live{border-color:rgba(52,199,89,.32);
+  background:linear-gradient(160deg,rgba(52,199,89,.12),var(--bg-surface) 55%)}
+.nvl-card.idle{border-color:rgba(255,176,32,.3);
+  background:linear-gradient(160deg,rgba(255,176,32,.10),var(--bg-surface) 55%)}
+.nvl-card.stale,.nvl-card.dead{border-color:rgba(255,82,82,.32);
+  background:linear-gradient(160deg,rgba(255,82,82,.10),var(--bg-surface) 55%)}
+.nvl-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.nvl-pulse{width:10px;height:10px;border-radius:50%;background:var(--text-mut);flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+.nvl-card.live .nvl-pulse{background:var(--green);
+  animation:nvlPulseLive 1.8s ease-in-out infinite}
+.nvl-card.idle .nvl-pulse{background:var(--amber)}
+.nvl-card.stale .nvl-pulse,.nvl-card.dead .nvl-pulse{background:var(--red);
+  animation:nvlPulseBad 1.2s ease-in-out infinite}
+@keyframes nvlPulseLive{0%,100%{box-shadow:0 0 0 0 rgba(52,199,89,.55)}
+  50%{box-shadow:0 0 0 6px rgba(52,199,89,0)}}
+@keyframes nvlPulseBad{0%,100%{opacity:1}50%{opacity:.45}}
+.nvl-title{font-size:12px;font-weight:800;color:var(--text-pri);letter-spacing:.2px;flex:1}
+.nvl-title em{font-style:normal;color:var(--text-mut);font-weight:600;font-size:10.5px;margin-left:6px}
+.nvl-status{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;
+  background:var(--bg-raised);color:var(--text-sec);letter-spacing:.3px}
+.nvl-card.live .nvl-status{background:rgba(52,199,89,.18);color:var(--green)}
+.nvl-card.idle .nvl-status{background:rgba(255,176,32,.18);color:var(--amber)}
+.nvl-card.stale .nvl-status,.nvl-card.dead .nvl-status{background:rgba(255,82,82,.18);color:var(--red)}
+.nvl-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:9px}
+.nvl-m{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:10px;padding:8px 9px}
+.nvl-m-n{font-size:18px;font-weight:800;color:var(--text-pri);line-height:1;
+  font-variant-numeric:tabular-nums}
+.nvl-m-n.warn{color:var(--amber)}
+.nvl-m-n.bad{color:var(--red)}
+.nvl-m-lbl{font-size:10px;color:var(--text-mut);font-weight:600;margin-top:4px;letter-spacing:.2px}
+.nvl-kw{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.nvl-kw-chip{display:inline-flex;align-items:center;gap:5px;
+  padding:4px 9px 4px 8px;border-radius:12px;
+  background:var(--bg-raised);border:1px solid rgba(255,255,255,.07);
+  font-size:10.5px;color:var(--text-mut);font-weight:600;white-space:nowrap}
+.nvl-kw-chip.hit{background:rgba(52,199,89,.14);border-color:rgba(52,199,89,.28);color:var(--green)}
+.nvl-kw-chip.hit b{color:var(--green);font-weight:800}
+.nvl-kw-chip.zero{opacity:.55}
+.nvl-kw-chip b{font-weight:800;color:var(--text-pri)}
+.nvl-stream{border-top:1px solid var(--border-subtle);padding-top:8px;margin-top:2px}
+.nvl-stream-head{font-size:10px;color:var(--text-mut);font-weight:700;letter-spacing:.3px;
+  text-transform:uppercase;margin-bottom:5px}
+.nvl-stream-row{display:flex;align-items:baseline;gap:8px;padding:4px 0;
+  border-bottom:1px dashed rgba(255,255,255,.05);font-size:11px}
+.nvl-stream-row:last-child{border-bottom:0}
+.nvl-stream-time{font-family:var(--mono);font-size:10px;color:var(--text-mut);flex-shrink:0;width:48px}
+.nvl-stream-kw{font-size:9.5px;font-weight:700;color:#a78bfa;flex-shrink:0;
+  padding:1px 6px;border-radius:8px;background:rgba(167,139,250,.12);
+  letter-spacing:.2px;white-space:nowrap}
+.nvl-stream-ttl{color:var(--text-sec);flex:1;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-size:11px}
+.nvl-empty{font-size:11px;color:var(--text-mut);text-align:center;padding:8px 0}
+.nvl-banner{margin-top:8px;padding:7px 10px;border-radius:8px;
+  font-size:10.5px;font-weight:600;text-align:center}
+.nvl-banner.warn{background:rgba(255,176,32,.12);color:var(--amber);
+  border:1px solid rgba(255,176,32,.25)}
+.nvl-banner.bad{background:rgba(255,82,82,.12);color:var(--red);
+  border:1px solid rgba(255,82,82,.28)}
+
 /* 2) 평가 저장소 */
 .ops2-eval{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
 .ops2-ec{position:relative;background:var(--bg-surface);border-radius:var(--r-md);
@@ -1170,6 +1235,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <!-- 1) 시스템 상태 strip -->
   <div class="ops2-status" id="ops2Status"></div>
   <div class="ops2-sync" id="ops2Sync"></div>
+
+  <!-- 1.5) 네이버 라이브 — 수집이 지금 돌고 있나? -->
+  <div class="sec-head first">네이버 라이브</div>
+  <div id="nvlMount"></div>
 
   <!-- 2) 평가 저장소 -->
   <div class="sec-head first">평가 저장소</div>
@@ -2033,6 +2102,126 @@ async function loadNaver(){
   }catch(e){console.warn('naver:',e)}
 }
 
+/* ═════════ 네이버 라이브 카드 ═════════ */
+function _nvlFmtSince(sec){
+  if(sec==null)return '기록 없음';
+  if(sec<60)return sec+'초 전';
+  const m=Math.floor(sec/60);if(m<60)return m+'분 전';
+  const h=Math.floor(m/60);if(h<24)return h+'시간 전';
+  return Math.floor(h/24)+'일 전';
+}
+function _nvlFmtTime(iso){
+  if(!iso)return '';
+  try{const d=new Date(iso);if(isNaN(d))return '';
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  }catch(e){return ''}
+}
+function _nvlStatusLabel(s){
+  return {live:'LIVE',idle:'IDLE',stale:'STALE',dead:'DEAD'}[s]||'—';
+}
+function _nvlRender(d){
+  const mount=document.getElementById('nvlMount');if(!mount)return;
+  if(!d||!d.configured){
+    mount.innerHTML=`<div class="nvl-card dead">
+      <div class="nvl-head">
+        <span class="nvl-pulse"></span>
+        <span class="nvl-title">네이버 수집 <em>NAVER_CLIENT_ID 미설정</em></span>
+        <span class="nvl-status">OFF</span>
+      </div>
+      <div class="nvl-empty">.env 에 NAVER_CLIENT_ID / SECRET 설정 후 재시작하세요.</div>
+    </div>`;
+    return;
+  }
+  const st=d.status||'dead';
+  const sec=d.seconds_since_last;
+  const cycles60=d.cycles_60m||0;
+  const items60=d.items_60m||0;
+  const lastMs=d.last_cycle_ms||0;
+  const lastItems=d.last_cycle_items||0;
+  const quota=d.quota||{};
+  const quotaPct=quota.pct_used||0;
+
+  // 메트릭 3칸
+  const m1Cls=(sec==null||sec>900)?'bad':(sec>180?'warn':'');
+  const m2Cls=cycles60===0?'warn':'';
+  const m3Cls=quotaPct>=80?'bad':(quotaPct>=50?'warn':'');
+
+  const metrics=`<div class="nvl-metrics">
+    <div class="nvl-m">
+      <div class="nvl-m-n ${m1Cls}">${_nvlFmtSince(sec)}</div>
+      <div class="nvl-m-lbl">마지막 수집</div>
+    </div>
+    <div class="nvl-m">
+      <div class="nvl-m-n ${m2Cls}">${cycles60} <span style="font-size:11px;color:var(--text-mut);font-weight:600">사이클</span></div>
+      <div class="nvl-m-lbl">최근 60분 · ${items60}건</div>
+    </div>
+    <div class="nvl-m">
+      <div class="nvl-m-n ${m3Cls}">${quotaPct}%</div>
+      <div class="nvl-m-lbl">오늘 할당량</div>
+    </div>
+  </div>`;
+
+  // 키워드 칩
+  const kws=d.per_keyword||[];
+  const kwChips=kws.map(k=>{
+    const hit=k.hits_60m||0;
+    const cls=hit>0?'hit':'zero';
+    const lastT=k.last_hit_at?` · ${_nvlFmtTime(k.last_hit_at)}`:'';
+    return `<span class="nvl-kw-chip ${cls}">${_ops2Esc(k.keyword)} <b>×${hit}</b>${lastT}</span>`;
+  }).join('');
+  const kwBlock=kws.length?`<div class="nvl-kw">${kwChips}</div>`:'';
+
+  // 스트림
+  const items=d.recent_items||[];
+  let streamRows='';
+  if(items.length===0){
+    streamRows=`<div class="nvl-empty">수집된 기사가 아직 없습니다 — 사이클 대기 중</div>`;
+  }else{
+    streamRows=items.slice(0,8).map(it=>{
+      const t=_nvlFmtTime(it.fetched_at);
+      return `<div class="nvl-stream-row">
+        <span class="nvl-stream-time">${t}</span>
+        <span class="nvl-stream-kw">${_ops2Esc(it.keyword)}</span>
+        <span class="nvl-stream-ttl">${_ops2Esc(it.title)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // 배너
+  let banner='';
+  if(st==='stale'){
+    banner=`<div class="nvl-banner warn">⚠ 수집 지연 — 마지막 사이클 ${_nvlFmtSince(sec)}. 스케줄러 확인 필요.</div>`;
+  }else if(st==='dead'){
+    banner=`<div class="nvl-banner bad">🚨 수집 멈춤 — ${_nvlFmtSince(sec)}. 봇/네트워크 점검.</div>`;
+  }else if(cycles60===0 && sec!=null && sec<900){
+    banner=`<div class="nvl-banner warn">첫 사이클 대기 중 — 곧 시작됩니다.</div>`;
+  }
+
+  const titleMeta=lastItems>0?`<em>직전 ${lastItems}건 · ${lastMs}ms</em>`:`<em>실시간 관측</em>`;
+
+  mount.innerHTML=`<div class="nvl-card ${st}">
+    <div class="nvl-head">
+      <span class="nvl-pulse"></span>
+      <span class="nvl-title">네이버 실시간 수집 ${titleMeta}</span>
+      <span class="nvl-status">${_nvlStatusLabel(st)}</span>
+    </div>
+    ${metrics}
+    ${kwBlock}
+    <div class="nvl-stream">
+      <div class="nvl-stream-head">최근 수집 스트림</div>
+      ${streamRows}
+    </div>
+    ${banner}
+  </div>`;
+}
+async function loadNaverLive(){
+  try{
+    const r=await fetch(API+'/control/naver/live');
+    const d=await r.json();
+    _nvlRender(d);
+  }catch(e){console.warn('naver live:',e);_nvlRender(null)}
+}
+
 async function loadBiz(){
   try{
     const r=await fetch(API+'/control/business-summary');
@@ -2700,12 +2889,14 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
 async function loadAll(){
   await Promise.allSettled([
     loadStatus(),loadEditorial(),loadProviders(),
-    loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),
+    loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),loadNaverLive(),
     loadBiz(),loadRejected(),loadOpsExtras()
   ]);
 }
 loadAll();
 setInterval(loadAll,30000);
+// 네이버 라이브 카드는 더 자주 갱신 (15초) — "지금 돌고 있나" 가시성 유지
+setInterval(loadNaverLive,15000);
 </script>
 </body>
 </html>
