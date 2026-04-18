@@ -715,6 +715,7 @@ async def get_scored_candidates(limit: int = 15, min_score: int = 0):
                 "score": a["_score"],
                 "category": a.get("category", ""),
                 "time": str(pub)[11:16],
+                "added_at": a.get("added_at", ""),
             })
             if len(result) >= limit:
                 break

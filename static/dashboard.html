@@ -440,6 +440,9 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .pp2-c-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:var(--text-sec);align-items:center}
 .pp2-c-cat{padding:1px 7px;border-radius:8px;background:var(--bg-raised);font-weight:700;color:var(--text-pri)}
 .pp2-c-time{font-family:var(--mono);color:var(--text-mut)}
+.pp2-c-age{padding:1px 7px;border-radius:8px;background:var(--bg-raised);color:var(--text-mut);font-weight:600}
+.pp2-c-age.stale{background:var(--amber-dim);color:var(--amber)}
+.pp2-cand.aged{opacity:.78}
 .pp2-c-why{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--amber);
   background:var(--amber-dim);padding:4px 8px;border-radius:8px;line-height:1.3}
 .pp2-c-why-ic{font-size:10px;line-height:1}
@@ -1940,6 +1943,21 @@ function _ppRiskClass(r){return{low:'risk-low',medium:'risk-med',high:'risk-high
 function _ppRiskL(r){return{low:'안전',medium:'주의',high:'위험'}[r]||(r||'—')}
 function _ppResClass(v){return v>=85?'res-hi':v>=70?'res-mi':'res-lo'}
 function _ppSevCand(sc){return sc>=15?'hi':sc>=8?'mi':'lo'}
+function _ppCandAge(addedAt){
+  // added_at: KST ISO 문자열 → {label, stale} 반환
+  if(!addedAt)return {label:'',stale:false};
+  try{
+    const t=new Date(addedAt).getTime();
+    if(!t)return {label:'',stale:false};
+    const min=Math.max(0,Math.round((Date.now()-t)/60000));
+    let label;
+    if(min<1)label='방금';
+    else if(min<60)label=min+'분 전';
+    else if(min<1440)label=Math.round(min/60)+'시간 전';
+    else label=Math.floor(min/1440)+'일 전';
+    return {label,stale:min>=120}; // 2시간 이상이면 stale
+  }catch(e){return {label:'',stale:false}}
+}
 function _ppCatKr(c){
   return{crypto:'암호화폐',economy:'경제',politics:'정치',policy:'정책',tech:'기술',world:'국제',market:'시장',stock:'주식'}[c]||c||'기타';
 }
@@ -2100,11 +2118,13 @@ function _ppRenderLive(){
     const cat=_ppCatKr(c.category);
     const displayTitle=(c.summary&&c.summary.length>10?c.summary:c.title||'—').replace(/</g,'&lt;');
     const why=_ppWhyItMatters(c.title+' '+(c.summary||''),c.category,c.score||0);
+    const age=_ppCandAge(c.added_at);
+    const ageChip=age.label?`<span class="pp2-c-age${age.stale?' stale':''}">수집 ${age.label}</span>`:'';
     const idx=d.indexOf(c);
-    return`<div class="pp2-cand ${sev}" style="animation-delay:${i*25}ms" onclick="openCandSheet(${idx})">
+    return`<div class="pp2-cand ${sev}${age.stale?' aged':''}" style="animation-delay:${i*25}ms" onclick="openCandSheet(${idx})">
       <div class="pp2-c-score ${sev}">${c.score||0}<div class="pp2-c-score-lbl">점수</div></div>
       <div class="pp2-c-title">${displayTitle}</div>
-      <div class="pp2-c-meta"><span class="pp2-c-cat">${cat}</span><span class="pp2-c-time">${c.time||''}</span></div>
+      <div class="pp2-c-meta"><span class="pp2-c-cat">${cat}</span><span class="pp2-c-time">${c.time||''}</span>${ageChip}</div>
       <div class="pp2-c-why"><span class="pp2-c-why-ic">●</span>${why}</div>
       <div class="pp2-c-acts" onclick="event.stopPropagation()">
         ${c.url?`<a class="btn-secondary" href="${c.url}" target="_blank" rel="noopener">원문</a>`:''}
