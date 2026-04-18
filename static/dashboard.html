@@ -1946,11 +1946,16 @@ function _ppWhyItMatters(title,category,score){
     [/(삼성|sk하이닉스|lg|현대차|코스피|코스닥)/,'한국 대형주 영향'],
   ];
   for(const[re,msg] of m){if(re.test(t))return msg}
-  if(score>=35)return'점수 기준 핵심 뉴스';
-  if(category==='crypto')return'암호화폐 관심사';
-  if(category==='economy')return'거시 경제 지표';
-  if(category==='politics')return'정책 방향 변화';
-  return'주목할 만한 뉴스';
+  // 키워드 패턴 매치 실패 — 점수 만으로 정당화 가능한 경우만 카테고리 라벨 출력.
+  // (이전: 28~34점도 카테고리만 보고 "암호화폐 관심사" 같은 라벨 → SEO 스팸 가짜 정당화)
+  if(score>=50)return'점수 기준 핵심 뉴스';
+  if(score>=35){
+    if(category==='crypto')return'암호화폐 관심사';
+    if(category==='economy')return'거시 경제 지표';
+    if(category==='politics')return'정책 방향 변화';
+    return'주목할 만한 뉴스';
+  }
+  return'키워드 매칭 약함 · 검토 필요';
 }
 
 function _ppRiskClass(r){return{low:'risk-low',medium:'risk-med',high:'risk-high'}[r]||'risk-med'}
