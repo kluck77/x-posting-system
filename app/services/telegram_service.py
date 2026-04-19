@@ -354,6 +354,10 @@ def build_inline_keyboard(draft_id: int) -> dict:
                 {"text": "⏸️ 보류", "callback_data": f"defer:{draft_id}"},
                 {"text": "🔄 재생성", "callback_data": f"regenerate:{draft_id}"},
             ],
+            [
+                {"text": "📋 본문 복사", "callback_data": f"copy_body:{draft_id}"},
+                {"text": "🤖 Grok 편집용", "callback_data": f"copy_grok:{draft_id}"},
+            ],
         ]
     }
     return keyboard

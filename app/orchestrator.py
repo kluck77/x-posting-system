@@ -41,6 +41,12 @@ from app.services.quality_scorer import (
 )
 from app.providers.ai_provider import AITeam, create_ai_team
 from app.providers.base import DraftResult, ResearchResult, FactCheckResult, TrendResult
+from app.services.source_pack import build_source_pack
+from app.services.angle_pack import build_angle_pack
+from app.services.grok_handoff import (
+    format_handoff, compose_enriched_source, compose_pack_context,
+)
+from app.services.pack_sidecar import save_pack
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +312,61 @@ class Orchestrator:
                 sources=[data.url] if data.url else [],
             )
 
+        # Step 2.5: Pack Chain (Grok Handoff, Phase 1) — flag gated
+        # research 직후, draft 생성 전에 factcheck 를 선행시켜 source/angle pack 구성.
+        # 실패 시 [PACK_CHAIN_FALLBACK] 로그 + legacy 경로로 자연 복귀 (변수 초기화만).
+        pack_chain_data: dict | None = None
+        _precomputed_factcheck: FactCheckResult | None = None
+        if settings.pack_chain_enabled:
+            try:
+                # 2.5.1 factcheck 선행 (source_text 기준 — legacy 는 draft.body 기준)
+                try:
+                    _precomputed_factcheck = await self.ai.fact_checker.check_facts(
+                        claim=data.source_text[:1500],
+                        context=data.title[:500],
+                    )
+                except Exception as _fc_e:
+                    logger.warning(
+                        f"[pack_chain] pre-factcheck 실패 (pack 만 heuristic): {_fc_e}"
+                    )
+                    _precomputed_factcheck = None
+
+                # 2.5.2 source_pack
+                _source_pack = build_source_pack(
+                    source_item=source_item,
+                    input_data=data,
+                    research=research,
+                    factcheck=_precomputed_factcheck,
+                )
+                # 2.5.3 angle_pack (Gemini 1회 or heuristic)
+                _angle_pack = await build_angle_pack(_source_pack, self.ai)
+                _winner = _angle_pack.get("winner_angle") or {}
+
+                # 2.5.4 compose
+                _enriched_source = compose_enriched_source(
+                    original=data.source_text,
+                    source_pack=_source_pack,
+                    winner_angle=_winner,
+                )
+                _pack_context = compose_pack_context(_source_pack, _winner)
+
+                pack_chain_data = {
+                    "source_pack":           _source_pack,
+                    "angle_pack":            _angle_pack,
+                    "enriched_source_pack":  _enriched_source,
+                    "pack_context":          _pack_context,
+                    "precomputed_factcheck": _precomputed_factcheck,
+                }
+                logger.info(
+                    f"[pack_chain] active — winner={str(_winner.get('angle', ''))[:80]}"
+                )
+            except Exception as _pc_e:
+                logger.warning(
+                    f"[PACK_CHAIN_FALLBACK] {type(_pc_e).__name__}: {_pc_e}"
+                )
+                pack_chain_data = None
+                _precomputed_factcheck = None
+
         # Step 3: DraftWriter — 초안 생성
         logger.info("[3/6] DraftWriter: 초안 생성")
 
@@ -344,6 +405,14 @@ class Orchestrator:
                     f"[Researcher identified interpretation gaps — use these for your angle]:\n"
                     f"{gaps_text}"
                 )
+            # Pack chain 활성 시 pack 기반 enriched_source / pack_context 로 override
+            if pack_chain_data:
+                enriched_source = pack_chain_data["enriched_source_pack"]
+                _pack_ctx = pack_chain_data["pack_context"]
+                draft_criteria_ctx = (
+                    (draft_criteria_ctx + "\n\n" + _pack_ctx).strip()
+                    if draft_criteria_ctx else _pack_ctx
+                )
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
                 source_text=enriched_source[:3000],
@@ -361,17 +430,22 @@ class Orchestrator:
 
         # Step 4: FactChecker — 팩트체크
         logger.info("[4/6] FactChecker: 검증")
-        try:
-            factcheck = await self.ai.fact_checker.check_facts(
-                claim=draft_result.body, context=data.source_text[:500],
-            )
-            if factcheck and factcheck.criteria_signals.any_populated():
-                logger.info(
-                    f"[FactChecker criteria] {factcheck.criteria_signals.to_log_str()}"
+        if pack_chain_data and _precomputed_factcheck is not None:
+            # pack chain 이 이미 source_text 기준으로 factcheck 수행 — 중복 호출 회피
+            factcheck = _precomputed_factcheck
+            logger.info("[pack_chain] factcheck 재사용 (pre-computed, source 기준)")
+        else:
+            try:
+                factcheck = await self.ai.fact_checker.check_facts(
+                    claim=draft_result.body, context=data.source_text[:500],
                 )
-        except Exception as e:
-            logger.warning(f"FactChecker 실패: {e}")
-            factcheck = None
+                if factcheck and factcheck.criteria_signals.any_populated():
+                    logger.info(
+                        f"[FactChecker criteria] {factcheck.criteria_signals.to_log_str()}"
+                    )
+            except Exception as e:
+                logger.warning(f"FactChecker 실패: {e}")
+                factcheck = None
 
         # Step 4.5: 5-Criteria 품질 필터 (Reviewer 전 사전 체크)
         criteria_result = score_5criteria(
@@ -402,6 +476,14 @@ class Orchestrator:
         except Exception as _ctx_err:
             logger.warning(f"[criteria_context] Reviewer 빌드 실패 (무시): {_ctx_err}")
             review_criteria_ctx = ""
+
+        # Pack chain 활성 시 pack_context 를 Reviewer criteria_context 에 합침
+        if pack_chain_data:
+            _pack_ctx = pack_chain_data["pack_context"]
+            review_criteria_ctx = (
+                (review_criteria_ctx + "\n\n" + _pack_ctx).strip()
+                if review_criteria_ctx else _pack_ctx
+            )
 
         # Step 5: Reviewer — 리스크 판단 & 최종 다듬기
         logger.info("[5/6] Reviewer: 최종 판단")
@@ -656,6 +738,23 @@ class Orchestrator:
             )
         except Exception as e:
             logger.warning(f"[ResonanceScore] 계산 실패 (무시): {e}")
+
+        # Pack sidecar 저장 (pack chain 활성 시만, draft.id 확보 이후)
+        if pack_chain_data:
+            try:
+                _handoff_text = format_handoff(
+                    pack_chain_data["source_pack"],
+                    pack_chain_data["angle_pack"],
+                    review.body,
+                )
+                save_pack(draft.id, {
+                    "source":     pack_chain_data["source_pack"],
+                    "angle":      pack_chain_data["angle_pack"],
+                    "final_body": review.body,
+                    "handoff":    _handoff_text,
+                })
+            except Exception as _sv_e:
+                logger.warning(f"[pack_sidecar] save 실패 (무시): {_sv_e}")
 
         logger.info(
             f"=== 파이프라인 완료: draft_id={draft.id}, "

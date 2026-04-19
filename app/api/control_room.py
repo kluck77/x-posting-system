@@ -40,6 +40,21 @@ def _is_dismissed(url: str) -> bool:
 router = APIRouter(prefix="/control", tags=["control-room"])
 
 
+# ── Pack Sidecar 조회 (Grok Handoff Phase 1) ─────────────────────────────────
+
+@router.get("/pack/{draft_id}")
+async def get_pack_sidecar(draft_id: int):
+    """draft_id 에 대응하는 sidecar JSON 을 그대로 반환.
+
+    없음/파싱 실패 시 {"error": "no pack"} 반환 (404 대신 200 — 쉬운 디버깅).
+    """
+    from app.services.pack_sidecar import load_pack
+    pack = load_pack(draft_id)
+    if not pack:
+        return {"error": "no pack", "draft_id": draft_id}
+    return pack
+
+
 # ── 대시보드 HTML 페이지 ──────────────────────────────────────────────────────
 
 @router.get("/", include_in_schema=False)

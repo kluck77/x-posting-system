@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     # --- 안전 설정 ---
     enable_auto_post_low_risk: bool = Field(default=False)
 
+    # --- Pack Chain (Grok Handoff) --- Phase 1: off by default
+    pack_chain_enabled: bool = Field(
+        default=False,
+        description="Pack chain 경로 활성화 (source_pack + angle_pack + sidecar). "
+                    "실패 시 legacy 경로로 fallback.",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

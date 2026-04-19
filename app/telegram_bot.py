@@ -664,6 +664,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_type_callback(query, context)
         return
 
+    # --- 본문 복사 / Grok 편집용 복사 콜백 (Pack Chain Phase 1) ---
+    if callback_data.startswith("copy_body:") or callback_data.startswith("copy_grok:"):
+        await _handle_copy_callback(query, context)
+        return
+
     # --- 기존 승인/거절 콜백 ---
     parsed = parse_callback_data(callback_data)
     if not parsed:
@@ -748,6 +753,77 @@ async def _handle_quick_callback(query, context: ContextTypes.DEFAULT_TYPE):
         await cost_command(u, context)
     elif action == "quick_reset_limit":
         await reset_limit_command(u, context)
+
+
+async def _handle_copy_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    """
+    본문 복사 / Grok 편집용 복사 버튼 처리 (Pack Chain Phase 1).
+
+    callback_data:
+      copy_body:{draft_id}  — draft.body 를 코드블록으로 회신 (모바일 복사용)
+      copy_grok:{draft_id}  — sidecar JSON 의 handoff 텍스트 회신
+                             (pack 없으면 "레거시 초안 — handoff 없음" 안내)
+    """
+    from app.services.pack_sidecar import load_pack
+    from app.services.draft_service import DraftService
+    from app.db import SessionLocal
+
+    data = query.data or ""
+    parts = data.split(":", 1)
+    if len(parts) != 2:
+        await query.message.reply_text("⚠️ 잘못된 복사 요청입니다.")
+        return
+
+    action, raw_id = parts[0], parts[1]
+    try:
+        draft_id = int(raw_id)
+    except ValueError:
+        await query.message.reply_text("⚠️ 잘못된 draft_id 입니다.")
+        return
+
+    if action == "copy_body":
+        db = SessionLocal()
+        try:
+            draft = DraftService(db).get_by_id(draft_id)
+            if not draft:
+                await query.message.reply_text(f"⚠️ 초안을 찾을 수 없습니다: {draft_id}")
+                return
+            hook = (draft.hook or "").strip()
+            body = (draft.body or "").strip()
+            post_text = f"{hook}\n\n{body}".strip() if (hook or body) else "(비어있음)"
+        finally:
+            db.close()
+
+        import html as _html
+        await query.message.reply_text(
+            f"📋 <b>본문 복사 (draft {draft_id})</b>\n"
+            f"<pre>{_html.escape(post_text[:3500])}</pre>",
+            parse_mode="HTML",
+        )
+        return
+
+    # copy_grok
+    pack = load_pack(draft_id)
+    if not pack or not isinstance(pack, dict):
+        await query.message.reply_text(
+            f"ℹ️ 레거시 초안 — handoff 없음 (draft {draft_id}).\n"
+            f"Pack chain 미활성 상태에서 생성된 초안이거나 sidecar 파일이 없습니다."
+        )
+        return
+
+    handoff = pack.get("handoff") or ""
+    if not handoff:
+        await query.message.reply_text(
+            f"ℹ️ sidecar 는 있지만 handoff 가 비어있습니다 (draft {draft_id})."
+        )
+        return
+
+    import html as _html
+    await query.message.reply_text(
+        f"🤖 <b>Grok 편집용 Handoff (draft {draft_id})</b>\n"
+        f"<pre>{_html.escape(handoff[:3500])}</pre>",
+        parse_mode="HTML",
+    )
 
 
 async def _handle_queue_callback(query, context: ContextTypes.DEFAULT_TYPE):

@@ -64,7 +64,8 @@ class TestBuildInlineKeyboard:
         kb = build_inline_keyboard(42)
         assert "inline_keyboard" in kb
         rows = kb["inline_keyboard"]
-        assert len(rows) == 2  # 2줄
+        # Phase 1 (Pack Chain): 3 rows — approve/reject, defer/regenerate, copy_body/copy_grok
+        assert len(rows) == 3
 
         # 첫 줄: Approve, Reject
         assert len(rows[0]) == 2
@@ -74,6 +75,11 @@ class TestBuildInlineKeyboard:
         # 둘째 줄: Defer, Regenerate
         assert rows[1][0]["callback_data"] == "defer:42"
         assert rows[1][1]["callback_data"] == "regenerate:42"
+
+        # 셋째 줄: 본문 복사, Grok 편집용 (Pack Chain Phase 1)
+        assert len(rows[2]) == 2
+        assert rows[2][0]["callback_data"] == "copy_body:42"
+        assert rows[2][1]["callback_data"] == "copy_grok:42"
 
 
 class TestRecommendedActionQualityGate:
