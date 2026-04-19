@@ -4,18 +4,24 @@ Angle Pack
 source_pack 을 입력으로 받아 "어느 각도로 쓸지" 를 결정하는 층.
 Gemini 1회만 호출 (safety pass 없음 — safety 는 Reviewer 단 전담).
 
-키 (6):
-  core_tension   — 이 스토리의 핵심 긴장/대립 한 문장
-  angle_options  — 후보 각도 리스트 (3~4개)
-  winner_angle   — Gemini 가 선택한 최적 각도 (dict: {angle, score, reason})
-  series_type    — breaking / analysis / reaction / explainer / thread
-  follow_reason  — 팔로우할 이유 (1줄 — 게시 후 팔로업 근거)
-  share_reason   — 공유할 이유 (1줄 — 독자가 RT 하는 동기)
+키 (11):
+  core_tension      — 이 스토리의 핵심 긴장/대립 한 문장
+  angle_options     — 후보 각도 리스트 (3~4개)
+  winner_angle      — Gemini 가 선택한 최적 각도 (dict: {angle, score, reason})
+  series_type       — breaking / analysis / reaction / explainer / thread
+  follow_reason     — 팔로우할 이유 (1줄 — 게시 후 팔로업 근거)
+  share_reason      — 공유할 이유 (1줄 — 독자가 RT 하는 동기)
+  frame_type        — parallel / contrast / hidden_signal / underreported_angle  (Phase 1.1)
+  story_spine       — 글의 뼈대 순서 (list of phase keys)                         (Phase 1.1)
+  readability_risk  — low / medium / high                                         (Phase 1.1)
+  share_trigger     — 공유 트리거 한 줄 (짧고 구체)                                (Phase 1.1)
+  scan_pattern      — 모바일 스캔 패턴 힌트 (짧은 문장)                            (Phase 1.1)
 
 설계 원칙:
 - plain dict 반환. Pydantic 금지.
 - Gemini 키 없으면 heuristic fallback 사용 (RuntimeError 금지).
 - 호출 실패/JSON 파싱 실패 → heuristic fallback 으로 우회.
+- Gemini 호출 수 유지 (1회). Phase 1.1 은 스키마만 확장.
 - orchestrator 는 이 pack 의 winner_angle 을 enriched_source / pack_context 에 주입.
 """
 
@@ -38,14 +44,25 @@ ANGLE_PACK_KEYS: tuple[str, ...] = (
     "series_type",
     "follow_reason",
     "share_reason",
+    # Phase 1.1 구조 강화
+    "frame_type",
+    "story_spine",
+    "readability_risk",
+    "share_trigger",
+    "scan_pattern",
 )
+
+_FRAME_TYPES = ("parallel", "contrast", "hidden_signal", "underreported_angle")
+_READABILITY_LEVELS = ("low", "medium", "high")
+_DEFAULT_STORY_SPINE: tuple[str, ...] = ("hook", "explain", "evidence", "contrast", "close")
+_VALID_SPINE_PHASES = {"hook", "explain", "evidence", "contrast", "close", "signal", "twist"}
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_MODEL = "gemini-2.5-flash"
 
 SYSTEM_INSTRUCTION = """You are the angle strategist for @cheesesvav — an English-language X account that shares Korean perspectives with global readers.
 
-Given a "source pack" (confirmed facts, conflicts/uncertainty, Korea angle, global angle, watch-next signals), decide the best angle to post.
+Given a "source pack" (confirmed facts, conflicts/uncertainty, Korea angle, global angle, watch-next signals, plus optional historical_parallel / concept_translation / evidence_pack / closing_signal), decide the best angle to post.
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -62,15 +79,45 @@ Return ONLY valid JSON with this exact shape:
   },
   "series_type": "breaking|analysis|reaction|explainer|thread",
   "follow_reason": "one sentence: why a reader would follow after seeing this post",
-  "share_reason": "one sentence: why a reader would share/RT this post"
+  "share_reason": "one sentence: why a reader would share/RT this post",
+  "frame_type": "parallel|contrast|hidden_signal|underreported_angle",
+  "story_spine": ["hook","explain","evidence","contrast","close"],
+  "readability_risk": "low|medium|high",
+  "share_trigger": "one short, concrete line that makes the reader want to share",
+  "scan_pattern": "one short hint on how the post should scan on mobile (e.g. 'short lines, one number per line')"
 }
 
 Rules:
 - Ground every angle in confirmed_facts or conflicts_or_uncertainty. Do not invent.
 - Prefer angles that expose interpretation gaps (what Reuters/Bloomberg misses).
 - Winner selection: highest marginal insight, lowest speculation risk.
+- frame_type: pick "parallel" when a historical/cross-case parallel exists; "contrast" when two positions clash; "hidden_signal" when a small confirmed fact hints at a bigger move; "underreported_angle" when global media is missing the Korea/Asia read.
+- story_spine: pick 4~5 phases from ["hook","explain","evidence","contrast","close","signal","twist"], in the order the post should flow. No duplicates.
+- readability_risk: "high" if the topic is dense / jargon-heavy / requires prior context; "low" if it is a clean one-beat story.
+- scan_pattern: imagine a phone screen — tell the writer what shape to give the post.
 - Do NOT include a safety verdict — Reviewer handles that downstream.
 """
+
+
+def _pick_frame_type_heuristic(source_pack: dict) -> str:
+    if source_pack.get("historical_parallel"):
+        return "parallel"
+    if source_pack.get("conflicts_or_uncertainty"):
+        return "contrast"
+    if source_pack.get("korea_angle") or source_pack.get("global_angle"):
+        return "underreported_angle"
+    if source_pack.get("watch_next"):
+        return "hidden_signal"
+    return "underreported_angle"
+
+
+def _pick_readability_risk_heuristic(source_pack: dict) -> str:
+    if source_pack.get("concept_translation"):
+        return "high"
+    confirmed = source_pack.get("confirmed_facts") or []
+    if len(confirmed) >= 6:
+        return "medium"
+    return "low"
 
 
 def _heuristic_angle_pack(source_pack: dict) -> dict:
@@ -80,6 +127,7 @@ def _heuristic_angle_pack(source_pack: dict) -> dict:
     korea = source_pack.get("korea_angle") or []
     global_ = source_pack.get("global_angle") or []
     watch = source_pack.get("watch_next") or []
+    closing = source_pack.get("closing_signal") or ""
 
     if conflicts:
         core = f"Uncertainty on record: {str(conflicts[0])[:160]}"
@@ -136,13 +184,37 @@ def _heuristic_angle_pack(source_pack: dict) -> dict:
         else "Fills a gap English-language coverage misses."
     )
 
+    frame_type = _pick_frame_type_heuristic(source_pack)
+    readability_risk = _pick_readability_risk_heuristic(source_pack)
+
+    share_trigger = ""
+    if closing:
+        share_trigger = str(closing)[:200]
+    elif global_:
+        share_trigger = f"Most English readers don't see this: {str(global_[0])[:160]}"
+    elif confirmed:
+        share_trigger = f"One line worth passing on: {str(confirmed[0])[:160]}"
+    else:
+        share_trigger = share_reason[:200]
+
+    scan_pattern = (
+        "short lines, one number per line, contrast on a single line."
+        if frame_type == "contrast"
+        else "short lines, lead with the concrete fact, close on the signal."
+    )
+
     return {
-        "core_tension":  core[:300],
-        "angle_options": options[:4],
-        "winner_angle":  winner,
-        "series_type":   series_type,
-        "follow_reason": follow_reason[:200],
-        "share_reason":  share_reason[:200],
+        "core_tension":    core[:300],
+        "angle_options":   options[:4],
+        "winner_angle":    winner,
+        "series_type":     series_type,
+        "follow_reason":   follow_reason[:200],
+        "share_reason":    share_reason[:200],
+        "frame_type":      frame_type,
+        "story_spine":     list(_DEFAULT_STORY_SPINE),
+        "readability_risk": readability_risk,
+        "share_trigger":   share_trigger[:200],
+        "scan_pattern":    scan_pattern[:200],
     }
 
 
@@ -160,6 +232,21 @@ def _source_pack_to_prompt(source_pack: dict) -> str:
         _block("GLOBAL_ANGLE", source_pack.get("global_angle") or []),
         _block("WATCH_NEXT", source_pack.get("watch_next") or []),
     ]
+
+    hp = source_pack.get("historical_parallel") or ""
+    if hp:
+        parts.append(f"HISTORICAL_PARALLEL:\n  - {str(hp)[:240]}\n")
+    ct = source_pack.get("concept_translation") or ""
+    if ct:
+        parts.append(f"CONCEPT_TRANSLATION:\n  - {str(ct)[:240]}\n")
+    ep = source_pack.get("evidence_pack") or []
+    if isinstance(ep, list) and ep:
+        lines = "\n".join(f"  - {str(x)[:240]}" for x in ep[:5])
+        parts.append(f"EVIDENCE_PACK:\n{lines}\n")
+    cs = source_pack.get("closing_signal") or ""
+    if cs:
+        parts.append(f"CLOSING_SIGNAL:\n  - {str(cs)[:240]}\n")
+
     sq = source_pack.get("source_quality") or {}
     if isinstance(sq, dict):
         parts.append(
@@ -227,6 +314,23 @@ async def _call_gemini_angle(source_pack: dict) -> dict:
     return json.loads(_t)
 
 
+def _normalize_story_spine(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return list(_DEFAULT_STORY_SPINE)
+    out: list[str] = []
+    seen: set = set()
+    for p in raw:
+        key = str(p).strip().lower()[:20]
+        if key and key in _VALID_SPINE_PHASES and key not in seen:
+            out.append(key)
+            seen.add(key)
+        if len(out) >= 6:
+            break
+    if len(out) < 3:
+        return list(_DEFAULT_STORY_SPINE)
+    return out
+
+
 def _normalize_angle_pack(raw: Any, source_pack: dict) -> dict:
     """Gemini 반환 JSON 을 ANGLE_PACK_KEYS 스키마로 보정."""
     if not isinstance(raw, dict):
@@ -269,17 +373,40 @@ def _normalize_angle_pack(raw: Any, source_pack: dict) -> dict:
     follow_reason = str(raw.get("follow_reason", "")).strip()[:200]
     share_reason = str(raw.get("share_reason", "")).strip()[:200]
 
+    frame_type = str(raw.get("frame_type", "")).strip().lower()[:32]
+    if frame_type not in _FRAME_TYPES:
+        frame_type = _pick_frame_type_heuristic(source_pack)
+
+    story_spine = _normalize_story_spine(raw.get("story_spine"))
+
+    readability_risk = str(raw.get("readability_risk", "")).strip().lower()[:10]
+    if readability_risk not in _READABILITY_LEVELS:
+        readability_risk = _pick_readability_risk_heuristic(source_pack)
+
+    share_trigger = str(raw.get("share_trigger", "")).strip()[:200]
+    scan_pattern = str(raw.get("scan_pattern", "")).strip()[:200]
+
+    if not share_trigger:
+        share_trigger = share_reason or "Fills a gap English-language coverage misses."
+    if not scan_pattern:
+        scan_pattern = "short lines, lead with the concrete fact, close on the signal."
+
     if not options or not winner["angle"] or not core_tension:
         # 치명적 누락 → heuristic 으로 우회
         return _heuristic_angle_pack(source_pack)
 
     return {
-        "core_tension":  core_tension,
-        "angle_options": options,
-        "winner_angle":  winner,
-        "series_type":   series_type,
-        "follow_reason": follow_reason,
-        "share_reason":  share_reason,
+        "core_tension":     core_tension,
+        "angle_options":    options,
+        "winner_angle":     winner,
+        "series_type":      series_type,
+        "follow_reason":    follow_reason,
+        "share_reason":     share_reason,
+        "frame_type":       frame_type,
+        "story_spine":      story_spine,
+        "readability_risk": readability_risk,
+        "share_trigger":    share_trigger,
+        "scan_pattern":     scan_pattern,
     }
 
 
@@ -327,6 +454,13 @@ def validate_angle_pack(pack: dict) -> None:
         raise ValueError("angle_pack.angle_options must be non-empty list")
     if not isinstance(pack["winner_angle"], dict) or not pack["winner_angle"].get("angle"):
         raise ValueError("angle_pack.winner_angle must be dict with angle")
-    for str_key in ("core_tension", "series_type", "follow_reason", "share_reason"):
+    for str_key in ("core_tension", "series_type", "follow_reason", "share_reason",
+                    "frame_type", "readability_risk", "share_trigger", "scan_pattern"):
         if not isinstance(pack[str_key], str):
             raise ValueError(f"angle_pack.{str_key} must be str")
+    if pack["frame_type"] not in _FRAME_TYPES:
+        raise ValueError(f"angle_pack.frame_type invalid: {pack['frame_type']}")
+    if pack["readability_risk"] not in _READABILITY_LEVELS:
+        raise ValueError(f"angle_pack.readability_risk invalid: {pack['readability_risk']}")
+    if not isinstance(pack["story_spine"], list) or not pack["story_spine"]:
+        raise ValueError("angle_pack.story_spine must be non-empty list")

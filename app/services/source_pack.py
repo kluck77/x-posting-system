@@ -3,17 +3,22 @@ Source Pack
 ===========
 Research + FactCheck + 원문 을 합친 "재료 정리" 층.
 
-키 (6):
+키 (10):
   confirmed_facts          — 확정 팩트 (factcheck 통과 + research key_facts)
   conflicts_or_uncertainty — 상충/미확인 (factcheck corrections + interpretation_gaps)
   korea_angle              — 한국 관점 (research context_for_foreigners 계열)
   global_angle             — 글로벌 관점 (interpretation_gaps 중 global 신호)
   watch_next               — 다음 주목 포인트 (research summary 기반)
   source_quality           — 출처 품질 메타 (url, source_type, confidence)
+  historical_parallel      — 과거/현재 구조 비교 1~2문장 (Phase 1.1)
+  concept_translation      — 어려운 개념 한 줄 풀이 (Phase 1.1)
+  evidence_pack            — 숫자/기관명/실명/인용 후보 최대 5개 (Phase 1.1)
+  closing_signal           — 마지막 문장용 강한 포인트 1개 (Phase 1.1)
 
 구현 원칙:
 - plain dict + validator 함수. Pydantic 도입 금지.
 - research / factcheck 가 None 이어도 빈 값으로 채워 반환 (절대 raise 하지 않음).
+- hallucination 금지 — 원문/리서치/팩트체크에 없는 내용 생성 금지.
 - 호출측(orchestrator)은 이 dict 를 enriched_source / pack_context 로 변환해서
   기존 DraftWriter / Reviewer 에 주입.
 """
@@ -21,6 +26,7 @@ Research + FactCheck + 원문 을 합친 "재료 정리" 층.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -32,7 +38,35 @@ SOURCE_PACK_KEYS: tuple[str, ...] = (
     "global_angle",
     "watch_next",
     "source_quality",
+    # Phase 1.1 — structural reinforcement
+    "historical_parallel",
+    "concept_translation",
+    "evidence_pack",
+    "closing_signal",
 )
+
+# Phase 1.1 — 구조 감지 패턴 (ko + en, hallucination 금지 위해 원문 매칭만)
+_HISTORICAL_HINTS = (
+    "과거", "예전", "이전에는", "직전", "역사적으로", "과거와", "전례",
+    "previously", "compared to", " vs ", "versus", "unlike", "as in",
+)
+_NUMBER_RE = re.compile(
+    r"(\d+(?:\.\d+)?\s*(?:%|조|천억|억|만|배|회|건|위|퍼센트|percent|bp))"
+    r"|(\$\d[\d,\.]*)"
+    r"|(₩\d[\d,\.]*)"
+    r"|(\d{4}년)"
+    r"|(\b\d{4}\b)"
+)
+_QUOTE_RE = re.compile(r"[\"“”'‘’]([^\"“”'‘’]{8,160})[\"“”'‘’]")
+_ORG_HINTS = (
+    "NIST", "Bloomberg", "Reuters", "AP", "Fed", "BOK", "한은", "기재부", "과기부",
+    "금감원", "공정위", "Binance", "Coinbase", "Upbit", "Bithumb", "삼성",
+    "SK", "LG", "현대", "금융위", "한국은행", "MSIT", "국정원", "Google", "Apple",
+    "Tesla", "Meta", "Microsoft", "IMF", "WTO", "UN", "OECD", "청와대", "국회",
+)
+
+_EVIDENCE_MAX = 5
+_EVIDENCE_ITEM_LEN = 240
 
 
 def _safe_list(x: Any) -> list[str]:
@@ -51,6 +85,103 @@ def _safe_str(x: Any, limit: int = 500) -> str:
         return ""
     s = str(x).strip()
     return s[:limit]
+
+
+def _split_sentences(text: str) -> list[str]:
+    if not text:
+        return []
+    t = text.replace("?", ".").replace("!", ".")
+    return [p.strip() for p in t.split(".") if p.strip()]
+
+
+def _pick_historical_parallel(research) -> str:
+    """research.summary / key_facts 에서 과거-현재 비교 문장을 추출."""
+    if not research:
+        return ""
+    candidates: list[str] = []
+    summary = _safe_str(getattr(research, "summary", ""), 1200)
+    candidates.extend(_split_sentences(summary))
+    for f in (getattr(research, "key_facts", None) or [])[:10]:
+        candidates.extend(_split_sentences(str(f)))
+    for s in candidates:
+        low = s.lower()
+        if any(h.lower() in low for h in _HISTORICAL_HINTS):
+            return s[:300]
+    return ""
+
+
+def _pick_concept_translation(research) -> str:
+    """어려운 개념의 한 줄 풀이. missing_context 라벨 팩트 우선."""
+    if not research:
+        return ""
+    labels = getattr(research, "fact_labels", None) or {}
+    for fact_text, label in labels.items():
+        if label == "missing_context":
+            s = _safe_str(fact_text, 240)
+            if s:
+                return s
+    # fallback — summary 첫 문장을 한 줄 풀이로
+    summary = _safe_str(getattr(research, "summary", ""), 600)
+    sentences = _split_sentences(summary)
+    if sentences:
+        return sentences[0][:200]
+    return ""
+
+
+def _build_evidence_pack(research, factcheck) -> list[str]:
+    """숫자/기관명/실명/quote 후보 최대 5개. 원문 문자열만 통과."""
+    pool: list[str] = []
+    if research:
+        pool.extend(str(f) for f in (getattr(research, "key_facts", None) or []))
+        summary = _safe_str(getattr(research, "summary", ""), 1200)
+        pool.extend(_split_sentences(summary))
+    if factcheck:
+        pool.extend(_safe_list(getattr(factcheck, "corrections", None)))
+        opp = _safe_str(getattr(factcheck, "interpretation_opportunity", ""), 240)
+        if opp:
+            pool.append(opp)
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in pool:
+        s = str(raw).strip()
+        if not s or s in seen:
+            continue
+        has_num = bool(_NUMBER_RE.search(s))
+        has_org = any(o in s for o in _ORG_HINTS)
+        has_quote = bool(_QUOTE_RE.search(s))
+        if not (has_num or has_org or has_quote):
+            continue
+        seen.add(s)
+        out.append(s[:_EVIDENCE_ITEM_LEN])
+        if len(out) >= _EVIDENCE_MAX:
+            break
+    return out
+
+
+def _pick_closing_signal(
+    watch_next: list[str],
+    conflicts: list[str],
+    research,
+) -> str:
+    """마지막 문장 닫기용 강한 포인트 1개."""
+    for w in watch_next:
+        s = str(w).strip()
+        if s:
+            # 내부 태그 제거 (표시용)
+            s = s.replace("[marketability]", "").strip()
+            if s:
+                return s[:200]
+    for c in conflicts:
+        s = str(c).strip()
+        if s.startswith("[opportunity]"):
+            return s.replace("[opportunity]", "").strip()[:200]
+    if research:
+        summary = _safe_str(getattr(research, "summary", ""), 800)
+        sentences = _split_sentences(summary)
+        if sentences:
+            return sentences[-1][:200]
+    return ""
 
 
 def build_source_pack(
@@ -132,8 +263,7 @@ def build_source_pack(
     if research:
         summary = _safe_str(getattr(research, "summary", ""), 800)
         if summary:
-            # 문장 분리 단순 휴리스틱 — 마침표 기반
-            parts = [p.strip() for p in summary.replace("?", ".").replace("!", ".").split(".") if p.strip()]
+            parts = _split_sentences(summary)
             if parts:
                 watch_next.append(parts[-1][:200])
 
@@ -152,6 +282,12 @@ def build_source_pack(
         "factcheck_verified": bool(getattr(factcheck, "verified", False)) if factcheck else False,
     }
 
+    # --- Phase 1.1 구조 필드 ---
+    historical_parallel = _pick_historical_parallel(research)
+    concept_translation = _pick_concept_translation(research)
+    evidence_pack       = _build_evidence_pack(research, factcheck)
+    closing_signal      = _pick_closing_signal(watch_next[:3], conflicts[:6], research)
+
     pack: dict = {
         "confirmed_facts":          confirmed[:12],
         "conflicts_or_uncertainty": conflicts[:10],
@@ -159,6 +295,10 @@ def build_source_pack(
         "global_angle":             global_angle[:6],
         "watch_next":               watch_next[:6],
         "source_quality":           source_quality,
+        "historical_parallel":      historical_parallel,
+        "concept_translation":      concept_translation,
+        "evidence_pack":            evidence_pack,
+        "closing_signal":           closing_signal,
     }
 
     try:
@@ -179,8 +319,26 @@ def validate_source_pack(pack: dict) -> None:
         if k not in pack:
             raise ValueError(f"source_pack missing key: {k}")
     for list_key in ("confirmed_facts", "conflicts_or_uncertainty",
-                     "korea_angle", "global_angle", "watch_next"):
+                     "korea_angle", "global_angle", "watch_next",
+                     "evidence_pack"):
         if not isinstance(pack[list_key], list):
             raise ValueError(f"source_pack.{list_key} must be list")
     if not isinstance(pack["source_quality"], dict):
         raise ValueError("source_pack.source_quality must be dict")
+    # Phase 1.1 string fields
+    for str_key in ("historical_parallel", "concept_translation", "closing_signal"):
+        if not isinstance(pack[str_key], str):
+            raise ValueError(f"source_pack.{str_key} must be str")
+    # evidence_pack item-level
+    if len(pack["evidence_pack"]) > _EVIDENCE_MAX:
+        raise ValueError(
+            f"source_pack.evidence_pack exceeds cap {_EVIDENCE_MAX}: "
+            f"{len(pack['evidence_pack'])}"
+        )
+    for item in pack["evidence_pack"]:
+        if not isinstance(item, str):
+            raise ValueError("source_pack.evidence_pack items must be str")
+        if len(item) > _EVIDENCE_ITEM_LEN:
+            raise ValueError(
+                f"source_pack.evidence_pack item exceeds {_EVIDENCE_ITEM_LEN}: {len(item)}"
+            )

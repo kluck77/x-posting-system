@@ -358,7 +358,10 @@ class Orchestrator:
                     "precomputed_factcheck": _precomputed_factcheck,
                 }
                 logger.info(
-                    f"[pack_chain] active — winner={str(_winner.get('angle', ''))[:80]}"
+                    f"[pack_chain] active — winner={str(_winner.get('angle', ''))[:80]} "
+                    f"frame={_angle_pack.get('frame_type', '?')} "
+                    f"spine={'/'.join(str(p) for p in (_angle_pack.get('story_spine') or [])[:5])} "
+                    f"risk={_angle_pack.get('readability_risk', '?')}"
                 )
             except Exception as _pc_e:
                 logger.warning(
