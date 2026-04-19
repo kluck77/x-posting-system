@@ -1371,34 +1371,48 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="tab-footer" id="opsFooter"></div>
 </section>
 
-<!-- Strategy OS (Phase A — read-only) -->
+<!-- Strategy OS (Phase B — read + edit) -->
 <section class="tab-pane" id="tab-strategy-os">
-  <div class="sec-head first">Positioning</div>
-  <div id="soPositioning"><div class="empty-sm">로딩 대기</div></div>
+  <div id="soActions" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+    <button id="soEditBtn" class="nav-btn" type="button">✏️ Edit</button>
+    <button id="soSaveBtn" class="nav-btn" type="button" hidden>💾 Save</button>
+    <button id="soCancelBtn" class="nav-btn" type="button" hidden>Cancel</button>
+  </div>
+  <div id="soEditError" class="empty-sm" style="color:var(--red);display:none;margin-bottom:8px"></div>
+  <textarea id="soEditor" hidden spellcheck="false" style="width:100%;min-height:360px;
+    background:var(--bg-surface);color:var(--text-pri);
+    border:1px solid var(--border-normal);border-radius:var(--r-md);
+    padding:10px;font-family:var(--mono);font-size:12px;line-height:1.5;
+    resize:vertical;box-sizing:border-box"></textarea>
 
-  <div class="sec-head">Content Pillars</div>
-  <div id="soContentPillars"><div class="empty-sm">로딩 대기</div></div>
+  <div id="soView">
+    <div class="sec-head first">Positioning</div>
+    <div id="soPositioning"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">Series</div>
-  <div id="soSeries"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">Content Pillars</div>
+    <div id="soContentPillars"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">Hook Library</div>
-  <div id="soHookLibrary"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">Series</div>
+    <div id="soSeries"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">RT Trigger Rules</div>
-  <div id="soRtTriggerRules"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">Hook Library</div>
+    <div id="soHookLibrary"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">Banned Style</div>
-  <div id="soBannedStyle"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">RT Trigger Rules</div>
+    <div id="soRtTriggerRules"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">Good Examples</div>
-  <div id="soGoodExamples"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">Banned Style</div>
+    <div id="soBannedStyle"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">Bad Examples</div>
-  <div id="soBadExamples"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">Good Examples</div>
+    <div id="soGoodExamples"><div class="empty-sm">로딩 대기</div></div>
 
-  <div class="sec-head">Weekly Review Checklist</div>
-  <div id="soWeeklyReviewChecklist"><div class="empty-sm">로딩 대기</div></div>
+    <div class="sec-head">Bad Examples</div>
+    <div id="soBadExamples"><div class="empty-sm">로딩 대기</div></div>
+
+    <div class="sec-head">Weekly Review Checklist</div>
+    <div id="soWeeklyReviewChecklist"><div class="empty-sm">로딩 대기</div></div>
+  </div>
 
   <div class="tab-footer" id="soFooter"></div>
 </section>
@@ -1435,9 +1449,10 @@ document.querySelectorAll('.nav-btn').forEach(b=>{
   });
 });
 
-// ── STRATEGY OS (Phase A, read-only, lazy + cached) ──
+// ── STRATEGY OS (Phase B, read + edit, lazy + cached) ──
 // 탭 최초 진입 1회만 fetch. 재진입 시 재fetch 하지 않음.
-// 실패해도 해당 탭 내부에만 메시지 — 다른 탭 무영향 (전체 try/catch IIFE).
+// 편집 Save 성공 시에만 캐시 갱신 — 저장 후 재fetch 없이 즉시 렌더.
+// 모든 실패는 해당 탭 내부에만 표시 — 다른 탭 무영향 (전체 try/catch IIFE).
 (function(){
   try{
     var loaded=false, loading=false;
@@ -1510,6 +1525,19 @@ document.querySelectorAll('.nav-btn').forEach(b=>{
         if(el) el.innerHTML='<div class="empty-sm">—</div>';
       }
     };
+    var currentData=null;
+    var renderAll=function(data){
+      data=data||{};
+      try{ renderPositioning(data.positioning); }catch(e){}
+      try{ renderList('soContentPillars',        data.content_pillars); }catch(e){}
+      try{ renderList('soSeries',                data.series); }catch(e){}
+      try{ renderList('soHookLibrary',           data.hook_library); }catch(e){}
+      try{ renderList('soRtTriggerRules',        data.rt_trigger_rules); }catch(e){}
+      try{ renderList('soBannedStyle',           data.banned_style); }catch(e){}
+      try{ renderList('soGoodExamples',          data.good_examples); }catch(e){}
+      try{ renderList('soBadExamples',           data.bad_examples); }catch(e){}
+      try{ renderList('soWeeklyReviewChecklist', data.weekly_review_checklist); }catch(e){}
+    };
     var loadStrategyOS=function(){
       if(loaded||loading) return;
       loading=true;
@@ -1518,16 +1546,8 @@ document.querySelectorAll('.nav-btn').forEach(b=>{
       })
         .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
         .then(function(data){
-          data=data||{};
-          try{ renderPositioning(data.positioning); }catch(e){}
-          try{ renderList('soContentPillars',        data.content_pillars); }catch(e){}
-          try{ renderList('soSeries',                data.series); }catch(e){}
-          try{ renderList('soHookLibrary',           data.hook_library); }catch(e){}
-          try{ renderList('soRtTriggerRules',        data.rt_trigger_rules); }catch(e){}
-          try{ renderList('soBannedStyle',           data.banned_style); }catch(e){}
-          try{ renderList('soGoodExamples',          data.good_examples); }catch(e){}
-          try{ renderList('soBadExamples',           data.bad_examples); }catch(e){}
-          try{ renderList('soWeeklyReviewChecklist', data.weekly_review_checklist); }catch(e){}
+          currentData=data||{};
+          renderAll(currentData);
           loaded=true; loading=false;
         })
         .catch(function(e){
@@ -1537,6 +1557,78 @@ document.querySelectorAll('.nav-btn').forEach(b=>{
     };
     var btn=document.querySelector('.nav-btn[data-tab="strategy-os"]');
     if(btn) btn.addEventListener('click', loadStrategyOS);
+
+    // ── EDIT / SAVE / CANCEL (Phase B) ──
+    // 인라인 editor. JSON.parse 실패 시 로컬에러, 서버 400 시 field 표시.
+    // 실패는 탭 내부에만 표시 — 다른 탭 무영향.
+    var editBtn=document.getElementById('soEditBtn');
+    var saveBtn=document.getElementById('soSaveBtn');
+    var cancelBtn=document.getElementById('soCancelBtn');
+    var editor=document.getElementById('soEditor');
+    var viewBox=document.getElementById('soView');
+    var errBox=document.getElementById('soEditError');
+    var setErr=function(msg){
+      if(!errBox) return;
+      if(!msg){ errBox.style.display='none'; errBox.textContent=''; return; }
+      errBox.textContent=String(msg); errBox.style.display='block';
+    };
+    var enterEdit=function(){
+      if(!editor||!viewBox) return;
+      setErr('');
+      var base=currentData||{};
+      try{ editor.value=JSON.stringify(base,null,2); }catch(_){ editor.value='{}'; }
+      editor.hidden=false;
+      viewBox.style.display='none';
+      if(editBtn) editBtn.hidden=true;
+      if(saveBtn) saveBtn.hidden=false;
+      if(cancelBtn) cancelBtn.hidden=false;
+    };
+    var leaveEdit=function(){
+      if(!editor||!viewBox) return;
+      setErr('');
+      editor.hidden=true;
+      viewBox.style.display='';
+      if(editBtn) editBtn.hidden=false;
+      if(saveBtn) saveBtn.hidden=true;
+      if(cancelBtn) cancelBtn.hidden=true;
+    };
+    var doSave=function(){
+      if(!editor) return;
+      setErr('');
+      var parsed;
+      try{ parsed=JSON.parse(editor.value); }
+      catch(e){ setErr('JSON parse 실패: '+(e&&e.message?e.message:e)); return; }
+      if(saveBtn) saveBtn.disabled=true;
+      fetch((window.API||window.location.origin)+'/control/strategy-os',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify(parsed)
+      })
+        .then(function(r){
+          return r.json().then(function(body){ return {status:r.status, body:body}; });
+        })
+        .then(function(resp){
+          if(saveBtn) saveBtn.disabled=false;
+          if(resp.status>=200&&resp.status<300&&resp.body&&resp.body.ok){
+            currentData=resp.body.data||parsed;
+            renderAll(currentData);
+            leaveEdit();
+            return;
+          }
+          // FastAPI 의 detail 구조 {ok,error,field} 를 우선으로 펼침
+          var detail=(resp.body&&resp.body.detail)||resp.body||{};
+          var msg=detail.error||('서버 응답 '+resp.status);
+          if(detail.field) msg+=' ['+detail.field+']';
+          setErr('저장 실패: '+msg);
+        })
+        .catch(function(e){
+          if(saveBtn) saveBtn.disabled=false;
+          setErr('네트워크 실패: '+(e&&e.message?e.message:e));
+        });
+    };
+    if(editBtn)   editBtn.addEventListener('click', enterEdit);
+    if(cancelBtn) cancelBtn.addEventListener('click', leaveEdit);
+    if(saveBtn)   saveBtn.addEventListener('click', doSave);
   }catch(e){
     // Strategy OS 초기화 실패는 절대 다른 탭에 전파하지 않음.
     if(window.console&&console.warn) console.warn('[strategy-os] init failed:', e);

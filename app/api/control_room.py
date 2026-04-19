@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from pydantic import BaseModel
@@ -22,7 +22,13 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.db import get_db
-from app.services.strategy_os import load_strategy_os
+from app.services.strategy_os import (
+    StrategyOSValidationError,
+    backup_previous_strategy_os,
+    load_strategy_os,
+    save_strategy_os,
+    validate_strategy_os,
+)
 
 logger = logging.getLogger(__name__)
 KST = ZoneInfo("Asia/Seoul")
@@ -1461,3 +1467,40 @@ async def get_strategy_os():
     default 반환 — 대시보드 보호. fallback 책임은 서비스 계층에 위임.
     """
     return load_strategy_os()
+
+
+@router.post("/strategy-os")
+async def post_strategy_os(payload: dict = Body(...)):
+    """Strategy OS 전체 JSON 저장 (Phase B — read/write).
+
+    - 검증 실패 → 400 + {"ok": false, "error", "field"}
+    - 백업/쓰기 실패 → 500 + {"ok": false, "error"}
+    - 성공 → 200 + {"ok": true, "backed_up": bool, "data": merged}
+    """
+    try:
+        merged = validate_strategy_os(payload)
+    except StrategyOSValidationError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": str(e), "field": e.field},
+        )
+
+    try:
+        backed_up = backup_previous_strategy_os()
+    except Exception as e:
+        logger.exception("strategy-os backup 실패")
+        raise HTTPException(
+            status_code=500,
+            detail={"ok": False, "error": f"backup failed: {e}"},
+        )
+
+    try:
+        save_strategy_os(merged)
+    except Exception as e:
+        logger.exception("strategy-os save 실패")
+        raise HTTPException(
+            status_code=500,
+            detail={"ok": False, "error": f"save failed: {e}"},
+        )
+
+    return {"ok": True, "backed_up": backed_up, "data": merged}
