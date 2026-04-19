@@ -16,7 +16,11 @@ from app.models.content import Draft, ApprovalStatus
 logger = logging.getLogger(__name__)
 
 # 프리미엄 후보 상태 (유효 값)
-PREMIUM_STATUSES = ("new", "reviewing", "shortlisted", "postponed", "rejected", "promoted")
+# skipped: Pulse top-pick 카드에서 "건너뛰기" 로 운영자가 직접 치운 상태.
+#          top_pick 후보 풀에서 빠지고, /premium list / 전체보기 에는 여전히 남음.
+PREMIUM_STATUSES = (
+    "new", "reviewing", "shortlisted", "postponed", "rejected", "promoted", "skipped",
+)
 
 # 대상 독자 유형 (제안값)
 TARGET_READER_TYPES = (

@@ -940,6 +940,29 @@ async def send_premium_to_telegram(draft_id: int):
         db.close()
 
 
+@router.post("/premium/{draft_id}/skip")
+async def skip_premium_candidate(draft_id: int):
+    """
+    Pulse top-pick 카드에서 "건너뛰기" 누르면 호출됨.
+
+    premium_status 를 "skipped" 로 돌려서 top_pick 후보 풀에서 제외한다.
+    /premium list (텔레그램) 이나 전체 보기에는 여전히 남아있음 — 완전 삭제 아님.
+    """
+    db = get_db()
+    try:
+        from app.services.premium_candidate_service import PremiumCandidateService
+        svc = PremiumCandidateService(db)
+        draft = svc.update_status(draft_id, "skipped")
+        if draft:
+            return {"success": True, "draft_id": draft_id, "status": "skipped"}
+        return {"success": False, "error": f"premium 후보 없음: {draft_id}"}
+    except Exception as e:
+        logger.warning(f"premium skip 오류: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
 # ── Naver 할당량 ──────────────────────────────────────────────────────────────
 
 @router.get("/naver")
@@ -976,6 +999,7 @@ async def get_pulse_overview():
     hourly_bars = [0] * 24
     activity_drafts: list[dict] = []
     top_pick: dict | None = None
+    top_pool: list[dict] = []
 
     db = get_db()
     try:
@@ -1047,25 +1071,46 @@ async def get_pulse_overview():
                 "title": ttl,
             })
 
-        # TOP PICK: premium_candidate 중 가장 임팩트 큰 1건
+        # TOP PICK: premium_candidate 중 지금 액션 가치 있는 후보
+        #
+        # 정책 (2026-04-19 개편):
+        #   - top_pick 은 "6시간 이내 + status=new" 중 compound 점수 최고. 이걸 넘기면
+        #     사용자가 이미 봤다고 간주 → 자동 숨김.
+        #   - skipped / reviewing / rejected 는 top_pick 에서 영구 제외.
+        #   - top_pool[] 에는 "24시간 이내 + new/reviewing" 상위 8건. 대시보드에서 카드 탭 시
+        #     bottom sheet 로 드릴인.
         try:
             from app.services.premium_candidate_service import PremiumCandidateService
             import math
             svc = PremiumCandidateService(db)
             cands = svc.get_candidates(limit=50)
-            # status="new" (아직 텔레그램 전송 안 된 것) 우선, 없으면 전체
+
             def _age_h(d):
                 if not d.created_at:
                     return 1e9
                 u = d.created_at if d.created_at.tzinfo else d.created_at.replace(tzinfo=_tz.utc)
                 return (now_utc - u).total_seconds() / 3600
-            new_cands = [c for c in cands if (c.premium_status or "new") == "new" and _age_h(c) <= 24 * 7]
-            pool = new_cands if new_cands else [c for c in cands if _age_h(c) <= 24 * 3]
-            if pool:
-                def _compound(c):
-                    return (c.monetization_score or 0) * math.exp(-_age_h(c) / 24 / 10)
-                pool.sort(key=_compound, reverse=True)
-                best = pool[0]
+
+            def _compound(c):
+                return (c.monetization_score or 0) * math.exp(-_age_h(c) / 24 / 10)
+
+            TOP_PICK_FRESH_HOURS = 6
+            POOL_HOURS = 24
+            EXCLUDED_STATUSES = ("skipped", "rejected", "promoted", "published")
+
+            actionable = [
+                c for c in cands
+                if (c.premium_status or "new") not in EXCLUDED_STATUSES
+            ]
+
+            # top_pick: 6시간 이내 + new 상태만
+            fresh_new = [
+                c for c in actionable
+                if (c.premium_status or "new") == "new" and _age_h(c) <= TOP_PICK_FRESH_HOURS
+            ]
+            if fresh_new:
+                fresh_new.sort(key=_compound, reverse=True)
+                best = fresh_new[0]
                 top_pick = {
                     "kind": "premium",
                     "id": best.id,
@@ -1076,8 +1121,23 @@ async def get_pulse_overview():
                     "action": "send_premium",
                     "endpoint": f"/control/premium/{best.id}/send-telegram",
                 }
+
+            # top_pool: 24시간 이내 액션 가능 후보 상위 8건 (top_pick 포함).
+            # 카드 탭 시 시트로 드릴인. "놓친 고점수 기사" 확인용.
+            pool_cands = [c for c in actionable if _age_h(c) <= POOL_HOURS]
+            pool_cands.sort(key=_compound, reverse=True)
+            top_pool = []
+            for c in pool_cands[:8]:
+                top_pool.append({
+                    "id": c.id,
+                    "hook": (c.hook or "")[:90],
+                    "score": c.monetization_score or 0,
+                    "age_hours": round(_age_h(c), 1),
+                    "status": c.premium_status or "new",
+                })
         except Exception as e:
             logger.warning(f"pulse top_pick 오류: {e}")
+            top_pool = []
     except Exception as e:
         logger.warning(f"pulse-overview 오류: {e}")
     finally:
@@ -1145,6 +1205,7 @@ async def get_pulse_overview():
         "hourly_bars": hourly_bars,
         "hourly_max": max(hourly_bars) if hourly_bars else 0,
         "top_pick": top_pick,
+        "top_pool": top_pool,
         "activity_stream": stream,
         "last_ingestion_at": last_ingestion_at,
         "seconds_since_ingestion": seconds_since_ing,

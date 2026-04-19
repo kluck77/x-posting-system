@@ -871,7 +871,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
 .p-pick-meta{display:flex;align-items:center;gap:10px;font-size:10.5px;color:var(--text-mut);
   font-family:var(--mono);margin-bottom:9px}
 .p-pick-meta .sep{color:var(--border-strong)}
-.p-pick-actions{display:flex;gap:6px}
+.p-pick-actions{display:flex;gap:6px;flex-wrap:wrap}
+.p-pick-tap{cursor:pointer;-webkit-tap-highlight-color:rgba(192,132,252,.15);
+  transition:opacity .12s}
+.p-pick-tap:active{opacity:.6}
 .p-pick-btn{flex:1;padding:9px 10px;border-radius:8px;border:0;
   background:#c084fc;color:#1a0930;font-size:12px;font-weight:800;
   cursor:pointer;-webkit-tap-highlight-color:transparent;
@@ -1597,16 +1600,25 @@ function _pulseRenderHero(d){
 function _pulseRenderTopPick(d){
   const mount=document.getElementById('pPickMount');if(!mount)return;
   const pk=d.top_pick;
+  // 전체 풀 (0~8건) 을 전역에 캐시해두고 탭 시 시트에서 렌더.
+  window._pulsePool = Array.isArray(d.top_pool) ? d.top_pool : [];
+  const poolCount = window._pulsePool.length;
+
   if(!pk){
     const ing=d.seconds_since_ingestion;
     const ingT=ing!=null?(ing<60?ing+'초 전':Math.floor(ing/60)+'분 전'):'—';
+    // top_pick 은 없어도 top_pool 에 older new 후보가 있을 수 있음 → 드릴인 버튼 제공
+    const poolBtn = poolCount>0
+      ? `<button class="p-pick-btn sec" style="margin-top:10px" onclick="_pulseOpenPoolSheet()">📋 후보 ${poolCount}건 보기</button>`
+      : '';
     mount.innerHTML=`<div class="p-pick none">
       <div class="p-pick-head">
         <span class="p-pick-ico">💤</span>
         <span class="p-pick-lbl">지금 최우선 — 대기 중</span>
       </div>
-      <div class="p-pick-empty">승격할 후보가 없습니다.<br>
-        마지막 수집 <b>${ingT}</b> · 파이프라인에서 후보가 올라오면 여기에 뜹니다.</div>
+      <div class="p-pick-empty">6시간 이내 새 후보 없음.<br>
+        마지막 수집 <b>${ingT}</b> · 나머지 후보는 아래 버튼으로 확인.</div>
+      ${poolBtn}
     </div>`;
     return;
   }
@@ -1614,15 +1626,16 @@ function _pulseRenderTopPick(d){
   const age=_pulseFmtAge(pk.age_hours);
   const score=pk.score||0;
   const status=pk.status||'new';
-  const statusLbl={new:'대기',reviewing:'전송됨',approved:'승인',sent:'전송완료'}[status]||status;
+  const statusLbl={new:'대기',reviewing:'전송됨',approved:'승인',sent:'전송완료',skipped:'건너뜀'}[status]||status;
   const canSend=status==='new';
+  const moreLbl = poolCount>1 ? `📋 다른 후보 ${poolCount-1}건` : '📋 전체 보기';
   mount.innerHTML=`<div class="p-pick">
-    <div class="p-pick-head">
+    <div class="p-pick-head p-pick-tap" onclick="_pulseOpenPoolSheet()" title="탭 — 전체 고점수 후보 리스트">
       <span class="p-pick-ico">🎯</span>
       <span class="p-pick-lbl">지금 최우선 — 프리미엄 후보</span>
       <span class="p-pick-score">${score}점</span>
     </div>
-    <div class="p-pick-title">${hook}</div>
+    <div class="p-pick-title p-pick-tap" onclick="_pulseOpenPoolSheet()">${hook}</div>
     <div class="p-pick-meta">
       <span>${age}</span>
       <span class="sep">·</span>
@@ -1632,10 +1645,14 @@ function _pulseRenderTopPick(d){
       <button class="p-pick-btn" ${canSend?'':'disabled'} onclick="_pulseSendPick(${pk.id},this)">
         ${canSend?'📨 텔레그램 전송':'이미 전송됨'}
       </button>
-      <button class="p-pick-btn sec" onclick="pulseGoTo('ready')">전체 보기</button>
+      <button class="p-pick-btn sec" onclick="_pulseSkipPick(${pk.id},this)" title="이 후보를 top-pick 에서 치우기 (전체 리스트엔 남음)">
+        ✕ 건너뛰기
+      </button>
+      <button class="p-pick-btn sec" onclick="_pulseOpenPoolSheet()">${moreLbl}</button>
     </div>
   </div>`;
 }
+
 async function _pulseSendPick(id,btn){
   if(!id)return;
   const orig=btn.textContent;
@@ -1652,6 +1669,61 @@ async function _pulseSendPick(id,btn){
     btn.textContent='오류';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},2000);
   }
 }
+
+async function _pulseSkipPick(id,btn){
+  if(!id)return;
+  const orig=btn.textContent;
+  btn.disabled=true;btn.textContent='건너뛰는 중…';
+  try{
+    const r=await fetch(`${API}/control/premium/${id}/skip`,{method:'POST'});
+    if(r.ok){
+      btn.textContent='✓ 건너뜀';
+      // 다음 top_pick 으로 자동 교체
+      setTimeout(()=>loadPulseOverview(),800);
+    }else{
+      btn.textContent='실패';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},2000);
+    }
+  }catch(e){
+    btn.textContent='오류';setTimeout(()=>{btn.textContent=orig;btn.disabled=false},2000);
+  }
+}
+
+function _pulseOpenPoolSheet(){
+  const pool = Array.isArray(window._pulsePool) ? window._pulsePool : [];
+  const title = '프리미엄 후보 — 고점수 리스트';
+  const sub   = '24시간 이내 액션 가능 · 수익성 점수 × 최신성 가중치 순';
+  if(pool.length===0){
+    openSheet(title, sub, '<div class="sheet-empty">표시할 후보가 없습니다</div>');
+    return;
+  }
+  const rows = pool.map(it=>{
+    const hook = _ops2Esc(it.hook||'(제목 없음)');
+    const age  = _pulseFmtAge(it.age_hours);
+    const score= it.score||0;
+    const scoreColor = score>=90?'var(--green)':score>=70?'var(--amber)':'var(--text-sec)';
+    const status = it.status||'new';
+    const stLbl  = {new:'대기',reviewing:'전송됨',approved:'승인',skipped:'건너뜀',postponed:'보류',shortlisted:'숏리스트'}[status]||status;
+    const canSend = status==='new';
+    const sendBtn = canSend
+      ? `<button class="p-pick-btn" style="padding:6px 10px;font-size:11px" onclick="_pulseSendPick(${it.id},this)">📨 전송</button>`
+      : `<span style="font-size:10px;color:var(--text-mut);padding:6px 10px">${stLbl}</span>`;
+    const skipBtn = (status==='new')
+      ? `<button class="p-pick-btn sec" style="padding:6px 10px;font-size:11px" onclick="_pulseSkipPick(${it.id},this)">✕</button>`
+      : '';
+    return `<div class="sheet-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:600;line-height:1.35;flex:1">${hook}</span>
+        <span style="color:${scoreColor};font-weight:700;font-size:13px;white-space:nowrap">${score}점</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;color:var(--text-mut)">
+        <span>${age} · 상태 ${stLbl}</span>
+        <div style="display:flex;gap:4px">${sendBtn}${skipBtn}</div>
+      </div>
+    </div>`;
+  }).join('');
+  openSheet(title, sub, rows);
+}
+window._pulseOpenPoolSheet=_pulseOpenPoolSheet;
 function _pulseRenderStream(d){
   if(_pulseUrgent)return;  // 긴급 알림 카드가 자리 차지 중이면 건드리지 않음
   const mount=document.getElementById('recentAlerts');if(!mount)return;
