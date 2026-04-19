@@ -1371,6 +1371,38 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="tab-footer" id="opsFooter"></div>
 </section>
 
+<!-- Strategy OS (Phase A — read-only) -->
+<section class="tab-pane" id="tab-strategy-os">
+  <div class="sec-head first">Positioning</div>
+  <div id="soPositioning"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Content Pillars</div>
+  <div id="soContentPillars"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Series</div>
+  <div id="soSeries"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Hook Library</div>
+  <div id="soHookLibrary"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">RT Trigger Rules</div>
+  <div id="soRtTriggerRules"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Banned Style</div>
+  <div id="soBannedStyle"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Good Examples</div>
+  <div id="soGoodExamples"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Bad Examples</div>
+  <div id="soBadExamples"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="sec-head">Weekly Review Checklist</div>
+  <div id="soWeeklyReviewChecklist"><div class="empty-sm">로딩 대기</div></div>
+
+  <div class="tab-footer" id="soFooter"></div>
+</section>
+
 <!-- Ops drill-down bottom sheet -->
 <div class="pp2-sheet-mask" id="opsSheetMask" onclick="closeOpsSheet()"></div>
 <div class="pp2-sheet" id="opsSheet">
@@ -1387,6 +1419,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <button class="nav-btn" data-tab="agents"><span class="nav-icon">🤖</span>Agents</button>
   <button class="nav-btn" data-tab="pipeline"><span class="nav-icon">🔄</span>Pipeline</button>
   <button class="nav-btn" data-tab="ops"><span class="nav-icon">⚙️</span>Ops</button>
+  <button class="nav-btn" data-tab="strategy-os"><span class="nav-icon">🧭</span>Strategy OS</button>
 </nav>
 
 <script>
@@ -1401,6 +1434,114 @@ document.querySelectorAll('.nav-btn').forEach(b=>{
     document.getElementById('tab-'+b.dataset.tab).classList.add('active');
   });
 });
+
+// ── STRATEGY OS (Phase A, read-only, lazy + cached) ──
+// 탭 최초 진입 1회만 fetch. 재진입 시 재fetch 하지 않음.
+// 실패해도 해당 탭 내부에만 메시지 — 다른 탭 무영향 (전체 try/catch IIFE).
+(function(){
+  try{
+    var loaded=false, loading=false;
+    var esc=function(s){
+      return String(s==null?'':s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    };
+    var renderItem=function(item){
+      if(item==null) return '<div class="empty-sm">—</div>';
+      if(typeof item==='string'||typeof item==='number'||typeof item==='boolean'){
+        return '<div class="alert-card"><div class="ac-why">'+esc(String(item))+'</div></div>';
+      }
+      if(typeof item==='object'){
+        var rows=Object.keys(item).map(function(k){
+          var v=item[k]; var txt;
+          if(v==null) txt='—';
+          else if(typeof v==='string'||typeof v==='number'||typeof v==='boolean') txt=String(v);
+          else try{ txt=JSON.stringify(v); }catch(_){ txt='[unserializable]'; }
+          return '<div style="font-size:11px;color:var(--text-mut);margin-top:2px">'+
+                 esc(k)+': <span style="color:var(--text-sec)">'+esc(txt)+'</span></div>';
+        }).join('');
+        return '<div class="alert-card">'+rows+'</div>';
+      }
+      return '<div class="alert-card"><div class="ac-why">'+esc(String(item))+'</div></div>';
+    };
+    var renderList=function(mountId, arr){
+      var el=document.getElementById(mountId); if(!el) return;
+      if(!Array.isArray(arr)||arr.length===0){
+        el.innerHTML='<div class="empty-sm">비어있음 — strategy_os.json 에서 채워주세요</div>';
+        return;
+      }
+      try{
+        el.innerHTML=arr.map(renderItem).join('');
+      }catch(e){
+        el.innerHTML='<div class="empty-sm" style="color:var(--red)">렌더 실패</div>';
+      }
+    };
+    var renderPositioning=function(p){
+      var el=document.getElementById('soPositioning'); if(!el) return;
+      p=p||{};
+      var oneLiner=(p.one_liner&&String(p.one_liner).trim())
+        ? esc(p.one_liner)
+        : '<span style="color:var(--text-mut)">(비어있음)</span>';
+      var lenses=Array.isArray(p.lenses)?p.lenses:[];
+      var lensHtml=lenses.length
+        ? lenses.map(function(l){ return '<span class="badge badge-blue" style="margin:2px 4px 2px 0">'+esc(typeof l==='string'?l:JSON.stringify(l))+'</span>'; }).join('')
+        : '<span style="color:var(--text-mut)">(없음)</span>';
+      var donots=Array.isArray(p.do_not_do)?p.do_not_do:[];
+      var donotsHtml=donots.length
+        ? donots.map(function(d){ return '<div class="alert-card"><div class="ac-why">'+esc(typeof d==='string'?d:JSON.stringify(d))+'</div></div>'; }).join('')
+        : '<div class="empty-sm">비어있음</div>';
+      el.innerHTML=
+        '<div class="alert-card">'+
+          '<div style="font-size:11px;color:var(--text-mut);margin-bottom:2px">one_liner</div>'+
+          '<div style="font-size:13px;color:var(--text-pri);margin-bottom:8px">'+oneLiner+'</div>'+
+          '<div style="font-size:11px;color:var(--text-mut);margin-bottom:4px">lenses</div>'+
+          '<div>'+lensHtml+'</div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--text-mut);margin:8px 0 4px 2px">do_not_do</div>'+
+        donotsHtml;
+    };
+    var showError=function(msg){
+      var ids=['soPositioning','soContentPillars','soSeries','soHookLibrary',
+               'soRtTriggerRules','soBannedStyle','soGoodExamples','soBadExamples',
+               'soWeeklyReviewChecklist'];
+      var first=document.getElementById('soPositioning');
+      if(first) first.innerHTML='<div class="empty-sm" style="color:var(--red)">로딩 실패: '+esc(msg)+'</div>';
+      for(var i=1;i<ids.length;i++){
+        var el=document.getElementById(ids[i]);
+        if(el) el.innerHTML='<div class="empty-sm">—</div>';
+      }
+    };
+    var loadStrategyOS=function(){
+      if(loaded||loading) return;
+      loading=true;
+      fetch((window.API||window.location.origin)+'/control/strategy-os',{
+        headers:{'Accept':'application/json'}
+      })
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(data){
+          data=data||{};
+          try{ renderPositioning(data.positioning); }catch(e){}
+          try{ renderList('soContentPillars',        data.content_pillars); }catch(e){}
+          try{ renderList('soSeries',                data.series); }catch(e){}
+          try{ renderList('soHookLibrary',           data.hook_library); }catch(e){}
+          try{ renderList('soRtTriggerRules',        data.rt_trigger_rules); }catch(e){}
+          try{ renderList('soBannedStyle',           data.banned_style); }catch(e){}
+          try{ renderList('soGoodExamples',          data.good_examples); }catch(e){}
+          try{ renderList('soBadExamples',           data.bad_examples); }catch(e){}
+          try{ renderList('soWeeklyReviewChecklist', data.weekly_review_checklist); }catch(e){}
+          loaded=true; loading=false;
+        })
+        .catch(function(e){
+          loading=false;
+          try{ showError(e&&e.message?e.message:String(e)); }catch(_){}
+        });
+    };
+    var btn=document.querySelector('.nav-btn[data-tab="strategy-os"]');
+    if(btn) btn.addEventListener('click', loadStrategyOS);
+  }catch(e){
+    // Strategy OS 초기화 실패는 절대 다른 탭에 전파하지 않음.
+    if(window.console&&console.warn) console.warn('[strategy-os] init failed:', e);
+  }
+})();
 
 // ── CLOCK ──
 function tick(){

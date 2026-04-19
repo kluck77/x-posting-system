@@ -22,6 +22,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.db import get_db
+from app.services.strategy_os import load_strategy_os
 
 logger = logging.getLogger(__name__)
 KST = ZoneInfo("Asia/Seoul")
@@ -1448,3 +1449,15 @@ def _format_draft_trace(d) -> dict:
         "broken": broken,
         "resonance": res_score,
     }
+
+
+# ── Strategy OS (Phase A — read-only) ─────────────────────────────────────────
+
+@router.get("/strategy-os")
+async def get_strategy_os():
+    """Strategy OS 를 읽어 반환한다.
+
+    파일이 없으면 default seed 로 자동 생성되고, 어떤 오류에서도
+    default 반환 — 대시보드 보호. fallback 책임은 서비스 계층에 위임.
+    """
+    return load_strategy_os()
