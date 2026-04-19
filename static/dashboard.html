@@ -1371,48 +1371,172 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="tab-footer" id="opsFooter"></div>
 </section>
 
-<!-- Strategy OS (Phase B — read + edit) -->
+<!-- Strategy OS (Phase B+ — 한글화 + 폼 편집 UX) -->
 <section class="tab-pane" id="tab-strategy-os">
-  <div id="soActions" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-    <button id="soEditBtn" class="nav-btn" type="button">✏️ Edit</button>
-    <button id="soSaveBtn" class="nav-btn" type="button" hidden>💾 Save</button>
-    <button id="soCancelBtn" class="nav-btn" type="button" hidden>Cancel</button>
+  <style>
+    #tab-strategy-os { --so-pad:10px; --so-gap:8px; }
+    #tab-strategy-os button, #tab-strategy-os input, #tab-strategy-os textarea { touch-action:manipulation; }
+    #tab-strategy-os .so-topbar{
+      position:sticky;top:0;z-index:5;
+      display:flex;align-items:center;gap:var(--so-gap);flex-wrap:wrap;
+      padding:8px 2px;margin-bottom:6px;background:var(--bg-deep);
+    }
+    #tab-strategy-os .so-mode-badge{
+      font-size:11px;font-weight:600;letter-spacing:.3px;
+      padding:4px 10px;border-radius:999px;
+      background:var(--bg-raised);color:var(--text-sec);
+      border:1px solid var(--border-subtle);
+      transition:background 140ms ease,color 140ms ease;
+    }
+    #tab-strategy-os .so-mode-badge.is-edit{
+      background:var(--indigo-dim);color:var(--indigo);border-color:var(--border-accent);
+    }
+    #tab-strategy-os .so-actions{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;}
+    #tab-strategy-os .so-btn{
+      background:var(--bg-raised);color:var(--text-pri);
+      border:1px solid var(--border-normal);border-radius:var(--r-md);
+      padding:8px 14px;font-size:13px;font-weight:500;
+      cursor:pointer;user-select:none;
+      transition:transform 80ms ease,background 140ms ease,border-color 140ms ease,opacity 140ms ease;
+    }
+    #tab-strategy-os .so-btn:hover{background:var(--bg-surface);}
+    #tab-strategy-os .so-btn:active:not(:disabled){transform:scale(.97);}
+    #tab-strategy-os .so-btn:disabled{opacity:.55;cursor:default;}
+    #tab-strategy-os .so-btn-primary{
+      background:var(--indigo-dim);color:var(--indigo);border-color:var(--border-accent);
+    }
+    #tab-strategy-os .so-btn-primary:hover{filter:brightness(1.15);}
+    #tab-strategy-os .so-btn-ghost{
+      background:transparent;color:var(--text-mut);
+      border-color:var(--border-subtle);font-size:12px;padding:6px 10px;
+    }
+    #tab-strategy-os .so-banner{
+      padding:10px 12px;border-radius:var(--r-md);font-size:13px;
+      margin-bottom:8px;border:1px solid transparent;
+      animation:soFadeIn 140ms ease;
+    }
+    #tab-strategy-os .so-banner-ok{
+      background:var(--green-dim);color:var(--green);border-color:rgba(45,212,191,.3);
+    }
+    #tab-strategy-os .so-banner-error{
+      background:var(--red-dim);color:var(--red);border-color:rgba(239,68,68,.3);
+    }
+    #tab-strategy-os .so-sec-desc{
+      font-size:11.5px;color:var(--text-mut);line-height:1.5;
+      margin:-2px 0 8px 2px;
+    }
+    #tab-strategy-os .so-card{
+      background:var(--bg-surface);border:1px solid var(--border-normal);
+      border-radius:var(--r-md);padding:12px;margin-bottom:10px;
+    }
+    #tab-strategy-os .so-field-label{
+      font-size:11px;color:var(--text-mut);
+      margin-bottom:3px;font-weight:500;letter-spacing:.2px;
+    }
+    #tab-strategy-os .so-field-value{
+      font-size:14px;color:var(--text-pri);line-height:1.5;
+      margin-bottom:10px;word-break:break-word;white-space:pre-wrap;
+    }
+    #tab-strategy-os .so-dim{color:var(--text-mut);font-style:italic;}
+    #tab-strategy-os .so-pill{margin:0 4px 4px 0;}
+    #tab-strategy-os .so-item{
+      background:var(--bg-surface);border:1px solid var(--border-normal);
+      border-radius:var(--r-md);padding:10px 12px;margin-bottom:6px;
+      animation:soFadeIn 120ms ease;
+    }
+    #tab-strategy-os .so-item-text{
+      font-size:13px;color:var(--text-pri);line-height:1.5;
+      word-break:break-word;white-space:pre-wrap;
+    }
+    #tab-strategy-os .so-input,#tab-strategy-os .so-textarea{
+      width:100%;box-sizing:border-box;
+      background:var(--bg-raised);color:var(--text-pri);
+      border:1px solid var(--border-normal);border-radius:var(--r-md);
+      padding:10px 12px;font-family:inherit;font-size:14px;line-height:1.5;
+      transition:border-color 120ms ease,background 140ms ease;
+    }
+    #tab-strategy-os .so-input:focus,#tab-strategy-os .so-textarea:focus{
+      outline:none;border-color:var(--indigo);background:var(--bg-surface);
+    }
+    #tab-strategy-os .so-input.is-invalid,#tab-strategy-os .so-textarea.is-invalid{
+      border-color:var(--red);
+    }
+    #tab-strategy-os .so-textarea{min-height:44px;resize:vertical;}
+    #tab-strategy-os .so-counter{
+      font-size:10.5px;color:var(--text-mut);
+      text-align:right;margin-top:3px;font-family:var(--mono);
+    }
+    #tab-strategy-os .so-counter.is-warn{color:var(--amber);}
+    #tab-strategy-os .so-counter.is-over{color:var(--red);}
+    #tab-strategy-os .so-row{
+      display:flex;gap:6px;align-items:stretch;margin-bottom:6px;
+      animation:soFadeIn 120ms ease;
+    }
+    #tab-strategy-os .so-row > .so-textarea{flex:1;}
+    #tab-strategy-os .so-row-del{
+      flex:0 0 auto;min-width:40px;
+      background:transparent;color:var(--text-mut);
+      border:1px solid var(--border-subtle);border-radius:var(--r-md);
+      cursor:pointer;font-size:16px;line-height:1;
+      transition:background 120ms ease,color 120ms ease,transform 80ms ease;
+    }
+    #tab-strategy-os .so-row-del:hover{
+      background:var(--red-dim);color:var(--red);border-color:rgba(239,68,68,.3);
+    }
+    #tab-strategy-os .so-row-del:active{transform:scale(.92);}
+    #tab-strategy-os .so-add{
+      display:inline-flex;align-items:center;gap:6px;
+      background:transparent;color:var(--text-acc);
+      border:1px dashed var(--border-accent);border-radius:var(--r-md);
+      padding:8px 14px;font-size:13px;cursor:pointer;margin-top:2px;
+      transition:background 120ms ease,transform 80ms ease;
+    }
+    #tab-strategy-os .so-add:hover{background:var(--indigo-dim);}
+    #tab-strategy-os .so-add:active{transform:scale(.97);}
+    #tab-strategy-os .so-seed{
+      background:var(--indigo-dim);border:1px solid var(--border-accent);
+      border-radius:var(--r-md);padding:14px;margin-bottom:14px;
+    }
+    #tab-strategy-os .so-seed-title{
+      font-size:13px;font-weight:600;color:var(--text-pri);margin-bottom:4px;
+    }
+    #tab-strategy-os .so-seed-desc{
+      font-size:12px;color:var(--text-sec);line-height:1.5;margin-bottom:10px;
+    }
+    #tab-strategy-os .so-json-editor{
+      width:100%;box-sizing:border-box;min-height:360px;
+      background:var(--bg-surface);color:var(--text-pri);
+      border:1px solid var(--border-normal);border-radius:var(--r-md);
+      padding:10px;font-family:var(--mono);font-size:12px;line-height:1.55;
+      resize:vertical;
+    }
+    #tab-strategy-os .so-json-help{
+      font-size:11px;color:var(--text-mut);margin:4px 2px 8px;
+    }
+    #tab-strategy-os .so-field-err{
+      color:var(--red);font-size:11.5px;margin-top:4px;
+    }
+    @keyframes soFadeIn{
+      from{opacity:0;transform:translateY(4px);}
+      to{opacity:1;transform:translateY(0);}
+    }
+  </style>
+
+  <div class="so-topbar">
+    <span class="so-mode-badge" id="soModeBadge">읽기 모드</span>
+    <div class="so-actions">
+      <button class="so-btn so-btn-primary" id="soEditBtn" type="button">✏️ 편집</button>
+      <button class="so-btn so-btn-primary" id="soSaveBtn" type="button" hidden>💾 저장</button>
+      <button class="so-btn" id="soCancelBtn" type="button" hidden>취소</button>
+      <button class="so-btn so-btn-ghost" id="soJsonToggle" type="button" hidden>{ } JSON</button>
+    </div>
   </div>
-  <div id="soEditError" class="empty-sm" style="color:var(--red);display:none;margin-bottom:8px"></div>
-  <textarea id="soEditor" hidden spellcheck="false" style="width:100%;min-height:360px;
-    background:var(--bg-surface);color:var(--text-pri);
-    border:1px solid var(--border-normal);border-radius:var(--r-md);
-    padding:10px;font-family:var(--mono);font-size:12px;line-height:1.5;
-    resize:vertical;box-sizing:border-box"></textarea>
 
-  <div id="soView">
-    <div class="sec-head first">Positioning</div>
-    <div id="soPositioning"><div class="empty-sm">로딩 대기</div></div>
+  <div class="so-banner" id="soBanner" hidden></div>
+  <textarea class="so-json-editor" id="soJsonEditor" hidden spellcheck="false"></textarea>
+  <div class="so-json-help" id="soJsonHelp" hidden>JSON 전체를 직접 편집합니다. 저장 시 서버 검증이 다시 돕니다.</div>
 
-    <div class="sec-head">Content Pillars</div>
-    <div id="soContentPillars"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">Series</div>
-    <div id="soSeries"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">Hook Library</div>
-    <div id="soHookLibrary"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">RT Trigger Rules</div>
-    <div id="soRtTriggerRules"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">Banned Style</div>
-    <div id="soBannedStyle"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">Good Examples</div>
-    <div id="soGoodExamples"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">Bad Examples</div>
-    <div id="soBadExamples"><div class="empty-sm">로딩 대기</div></div>
-
-    <div class="sec-head">Weekly Review Checklist</div>
-    <div id="soWeeklyReviewChecklist"><div class="empty-sm">로딩 대기</div></div>
-  </div>
+  <div id="soContent"><div class="empty-sm">로딩 대기</div></div>
 
   <div class="tab-footer" id="soFooter"></div>
 </section>
@@ -1449,189 +1573,545 @@ document.querySelectorAll('.nav-btn').forEach(b=>{
   });
 });
 
-// ── STRATEGY OS (Phase B, read + edit, lazy + cached) ──
+// ── STRATEGY OS (Phase B+ — 한글 + 폼 편집 + JSON 고급모드 + lazy cache) ──
 // 탭 최초 진입 1회만 fetch. 재진입 시 재fetch 하지 않음.
 // 편집 Save 성공 시에만 캐시 갱신 — 저장 후 재fetch 없이 즉시 렌더.
 // 모든 실패는 해당 탭 내부에만 표시 — 다른 탭 무영향 (전체 try/catch IIFE).
 (function(){
   try{
-    var loaded=false, loading=false;
-    var esc=function(s){
-      return String(s==null?'':s)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // ── 상수 ──
+    var SO_ONELINER_MAX = 240;
+    var SO_ITEM_MAX = 120;
+    var SO_LS_JSON = 'strategyOs.preferJson';
+    var SECTIONS = [
+      {key:'content_pillars',         title:'콘텐츠 기둥',         desc:'이 계정이 다루는 주제 축 (3~5개 권장)',               placeholder:'예: 한국 정책, 한국 경제'},
+      {key:'series',                  title:'시리즈',              desc:'반복해서 내보낼 연재 꼭지',                            placeholder:'예: 주간 정책 브리핑'},
+      {key:'hook_library',            title:'훅 라이브러리',       desc:'첫 줄에 쓸 수 있는 검증된 훅 패턴',                     placeholder:'예: Korea just X:'},
+      {key:'rt_trigger_rules',        title:'RT 유도 규칙',        desc:'RT·인용 나올 만한 문장 조건',                           placeholder:'예: 구체 수치 + 시점 대비'},
+      {key:'banned_style',            title:'금지 스타일',         desc:'AI 냄새 / 기자체 — 쓰면 안 되는 표현',                  placeholder:"예: it's worth noting"},
+      {key:'good_examples',           title:'좋은 예시',           desc:'과거 기억할 만한 성공 게시물',                          placeholder:''},
+      {key:'bad_examples',            title:'나쁜 예시',           desc:'과거 다시 쓰지 말아야 할 실패 게시물',                  placeholder:''},
+      {key:'weekly_review_checklist', title:'주간 점검 체크리스트',desc:'매주 말 계정 돌아볼 때 스스로 묻는 질문',               placeholder:'예: 이번 주 차별화 살아났나?'}
+    ];
+    var SEED_DATA = {
+      positioning: {
+        one_liner: 'explainer for non-Koreans who do not follow Korean media',
+        lenses: ['policy','economy','society'],
+        do_not_do: ['팬덤 톤 사용','정치적 선동','근거 없는 추측']
+      },
+      content_pillars: [],
+      series: [],
+      hook_library: [
+        'Korea just X:',
+        'N years ago, Korea was Y. Now it is Z.',
+        'While others do A, Korea does B.'
+      ],
+      rt_trigger_rules: [],
+      banned_style: [
+        "it's worth noting",
+        'furthermore',
+        'as we can see',
+        'delve into',
+        'tapestry'
+      ],
+      good_examples: [],
+      bad_examples: [],
+      weekly_review_checklist: []
     };
-    var renderItem=function(item){
-      if(item==null) return '<div class="empty-sm">—</div>';
-      if(typeof item==='string'||typeof item==='number'||typeof item==='boolean'){
-        return '<div class="alert-card"><div class="ac-why">'+esc(String(item))+'</div></div>';
+
+    // ── DOM refs ──
+    var elContent    = document.getElementById('soContent');
+    var elModeBadge  = document.getElementById('soModeBadge');
+    var elEditBtn    = document.getElementById('soEditBtn');
+    var elSaveBtn    = document.getElementById('soSaveBtn');
+    var elCancelBtn  = document.getElementById('soCancelBtn');
+    var elJsonToggle = document.getElementById('soJsonToggle');
+    var elJsonEditor = document.getElementById('soJsonEditor');
+    var elJsonHelp   = document.getElementById('soJsonHelp');
+    var elBanner     = document.getElementById('soBanner');
+
+    // ── 상태 ──
+    var mode = 'read';         // 'read' | 'edit' | 'json'
+    var currentData = null;    // 서버에서 받은 마지막 정상 데이터
+    var editState = null;      // 편집 중 객체 (edit / json 모드에서 유효)
+    var loaded = false;
+    var loading = false;
+    var saving = false;
+    var bannerTimer = null;
+
+    // ── 유틸 ──
+    function esc(s){
+      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function defaultData(){
+      return {
+        positioning:{one_liner:'',do_not_do:[],lenses:[]},
+        content_pillars:[],series:[],hook_library:[],rt_trigger_rules:[],
+        banned_style:[],good_examples:[],bad_examples:[],weekly_review_checklist:[]
+      };
+    }
+    function normalizeData(d){
+      var base = defaultData();
+      if(!d || typeof d !== 'object') return base;
+      if(d.positioning && typeof d.positioning === 'object'){
+        if(typeof d.positioning.one_liner === 'string') base.positioning.one_liner = d.positioning.one_liner;
+        if(Array.isArray(d.positioning.do_not_do))       base.positioning.do_not_do = d.positioning.do_not_do.map(toStr).filter(Boolean);
+        if(Array.isArray(d.positioning.lenses))          base.positioning.lenses    = d.positioning.lenses.map(toStr).filter(Boolean);
       }
-      if(typeof item==='object'){
-        var rows=Object.keys(item).map(function(k){
-          var v=item[k]; var txt;
-          if(v==null) txt='—';
-          else if(typeof v==='string'||typeof v==='number'||typeof v==='boolean') txt=String(v);
-          else try{ txt=JSON.stringify(v); }catch(_){ txt='[unserializable]'; }
-          return '<div style="font-size:11px;color:var(--text-mut);margin-top:2px">'+
-                 esc(k)+': <span style="color:var(--text-sec)">'+esc(txt)+'</span></div>';
-        }).join('');
-        return '<div class="alert-card">'+rows+'</div>';
+      SECTIONS.forEach(function(s){
+        if(Array.isArray(d[s.key])) base[s.key] = d[s.key].map(toStr).filter(Boolean);
+      });
+      return base;
+    }
+    function toStr(x){
+      if(x == null) return '';
+      if(typeof x === 'string') return x;
+      try{ return JSON.stringify(x); }catch(_){ return String(x); }
+    }
+    function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+    function isEmpty(d){
+      if(!d) return true;
+      var p = d.positioning || {};
+      if((p.one_liner || '').trim()) return false;
+      if((p.do_not_do || []).length) return false;
+      if((p.lenses    || []).length) return false;
+      for(var i=0;i<SECTIONS.length;i++){
+        if((d[SECTIONS[i].key] || []).length) return false;
       }
-      return '<div class="alert-card"><div class="ac-why">'+esc(String(item))+'</div></div>';
-    };
-    var renderList=function(mountId, arr){
-      var el=document.getElementById(mountId); if(!el) return;
-      if(!Array.isArray(arr)||arr.length===0){
-        el.innerHTML='<div class="empty-sm">비어있음 — strategy_os.json 에서 채워주세요</div>';
+      return true;
+    }
+    function setBanner(kind, msg, autoHideMs){
+      if(!elBanner) return;
+      if(bannerTimer){ clearTimeout(bannerTimer); bannerTimer = null; }
+      if(!kind){
+        elBanner.hidden = true;
+        elBanner.textContent = '';
+        elBanner.className = 'so-banner';
         return;
       }
-      try{
-        el.innerHTML=arr.map(renderItem).join('');
-      }catch(e){
-        el.innerHTML='<div class="empty-sm" style="color:var(--red)">렌더 실패</div>';
+      elBanner.hidden = false;
+      elBanner.textContent = msg;
+      elBanner.className = 'so-banner so-banner-' + kind;
+      if(autoHideMs){
+        bannerTimer = setTimeout(function(){ setBanner(null); }, autoHideMs);
       }
-    };
-    var renderPositioning=function(p){
-      var el=document.getElementById('soPositioning'); if(!el) return;
-      p=p||{};
-      var oneLiner=(p.one_liner&&String(p.one_liner).trim())
-        ? esc(p.one_liner)
-        : '<span style="color:var(--text-mut)">(비어있음)</span>';
-      var lenses=Array.isArray(p.lenses)?p.lenses:[];
-      var lensHtml=lenses.length
-        ? lenses.map(function(l){ return '<span class="badge badge-blue" style="margin:2px 4px 2px 0">'+esc(typeof l==='string'?l:JSON.stringify(l))+'</span>'; }).join('')
-        : '<span style="color:var(--text-mut)">(없음)</span>';
-      var donots=Array.isArray(p.do_not_do)?p.do_not_do:[];
-      var donotsHtml=donots.length
-        ? donots.map(function(d){ return '<div class="alert-card"><div class="ac-why">'+esc(typeof d==='string'?d:JSON.stringify(d))+'</div></div>'; }).join('')
-        : '<div class="empty-sm">비어있음</div>';
-      el.innerHTML=
-        '<div class="alert-card">'+
-          '<div style="font-size:11px;color:var(--text-mut);margin-bottom:2px">one_liner</div>'+
-          '<div style="font-size:13px;color:var(--text-pri);margin-bottom:8px">'+oneLiner+'</div>'+
-          '<div style="font-size:11px;color:var(--text-mut);margin-bottom:4px">lenses</div>'+
-          '<div>'+lensHtml+'</div>'+
-        '</div>'+
-        '<div style="font-size:11px;color:var(--text-mut);margin:8px 0 4px 2px">do_not_do</div>'+
-        donotsHtml;
-    };
-    var showError=function(msg){
-      var ids=['soPositioning','soContentPillars','soSeries','soHookLibrary',
-               'soRtTriggerRules','soBannedStyle','soGoodExamples','soBadExamples',
-               'soWeeklyReviewChecklist'];
-      var first=document.getElementById('soPositioning');
-      if(first) first.innerHTML='<div class="empty-sm" style="color:var(--red)">로딩 실패: '+esc(msg)+'</div>';
-      for(var i=1;i<ids.length;i++){
-        var el=document.getElementById(ids[i]);
-        if(el) el.innerHTML='<div class="empty-sm">—</div>';
-      }
-    };
-    var currentData=null;
-    var renderAll=function(data){
-      data=data||{};
-      try{ renderPositioning(data.positioning); }catch(e){}
-      try{ renderList('soContentPillars',        data.content_pillars); }catch(e){}
-      try{ renderList('soSeries',                data.series); }catch(e){}
-      try{ renderList('soHookLibrary',           data.hook_library); }catch(e){}
-      try{ renderList('soRtTriggerRules',        data.rt_trigger_rules); }catch(e){}
-      try{ renderList('soBannedStyle',           data.banned_style); }catch(e){}
-      try{ renderList('soGoodExamples',          data.good_examples); }catch(e){}
-      try{ renderList('soBadExamples',           data.bad_examples); }catch(e){}
-      try{ renderList('soWeeklyReviewChecklist', data.weekly_review_checklist); }catch(e){}
-    };
-    var loadStrategyOS=function(){
-      if(loaded||loading) return;
-      loading=true;
+    }
+
+    // ── 로드 (탭 최초 진입 1회) ──
+    function loadStrategyOS(){
+      if(loaded || loading) return;
+      loading = true;
       fetch((window.API||window.location.origin)+'/control/strategy-os',{
         headers:{'Accept':'application/json'}
       })
         .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
         .then(function(data){
-          currentData=data||{};
-          renderAll(currentData);
-          loaded=true; loading=false;
+          currentData = normalizeData(data);
+          loaded = true; loading = false;
+          renderRead();
         })
         .catch(function(e){
-          loading=false;
-          try{ showError(e&&e.message?e.message:String(e)); }catch(_){}
+          loading = false;
+          setBanner('error', '로딩 실패: ' + (e && e.message ? e.message : e));
+          if(elContent) elContent.innerHTML = '<div class="empty-sm">데이터를 불러올 수 없습니다.</div>';
         });
-    };
-    var btn=document.querySelector('.nav-btn[data-tab="strategy-os"]');
-    if(btn) btn.addEventListener('click', loadStrategyOS);
+    }
 
-    // ── EDIT / SAVE / CANCEL (Phase B) ──
-    // 인라인 editor. JSON.parse 실패 시 로컬에러, 서버 400 시 field 표시.
-    // 실패는 탭 내부에만 표시 — 다른 탭 무영향.
-    var editBtn=document.getElementById('soEditBtn');
-    var saveBtn=document.getElementById('soSaveBtn');
-    var cancelBtn=document.getElementById('soCancelBtn');
-    var editor=document.getElementById('soEditor');
-    var viewBox=document.getElementById('soView');
-    var errBox=document.getElementById('soEditError');
-    var setErr=function(msg){
-      if(!errBox) return;
-      if(!msg){ errBox.style.display='none'; errBox.textContent=''; return; }
-      errBox.textContent=String(msg); errBox.style.display='block';
-    };
-    var enterEdit=function(){
-      if(!editor||!viewBox) return;
-      setErr('');
-      var base=currentData||{};
-      try{ editor.value=JSON.stringify(base,null,2); }catch(_){ editor.value='{}'; }
-      editor.hidden=false;
-      viewBox.style.display='none';
-      if(editBtn) editBtn.hidden=true;
-      if(saveBtn) saveBtn.hidden=false;
-      if(cancelBtn) cancelBtn.hidden=false;
-    };
-    var leaveEdit=function(){
-      if(!editor||!viewBox) return;
-      setErr('');
-      editor.hidden=true;
-      viewBox.style.display='';
-      if(editBtn) editBtn.hidden=false;
-      if(saveBtn) saveBtn.hidden=true;
-      if(cancelBtn) cancelBtn.hidden=true;
-    };
-    var doSave=function(){
-      if(!editor) return;
-      setErr('');
-      var parsed;
-      try{ parsed=JSON.parse(editor.value); }
-      catch(e){ setErr('JSON parse 실패: '+(e&&e.message?e.message:e)); return; }
-      if(saveBtn) saveBtn.disabled=true;
+    // ── 모드 전환 ──
+    function setMode(next){
+      mode = next;
+      var isEdit = (next !== 'read');
+      if(elModeBadge){
+        elModeBadge.textContent = next === 'read' ? '읽기 모드' : (next === 'json' ? '편집 중 · JSON' : '편집 중');
+        elModeBadge.classList.toggle('is-edit', isEdit);
+      }
+      if(elEditBtn)    elEditBtn.hidden    = isEdit;
+      if(elSaveBtn)    elSaveBtn.hidden    = !isEdit;
+      if(elCancelBtn)  elCancelBtn.hidden  = !isEdit;
+      if(elJsonToggle){
+        elJsonToggle.hidden = !isEdit;
+        elJsonToggle.textContent = next === 'json' ? '폼 모드' : '{ } JSON';
+      }
+      // JSON/폼 DOM 노출 토글
+      if(elJsonEditor) elJsonEditor.hidden = next !== 'json';
+      if(elJsonHelp)   elJsonHelp.hidden   = next !== 'json';
+      if(elContent)    elContent.hidden    = next === 'json';
+    }
+
+    // ── 읽기 모드 ──
+    function renderRead(){
+      setBanner(null);
+      setMode('read');
+      var d = currentData || defaultData();
+      var parts = [];
+      parts.push(renderReadPositioning(d.positioning || {}));
+      SECTIONS.forEach(function(s){
+        parts.push(renderReadSection(s, d[s.key] || []));
+      });
+      elContent.innerHTML = parts.join('');
+    }
+    function renderReadPositioning(p){
+      var one = (p.one_liner||'').trim();
+      var lenses = Array.isArray(p.lenses) ? p.lenses : [];
+      var dnd    = Array.isArray(p.do_not_do) ? p.do_not_do : [];
+      var oneHtml = one ? esc(one) : '<span class="so-dim">(아직 없음)</span>';
+      var lensHtml = lenses.length
+        ? lenses.map(function(l){ return '<span class="badge badge-blue so-pill">' + esc(String(l)) + '</span>'; }).join('')
+        : '<span class="so-dim">(아직 없음)</span>';
+      var dndCount = dnd.length ? ' (' + dnd.length + ')' : '';
+      var dndHtml = dnd.length
+        ? dnd.map(function(x){ return '<div class="so-item"><div class="so-item-text">' + esc(String(x)) + '</div></div>'; }).join('')
+        : '<div class="empty-sm">아직 비어있음 — 편집 버튼으로 추가하세요</div>';
+      return (
+        '<div class="sec-head first">포지셔닝</div>' +
+        '<div class="so-sec-desc">이 계정이 무엇을 설명하는지 / 어떤 각도로 볼지</div>' +
+        '<div class="so-card">' +
+          '<div class="so-field-label">한 줄 정의</div>' +
+          '<div class="so-field-value">' + oneHtml + '</div>' +
+          '<div class="so-field-label">해석 렌즈</div>' +
+          '<div>' + lensHtml + '</div>' +
+        '</div>' +
+        '<div class="sec-head">하지 말 것' + dndCount + '</div>' +
+        '<div class="so-sec-desc">이 계정이 피해야 할 태도·프레임</div>' +
+        dndHtml
+      );
+    }
+    function renderReadSection(s, items){
+      var countLabel = items.length ? ' (' + items.length + ')' : '';
+      var body = items.length
+        ? items.map(function(it){ return '<div class="so-item"><div class="so-item-text">' + esc(String(it)) + '</div></div>'; }).join('')
+        : '<div class="empty-sm">아직 비어있음 — 편집 버튼으로 추가하세요</div>';
+      return (
+        '<div class="sec-head">' + esc(s.title) + countLabel + '</div>' +
+        '<div class="so-sec-desc">' + esc(s.desc) + '</div>' +
+        body
+      );
+    }
+
+    // ── 편집(폼) 모드 ──
+    function renderEdit(){
+      setMode('edit');
+      var frag = document.createDocumentFragment();
+      if(isEmpty(editState)){
+        frag.appendChild(buildSeedCard());
+      }
+      frag.appendChild(buildPositioningForm(editState.positioning));
+      SECTIONS.forEach(function(s){
+        frag.appendChild(buildListSection(s, editState[s.key]));
+      });
+      elContent.innerHTML = '';
+      elContent.appendChild(frag);
+    }
+
+    // 시드 카드
+    function buildSeedCard(){
+      var box = document.createElement('div');
+      box.className = 'so-seed';
+      box.innerHTML =
+        '<div class="so-seed-title">처음이세요?</div>' +
+        '<div class="so-seed-desc">검증된 예시 시드로 시작할 수 있어요. 저장 전에 자유롭게 고쳐도 됩니다.</div>';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'so-btn so-btn-primary';
+      btn.textContent = '예시로 시작';
+      btn.addEventListener('click', function(){
+        editState = normalizeData(SEED_DATA);
+        renderEdit();
+      });
+      box.appendChild(btn);
+      return box;
+    }
+
+    // ── 포지셔닝 폼 ──
+    function buildPositioningForm(pos){
+      pos = pos || {one_liner:'', do_not_do:[], lenses:[]};
+      var wrap = document.createElement('div');
+      var head = document.createElement('div');
+      head.className = 'sec-head first';
+      head.textContent = '포지셔닝';
+      wrap.appendChild(head);
+      var desc = document.createElement('div');
+      desc.className = 'so-sec-desc';
+      desc.textContent = '이 계정이 무엇을 설명하는지 / 어떤 각도로 볼지';
+      wrap.appendChild(desc);
+
+      var card = document.createElement('div');
+      card.className = 'so-card';
+
+      // one_liner
+      var lab1 = document.createElement('div');
+      lab1.className = 'so-field-label';
+      lab1.textContent = '한 줄 정의';
+      card.appendChild(lab1);
+      var ta = document.createElement('textarea');
+      ta.className = 'so-textarea';
+      ta.rows = 2;
+      ta.value = pos.one_liner || '';
+      ta.maxLength = SO_ONELINER_MAX + 100; // 소프트 경고, 서버가 최종 판단
+      var counter = document.createElement('div');
+      counter.className = 'so-counter';
+      function updateOneLinerCounter(){
+        var n = ta.value.length;
+        counter.textContent = n + ' / ' + SO_ONELINER_MAX;
+        counter.classList.toggle('is-warn', n > SO_ONELINER_MAX * 0.8 && n <= SO_ONELINER_MAX);
+        counter.classList.toggle('is-over', n > SO_ONELINER_MAX);
+      }
+      updateOneLinerCounter();
+      ta.addEventListener('input', function(){
+        editState.positioning.one_liner = ta.value;
+        updateOneLinerCounter();
+      });
+      card.appendChild(ta);
+      card.appendChild(counter);
+
+      // lenses
+      var lab2 = document.createElement('div');
+      lab2.className = 'so-field-label';
+      lab2.style.marginTop = '10px';
+      lab2.textContent = '해석 렌즈 (짧은 태그, 쉼표 대신 여러 개 추가)';
+      card.appendChild(lab2);
+      card.appendChild(buildListEditor({
+        getArr: function(){ return editState.positioning.lenses; },
+        setArr: function(arr){ editState.positioning.lenses = arr; },
+        placeholder: '예: policy',
+        minHeight: 40
+      }));
+
+      wrap.appendChild(card);
+
+      // do_not_do
+      var head2 = document.createElement('div');
+      head2.className = 'sec-head';
+      head2.textContent = '하지 말 것';
+      wrap.appendChild(head2);
+      var desc2 = document.createElement('div');
+      desc2.className = 'so-sec-desc';
+      desc2.textContent = '이 계정이 피해야 할 태도·프레임';
+      wrap.appendChild(desc2);
+      wrap.appendChild(buildListEditor({
+        getArr: function(){ return editState.positioning.do_not_do; },
+        setArr: function(arr){ editState.positioning.do_not_do = arr; },
+        placeholder: '예: 팬덤 톤 사용'
+      }));
+
+      return wrap;
+    }
+
+    // ── 일반 리스트 섹션 폼 ──
+    function buildListSection(s, arr){
+      var wrap = document.createElement('div');
+      var head = document.createElement('div');
+      head.className = 'sec-head';
+      head.textContent = s.title + ((arr && arr.length) ? ' (' + arr.length + ')' : '');
+      head.dataset.soCountFor = s.key;
+      wrap.appendChild(head);
+      var desc = document.createElement('div');
+      desc.className = 'so-sec-desc';
+      desc.textContent = s.desc;
+      wrap.appendChild(desc);
+      wrap.appendChild(buildListEditor({
+        getArr: function(){ return editState[s.key]; },
+        setArr: function(a){ editState[s.key] = a; },
+        placeholder: s.placeholder || '',
+        onChange: function(){
+          var arr = editState[s.key] || [];
+          head.textContent = s.title + (arr.length ? ' (' + arr.length + ')' : '');
+        }
+      }));
+      return wrap;
+    }
+
+    // ── 공용 리스트 에디터 (컴포넌트) ──
+    // getArr/setArr: editState 의 해당 배열 참조/갱신
+    // onChange: 변경 후 호출 (헤더 카운트 갱신 등)
+    function buildListEditor(opts){
+      var container = document.createElement('div');
+      var listBox = document.createElement('div');
+      container.appendChild(listBox);
+
+      function rerenderRows(){
+        listBox.innerHTML = '';
+        var arr = opts.getArr() || [];
+        for(var i=0;i<arr.length;i++){
+          listBox.appendChild(makeRow(i, arr[i]));
+        }
+      }
+      function makeRow(idx, value){
+        var row = document.createElement('div');
+        row.className = 'so-row';
+        row.dataset.idx = String(idx);
+
+        var ta = document.createElement('textarea');
+        ta.className = 'so-textarea';
+        ta.rows = 1;
+        ta.value = value == null ? '' : String(value);
+        ta.placeholder = opts.placeholder || '';
+        ta.addEventListener('input', function(){
+          var arr = opts.getArr() || [];
+          arr[idx] = ta.value;
+          opts.setArr(arr);
+          // 글자 오버 경고 (시각만)
+          ta.classList.toggle('is-invalid', ta.value.length > SO_ITEM_MAX);
+          if(opts.onChange) opts.onChange();
+        });
+        // Enter 로 새 항목 추가 (Shift+Enter 는 줄바꿈)
+        ta.addEventListener('keydown', function(e){
+          if(e.key === 'Enter' && !e.shiftKey){
+            e.preventDefault();
+            addItem(/*focusNew=*/true);
+          }
+        });
+        row.appendChild(ta);
+
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'so-row-del';
+        del.setAttribute('aria-label', '삭제');
+        del.textContent = '×';
+        del.addEventListener('click', function(){
+          var arr = opts.getArr() || [];
+          arr.splice(idx, 1);
+          opts.setArr(arr);
+          rerenderRows();
+          if(opts.onChange) opts.onChange();
+        });
+        row.appendChild(del);
+        return row;
+      }
+      function addItem(focusNew){
+        var arr = opts.getArr() || [];
+        arr.push('');
+        opts.setArr(arr);
+        rerenderRows();
+        if(opts.onChange) opts.onChange();
+        if(focusNew){
+          var rows = listBox.querySelectorAll('.so-row');
+          var last = rows[rows.length - 1];
+          if(last){
+            var ta = last.querySelector('textarea');
+            if(ta) ta.focus();
+          }
+        }
+      }
+
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'so-add';
+      addBtn.textContent = '＋ 항목 추가';
+      addBtn.addEventListener('click', function(){ addItem(true); });
+      container.appendChild(addBtn);
+
+      rerenderRows();
+      return container;
+    }
+
+    // ── JSON 고급 모드 ──
+    function renderJson(){
+      setMode('json');
+      try{
+        elJsonEditor.value = JSON.stringify(editState, null, 2);
+      }catch(_){
+        elJsonEditor.value = '{}';
+      }
+    }
+    function applyJsonTextarea(){
+      // JSON → editState 반영. 실패 시 editState 유지.
+      var raw = elJsonEditor.value;
+      try{
+        var parsed = JSON.parse(raw);
+        if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
+          throw new Error('루트는 JSON 객체여야 합니다');
+        }
+        editState = normalizeData(parsed);
+        return true;
+      }catch(e){
+        setBanner('error', 'JSON parse 실패: ' + (e && e.message ? e.message : e));
+        return false;
+      }
+    }
+
+    // ── 핸들러 ──
+    function onClickEdit(){
+      editState = deepClone(currentData || defaultData());
+      setBanner(null);
+      var preferJson = false;
+      try{ preferJson = localStorage.getItem(SO_LS_JSON) === '1'; }catch(_){}
+      if(preferJson) renderJson();
+      else           renderEdit();
+    }
+    function onClickCancel(){
+      editState = null;
+      setBanner(null);
+      renderRead();
+    }
+    function onClickJsonToggle(){
+      if(mode === 'json'){
+        // JSON → 폼. JSON parse 시도, 실패 시 머무름.
+        if(!applyJsonTextarea()) return;
+        try{ localStorage.setItem(SO_LS_JSON, '0'); }catch(_){}
+        renderEdit();
+      } else {
+        // 폼 → JSON. editState 직렬화.
+        try{ localStorage.setItem(SO_LS_JSON, '1'); }catch(_){}
+        renderJson();
+      }
+    }
+    function onClickSave(){
+      if(saving) return;
+      setBanner(null);
+
+      // JSON 모드에서 저장하면 textarea → editState 반영 시도
+      if(mode === 'json' && !applyJsonTextarea()) return;
+
+      // 저장 페이로드: editState 그대로 (서버가 최종 검증)
+      var payload;
+      try{ payload = deepClone(editState); }
+      catch(e){ setBanner('error','편집 상태 직렬화 실패'); return; }
+
+      saving = true;
+      if(elSaveBtn){ elSaveBtn.disabled = true; elSaveBtn.textContent = '저장 중…'; }
       fetch((window.API||window.location.origin)+'/control/strategy-os',{
         method:'POST',
         headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body:JSON.stringify(parsed)
+        body: JSON.stringify(payload)
       })
         .then(function(r){
-          return r.json().then(function(body){ return {status:r.status, body:body}; });
+          return r.json().then(function(body){ return {status:r.status, body:body}; })
+                         .catch(function(){ return {status:r.status, body:{}}; });
         })
         .then(function(resp){
-          if(saveBtn) saveBtn.disabled=false;
-          if(resp.status>=200&&resp.status<300&&resp.body&&resp.body.ok){
-            currentData=resp.body.data||parsed;
-            renderAll(currentData);
-            leaveEdit();
+          saving = false;
+          if(elSaveBtn){ elSaveBtn.disabled = false; elSaveBtn.textContent = '💾 저장'; }
+          if(resp.status >= 200 && resp.status < 300 && resp.body && resp.body.ok){
+            currentData = normalizeData(resp.body.data || payload);
+            editState = null;
+            renderRead();
+            setBanner('ok', '저장됨 ✓', 1500);
             return;
           }
-          // FastAPI 의 detail 구조 {ok,error,field} 를 우선으로 펼침
-          var detail=(resp.body&&resp.body.detail)||resp.body||{};
-          var msg=detail.error||('서버 응답 '+resp.status);
-          if(detail.field) msg+=' ['+detail.field+']';
-          setErr('저장 실패: '+msg);
+          var detail = (resp.body && resp.body.detail) || resp.body || {};
+          var msg = detail.error || ('서버 응답 ' + resp.status);
+          if(detail.field) msg += ' [' + detail.field + ']';
+          setBanner('error', '저장 실패: ' + msg);
         })
         .catch(function(e){
-          if(saveBtn) saveBtn.disabled=false;
-          setErr('네트워크 실패: '+(e&&e.message?e.message:e));
+          saving = false;
+          if(elSaveBtn){ elSaveBtn.disabled = false; elSaveBtn.textContent = '💾 저장'; }
+          setBanner('error', '네트워크 실패: ' + (e && e.message ? e.message : e));
         });
-    };
-    if(editBtn)   editBtn.addEventListener('click', enterEdit);
-    if(cancelBtn) cancelBtn.addEventListener('click', leaveEdit);
-    if(saveBtn)   saveBtn.addEventListener('click', doSave);
+    }
+
+    // ── 리스너 부착 (1회만) ──
+    var navBtn = document.querySelector('.nav-btn[data-tab="strategy-os"]');
+    if(navBtn) navBtn.addEventListener('click', loadStrategyOS);
+    if(elEditBtn)    elEditBtn.addEventListener('click', onClickEdit);
+    if(elCancelBtn)  elCancelBtn.addEventListener('click', onClickCancel);
+    if(elJsonToggle) elJsonToggle.addEventListener('click', onClickJsonToggle);
+    if(elSaveBtn)    elSaveBtn.addEventListener('click', onClickSave);
+
   }catch(e){
     // Strategy OS 초기화 실패는 절대 다른 탭에 전파하지 않음.
-    if(window.console&&console.warn) console.warn('[strategy-os] init failed:', e);
+    if(window.console && console.warn) console.warn('[strategy-os] init failed:', e);
   }
 })();
 
