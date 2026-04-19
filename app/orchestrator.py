@@ -118,6 +118,83 @@ def _build_criteria_context(
     return "[UPSTREAM CRITERIA SIGNALS]\n" + "\n".join(lines)
 
 
+# =============================================================================
+# Layer 2 헬퍼 — Strategy OS advisory inject (Phase C)
+# =============================================================================
+# Strategy OS 에 저장된 운영 자산(positioning / hook_library / banned_style /
+# lenses) 일부를 프롬프트 힌트로만 주입. provider 인터페이스 / DB / Pack Chain /
+# approval 에는 접촉하지 않음. 실패 시 "" 리턴 — Layer 1 경로 100% 유지.
+
+_ADVISORY_CAPS = {"lenses": 3, "hooks": 3, "banned": 5}
+_ADVISORY_MAX_LEN = 900      # 블록 전체 문자 상한 (프롬프트 오염 방지)
+_ADVISORY_ITEM_MAX = 120     # 각 원소 문자 상한 (토큰 폭주 방지)
+
+
+def _clip_strs(items, limit: int) -> list[str]:
+    """타입 오염 방어 + 상한 적용. 어떤 입력이 와도 예외 없이 list[str] 리턴."""
+    if not isinstance(items, list):
+        return []
+    out: list[str] = []
+    for it in items:
+        try:
+            if isinstance(it, str):
+                s = it.strip()
+            elif it is None:
+                continue
+            else:
+                s = str(it).strip()
+        except Exception:
+            continue
+        if not s:
+            continue
+        if len(s) > _ADVISORY_ITEM_MAX:
+            s = s[: _ADVISORY_ITEM_MAX - 1] + "…"
+        out.append(s)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _build_strategy_os_advisory() -> str:
+    """
+    Strategy OS 에서 advisory 블록을 만든다.
+    실패 / 빈 값 / 타입 오염 → "" 리턴. Layer 1 경로는 절대 막지 않음.
+    블록 톤은 "참고 우선순위" — 강제 규칙으로 쓰지 말 것.
+    """
+    try:
+        from app.services.strategy_os import load_strategy_os
+        data = load_strategy_os()
+        pos_raw = data.get("positioning")
+        pos = pos_raw if isinstance(pos_raw, dict) else {}
+        one_raw = pos.get("one_liner")
+        one = str(one_raw).strip() if isinstance(one_raw, str) else ""
+        if len(one) > _ADVISORY_ITEM_MAX * 2:
+            one = one[: _ADVISORY_ITEM_MAX * 2 - 1] + "…"
+        lenses = _clip_strs(pos.get("lenses"),      _ADVISORY_CAPS["lenses"])
+        hooks  = _clip_strs(data.get("hook_library"), _ADVISORY_CAPS["hooks"])
+        banned = _clip_strs(data.get("banned_style"), _ADVISORY_CAPS["banned"])
+        if not one and not lenses and not hooks and not banned:
+            return ""
+        lines = ["[STRATEGY OS ADVISORY — optional priorities, not hard rules]"]
+        if one:
+            lines.append(f"Positioning: {one}")
+        if lenses:
+            lines.append(f"Lenses: {', '.join(lenses)}")
+        if hooks:
+            lines.append("Hooks (priority, reference only):")
+            lines.extend(f"  - {h}" for h in hooks)
+        if banned:
+            lines.append("Style to avoid:")
+            lines.extend(f"  - {b}" for b in banned)
+        block = "\n".join(lines)
+        if len(block) > _ADVISORY_MAX_LEN:
+            block = block[: _ADVISORY_MAX_LEN - 1] + "…"
+        return block
+    except Exception as e:
+        logger.warning(f"[STRATEGY_OS_ADVISORY_SKIP] {e}")
+        return ""
+
+
 class Orchestrator:
     """
     5-역할 AI 파이프라인 오케스트레이터.
@@ -398,6 +475,18 @@ class Orchestrator:
         except Exception as _hint_err:
             logger.warning(f"[OperatorHints] 주입 실패 (무시): {_hint_err}")
 
+        # Layer 2: Strategy OS advisory (Phase C — fail-open)
+        try:
+            so_advisory = _build_strategy_os_advisory()
+            if so_advisory:
+                draft_criteria_ctx = (
+                    (draft_criteria_ctx + "\n\n" + so_advisory).strip()
+                    if draft_criteria_ctx else so_advisory
+                )
+                logger.debug(f"[StrategyOS] DraftWriter 주입: {len(so_advisory)}자")
+        except Exception as _so_err:
+            logger.warning(f"[STRATEGY_OS_ADVISORY_SKIP] draft path: {_so_err}")
+
         try:
             # Gemini interpretation_gaps를 source_text에 추가 → DraftWriter가 해석 각도 활용
             enriched_source = data.source_text
@@ -479,6 +568,18 @@ class Orchestrator:
         except Exception as _ctx_err:
             logger.warning(f"[criteria_context] Reviewer 빌드 실패 (무시): {_ctx_err}")
             review_criteria_ctx = ""
+
+        # Layer 2: Strategy OS advisory (Phase C — fail-open)
+        try:
+            so_advisory = _build_strategy_os_advisory()
+            if so_advisory:
+                review_criteria_ctx = (
+                    (review_criteria_ctx + "\n\n" + so_advisory).strip()
+                    if review_criteria_ctx else so_advisory
+                )
+                logger.debug(f"[StrategyOS] Reviewer 주입: {len(so_advisory)}자")
+        except Exception as _so_err:
+            logger.warning(f"[STRATEGY_OS_ADVISORY_SKIP] review path: {_so_err}")
 
         # Pack chain 활성 시 pack_context 를 Reviewer criteria_context 에 합침
         if pack_chain_data:
