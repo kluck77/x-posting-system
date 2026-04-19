@@ -65,6 +65,9 @@ htmlcov/
 # --- Claude Code 로컬 설정 ---
 .claude/
 
+# --- Strategy OS (Phase A: 운영자별 로컬 상태, 커밋 금지) ---
+runtime_x/strategy/
+
 # --- 기타 ---
 *.bak
 *.tmp

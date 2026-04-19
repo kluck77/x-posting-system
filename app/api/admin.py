@@ -6,7 +6,10 @@ FastAPI 관리자/디버그 엔드포인트
 """
 
 import logging
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from app.config import settings, validate_settings
 from app.db import get_db, init_db
 from app.models.content import (
@@ -15,6 +18,7 @@ from app.models.content import (
 from app.services.draft_service import DraftService
 from app.services.source_service import SourceService
 from app.orchestrator import Orchestrator
+from app.api.control_room import router as control_router
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,20 @@ app = FastAPI(
     description="한국 이슈 영문 X 포스팅 시스템 관리 API",
     version="1.0.0",
 )
+
+# === Control Room (Strategy OS 등 읽기 전용 대시보드 엔드포인트) ===
+app.include_router(control_router)
+
+# === 정적 대시보드 (static/dashboard.html) ===
+_STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def _root():
+    """루트 진입 → 대시보드로 리다이렉트."""
+    return RedirectResponse(url="/static/dashboard.html")
 
 
 @app.on_event("startup")
