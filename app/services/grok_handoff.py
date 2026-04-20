@@ -298,6 +298,67 @@ def _build_account_tone_block(strategy_os: dict | None) -> list[str]:
     return ["## 계정 톤 (참고)", *lines]
 
 
+# ── Phase 4: editorial_meta 기반 compact 블록 ──────────────────────────
+# 원칙: editorial_meta 가 None 이거나 모두 빈값이면 블록 없음 (회귀 방지).
+
+def _build_salvageability_badge(editorial_meta: dict | None) -> str:
+    """## 🎯 살릴 가치: A/B/C — reason  1줄. meta 비면 "" 리턴."""
+    em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    salv = em.get("salvageability") if isinstance(em.get("salvageability"), dict) else {}
+    grade = salv.get("score")
+    if grade not in ("A", "B", "C"):
+        return ""
+    reason = _clip_line(salv.get("reason", ""), 120)
+    if reason:
+        return f"## 🎯 살릴 가치: {grade} — {reason}"
+    return f"## 🎯 살릴 가치: {grade}"
+
+
+def _build_rt_motive_block(editorial_meta: dict | None) -> list[str]:
+    """## 🔥 이 글을 RT 하게 만드는 이유 — 최대 2줄. 값 비면 []."""
+    em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    rt_type = em.get("rt_motive_type") if isinstance(em.get("rt_motive_type"), str) else ""
+    identity = _clip_line(em.get("identity_signal", ""), 120)
+    lines: list[str] = []
+    if rt_type and rt_type != "unclear":
+        lines.append(f"- RT 동기: {rt_type}")
+    if identity:
+        lines.append(f"- 정체성 시그널: {identity}")
+    if not lines:
+        return []
+    return ["## 🔥 이 글을 RT 하게 만드는 이유", *lines]
+
+
+def _build_flat_reason_block(editorial_meta: dict | None) -> list[str]:
+    """## 🏴 지금 초안이 평평한 이유 — too_obvious_flag=True 일 때만 1줄."""
+    em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    if not em.get("too_obvious_flag"):
+        return []
+    reason = _clip_line(em.get("too_obvious_reason") or "", 160)
+    if not reason:
+        # flag True 이지만 reason 없으면 일반 문구로 최소 1줄
+        reason = "표면 인과만 — 숨은 변수/비대칭 노출 드러낼 것"
+    return ["## 🏴 지금 초안이 평평한 이유", f"- {reason}"]
+
+
+def _build_must_keep_block(editorial_meta: dict | None) -> list[str]:
+    """## 💎 반드시 살릴 포인트 — 훅 후보 / 숨은 변수 / 독자 스테이크. 비면 []."""
+    em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    stop_line = _clip_line(em.get("stop_scroll_line", ""), 90)
+    hidden = _clip_line(em.get("hidden_variable", ""), 120)
+    stake = _clip_line(em.get("stake_sentence", ""), 120)
+    lines: list[str] = []
+    if stop_line:
+        lines.append(f"- 훅 후보: {stop_line}")
+    if hidden:
+        lines.append(f"- 숨은 변수: {hidden}")
+    if stake:
+        lines.append(f"- 독자 스테이크: {stake}")
+    if not lines:
+        return []
+    return ["## 💎 반드시 살릴 포인트", *lines]
+
+
 def format_handoff(
     source_pack: dict,
     angle_pack: dict,
@@ -306,6 +367,7 @@ def format_handoff(
     final_hook: str | None = None,
     strategy_os: dict | None = None,
     linter_labels: dict | None = None,
+    editorial_meta: dict | None = None,
 ) -> str:
     """
     Grok (x.ai) 편집용 handoff. 복사-붙여넣기로 바로 쓰는 **편집 카드**.
@@ -325,6 +387,12 @@ def format_handoff(
       ## 편집 신호             — 핵심 긴장 / 공유 트리거 / 편집 목표
       ## 시스템이 감지한 약한 지점  — 탐지된 weakness 만
       ## 계정 톤 (참고)         — Strategy OS compact
+
+    Phase 4 blocks (editorial_meta 공급 시, 값 비면 생략):
+      ## 🎯 살릴 가치: A/B/C — reason   (상단, 재료 품질 경고 바로 뒤)
+      ## 🔥 이 글을 RT 하게 만드는 이유
+      ## 🏴 지금 초안이 평평한 이유
+      ## 💎 반드시 살릴 포인트
 
     상한: 1800자(body 버짓 계산) / 2800자(최종 하드 상한, 새 블록 포함).
     금지: URL 덤프 / 소스 리스트 / 긴 영어 분석 / >10 bullet / "research report" 톤.
@@ -456,12 +524,27 @@ def format_handoff(
     chunks: list[str] = []
     if _warning_block_text:
         chunks.append(_warning_block_text)
+
+    # Phase 4: 살릴 가치 뱃지 1줄 — 경고 블록 바로 뒤, 원문 초안 앞.
+    _salv_badge = _build_salvageability_badge(editorial_meta)
+    if _salv_badge:
+        chunks.append(_salv_badge)
+
     chunks.extend(["\n".join(section_draft)] + fixed_tail)
     for opt in optional_sections[:2]:
         chunks.append("\n".join(opt))
 
-    # 편집 신호 블록 2개 (있을 때만). Grok 이 본문→각도→규칙을 본 뒤 읽도록 뒤쪽에.
-    # (편집 목표 1줄은 위 `## 이 글의 핵심 각도` 블록에 이미 append 됨 — 중복 방지.)
+    # Phase 4: editorial_meta 기반 3 블록 — 기존 편집 신호 블록보다 먼저 노출.
+    phase4_blocks = [
+        _build_rt_motive_block(editorial_meta),
+        _build_flat_reason_block(editorial_meta),
+        _build_must_keep_block(editorial_meta),
+    ]
+    for pb in phase4_blocks:
+        if pb:
+            chunks.append("\n".join(pb))
+
+    # 편집 신호 블록 2개 (Phase 3b/B+). 기존 위치 유지.
     editorial_blocks = [
         _build_weakness_block(final_hook or "", body_raw, linter_labels),
         _build_account_tone_block(strategy_os),
@@ -473,8 +556,8 @@ def format_handoff(
     out = "\n\n".join(chunks)
 
     # 길이 제한 — 뒤(선택 블록 + 편집 신호 블록)부터 잘라낸다.
-    # 고정 5블록 + (경고 블록 있으면 1) 은 유지.
-    _min_keep = 5 + (1 if _warning_block_text else 0)
+    # 고정 5블록 + (경고 블록 있으면 1) + (살릴 가치 뱃지 있으면 1) 은 유지.
+    _min_keep = 5 + (1 if _warning_block_text else 0) + (1 if _salv_badge else 0)
     while len(out) > _HANDOFF_HARD_MAX and len(chunks) > _min_keep:
         chunks.pop()
         out = "\n\n".join(chunks)

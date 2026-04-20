@@ -866,6 +866,21 @@ class Orchestrator:
                 except Exception as _so_e:
                     logger.warning(f"[strategy_os] handoff 전달용 로드 실패 (무시): {_so_e}")
                     _so_for_handoff = None
+                # Phase 4: editorial_meta (RT 동기 / 숨은 변수 / 살릴 가치) 계산.
+                try:
+                    from app.services.editorial_meta import build_editorial_meta
+                    _meta = build_editorial_meta(
+                        hook=review.hook,
+                        body=review.body,
+                        source_pack=pack_chain_data["source_pack"],
+                        angle_pack=pack_chain_data["angle_pack"],
+                        linter_labels=_labels,
+                        strategy_os=_so_for_handoff,
+                        category=category.value if category else None,
+                    )
+                except Exception as _em_e:
+                    logger.warning(f"[editorial_meta] 실패 (무시): {_em_e}")
+                    _meta = {}
                 _handoff_text = format_handoff(
                     pack_chain_data["source_pack"],
                     pack_chain_data["angle_pack"],
@@ -873,13 +888,15 @@ class Orchestrator:
                     final_hook=review.hook,
                     strategy_os=_so_for_handoff,
                     linter_labels=_labels,
+                    editorial_meta=_meta,
                 )
                 save_pack(draft.id, {
-                    "source":     pack_chain_data["source_pack"],
-                    "angle":      pack_chain_data["angle_pack"],
-                    "final_body": review.body,
-                    "handoff":    _handoff_text,
-                    "labels":     _labels,
+                    "source":         pack_chain_data["source_pack"],
+                    "angle":          pack_chain_data["angle_pack"],
+                    "final_body":     review.body,
+                    "handoff":        _handoff_text,
+                    "labels":         _labels,
+                    "editorial_meta": _meta,
                 })
             except Exception as _sv_e:
                 logger.warning(f"[pack_sidecar] save 실패 (무시): {_sv_e}")
