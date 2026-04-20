@@ -1,19 +1,20 @@
 """
 editorial_meta.py
 ==================
-Phase 4: Grok 편집장에게 넘어가는 handoff 에 "이 글을 왜 RT 할지 / 어디가
-평평한지 / 반드시 살릴 포인트" 메타 신호를 1줄씩 추가한다.
+Phase 4 + 5: Grok 편집장에게 넘어가는 handoff 를 "검토 메모" 가 아니라
+"편집장 지시서" 로 쓰기 위한 메타 신호. 각 필드는 1줄 중심.
 
 원칙:
 - 시스템은 본문을 재작성하지 않는다. 신호만 생산.
 - 외부 LLM 호출 0. 결정론적 휴리스틱 + 기존 데이터 재조립.
 - fail-open: 각 파생 함수 실패 시 해당 필드만 빈값 / None.
   전체 dict 는 항상 유효한 스키마로 반환.
-- 중복 없음: too_obvious 는 grok_handoff 의 기존 파생과 동일 휴리스틱 재사용.
+- 중복 없음: too_obvious 는 grok_handoff 의 기존 휴리스틱 재사용.
 
-반환 스키마 (key 9):
+반환 스키마 (META_VERSION="2", key 12):
     meta_version, stop_scroll_line, rt_motive_type, identity_signal,
-    hidden_variable, stake_sentence, too_obvious_flag, too_obvious_reason,
+    hidden_variable, stake_sentence, too_obvious_flag, too_obvious_warning,
+    editorial_goal, what_to_sharpen (list, ≤2), what_to_cut (list, ≤3),
     salvageability: {score, reason, checks}
 """
 from __future__ import annotations
@@ -24,7 +25,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-META_VERSION = "1"
+META_VERSION = "2"
 
 _RT_MOTIVE_TYPES = (
     "approval", "argue", "signal", "identity", "practical", "unclear",
@@ -211,8 +212,12 @@ def _compute_too_obvious_flag(body: str, linter_labels: dict | None) -> bool:
     return not _has_number(b)
 
 
-def _derive_too_obvious_reason(body: str, linter_labels: dict | None) -> str | None:
-    """flag True 일 때 이유 1줄. 3 고정 문구 중 하나."""
+def _derive_too_obvious_warning(body: str, linter_labels: dict | None) -> str | None:
+    """flag True 일 때 편집장용 행동 지시 1줄. 3 고정 문구 중 하나.
+
+    Phase 4 의 too_obvious_reason 과 동일 로직, 키 명만 변경
+    (Phase 5 에서 handoff 블록 명을 '지금 초안이 평평한 이유' 로 재편하면서
+    필드명도 편집장 톤 'warning' 으로 통일)."""
     b = _safe_str(body, 2000)
     if len(b) < 100:
         return None
@@ -226,6 +231,107 @@ def _derive_too_obvious_reason(body: str, linter_labels: dict | None) -> str | N
         if len(re.findall(r"(악화|상승|하락|증가|감소|영향|압박)", b)) >= 3:
             return _TOO_OBVIOUS_REASONS["news_echo"]
     return None
+
+
+# ─── Phase 5 신규 3 필드 ────────────────────────────────────────────────
+
+def _derive_editorial_goal(angle_pack: dict | None, stake_sentence: str,
+                           core_tension: str, share_trigger: str) -> str:
+    """이 글을 왜 이 각도로 세게 써야 하는지 1줄.
+    winner_angle.reason 우선, 없으면 core_tension + stake 조합.
+    영어면 placeholder (handoff 에서 sanitize 가 다시 걸러내지만 안전망)."""
+    ap = angle_pack if isinstance(angle_pack, dict) else {}
+    wa = ap.get("winner_angle") if isinstance(ap.get("winner_angle"), dict) else {}
+    reason = _safe_str(wa.get("reason") if isinstance(wa, dict) else "", 160)
+    # heuristic fallback 마커는 제외 (angle_pack.py 가 넣는 placeholder)
+    if reason and "heuristic" not in reason.lower() and "fallback" not in reason.lower():
+        return _clip(reason, 100)
+    # 파생 조합
+    ct = _clip(core_tension or "", 40)
+    trig = _clip(share_trigger or stake_sentence or "", 40)
+    if ct and trig:
+        return _clip(f"{ct} → {trig}", 100)
+    return ct or trig or ""
+
+
+def _derive_what_to_sharpen(
+    stop_scroll_line: str, hidden_variable: str, stake_sentence: str
+) -> list[str]:
+    """반드시 세게 밀어야 할 포인트 최대 2개. 행동 동사 앞세움.
+    후보 3개 중 비어있지 않은 상위 2개 선택 + 행동 동사 포장."""
+    out: list[str] = []
+    if _nonempty(stop_scroll_line):
+        out.append(_clip(f"첫 줄로 끌어올려라: {stop_scroll_line}", 140))
+    if _nonempty(hidden_variable):
+        out.append(_clip(f"숨은 변수 명시: {hidden_variable}", 140))
+    if _nonempty(stake_sentence):
+        out.append(_clip(f"독자 손익 드러내라: {stake_sentence}", 140))
+    return out[:2]
+
+
+# weakness flag → 행동 지시 매핑 (Phase 5 신규)
+_CUT_LABELS = {
+    "weak_hook":       "약한 훅 문장 삭제 — 숫자·고유명사·대비 들어간 줄로 교체",
+    "too_obvious":     "표면 인과 문장 삭제 — 숨은 변수/비대칭 노출 드러내기",
+    "missing_context": "고유명사 뒤 1줄 설명 추가 — 링크 없이 읽는 독자 대상",
+    "weak_ending":     "엔딩 재작성 — 독자 행동/판단 요구 질문 또는 관전 포인트",
+    "generic_cta":     "흔한 CTA 문구 삭제 — 팔로우/구독/좋아요 금지",
+    "ai_tone":         "금지 표현 교체 — Strategy OS banned_style 기준",
+}
+
+# 우선순위 (치명도 높은 것 먼저)
+_CUT_PRIORITY = (
+    "weak_hook", "too_obvious", "weak_ending",
+    "missing_context", "generic_cta", "ai_tone",
+)
+
+
+def _is_weak_hook(hook: str) -> bool:
+    """grok_handoff._derive_weak_hook 와 동일 휴리스틱: 길이 10 미만, 또는
+    숫자·대문자·한국 기관명 중 하나도 없음."""
+    h = (hook or "").strip()
+    if len(h) < 10:
+        return True
+    has_num = bool(re.search(r"\d", h))
+    has_caps = bool(re.search(r"[A-Z]{2,}", h))
+    has_kr_entity = bool(
+        re.search(r"(정부|은행|금융위|공정위|국회|총리실|산업부|기재부|검찰|경찰|삼성|현대|SK|LG|네이버|카카오)", h)
+    )
+    return not (has_num or has_caps or has_kr_entity)
+
+
+def _derive_what_to_cut(
+    linter_labels: dict | None,
+    too_obvious_flag: bool,
+    hook: str = "",
+) -> list[str]:
+    """감지된 weakness 를 행동 지시 문장으로 최대 3개. 없으면 []."""
+    lab = linter_labels if isinstance(linter_labels, dict) else {}
+    flags = lab.get("flags") if isinstance(lab.get("flags"), dict) else {}
+    ending = lab.get("ending") if isinstance(lab.get("ending"), dict) else {}
+
+    detected: set[str] = set()
+    # weak_hook 은 hook 직접 체크 (post_linter 는 이 필드 안 만듦).
+    if _is_weak_hook(hook):
+        detected.add("weak_hook")
+    if too_obvious_flag:
+        detected.add("too_obvious")
+    if flags.get("missing_context_flag"):
+        detected.add("missing_context")
+    if flags.get("weak_ending_flag") or ending.get("ending_type") == "question_only":
+        detected.add("weak_ending")
+    if flags.get("generic_cta_flag"):
+        detected.add("generic_cta")
+    if flags.get("ai_tone_flag"):
+        detected.add("ai_tone")
+
+    out: list[str] = []
+    for key in _CUT_PRIORITY:
+        if key in detected:
+            out.append(_CUT_LABELS[key])
+        if len(out) >= 3:
+            break
+    return out
 
 
 # ─── salvageability ─────────────────────────────────────────────────────
@@ -332,7 +438,10 @@ def build_editorial_meta(
         "hidden_variable": "",
         "stake_sentence": "",
         "too_obvious_flag": False,
-        "too_obvious_reason": None,
+        "too_obvious_warning": None,     # Phase 5: reason → warning 리네이밍
+        "editorial_goal": "",             # Phase 5 신규
+        "what_to_sharpen": [],            # Phase 5 신규 (max 2)
+        "what_to_cut": [],                # Phase 5 신규 (max 3)
         "salvageability": {"score": "C", "reason": "", "checks": {}},
     }
 
@@ -362,9 +471,36 @@ def build_editorial_meta(
         logger.warning(f"[editorial_meta] too_obvious_flag 실패: {e}")
     try:
         if out["too_obvious_flag"]:
-            out["too_obvious_reason"] = _derive_too_obvious_reason(b, linter_labels)
+            out["too_obvious_warning"] = _derive_too_obvious_warning(b, linter_labels)
     except Exception as e:
-        logger.warning(f"[editorial_meta] too_obvious_reason 실패: {e}")
+        logger.warning(f"[editorial_meta] too_obvious_warning 실패: {e}")
+
+    # ── Phase 5 신규 3 필드 ─────────────────────────────────
+    try:
+        ap = angle_pack if isinstance(angle_pack, dict) else {}
+        out["editorial_goal"] = _derive_editorial_goal(
+            angle_pack=ap,
+            stake_sentence=out["stake_sentence"],
+            core_tension=_safe_str(ap.get("core_tension"), 200),
+            share_trigger=_safe_str(ap.get("share_trigger"), 200),
+        )
+    except Exception as e:
+        logger.warning(f"[editorial_meta] editorial_goal 실패: {e}")
+    try:
+        out["what_to_sharpen"] = _derive_what_to_sharpen(
+            out["stop_scroll_line"],
+            out["hidden_variable"],
+            out["stake_sentence"],
+        )
+    except Exception as e:
+        logger.warning(f"[editorial_meta] what_to_sharpen 실패: {e}")
+    try:
+        out["what_to_cut"] = _derive_what_to_cut(
+            linter_labels, out["too_obvious_flag"], hook=h,
+        )
+    except Exception as e:
+        logger.warning(f"[editorial_meta] what_to_cut 실패: {e}")
+
     try:
         out["salvageability"] = _score_salvageability(
             angle_pack=angle_pack,

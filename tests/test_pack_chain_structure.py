@@ -318,18 +318,21 @@ def test_grok_handoff_no_legacy_verbose_headers():
 
 
 def test_grok_handoff_optional_concept_translation():
+    # Phase 5: 영어 concept_translation 은 handoff 에서 생략됨 (sanitize).
+    # 한국어 concept 은 그대로 블록 생성.
     sp = _make_source_pack()
-    sp["concept_translation"] = "HBM3E is the AI-era DRAM tollgate Nvidia must pay."
+    sp["concept_translation"] = "HBM3E: AI 시대 D램 관문 — 엔비디아가 통과해야 할 톨게이트"
     ap = _heuristic_angle_pack(sp)
     out = format_handoff(sp, ap, "body")
     assert "## 어려운 개념 한 줄 번역" in out
 
 
 def test_grok_handoff_optional_evidence_block():
+    # Phase 5: 영어 dominant evidence 는 dedupe 단계에서 drop. 한국어는 유지.
     sp = _make_source_pack()
     sp["evidence_pack"] = [
-        "Samsung Q1 operating profit 6.6 trillion won (up 931%)",
-        "HBM share: >70% from Korean makers",
+        "삼성전자 1분기 영업이익 6.6조 원 (전년비 931% 증가)",
+        "한국 기업 HBM 점유율 70% 이상",
     ]
     ap = _heuristic_angle_pack(sp)
     out = format_handoff(sp, ap, "body")

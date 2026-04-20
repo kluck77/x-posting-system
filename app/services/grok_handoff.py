@@ -30,6 +30,12 @@ _BODY_MAX = 900
 _BLOCK_LINE_MAX = 160
 _URL_RE = re.compile(r"https?://\S+")
 
+# Phase 5: 한국어 비율 체크 — 편집장 handoff 는 한국어만.
+_ALPHA_ONLY_RE = re.compile(r"[A-Za-z]")
+_WORD_RE = re.compile(r"[\w가-힣]")
+_KO_RE = re.compile(r"[가-힣]")
+_NEED_KOREAN_THRESHOLD = 0.5
+
 
 def _strip_urls(s: str) -> str:
     return _URL_RE.sub("", str(s)).strip()
@@ -43,6 +49,105 @@ def _drop_url_only(items: Any) -> list:
         s = _strip_urls(str(x).strip())
         if s:
             out.append(s)
+    return out
+
+
+# ─── Phase 5: sanitize for editor ─────────────────────────────────────
+
+def _korean_ratio(text: str) -> float:
+    """(한글 문자) / (공백·구두점 제외 실제 문자) 비율. 없으면 0.0."""
+    if not isinstance(text, str) or not text:
+        return 0.0
+    ko = len(_KO_RE.findall(text))
+    total = len(_WORD_RE.findall(text))
+    return (ko / total) if total else 0.0
+
+
+def _sanitize_ko(text: Any, *, label: str = "원문", fallback: str = "") -> str:
+    """영어 dominant 텍스트를 편집장용 placeholder 로 대체.
+    한국어 토큰이 하나라도 있으면 혼합 표기 그대로 유지 (고유명사·영문 용어는
+    편집장이 한국어 문맥에서 이해 가능). 한글 0 + 영어 5자+ 일 때만 placeholder.
+
+    결과: `"{label} 영어 — 편집장 한국어 압축 필요"` 고정 문구 (번역하지 않음).
+    """
+    s = str(text or "").strip()
+    if not s:
+        return fallback
+    has_ko = bool(_KO_RE.search(s))
+    alpha = len(_ALPHA_ONLY_RE.findall(s))
+    if not has_ko and alpha >= 5:
+        return f"{label} 영어 — 편집장 한국어 압축 필요"
+    return s
+
+
+def _reformat_unverified(items: Any) -> list[str]:
+    """`[unverified] X` → `X는 현재 검증 부족` 한국어 재포맷.
+    `[en] X` → `원문 영어 — 한국어 압축 필요`.
+    기타 태그는 제거만 하고 본문 노출 (한국어면 유지, 영어면 sanitize)."""
+    if not isinstance(items, list):
+        return []
+    out: list[str] = []
+    for x in items:
+        s = str(x or "").strip()
+        if not s:
+            continue
+        s = _strip_urls(s)
+        if s.startswith("[unverified]"):
+            body = s[len("[unverified]"):].strip()
+            # 한글 토큰이 하나라도 있으면 그대로 "~는 현재 검증 부족" 접미사.
+            # (인명/회사명이 영어여도 한국어 본문 안에 있으면 편집장이 이해함.)
+            # 한글 0 이면 영어 dominant 로 간주 → placeholder.
+            if len(_KO_RE.findall(body)) >= 1:
+                out.append(f"{body}는 현재 검증 부족")
+            else:
+                out.append(f"원문 영어 — 한국어 압축 필요 ({_clip_head(body, 40)})")
+            continue
+        if s.startswith("[en]"):
+            body = s[len("[en]"):].strip()
+            out.append(f"원문 영어 — 한국어 압축 필요 ({_clip_head(body, 40)})")
+            continue
+        # 일반 태그 prefix 제거
+        cleaned = re.sub(r"^\[[a-zA-Z_]+\]\s*", "", s).strip()
+        if not cleaned:
+            continue
+        # 영어 dominant 면 placeholder
+        if _korean_ratio(cleaned) < _NEED_KOREAN_THRESHOLD and len(_ALPHA_ONLY_RE.findall(cleaned)) >= 5:
+            out.append(f"원문 영어 — 한국어 압축 필요 ({_clip_head(cleaned, 40)})")
+        else:
+            out.append(cleaned)
+    return out
+
+
+def _clip_head(s: str, n: int) -> str:
+    s = (s or "").strip()
+    if len(s) <= n:
+        return s
+    return s[: n - 1].rstrip() + "…"
+
+
+def _dedupe_evidence(items: Any, *, limit: int = 2) -> list[str]:
+    """evidence 블록 중복 제거. 앞 40자 normalize 기준 dedupe, 최대 limit.
+    영어 dominant 항목은 제외 (handoff 한국어 원칙)."""
+    if not isinstance(items, list):
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in items:
+        s = str(x or "").strip()
+        if not s:
+            continue
+        s = _strip_urls(s)
+        # 영어 dominant 제외
+        if _korean_ratio(s) < _NEED_KOREAN_THRESHOLD and len(_ALPHA_ONLY_RE.findall(s)) >= 5:
+            continue
+        # 정규화: 공백 1칸 + 앞 40자
+        norm = re.sub(r"\s+", " ", s).lower()[:40]
+        if norm in seen:
+            continue
+        seen.add(norm)
+        out.append(s)
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -248,40 +353,15 @@ _WEAKNESS_LABELS = {
 }
 
 
-def _build_weakness_block(hook: str, body: str, linter_labels: dict | None) -> list[str]:
-    """## 시스템이 감지한 약한 지점 — True 만 한국어 1줄씩. 전부 False 면 [].
-
-    linter_labels 가 None (post_linter 경로 자체를 안 탄 경우) 이면 블록 전체 생략.
-    빈 dict 이면 post_linter 가 fail-open 된 것으로 보고 파생 플래그만 돌림.
-    """
-    if linter_labels is None:
-        return []
-    lab = linter_labels if isinstance(linter_labels, dict) else {}
-    flags = lab.get("flags") if isinstance(lab.get("flags"), dict) else {}
-    detected: list[str] = []
-    if _derive_weak_hook(hook):
-        detected.append("weak_hook")
-    if _derive_too_obvious(body):
-        detected.append("too_obvious")
-    if flags.get("missing_context_flag"):
-        detected.append("missing_context")
-    if flags.get("weak_ending_flag"):
-        detected.append("weak_ending")
-    if flags.get("generic_cta_flag"):
-        detected.append("generic_cta")
-    if flags.get("ai_tone_flag"):
-        detected.append("ai_tone")
-    if not detected:
-        return []
-    lines = [f"- {k}: {_WEAKNESS_LABELS[k]}" for k in detected]
-    return ["## 시스템이 감지한 약한 지점", *lines]
-
-
 def _build_account_tone_block(strategy_os: dict | None) -> list[str]:
-    """## 계정 톤 (참고) — positioning.one_liner 1줄 + 훅 2개 + 금지 3개. 비면 []."""
+    """## 우리 계정 편집 우선순위 — positioning.one_liner 1줄 + 훅 2개 + 금지 3개.
+    Phase 5: 헤더 '우리 계정 편집 우선순위' 로 변경 ('계정 톤' → 편집장 톤)."""
     so = strategy_os if isinstance(strategy_os, dict) else {}
     pos = so.get("positioning") if isinstance(so.get("positioning"), dict) else {}
     one = _clip_line(pos.get("one_liner") if isinstance(pos, dict) else "", 160)
+    # 영어 dominant one_liner 는 sanitize 로 placeholder
+    if one:
+        one = _sanitize_ko(one, label="포지셔닝 원문")
     hooks_raw = so.get("hook_library") if isinstance(so.get("hook_library"), list) else []
     banned_raw = so.get("banned_style") if isinstance(so.get("banned_style"), list) else []
     hooks = [str(x).strip() for x in hooks_raw if isinstance(x, str) and x.strip()][:2]
@@ -295,58 +375,66 @@ def _build_account_tone_block(strategy_os: dict | None) -> list[str]:
         lines.append("- 금지 표현: " + ", ".join(_clip_line(b, 40) for b in banned))
     if not lines:
         return []
-    return ["## 계정 톤 (참고)", *lines]
+    return ["## 우리 계정 편집 우선순위", *lines]
 
 
-# ── Phase 4: editorial_meta 기반 compact 블록 ──────────────────────────
-# 원칙: editorial_meta 가 None 이거나 모두 빈값이면 블록 없음 (회귀 방지).
+# ── Phase 5: editorial_meta 기반 편집장 지시서 블록 ────────────────────
+# 원칙: editorial_meta 가 None/비면 블록 없음 (회귀). salvageability 블록은
+# 맨 아래로 이동 (뱃지 1줄 → 다단 블록).
 
-def _build_salvageability_badge(editorial_meta: dict | None) -> str:
-    """## 🎯 살릴 가치: A/B/C — reason  1줄. meta 비면 "" 리턴."""
+def _build_why_push_block(editorial_meta: dict | None) -> list[str]:
+    """## 🔥 왜 이 글을 세게 써야 하는가 — editorial_goal + core_tension +
+    share_trigger + RT 동기/정체성 신호. Phase 4 의 'RT 이유' 블록 흡수."""
     em = editorial_meta if isinstance(editorial_meta, dict) else {}
-    salv = em.get("salvageability") if isinstance(em.get("salvageability"), dict) else {}
-    grade = salv.get("score")
-    if grade not in ("A", "B", "C"):
-        return ""
-    reason = _clip_line(salv.get("reason", ""), 120)
-    if reason:
-        return f"## 🎯 살릴 가치: {grade} — {reason}"
-    return f"## 🎯 살릴 가치: {grade}"
-
-
-def _build_rt_motive_block(editorial_meta: dict | None) -> list[str]:
-    """## 🔥 이 글을 RT 하게 만드는 이유 — 최대 2줄. 값 비면 []."""
-    em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    goal = _sanitize_ko(em.get("editorial_goal", ""), label="편집 목표", fallback="")
+    if goal.endswith("한국어 압축 필요"):
+        goal = ""
     rt_type = em.get("rt_motive_type") if isinstance(em.get("rt_motive_type"), str) else ""
     identity = _clip_line(em.get("identity_signal", ""), 120)
+    identity = _sanitize_ko(identity, label="정체성 시그널", fallback="") if identity else ""
+    if identity.endswith("한국어 압축 필요"):
+        identity = ""
     lines: list[str] = []
+    if goal:
+        lines.append(f"- 편집 목표: {_clip_line(goal, 120)}")
     if rt_type and rt_type != "unclear":
         lines.append(f"- RT 동기: {rt_type}")
     if identity:
         lines.append(f"- 정체성 시그널: {identity}")
     if not lines:
         return []
-    return ["## 🔥 이 글을 RT 하게 만드는 이유", *lines]
+    return ["## 🔥 왜 이 글을 세게 써야 하는가", *lines]
 
 
-def _build_flat_reason_block(editorial_meta: dict | None) -> list[str]:
-    """## 🏴 지금 초안이 평평한 이유 — too_obvious_flag=True 일 때만 1줄."""
+def _build_why_flat_block(editorial_meta: dict | None) -> list[str]:
+    """## 🏴 지금 초안이 평평한 이유 — too_obvious_warning + what_to_cut(≤3).
+    모두 비면 블록 전체 생략."""
     em = editorial_meta if isinstance(editorial_meta, dict) else {}
-    if not em.get("too_obvious_flag"):
+    warning = _clip_line(em.get("too_obvious_warning") or "", 160)
+    cuts_raw = em.get("what_to_cut") if isinstance(em.get("what_to_cut"), list) else []
+    cuts = [str(c).strip() for c in cuts_raw if isinstance(c, str) and c.strip()][:3]
+    lines: list[str] = []
+    if warning:
+        lines.append(f"- {warning}")
+    for c in cuts:
+        lines.append(f"- 잘라라: {_clip_line(c, 140)}")
+    if not lines:
         return []
-    reason = _clip_line(em.get("too_obvious_reason") or "", 160)
-    if not reason:
-        # flag True 이지만 reason 없으면 일반 문구로 최소 1줄
-        reason = "표면 인과만 — 숨은 변수/비대칭 노출 드러낼 것"
-    return ["## 🏴 지금 초안이 평평한 이유", f"- {reason}"]
+    return ["## 🏴 지금 초안이 평평한 이유", *lines]
 
 
 def _build_must_keep_block(editorial_meta: dict | None) -> list[str]:
-    """## 💎 반드시 살릴 포인트 — 훅 후보 / 숨은 변수 / 독자 스테이크. 비면 []."""
+    """## 💎 반드시 살릴 포인트 — stop_scroll_line + hidden_variable +
+    stake_sentence + what_to_sharpen(≤2). 비면 []."""
     em = editorial_meta if isinstance(editorial_meta, dict) else {}
-    stop_line = _clip_line(em.get("stop_scroll_line", ""), 90)
+    stop_line = _sanitize_ko(em.get("stop_scroll_line", ""), label="훅 후보", fallback="")
+    if stop_line.endswith("한국어 압축 필요"):
+        stop_line = ""
+    stop_line = _clip_line(stop_line, 90)
     hidden = _clip_line(em.get("hidden_variable", ""), 120)
     stake = _clip_line(em.get("stake_sentence", ""), 120)
+    sharpen_raw = em.get("what_to_sharpen") if isinstance(em.get("what_to_sharpen"), list) else []
+    sharpen = [str(s).strip() for s in sharpen_raw if isinstance(s, str) and s.strip()][:2]
     lines: list[str] = []
     if stop_line:
         lines.append(f"- 훅 후보: {stop_line}")
@@ -354,9 +442,26 @@ def _build_must_keep_block(editorial_meta: dict | None) -> list[str]:
         lines.append(f"- 숨은 변수: {hidden}")
     if stake:
         lines.append(f"- 독자 스테이크: {stake}")
+    for s in sharpen:
+        lines.append(f"- 세게 밀어라: {_clip_line(s, 140)}")
     if not lines:
         return []
     return ["## 💎 반드시 살릴 포인트", *lines]
+
+
+def _build_salvageability_block(editorial_meta: dict | None) -> list[str]:
+    """## 🎯 살릴 가치 — Phase 5: 상단 뱃지 1줄 → 맨 아래 블록 (score + reason).
+    meta/점수 비면 []."""
+    em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    salv = em.get("salvageability") if isinstance(em.get("salvageability"), dict) else {}
+    grade = salv.get("score")
+    if grade not in ("A", "B", "C"):
+        return []
+    reason = _clip_line(salv.get("reason", ""), 160)
+    lines = [f"- 등급: {grade}"]
+    if reason:
+        lines.append(f"- 사유: {reason}")
+    return ["## 🎯 살릴 가치", *lines]
 
 
 def format_handoff(
@@ -413,10 +518,19 @@ def format_handoff(
     spine = ap.get("story_spine") if isinstance(ap.get("story_spine"), list) else []
     spine_str = " → ".join(str(p).strip()[:20] for p in spine[:6]) if spine else ""
 
-    confirmed = _drop_url_only(sp.get("confirmed_facts") or [])
+    # Phase 5: sanitize + reformat.
+    # - confirmed: [unverified] → "~는 현재 검증 부족", 영어 dominant → placeholder
+    # - conflicts: 영어 dominant 는 block 에서 제외 (미확정 예시로 쓰지 않음)
+    # - concept_translation: 영어 dominant 면 블록 생략
+    # - evidence_pack: 의미 중복 제거 + 영어 dominant 제외 후 max 2
+    confirmed = _reformat_unverified(sp.get("confirmed_facts") or [])
     conflicts = _drop_url_only(sp.get("conflicts_or_uncertainty") or [])
-    ct = _strip_urls(_safe(sp.get("concept_translation"), 220))
-    ep = _drop_url_only(sp.get("evidence_pack") or [])
+    ct_raw = _strip_urls(_safe(sp.get("concept_translation"), 220))
+    ct = _sanitize_ko(ct_raw, label="개념 설명", fallback="")
+    # ct 가 placeholder ("~한국어 압축 필요") 이면 블록 자체 생략
+    if ct.endswith("한국어 압축 필요"):
+        ct = ""
+    ep = _dedupe_evidence(sp.get("evidence_pack") or [], limit=2)
 
     # ── ## 원문 초안 ────────────────────────────────────────
     section_draft = [
@@ -426,23 +540,22 @@ def format_handoff(
         "```",
     ]
 
-    # ── ## 이 글의 핵심 각도 ────────────────────────────────
+    # ── ## 이 글의 핵심 각도 (sanitize 적용) ─────────────────
+    # Phase 5: 각 필드 한국어 보장. 영어 dominant 필드는 placeholder 로.
+    # "편집 목표" 줄은 신규 '## 왜 이 글을 세게 써야 하는가' 블록으로 이동 — 여기서 제거.
     section_angle = ["## 이 글의 핵심 각도"]
-    section_angle.append(f"- 앵글: {winner}")
+    section_angle.append(f"- 앵글: {_sanitize_ko(winner, label='앵글 원문')}")
     if core_tension:
-        section_angle.append(f"- 핵심 긴장: {core_tension}")
+        section_angle.append(f"- 핵심 긴장: {_sanitize_ko(core_tension, label='핵심 긴장 원문')}")
     section_angle.append(f"- frame: {frame_type}")
     if spine_str:
         section_angle.append(f"- 뼈대: {spine_str}")
     section_angle.append(f"- 가독성 리스크: {readability_risk}")
     if share_trigger:
-        section_angle.append(f"- 공유 트리거: {share_trigger}")
-    # 편집 목표 — Grok 편집장용 1줄 지시문. 있을 때만 append.
-    _goal = _derive_editorial_goal(ap)
-    if _goal:
-        section_angle.append(f"- 편집 목표: {_goal}")
+        section_angle.append(f"- 공유 트리거: {_sanitize_ko(share_trigger, label='공유 트리거 원문')}")
 
     # ── ## 절대 바꾸지 말 것 ────────────────────────────────
+    # Phase 5: [unverified] / 영어 원문 없이 한국어 문장만.
     section_lock: list[str] = ["## 절대 바꾸지 말 것"]
     lock_bullets = _compact_bullets(confirmed, limit=4, max_len=180)
     if lock_bullets:
@@ -454,13 +567,17 @@ def format_handoff(
     # ── ## 바꿔도 되는 것 ──────────────────────────────────
     section_free: list[str] = ["## 바꿔도 되는 것"]
     section_free.append("- 문장 길이·리듬·줄바꿈 (모바일 스캔 중심)")
-    if scan_pattern:
+    if scan_pattern and _korean_ratio(scan_pattern) >= _NEED_KOREAN_THRESHOLD:
         section_free.append(f"- 스캔 패턴 힌트: {scan_pattern}")
     section_free.append("- 훅/클로저 문장 (사실 추가 없이 어휘만)")
     if conflicts:
-        c0 = str(conflicts[0]).strip()[:160]
-        if c0:
-            section_free.append(f"- 미확정 항목은 헤지 동사로 (예: {c0})")
+        # Phase 5: 영어 dominant conflict 는 예시로 쓰지 않음 — 한국어 conflict 만.
+        c0_candidates = [c for c in conflicts[:3]
+                         if _korean_ratio(str(c)) >= _NEED_KOREAN_THRESHOLD]
+        if c0_candidates:
+            c0 = re.sub(r"^\[[a-zA-Z_]+\]\s*", "", str(c0_candidates[0])).strip()[:160]
+            if c0:
+                section_free.append(f"- 미확정 항목은 헤지 동사로 (예: {c0})")
 
     # ── ## 최종 출력 규칙 ──────────────────────────────────
     section_rules = [
@@ -525,39 +642,29 @@ def format_handoff(
     if _warning_block_text:
         chunks.append(_warning_block_text)
 
-    # Phase 4: 살릴 가치 뱃지 1줄 — 경고 블록 바로 뒤, 원문 초안 앞.
-    _salv_badge = _build_salvageability_badge(editorial_meta)
-    if _salv_badge:
-        chunks.append(_salv_badge)
-
+    # Phase 5: 고정 5 블록 (원문/각도/lock/free/rules) + 선택 2 블록 먼저.
     chunks.extend(["\n".join(section_draft)] + fixed_tail)
     for opt in optional_sections[:2]:
         chunks.append("\n".join(opt))
 
-    # Phase 4: editorial_meta 기반 3 블록 — 기존 편집 신호 블록보다 먼저 노출.
-    phase4_blocks = [
-        _build_rt_motive_block(editorial_meta),
-        _build_flat_reason_block(editorial_meta),
+    # Phase 5: editorial_meta 기반 편집장 지시서 블록들.
+    # 순서: 왜 세게 → 평평한 이유 → 반드시 살릴 → 우리 계정 편집 우선순위 → 살릴 가치
+    phase5_blocks = [
+        _build_why_push_block(editorial_meta),
+        _build_why_flat_block(editorial_meta),
         _build_must_keep_block(editorial_meta),
+        _build_account_tone_block(strategy_os),
+        _build_salvageability_block(editorial_meta),
     ]
-    for pb in phase4_blocks:
+    for pb in phase5_blocks:
         if pb:
             chunks.append("\n".join(pb))
 
-    # 편집 신호 블록 2개 (Phase 3b/B+). 기존 위치 유지.
-    editorial_blocks = [
-        _build_weakness_block(final_hook or "", body_raw, linter_labels),
-        _build_account_tone_block(strategy_os),
-    ]
-    for eb in editorial_blocks:
-        if eb:
-            chunks.append("\n".join(eb))
-
     out = "\n\n".join(chunks)
 
-    # 길이 제한 — 뒤(선택 블록 + 편집 신호 블록)부터 잘라낸다.
-    # 고정 5블록 + (경고 블록 있으면 1) + (살릴 가치 뱃지 있으면 1) 은 유지.
-    _min_keep = 5 + (1 if _warning_block_text else 0) + (1 if _salv_badge else 0)
+    # 길이 제한 — 뒤(선택 블록 + 편집장 지시서 블록)부터 잘라낸다.
+    # 고정 5 블록 + (경고 블록 있으면 1) 은 유지.
+    _min_keep = 5 + (1 if _warning_block_text else 0)
     while len(out) > _HANDOFF_HARD_MAX and len(chunks) > _min_keep:
         chunks.pop()
         out = "\n\n".join(chunks)

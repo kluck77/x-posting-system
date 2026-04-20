@@ -17,7 +17,7 @@ from app.services.editorial_meta import (
     _derive_identity_signal,
     _derive_hidden_variable,
     _derive_stake_sentence,
-    _derive_too_obvious_reason,
+    _derive_too_obvious_warning,
     _compute_too_obvious_flag,
     _score_salvageability,
 )
@@ -32,7 +32,11 @@ TOP_KEYS = {
     "hidden_variable",
     "stake_sentence",
     "too_obvious_flag",
-    "too_obvious_reason",
+    "too_obvious_warning",
+    # Phase 5 신규 3 필드
+    "editorial_goal",
+    "what_to_sharpen",
+    "what_to_cut",
     "salvageability",
 }
 
@@ -160,13 +164,13 @@ def test_stake_falls_back_to_share_trigger():
     assert _derive_stake_sentence(sp, ap) == "지금 봐야 할 포인트"
 
 
-# ─── 6. too_obvious_reason ────────────────────────────────────────────
+# ─── 6. too_obvious_warning ────────────────────────────────────────────
 
 def test_too_obvious_no_numbers():
     body = "에너지 비용 상승이 무역 수지에 영향을 미친다. " * 5
     assert _compute_too_obvious_flag(body, None) is True
-    assert _derive_too_obvious_reason(body, None) is not None
-    assert "수치" in _derive_too_obvious_reason(body, None)
+    assert _derive_too_obvious_warning(body, None) is not None
+    assert "수치" in _derive_too_obvious_warning(body, None)
 
 
 def test_too_obvious_with_numbers_no_flag():
@@ -174,8 +178,8 @@ def test_too_obvious_with_numbers_no_flag():
     assert _compute_too_obvious_flag(body, None) is False
 
 
-def test_too_obvious_reason_none_when_short_body():
-    assert _derive_too_obvious_reason("짧음", None) is None
+def test_too_obvious_warning_none_when_short_body():
+    assert _derive_too_obvious_warning("짧음", None) is None
 
 
 # ─── 7. salvageability 등급 경계 ──────────────────────────────────────
@@ -277,27 +281,32 @@ def test_build_editorial_meta_handles_corrupt_inputs():
 
 # ─── 9. format_handoff 통합 ───────────────────────────────────────────
 
-def test_format_handoff_phase4_blocks_render():
+def test_format_handoff_phase5_blocks_render():
+    """Phase 5 블록 헤더 4개 렌더 + 값 반영 확인."""
     meta = {
-        "meta_version": "1",
+        "meta_version": "2",
         "stop_scroll_line": "한국 원유 70% 호르무즈",
         "rt_motive_type": "signal",
         "identity_signal": "economy 관점 독자 — non-KR 해설",
         "hidden_variable": "보험료 재가격",
         "stake_sentence": "가계 예산 압박",
         "too_obvious_flag": True,
-        "too_obvious_reason": "표면 인과만 — 숨은 변수 부재",
-        "salvageability": {"score": "B", "reason": "B — 숨은 변수 부재 보완."},
+        "too_obvious_warning": "표면 인과만 — 숨은 변수 부재",
+        "editorial_goal": "중동 변수 → 한국 비대칭",
+        "what_to_sharpen": ["첫 줄로 끌어올려라: 한국 원유 70%"],
+        "what_to_cut": ["표면 인과 문장 삭제 — 숨은 변수 드러내기"],
+        "salvageability": {"score": "B", "reason": "숨은 변수 부재 보완."},
     }
     out = format_handoff(
         _min_sp(), _min_ap(),
         "본문 2026년 30% 기록.",
         editorial_meta=meta,
     )
-    assert "## 🎯 살릴 가치: B" in out
-    assert "## 🔥 이 글을 RT 하게 만드는 이유" in out
+    assert "## 🔥 왜 이 글을 세게 써야 하는가" in out
     assert "## 🏴 지금 초안이 평평한 이유" in out
     assert "## 💎 반드시 살릴 포인트" in out
+    assert "## 🎯 살릴 가치" in out
+    assert "- 등급: B" in out
     # 값들 반영
     assert "signal" in out
     assert "economy 관점" in out
@@ -309,28 +318,29 @@ def test_format_handoff_phase4_blocks_render():
 
 
 def test_format_handoff_meta_none_backwards_compat():
-    """editorial_meta=None 일 때 Phase 4 블록 전부 미생성 (회귀)."""
+    """editorial_meta=None 일 때 Phase 5 블록 전부 미생성."""
     out = format_handoff(_min_sp(), _min_ap(), "본문")
     assert "## 🎯 살릴 가치" not in out
-    assert "## 🔥 이 글을 RT" not in out
+    assert "## 🔥 왜 이 글을 세게" not in out
     assert "## 🏴 지금 초안이 평평한" not in out
     assert "## 💎 반드시 살릴 포인트" not in out
 
 
-def test_format_handoff_c_grade_badge_independent_of_warning():
-    """salvageability C 뱃지는 재료 품질 경고 BLOCK_RECOMMENDED 와 별개로 표시."""
+def test_format_handoff_c_grade_block_renders():
+    """salvageability C 는 블록 맨 아래에 '- 등급: C' 로 표시."""
     meta = {
-        "salvageability": {"score": "C", "reason": "C — frame 부재. 재각도/reject 권장."},
+        "salvageability": {"score": "C", "reason": "frame 부재. 재각도/reject 권장."},
         "rt_motive_type": "unclear",
         "too_obvious_flag": False,
     }
     out = format_handoff(_min_sp(), _min_ap(), "본문", editorial_meta=meta)
-    assert "## 🎯 살릴 가치: C" in out
+    assert "## 🎯 살릴 가치" in out
+    assert "- 등급: C" in out
 
 
-def test_format_handoff_empty_meta_no_phase4_blocks():
-    """editorial_meta 가 빈 dict 이면 모든 Phase 4 블록 생략."""
+def test_format_handoff_empty_meta_no_phase5_blocks():
+    """editorial_meta 가 빈 dict 이면 모든 Phase 5 블록 생략."""
     out = format_handoff(_min_sp(), _min_ap(), "본문", editorial_meta={})
     assert "## 🎯 살릴 가치" not in out
-    assert "## 🔥 이 글을 RT" not in out
+    assert "## 🔥 왜 이 글을 세게" not in out
     assert "## 💎 반드시 살릴 포인트" not in out
