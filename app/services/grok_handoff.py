@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.services.handoff_quality_guard import run_quality_guard
+
 _HANDOFF_MAX = 1800         # 본문(초안) 버짓 계산 기준 — 고정 5블록 + 선택 2블록 가정
 _HANDOFF_HARD_MAX = 2800    # 최종 하드 상한 (새 compact 편집 신호 3블록 포함)
 _BODY_MAX = 900
@@ -439,7 +441,22 @@ def format_handoff(
         "```",
     ]
 
-    chunks = ["\n".join(section_draft)] + fixed_tail
+    # Phase 1: 재료 품질 가드 — source_pack + angle_pack 병합해서 검사.
+    # 4종 결함 감지 시 맨 앞에 ## ⚠️ 재료 품질 경고 블록 prepend.
+    # 정상 draft (결함 0) 는 빈 문자열 → 기존 동작과 완전 동일.
+    try:
+        _guard_input = dict(sp) if isinstance(sp, dict) else {}
+        if isinstance(ap, dict):
+            _guard_input["angle_pack"] = ap
+        _quality = run_quality_guard(_guard_input)
+        _warning_block_text = _quality.get("rendered_warning_block", "") or ""
+    except Exception:
+        _warning_block_text = ""
+
+    chunks: list[str] = []
+    if _warning_block_text:
+        chunks.append(_warning_block_text)
+    chunks.extend(["\n".join(section_draft)] + fixed_tail)
     for opt in optional_sections[:2]:
         chunks.append("\n".join(opt))
 
@@ -456,8 +473,9 @@ def format_handoff(
     out = "\n\n".join(chunks)
 
     # 길이 제한 — 뒤(선택 블록 + 편집 신호 블록)부터 잘라낸다.
-    # 고정 5블록은 유지 (len(chunks) > 5 가드).
-    while len(out) > _HANDOFF_HARD_MAX and len(chunks) > 5:
+    # 고정 5블록 + (경고 블록 있으면 1) 은 유지.
+    _min_keep = 5 + (1 if _warning_block_text else 0)
+    while len(out) > _HANDOFF_HARD_MAX and len(chunks) > _min_keep:
         chunks.pop()
         out = "\n\n".join(chunks)
 
