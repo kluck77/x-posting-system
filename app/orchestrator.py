@@ -851,11 +851,25 @@ class Orchestrator:
                     pack_chain_data["angle_pack"],
                     review.body,
                 )
+                # Layer 2: Post Linter — 라벨만 생성 (재작성 0, fail-open)
+                try:
+                    from app.services.post_linter import run_post_linter
+                    _labels = run_post_linter(
+                        hook=review.hook,
+                        body=review.body,
+                        pack=pack_chain_data,
+                        category=category.value if category else None,
+                        title=data.title,
+                    )
+                except Exception as _lint_e:
+                    logger.warning(f"[post_linter] 실패 (무시): {_lint_e}")
+                    _labels = {}
                 save_pack(draft.id, {
                     "source":     pack_chain_data["source_pack"],
                     "angle":      pack_chain_data["angle_pack"],
                     "final_body": review.body,
                     "handoff":    _handoff_text,
+                    "labels":     _labels,
                 })
             except Exception as _sv_e:
                 logger.warning(f"[pack_sidecar] save 실패 (무시): {_sv_e}")

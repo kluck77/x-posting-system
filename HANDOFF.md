@@ -6,10 +6,10 @@
 
 ## 1. 지금의 trunk (활성 작업선)
 
-**활성 브랜치:** `strategy-os-phase-bplus-ux`
+**활성 브랜치:** `post-linter-labels`
 **서버 배포 브랜치:** `strategy-os-phase-c-advisory`
 **마지막 서버 배포 시점:** Phase C (2026-04-19)
-**다음 배포 예정 브랜치:** `strategy-os-phase-bplus-ux` (운영자 판단으로 실행)
+**다음 배포 예정 브랜치:** `post-linter-labels` (UX + 한국어 Pack 규칙 + Post Linter 전부 포함)
 
 운영선(운영자가 참조하는 실제 최신)은 `origin/claude/review-handoff-document-UoyuK`
 이지만, 거기로는 **직접 커밋하지 않는다.** 모든 작업은 위 활성 브랜치에서 분기.
@@ -23,7 +23,8 @@ origin/claude/review-handoff-document-UoyuK  9803612   # 실제 운영 trunk
   └─ strategy-os-phase-a-v2                 81d6788   # A: 읽기 전용 탭
        └─ strategy-os-phase-b-edit          5605e52   # A+B: JSON 인라인 편집
             └─ strategy-os-phase-c-advisory 2990a86   # A+B+C: orchestrator advisory inject
-                 └─ strategy-os-phase-bplus-ux        # A+B+C + UX 개편 (한글화/폼/시드/JSON 고급) ← 현재
+                 └─ strategy-os-phase-bplus-ux        # A+B+C + UX 개편 + grok-handoff 한국어
+                      └─ post-linter-labels           # 위 전부 + Post Linter(라벨러) ← 현재
 ```
 
 **원칙:**
@@ -66,10 +67,12 @@ origin/claude/review-handoff-document-UoyuK  9803612   # 실제 운영 trunk
 
 바뀐 파일은 아래뿐:
 - `app/services/strategy_os.py` (신규)
+- `app/services/post_linter.py` (신규 — 라벨러, 재작성 0)
 - `app/api/control_room.py` (import 1 + endpoint 2 추가)
-- `app/orchestrator.py` (helper 1 + 주입 2지점)
-- `static/dashboard.html` (탭 1개 + 버튼 1개 추가)
-- `tests/test_strategy_os.py`, `tests/test_strategy_os_advisory.py` (신규)
+- `app/orchestrator.py` (advisory helper 1 + 주입 2지점 + post_linter 훅 1)
+- `app/services/grok_handoff.py` (출력 규칙 한국어로, 2줄)
+- `static/dashboard.html` (탭 1개 + 버튼 1개 추가, UX 개편)
+- `tests/test_strategy_os.py`, `tests/test_strategy_os_advisory.py`, `tests/test_post_linter.py` (신규)
 
 ---
 
@@ -80,6 +83,7 @@ Strategy OS 경로의 어떤 실패도 파이프라인을 막지 않는다.
 - 파일 손상 / 누락 → `load_strategy_os()` 가 default 반환
 - 검증 실패 → `POST /control/strategy-os` 400, 기존 파일 무변화
 - orchestrator advisory 실패 → `[STRATEGY_OS_ADVISORY_SKIP] ...` 로그 1줄 + 빈 블록
+- post_linter 실패 → `[post_linter] 실패 (무시): ...` 로그 + `labels={}` 로 sidecar 저장 (기존 sidecar 필드 보존)
 
 **Kill switch (코드 revert 불필요):**
 ```bash
@@ -110,8 +114,9 @@ Phase C 배포 후 운영자가 관찰 중인 포인트:
 ## 7. 배포 (CLAUDE.md 원칙 그대로)
 
 ```bash
-deploy-x strategy-os-phase-bplus-ux        # UX 개편 배포 (예정)
-deploy-x strategy-os-phase-c-advisory      # Phase C 로 롤백
+deploy-x post-linter-labels                # UX + 한국어 Pack + Post Linter 전부 (예정)
+deploy-x strategy-os-phase-bplus-ux        # Post Linter 제외, UX + 한국어까지
+deploy-x strategy-os-phase-c-advisory      # Phase C 로 롤백 (현재 배포선)
 deploy-x strategy-os-phase-b-edit          # advisory 끔, 편집 UI 까지만
 deploy-x strategy-os-phase-a-v2            # 읽기 전용까지만
 ```
@@ -129,10 +134,11 @@ deploy-x strategy-os-phase-a-v2            # 읽기 전용까지만
 repo clone/pull 직후 다음 순서로 하면 끝:
 
 ```bash
-cat HANDOFF.md                    # 이 파일
-git log --oneline -10             # 최근 커밋
-git branch -a | grep strategy-os  # 스택 확인
-pytest tests/test_strategy_os*.py -v   # 38/38 PASS 확인
+cat HANDOFF.md                            # 이 파일
+git log --oneline -10                      # 최근 커밋
+git branch -a | grep -E 'strategy-os|post-linter'   # 스택 확인
+pytest tests/test_strategy_os*.py tests/test_post_linter.py -v
+# → strategy_os 38 + post_linter 30 = 68/68 PASS
 ```
 
 알려진 pre-existing 실패 (Strategy OS 와 무관, 별도 task):
