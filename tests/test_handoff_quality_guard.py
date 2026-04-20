@@ -365,3 +365,49 @@ def test_draft_1388_format_handoff_starts_with_warning():
     out = format_handoff(sp, ap, "draft 본문")
     assert out.startswith("## ⚠️ 재료 품질 경고")
     assert "**BLOCK_RECOMMENDED**" in out
+
+
+# ── 9. Phase 3b integration: heuristic_en_blocked placeholder 연동 ──
+
+def test_phase3b_heuristic_en_blocked_pack_triggers_high_medium_only():
+    """Phase 3b: _heuristic_angle_pack 의 placeholder 출력을 guard 가 감지.
+
+    기대 동작:
+      - detect_angle_pack_heuristic 가 winner_angle.reason 의 "heuristic fallback"
+        substring 매칭으로 HIGH flag 반환
+      - detect_english_residue 는 source_pack 의 [en] 프리픽스 korea_angle 로
+        MEDIUM flag 반환
+      - HIGH 1 + MEDIUM 1 → high_count < HIGH_FLAG_BLOCK_THRESHOLD(=2) 이므로
+        block_recommended=False (Phase 3b 의도된 결과)
+    """
+    # Phase 3b 가 상류에서 실제 생성할 source_pack 형태
+    source_pack = {
+        # confirmed_facts 는 [unverified] 태그로 최소 2건 이상 채워져 facts_empty 회피
+        "confirmed_facts": [
+            "[unverified] 일본 방위성 2026-04-20 관련 브리핑",
+            "[unverified] Mitsubishi Heavy Industries 수주 공시",
+        ],
+        "concept_translation": "Mogami: 호주 SEA3000 사업 낙찰 일본 호위함",
+        # korea_angle 영어 → [en] 프리픽스 (> 0.3 임계 기준 감지)
+        "core_tension": "[en] Australia picks Japan Mogami over Germany TKMS MEKO A-200",
+        # angle_pack 은 영어 conflicts 로 인해 heuristic_en_blocked 경로로 빠진 상태
+        "angle_pack": {
+            "winner_angle": {
+                "angle": "[angle 재작성 필요 - 영어 source 감지]",
+                "score": 0,
+                "reason": "heuristic fallback blocked (english source detected)",
+            },
+            "method": "heuristic_en_blocked",
+        },
+    }
+    result = run_quality_guard(source_pack)
+    ids = sorted(f["flag_id"] for f in result["flags"])
+    assert "angle_heuristic" in ids
+    assert "english_residue" in ids
+    # facts_empty 는 감지되지 않아야 함 — [unverified] 태그 항목이 실제 fact 로 카운트
+    assert "facts_empty" not in ids
+    # HIGH 1 + MEDIUM 1 상태
+    assert result["high_count"] == 1
+    assert result["medium_count"] >= 1
+    assert result["block_recommended"] is False
+    assert "**BLOCK_RECOMMENDED**" not in result["rendered_warning_block"]

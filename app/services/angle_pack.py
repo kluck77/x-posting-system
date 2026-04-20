@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -36,6 +37,22 @@ import httpx
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Phase 3b — 상류 완화 정책 상수 (source_pack.py 와 동일값 유지).
+# 상류 느슨 / 하류 handoff_quality_guard(=0.3) 엄격의 2단 필터.
+ENGLISH_RATIO_THRESHOLD_SOURCE = 0.4
+
+_ALPHA_ONLY_RE = re.compile(r"[A-Za-z]")
+_WORD_ONLY_RE = re.compile(r"[\w가-힣]")
+
+
+def _english_ratio(text: str) -> float:
+    """ASCII 알파벳 / (공백·구두점 제외 실제 문자) 비율."""
+    if not isinstance(text, str) or not text:
+        return 0.0
+    alpha = len(_ALPHA_ONLY_RE.findall(text))
+    total = len(_WORD_ONLY_RE.findall(text))
+    return (alpha / total) if total else 0.0
 
 ANGLE_PACK_KEYS: tuple[str, ...] = (
     "core_tension",
@@ -170,11 +187,26 @@ def _heuristic_angle_pack(source_pack: dict) -> dict:
     if not options:
         options.append({"angle": "Status note", "hook": "No strong angle.", "risk": "low"})
 
-    winner = {
-        "angle": options[0]["angle"],
-        "score": 50,
-        "reason": "heuristic fallback (no Gemini call)",
-    }
+    # Phase 3b: options[0] 의 angle 이 영어 비율 > 0.4 면 winner 를 placeholder
+    # 로 대체. source_pack 의 영어 원문이 그대로 angle 로 통과하는 경로 차단.
+    top_angle_text = str(options[0]["angle"]) if options else ""
+    english_blocked = _english_ratio(top_angle_text) > ENGLISH_RATIO_THRESHOLD_SOURCE
+    if english_blocked:
+        winner = {
+            "angle": "[angle 재작성 필요 - 영어 source 감지]",
+            "score": 0,
+            # Phase 1.5a detect_angle_pack_heuristic 의 winner_angle.reason
+            # substring 매칭 ("heuristic" or "fallback") 조건을 만족해야 한다.
+            "reason": "heuristic fallback blocked (english source detected)",
+        }
+        method_value = "heuristic_en_blocked"
+    else:
+        winner = {
+            "angle": options[0]["angle"],
+            "score": 50,
+            "reason": "heuristic fallback (no Gemini call)",
+        }
+        method_value = "heuristic"
 
     follow_reason = (
         str(watch[0])[:160] if watch else "Korea-origin signal with follow-up coming."
@@ -215,6 +247,10 @@ def _heuristic_angle_pack(source_pack: dict) -> dict:
         "readability_risk": readability_risk,
         "share_trigger":   share_trigger[:200],
         "scan_pattern":    scan_pattern[:200],
+        # Phase 3b: top-level method 필드 명시.
+        # "gemini" | "heuristic" | "heuristic_en_blocked" 세 값.
+        # handoff_quality_guard.detect_angle_pack_heuristic 가 이 필드를 우선 체크.
+        "method":          method_value,
     }
 
 
@@ -432,6 +468,9 @@ async def build_angle_pack(source_pack: dict, ai_team=None) -> dict:
     try:
         raw = await _call_gemini_angle(source_pack)
         pack = _normalize_angle_pack(raw, source_pack)
+        # Phase 3b: Gemini 성공 경로에서도 method 를 명시적으로 세팅.
+        # _heuristic_angle_pack 은 자체 경로에서 method 를 넣으므로 여기선 gemini 만.
+        pack["method"] = "gemini"
     except Exception as e:
         safe_msg = str(e)
         if settings.gemini_api_key:

@@ -68,6 +68,26 @@ _ORG_HINTS = (
 _EVIDENCE_MAX = 5
 _EVIDENCE_ITEM_LEN = 240
 
+# Phase 3b — 상류 완화 정책 상수
+# 상류(source_pack) 는 느슨하게, 하류(handoff_quality_guard) 는 0.30 으로 엄격.
+# 2단 필터 구조. 임계치 변경은 별도 논의.
+ENGLISH_RATIO_THRESHOLD_SOURCE = 0.4
+
+_ALPHA_ONLY_RE = re.compile(r"[A-Za-z]")
+_WORD_ONLY_RE = re.compile(r"[\w가-힣]")
+
+
+def _english_ratio(text: str) -> float:
+    """ASCII 알파벳 / (공백·구두점 제외 실제 문자) 비율.
+
+    비교 대상 필드가 한국어인지 영어인지 판정. handoff_quality_guard 의
+    동일 로직과 정렬 (임계치만 다름)."""
+    if not isinstance(text, str) or not text:
+        return 0.0
+    alpha = len(_ALPHA_ONLY_RE.findall(text))
+    total = len(_WORD_ONLY_RE.findall(text))
+    return (alpha / total) if total else 0.0
+
 
 def _safe_list(x: Any) -> list[str]:
     if not x:
@@ -202,9 +222,18 @@ def build_source_pack(
     실패를 raise 하지 않는다. 누락된 입력은 빈 값으로 채운다.
     """
     # --- confirmed_facts ---
+    # Phase 3b: factcheck.verified 여부와 무관하게 sources 통과.
+    # verified=False 면 [unverified] 태그를 붙여 하류 Grok Captain 이
+    # 신뢰도 조정 가능하게 한다 (완전 탈락 대신 태그 부여).
     confirmed: list[str] = []
-    if factcheck and getattr(factcheck, "verified", False):
-        confirmed.extend(_safe_list(getattr(factcheck, "sources", None)))
+    if factcheck:
+        fc_verified = bool(getattr(factcheck, "verified", False))
+        fc_sources = _safe_list(getattr(factcheck, "sources", None))
+        for s in fc_sources:
+            if fc_verified:
+                confirmed.append(s)
+            else:
+                confirmed.append(f"[unverified] {s}")
     if research and getattr(research, "key_facts", None):
         # research.fact_labels 에서 confirms_common_narrative 또는 challenges_assumption 으로
         # 태깅된 팩트를 우선 confirmed 로 간주 (둘 다 "실재" 팩트).
@@ -218,6 +247,16 @@ def build_source_pack(
                 confirmed.append(f"{fact_s} [{label}]")
             else:
                 confirmed.append(fact_s)
+
+    # Phase 3b 최종 방어선: 위 두 경로 모두 비었고 research.summary 가 있으면
+    # summary 자체를 confirmed[0] 으로 fallback. 영어 비율 > 0.4 면 [en] 프리픽스.
+    if not confirmed and research:
+        fallback_summary = _safe_str(getattr(research, "summary", ""), 300)
+        if fallback_summary:
+            if _english_ratio(fallback_summary) > ENGLISH_RATIO_THRESHOLD_SOURCE:
+                confirmed.append(f"[en] {fallback_summary}")
+            else:
+                confirmed.append(fallback_summary)
 
     # --- conflicts_or_uncertainty ---
     conflicts: list[str] = []
@@ -240,7 +279,12 @@ def build_source_pack(
         # (ResearchResult 는 summary, sources, interpretation_gaps 만 갖고 있다)
         summary = _safe_str(getattr(research, "summary", ""), 800)
         if summary:
-            korea_angle.append(summary)
+            # Phase 3b: 영어 비율 > 0.4 면 [en] 프리픽스. 자동 번역은 하지 않는다.
+            # 하류 handoff_quality_guard 의 english_residue 감지(임계 0.3)가 발동하도록.
+            if _english_ratio(summary) > ENGLISH_RATIO_THRESHOLD_SOURCE:
+                korea_angle.append(f"[en] {summary}")
+            else:
+                korea_angle.append(summary)
         # interpretation_gaps 중 "Reuters/Bloomberg/global/foreign" 키워드가 있으면 global_angle 로.
         gaps = getattr(research, "interpretation_gaps", None) or []
         for gap in gaps[:6]:
