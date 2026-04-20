@@ -76,6 +76,93 @@ def test_heuristic_fallback_detected_via_winner_source():
     assert flag["severity"] == "HIGH"
 
 
+# ── 2a. Phase 1.5a: winner_angle.reason 경로 (실 빌더 저장 위치) ───
+
+def test_heuristic_detected_via_winner_angle_reason():
+    """angle_pack.winner_angle.reason 에 heuristic 마커 있으면 HIGH flag 반환.
+
+    _heuristic_angle_pack() 빌더가 실제 저장하는 위치 (angle_pack.py:173-177).
+    다른 heuristic 단서는 모두 제거하고 reason 필드만으로 감지 확인.
+    """
+    p = _clean_pack()
+    # Gemini 정상 경로 흔적 제거
+    p["angle_pack"]["winner_angle"].pop("source", None)
+    p["angle_pack"].pop("method", None)
+    p["angle_pack"].pop("editorial_goal", None)
+    # reason 만 설정
+    p["angle_pack"]["winner_angle"]["reason"] = "heuristic fallback (no Gemini call)"
+    flag = detect_angle_pack_heuristic(p)
+    assert flag is not None
+    assert flag["flag_id"] == "angle_heuristic"
+    assert flag["severity"] == "HIGH"
+    assert "winner_angle.reason" in flag["evidence"]
+
+
+def test_heuristic_detected_via_winner_angle_reason_case_insensitive():
+    """매칭은 대소문자 무시."""
+    p = _clean_pack()
+    p["angle_pack"]["winner_angle"]["reason"] = "HEURISTIC FALLBACK — manual override"
+    flag = detect_angle_pack_heuristic(p)
+    assert flag is not None
+    assert flag["severity"] == "HIGH"
+
+
+def test_heuristic_detected_with_real_builder_output():
+    """실 _heuristic_angle_pack() 빌더 출력에 대해 감지 함수가 정상 작동.
+
+    향후 빌더 출력 구조가 변경되어도 감지 로직이 실 데이터와 동기화돼
+    있는지 지속 검증. fixture 복붙이 아니라 실제 빌더 함수를 호출해서
+    그 출력을 source_pack.angle_pack 에 주입한다.
+    """
+    from app.services.angle_pack import _heuristic_angle_pack
+    # 빌더가 비어있는 source_pack 에서도 최소 winner_angle 을 만드는지 확인
+    # 실패 케이스 대비 일반적인 conflict 하나 공급.
+    source_pack = {
+        "confirmed_facts": [],
+        "conflicts_or_uncertainty": ["한국은행 금리 경로 불확실"],
+        "concept_translation": "",
+    }
+    built_angle_pack = _heuristic_angle_pack(source_pack)
+    # 빌더 출력이 dict 이고 winner_angle.reason 에 fallback 마커가 있어야 함
+    assert isinstance(built_angle_pack, dict)
+    wa = built_angle_pack.get("winner_angle")
+    assert isinstance(wa, dict)
+    assert "reason" in wa
+    assert "heuristic" in wa["reason"].lower() or "fallback" in wa["reason"].lower(), (
+        "빌더 출력이 heuristic 마커를 reason 필드에 넣지 않음 — "
+        "_heuristic_angle_pack() 구현이 바뀌었다면 감지 함수도 업데이트 필요"
+    )
+    # source_pack 에 angle_pack 주입 후 감지 호출
+    guard_input = dict(source_pack)
+    guard_input["angle_pack"] = built_angle_pack
+    flag = detect_angle_pack_heuristic(guard_input)
+    assert flag is not None
+    assert flag["flag_id"] == "angle_heuristic"
+    assert flag["severity"] == "HIGH"
+
+
+def test_heuristic_detected_via_legacy_paths():
+    """기존 경로(method, winner_angle.source, editorial_goal) 만 있어도 감지 유지.
+
+    Phase 1.5a 에서 winner_angle.reason 을 추가했지만 legacy 3개 경로도
+    여전히 단독으로 동작해야 한다 (회귀 방지).
+    """
+    # method 단독
+    p = _clean_pack()
+    p["angle_pack"]["method"] = "fallback"
+    assert detect_angle_pack_heuristic(p) is not None
+
+    # winner_angle.source 단독
+    p = _clean_pack()
+    p["angle_pack"]["winner_angle"]["source"] = "heuristic"
+    assert detect_angle_pack_heuristic(p) is not None
+
+    # editorial_goal 단독
+    p = _clean_pack()
+    p["angle_pack"]["editorial_goal"] = "heuristic fallback (no Gemini call)"
+    assert detect_angle_pack_heuristic(p) is not None
+
+
 # ── 3. confirmed_facts 비어있음 ──────────────────────────────────────
 
 def test_empty_confirmed_facts_detected():
@@ -217,11 +304,15 @@ def test_render_skips_block_recommended_when_false():
 def _draft_1388_pack():
     """실제 운영자가 보여준 draft 1388 의 핸드오프 재료 재구성.
 
+    Phase 1.5a 기준: 실 `_heuristic_angle_pack()` 빌더 출력과 동일 구조.
+    editorial_goal 필드는 실 빌더가 생성하지 않으므로 제거하고,
+    fallback 마커는 winner_angle.reason 에 박는다 (angle_pack.py:173-177).
+
     증거 4종이 모두 포함된 케이스:
-      - angle_heuristic (editorial_goal: "heuristic fallback (no Gemini call)")
-      - facts_empty (메타 지시문만)
-      - english_residue (core_tension 영어)
-      - concept_translation_misuse (200자+ 기사 요약)
+      - angle_heuristic           HIGH   (winner_angle.reason 에 "heuristic fallback")
+      - facts_empty               HIGH   (메타 지시문만)
+      - english_residue           MEDIUM (core_tension 영어)
+      - concept_translation_misuse MEDIUM (200자+ 기사 요약)
     """
     return {
         "confirmed_facts": [
@@ -246,8 +337,9 @@ def _draft_1388_pack():
                     "한마디가 암호 화폐 ( 가상화폐 · 코인 ) 시장을 무섭게 달구고 있다. "
                     "그는 최근 팟캐스터 드와케시 파텔(Dwarkesh Patel)과의 인터뷰"
                 ),
+                "score": 50,
+                "reason": "heuristic fallback (no Gemini call)",
             },
-            "editorial_goal": "heuristic fallback (no Gemini call)",
         },
     }
 

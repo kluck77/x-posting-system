@@ -111,6 +111,20 @@ def detect_angle_pack_heuristic(source_pack: dict) -> Optional[QualityFlag]:
                     description="angle_pack: Gemini heuristic fallback → 각도 설계 부재",
                     evidence=f"winner_angle.source={src!r}",
                 )
+            # winner_angle.reason 체크 (Phase 1.5a — _heuristic_angle_pack() 실 저장 위치)
+            # app/services/angle_pack.py:173-177 의 빌더가 fallback 마커를
+            # "reason" 필드에 박는다. 대소문자 무시, "heuristic" 또는 "fallback"
+            # 둘 중 하나라도 포함되면 매치.
+            reason = wa.get("reason")
+            if isinstance(reason, str) and reason.strip():
+                low = reason.lower()
+                if ("heuristic" in low) or ("fallback" in low):
+                    return QualityFlag(
+                        flag_id="angle_heuristic",
+                        severity="HIGH",
+                        description="angle_pack: Gemini heuristic fallback → 각도 설계 부재",
+                        evidence=f"angle_pack.winner_angle.reason={reason[:80]!r}",
+                    )
         # edit_goal / editorial_goal 에 "heuristic fallback"
         for key in ("edit_goal", "editorial_goal"):
             v = ap.get(key)
