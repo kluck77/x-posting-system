@@ -382,21 +382,51 @@ def _build_account_tone_block(strategy_os: dict | None) -> list[str]:
 # 원칙: editorial_meta 가 None/비면 블록 없음 (회귀). salvageability 블록은
 # 맨 아래로 이동 (뱃지 1줄 → 다단 블록).
 
-def _build_why_push_block(editorial_meta: dict | None) -> list[str]:
+def _build_why_push_block(
+    editorial_meta: dict | None,
+    *,
+    angle_pack: dict | None = None,
+) -> list[str]:
     """## 🔥 왜 이 글을 세게 써야 하는가 — editorial_goal + core_tension +
-    share_trigger + RT 동기/정체성 신호. Phase 4 의 'RT 이유' 블록 흡수."""
+    share_trigger + RT 동기/정체성 신호.
+
+    Phase 5.1: spec 준수를 위해 core_tension / share_trigger 를 섹션 2 '핵심
+    각도' 와 중복으로 여기에도 재노출한다. 섹션 2 는 구조 정보, 섹션 6 은
+    편집장 지시 톤 — 편집장이 지시를 한눈에 받도록.
+    """
     em = editorial_meta if isinstance(editorial_meta, dict) else {}
+    ap = angle_pack if isinstance(angle_pack, dict) else {}
+
     goal = _sanitize_ko(em.get("editorial_goal", ""), label="편집 목표", fallback="")
     if goal.endswith("한국어 압축 필요"):
         goal = ""
+
+    # Phase 5.1: 섹션 6 에 core_tension / share_trigger 재노출 (spec 요구)
+    ct = _sanitize_ko(_safe(ap.get("core_tension"), 240), label="핵심 긴장", fallback="")
+    if ct.endswith("한국어 압축 필요"):
+        ct = ""
+    st = _sanitize_ko(
+        _strip_urls(_safe(ap.get("share_trigger"), 200)),
+        label="공유 트리거",
+        fallback="",
+    )
+    if st.endswith("한국어 압축 필요"):
+        st = ""
+
     rt_type = em.get("rt_motive_type") if isinstance(em.get("rt_motive_type"), str) else ""
     identity = _clip_line(em.get("identity_signal", ""), 120)
-    identity = _sanitize_ko(identity, label="정체성 시그널", fallback="") if identity else ""
-    if identity.endswith("한국어 압축 필요"):
-        identity = ""
+    if identity:
+        identity = _sanitize_ko(identity, label="정체성 시그널", fallback="")
+        if identity.endswith("한국어 압축 필요"):
+            identity = ""
+
     lines: list[str] = []
     if goal:
         lines.append(f"- 편집 목표: {_clip_line(goal, 120)}")
+    if ct:
+        lines.append(f"- 핵심 긴장: {_clip_line(ct, 100)}")
+    if st:
+        lines.append(f"- 공유 트리거: {_clip_line(st, 100)}")
     if rt_type and rt_type != "unclear":
         lines.append(f"- RT 동기: {rt_type}")
     if identity:
@@ -650,7 +680,7 @@ def format_handoff(
     # Phase 5: editorial_meta 기반 편집장 지시서 블록들.
     # 순서: 왜 세게 → 평평한 이유 → 반드시 살릴 → 우리 계정 편집 우선순위 → 살릴 가치
     phase5_blocks = [
-        _build_why_push_block(editorial_meta),
+        _build_why_push_block(editorial_meta, angle_pack=ap),
         _build_why_flat_block(editorial_meta),
         _build_must_keep_block(editorial_meta),
         _build_account_tone_block(strategy_os),

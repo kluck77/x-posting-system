@@ -261,6 +261,45 @@ def test_format_handoff_phase5_block_headers_present():
     assert "## 🎯 살릴 가치" in out
 
 
+# ─── 9. Phase 5.1: 🔥 블록에 core_tension / share_trigger 재노출 ──────
+
+def test_why_push_block_includes_tension_and_trigger():
+    """spec 섹션 6: editorial_goal + core_tension + share_trigger 모두
+    🔥 블록에 한국어 1줄씩 표시."""
+    ap = _min_ap(
+        core_tension="중동 변수 → 한국 비대칭",
+        share_trigger="지금 봐야 할 포인트: 보험료+스팟",
+    )
+    out = format_handoff(_min_sp(), ap, "본문", editorial_meta=_rich_meta())
+    # 🔥 블록 추출
+    why_idx = out.index("## 🔥 왜 이 글을 세게 써야 하는가")
+    flat_idx = out.index("## 🏴") if "## 🏴" in out else len(out)
+    why_block = out[why_idx:flat_idx]
+    assert "- 편집 목표:" in why_block
+    assert "- 핵심 긴장:" in why_block
+    assert "중동 변수" in why_block
+    assert "- 공유 트리거:" in why_block
+    assert "보험료+스팟" in why_block
+
+
+def test_why_push_block_skips_english_tension_and_trigger():
+    """영어 dominant core_tension / share_trigger 는 placeholder 로 전환되어
+    해당 줄 자체가 생략됨 (한글 0 + 영어 5+ → sanitize 버림)."""
+    ap = _min_ap(
+        core_tension="Uncertainty on record: Nvidia comment fuels rally",
+        share_trigger="Global markets recovered fast while Korea lagged",
+    )
+    out = format_handoff(_min_sp(), ap, "본문", editorial_meta=_rich_meta())
+    why_idx = out.index("## 🔥 왜 이 글을 세게 써야 하는가")
+    flat_idx = out.index("## 🏴") if "## 🏴" in out else len(out)
+    why_block = out[why_idx:flat_idx]
+    # 영어 문장이 그대로 나오면 안 됨
+    assert "Uncertainty on record" not in why_block
+    assert "Global markets recovered" not in why_block
+    # 편집 목표 / RT 동기 같은 다른 줄은 있을 수 있음 (rich_meta 기반)
+    assert "- 편집 목표:" in why_block
+
+
 def test_format_handoff_salvageability_is_last_block():
     out = format_handoff(_min_sp(), _min_ap(), "본문", editorial_meta=_rich_meta())
     assert "## 🎯 살릴 가치" in out
