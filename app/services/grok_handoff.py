@@ -22,7 +22,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_HANDOFF_MAX = 1800
+_HANDOFF_MAX = 1800         # 본문(초안) 버짓 계산 기준 — 고정 5블록 + 선택 2블록 가정
+_HANDOFF_HARD_MAX = 2800    # 최종 하드 상한 (새 compact 편집 신호 3블록 포함)
 _BODY_MAX = 900
 _BLOCK_LINE_MAX = 160
 _URL_RE = re.compile(r"https?://\S+")
@@ -185,7 +186,125 @@ def _truncate_to(text: str, limit: int) -> str:
     return text[: limit - 1].rstrip() + "…"
 
 
-def format_handoff(source_pack: dict, angle_pack: dict, final_body: str) -> str:
+# ── 편집 신호 (editorial signals) — compact 블록 ───────────────────────────
+# 원칙: 정보 추가 아님, "편집 신호" 만. 값 비면 블록 전체 생략. 1줄 중심.
+# 주의: core_tension / share_trigger 는 기존 `## 이 글의 핵심 각도` 블록에
+#       이미 포함되므로 중복 금지 — 추가 신호는 editorial_goal 1줄뿐.
+
+def _clip_line(s: Any, n: int) -> str:
+    s = str(s or "").strip()
+    if len(s) <= n:
+        return s
+    return s[: n - 1].rstrip() + "…"
+
+
+def _derive_editorial_goal(ap: dict) -> str:
+    """reason 이 있으면 그것, 없으면 core_tension + share_trigger 간이 조합.
+    정보 추가 없이 기존 필드 재배치. 없으면 "" 리턴."""
+    if not isinstance(ap, dict):
+        return ""
+    wa = ap.get("winner_angle") if isinstance(ap.get("winner_angle"), dict) else {}
+    reason = _clip_line(wa.get("reason") if isinstance(wa, dict) else "", 80)
+    if reason:
+        return reason
+    ct = _clip_line(ap.get("core_tension"), 40)
+    st = _clip_line(ap.get("share_trigger"), 40)
+    if ct and st:
+        return _clip_line(f"{ct} → {st}", 80)
+    return ct or st or ""
+
+
+def _derive_weak_hook(hook: str) -> bool:
+    h = (hook or "").strip()
+    if len(h) < 10:
+        return True
+    has_num = bool(re.search(r"\d", h))
+    has_caps = bool(re.search(r"[A-Z]{2,}", h))
+    has_kr_entity = bool(
+        re.search(r"(정부|은행|금융위|공정위|국회|총리실|산업부|기재부|검찰|경찰|삼성|현대|SK|LG|네이버|카카오)", h)
+    )
+    if not has_num and not has_caps and not has_kr_entity:
+        return True
+    return False
+
+
+def _derive_too_obvious(body: str) -> bool:
+    b = (body or "").strip()
+    if len(b) < 100:
+        return False
+    has_num = bool(re.search(r"\d", b))
+    return not has_num
+
+
+_WEAKNESS_LABELS = {
+    "weak_hook":       "훅이 짧거나 숫자/고유명사 없음 → 긴장선 올릴 것",
+    "too_obvious":     "표면 인과만 — 숨은 변수/비대칭 노출 드러낼 것",
+    "missing_context": "링크 없이 읽는 독자에게 맥락 부족",
+    "weak_ending":     "엔딩 약함 — 결론 진술 또는 구체 관전 포인트로",
+    "generic_cta":     "흔한 CTA 감지 — 제거 또는 구체 액션으로",
+    "ai_tone":         "금지 표현 감지 — 다듬을 것",
+}
+
+
+def _build_weakness_block(hook: str, body: str, linter_labels: dict | None) -> list[str]:
+    """## 시스템이 감지한 약한 지점 — True 만 한국어 1줄씩. 전부 False 면 [].
+
+    linter_labels 가 None (post_linter 경로 자체를 안 탄 경우) 이면 블록 전체 생략.
+    빈 dict 이면 post_linter 가 fail-open 된 것으로 보고 파생 플래그만 돌림.
+    """
+    if linter_labels is None:
+        return []
+    lab = linter_labels if isinstance(linter_labels, dict) else {}
+    flags = lab.get("flags") if isinstance(lab.get("flags"), dict) else {}
+    detected: list[str] = []
+    if _derive_weak_hook(hook):
+        detected.append("weak_hook")
+    if _derive_too_obvious(body):
+        detected.append("too_obvious")
+    if flags.get("missing_context_flag"):
+        detected.append("missing_context")
+    if flags.get("weak_ending_flag"):
+        detected.append("weak_ending")
+    if flags.get("generic_cta_flag"):
+        detected.append("generic_cta")
+    if flags.get("ai_tone_flag"):
+        detected.append("ai_tone")
+    if not detected:
+        return []
+    lines = [f"- {k}: {_WEAKNESS_LABELS[k]}" for k in detected]
+    return ["## 시스템이 감지한 약한 지점", *lines]
+
+
+def _build_account_tone_block(strategy_os: dict | None) -> list[str]:
+    """## 계정 톤 (참고) — positioning.one_liner 1줄 + 훅 2개 + 금지 3개. 비면 []."""
+    so = strategy_os if isinstance(strategy_os, dict) else {}
+    pos = so.get("positioning") if isinstance(so.get("positioning"), dict) else {}
+    one = _clip_line(pos.get("one_liner") if isinstance(pos, dict) else "", 160)
+    hooks_raw = so.get("hook_library") if isinstance(so.get("hook_library"), list) else []
+    banned_raw = so.get("banned_style") if isinstance(so.get("banned_style"), list) else []
+    hooks = [str(x).strip() for x in hooks_raw if isinstance(x, str) and x.strip()][:2]
+    banned = [str(x).strip() for x in banned_raw if isinstance(x, str) and x.strip()][:3]
+    lines: list[str] = []
+    if one:
+        lines.append(f"- 정의: {one}")
+    if hooks:
+        lines.append("- 훅 참고: " + " | ".join(_clip_line(h, 60) for h in hooks))
+    if banned:
+        lines.append("- 금지 표현: " + ", ".join(_clip_line(b, 40) for b in banned))
+    if not lines:
+        return []
+    return ["## 계정 톤 (참고)", *lines]
+
+
+def format_handoff(
+    source_pack: dict,
+    angle_pack: dict,
+    final_body: str,
+    *,
+    final_hook: str | None = None,
+    strategy_os: dict | None = None,
+    linter_labels: dict | None = None,
+) -> str:
     """
     Grok (x.ai) 편집용 handoff. 복사-붙여넣기로 바로 쓰는 **편집 카드**.
 
@@ -200,7 +319,12 @@ def format_handoff(source_pack: dict, angle_pack: dict, final_body: str) -> str:
       ## 어려운 개념 한 줄 번역
       ## 핵심 근거 2~3개
 
-    상한: 1800자.
+    편집 신호 블록 (optional 인자 공급 시, 값 비면 생략):
+      ## 편집 신호             — 핵심 긴장 / 공유 트리거 / 편집 목표
+      ## 시스템이 감지한 약한 지점  — 탐지된 weakness 만
+      ## 계정 톤 (참고)         — Strategy OS compact
+
+    상한: 1800자(body 버짓 계산) / 2800자(최종 하드 상한, 새 블록 포함).
     금지: URL 덤프 / 소스 리스트 / 긴 영어 분석 / >10 bullet / "research report" 톤.
     """
     sp = source_pack if isinstance(source_pack, dict) else {}
@@ -243,6 +367,10 @@ def format_handoff(source_pack: dict, angle_pack: dict, final_body: str) -> str:
     section_angle.append(f"- 가독성 리스크: {readability_risk}")
     if share_trigger:
         section_angle.append(f"- 공유 트리거: {share_trigger}")
+    # 편집 목표 — Grok 편집장용 1줄 지시문. 있을 때만 append.
+    _goal = _derive_editorial_goal(ap)
+    if _goal:
+        section_angle.append(f"- 편집 목표: {_goal}")
 
     # ── ## 절대 바꾸지 말 것 ────────────────────────────────
     section_lock: list[str] = ["## 절대 바꾸지 말 것"]
@@ -315,13 +443,24 @@ def format_handoff(source_pack: dict, angle_pack: dict, final_body: str) -> str:
     for opt in optional_sections[:2]:
         chunks.append("\n".join(opt))
 
+    # 편집 신호 블록 2개 (있을 때만). Grok 이 본문→각도→규칙을 본 뒤 읽도록 뒤쪽에.
+    # (편집 목표 1줄은 위 `## 이 글의 핵심 각도` 블록에 이미 append 됨 — 중복 방지.)
+    editorial_blocks = [
+        _build_weakness_block(final_hook or "", body_raw, linter_labels),
+        _build_account_tone_block(strategy_os),
+    ]
+    for eb in editorial_blocks:
+        if eb:
+            chunks.append("\n".join(eb))
+
     out = "\n\n".join(chunks)
 
-    # 길이 제한 — 선택 블록부터 잘라낸다
-    while len(out) > _HANDOFF_MAX and len(chunks) > 5:
+    # 길이 제한 — 뒤(선택 블록 + 편집 신호 블록)부터 잘라낸다.
+    # 고정 5블록은 유지 (len(chunks) > 5 가드).
+    while len(out) > _HANDOFF_HARD_MAX and len(chunks) > 5:
         chunks.pop()
         out = "\n\n".join(chunks)
 
-    if len(out) > _HANDOFF_MAX:
-        out = _truncate_to(out, _HANDOFF_MAX)
+    if len(out) > _HANDOFF_HARD_MAX:
+        out = _truncate_to(out, _HANDOFF_HARD_MAX)
     return out

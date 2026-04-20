@@ -6,10 +6,10 @@
 
 ## 1. 지금의 trunk (활성 작업선)
 
-**활성 브랜치:** `post-linter-labels`
+**활성 브랜치:** `grok-handoff-signals`
 **서버 배포 브랜치:** `strategy-os-phase-c-advisory`
 **마지막 서버 배포 시점:** Phase C (2026-04-19)
-**다음 배포 예정 브랜치:** `post-linter-labels` (UX + 한국어 Pack 규칙 + Post Linter 전부 포함)
+**다음 배포 예정 브랜치:** `grok-handoff-signals` (UX + 한국어 Pack + Post Linter + Grok 핸드오프 편집 신호 전부 포함)
 
 운영선(운영자가 참조하는 실제 최신)은 `origin/claude/review-handoff-document-UoyuK`
 이지만, 거기로는 **직접 커밋하지 않는다.** 모든 작업은 위 활성 브랜치에서 분기.
@@ -24,7 +24,8 @@ origin/claude/review-handoff-document-UoyuK  9803612   # 실제 운영 trunk
        └─ strategy-os-phase-b-edit          5605e52   # A+B: JSON 인라인 편집
             └─ strategy-os-phase-c-advisory 2990a86   # A+B+C: orchestrator advisory inject
                  └─ strategy-os-phase-bplus-ux        # A+B+C + UX 개편 + grok-handoff 한국어
-                      └─ post-linter-labels           # 위 전부 + Post Linter(라벨러) ← 현재
+                      └─ post-linter-labels  3a21e1a  # 위 전부 + Post Linter(라벨러)
+                           └─ grok-handoff-signals    # 위 전부 + Grok 편집 신호(편집 목표+약한 지점+계정 톤) ← 현재
 ```
 
 **원칙:**
@@ -69,10 +70,10 @@ origin/claude/review-handoff-document-UoyuK  9803612   # 실제 운영 trunk
 - `app/services/strategy_os.py` (신규)
 - `app/services/post_linter.py` (신규 — 라벨러, 재작성 0)
 - `app/api/control_room.py` (import 1 + endpoint 2 추가)
-- `app/orchestrator.py` (advisory helper 1 + 주입 2지점 + post_linter 훅 1)
-- `app/services/grok_handoff.py` (출력 규칙 한국어로, 2줄)
+- `app/orchestrator.py` (advisory helper 1 + 주입 2지점 + post_linter 훅 1 + handoff 인자 전달)
+- `app/services/grok_handoff.py` (한국어 출력 규칙 + 편집 목표 1줄 + 약한 지점 블록 + 계정 톤 블록)
 - `static/dashboard.html` (탭 1개 + 버튼 1개 추가, UX 개편)
-- `tests/test_strategy_os.py`, `tests/test_strategy_os_advisory.py`, `tests/test_post_linter.py` (신규)
+- `tests/test_strategy_os.py`, `tests/test_strategy_os_advisory.py`, `tests/test_post_linter.py`, `tests/test_grok_handoff_signals.py` (신규)
 
 ---
 
@@ -114,7 +115,8 @@ Phase C 배포 후 운영자가 관찰 중인 포인트:
 ## 7. 배포 (CLAUDE.md 원칙 그대로)
 
 ```bash
-deploy-x post-linter-labels                # UX + 한국어 Pack + Post Linter 전부 (예정)
+deploy-x grok-handoff-signals              # 최신: UX + 한국어 Pack + Post Linter + Grok 편집 신호
+deploy-x post-linter-labels                # Grok 편집 신호 제외, 라벨러까지만
 deploy-x strategy-os-phase-bplus-ux        # Post Linter 제외, UX + 한국어까지
 deploy-x strategy-os-phase-c-advisory      # Phase C 로 롤백 (현재 배포선)
 deploy-x strategy-os-phase-b-edit          # advisory 끔, 편집 UI 까지만
@@ -136,9 +138,9 @@ repo clone/pull 직후 다음 순서로 하면 끝:
 ```bash
 cat HANDOFF.md                            # 이 파일
 git log --oneline -10                      # 최근 커밋
-git branch -a | grep -E 'strategy-os|post-linter'   # 스택 확인
-pytest tests/test_strategy_os*.py tests/test_post_linter.py -v
-# → strategy_os 38 + post_linter 30 = 68/68 PASS
+git branch -a | grep -E 'strategy-os|post-linter|grok-handoff'   # 스택 확인
+pytest tests/test_strategy_os*.py tests/test_post_linter.py tests/test_grok_handoff_signals.py -v
+# → strategy_os 38 + post_linter 30 + grok_handoff_signals 20 = 88/88 PASS
 ```
 
 알려진 pre-existing 실패 (Strategy OS 와 무관, 별도 task):

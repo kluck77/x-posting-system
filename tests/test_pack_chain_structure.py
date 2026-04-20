@@ -273,11 +273,14 @@ def test_angle_pack_normalize_story_spine_filters_bad_phases():
 # ─────────────────────────────────────────────────────────────
 
 def test_grok_handoff_length_cap():
+    from app.services.grok_handoff import _HANDOFF_HARD_MAX
     sp = _make_source_pack()
     ap = _heuristic_angle_pack(sp)
     body = "X" * 3000
     out = format_handoff(sp, ap, body)
-    assert len(out) <= 1800
+    # grok-handoff-signals phase 에서 편집 목표 1줄 + weakness/tone 블록
+    # 추가로 하드 상한이 _HANDOFF_HARD_MAX (2800) 으로 상향됨.
+    assert len(out) <= _HANDOFF_HARD_MAX
 
 
 def test_grok_handoff_has_5_required_blocks():
@@ -335,12 +338,13 @@ def test_grok_handoff_optional_evidence_block():
 
 def test_grok_handoff_drops_optional_blocks_when_oversized():
     """본문이 너무 길면 선택 블록부터 잘려야 한다."""
+    from app.services.grok_handoff import _HANDOFF_HARD_MAX
     sp = _make_source_pack()
     sp["concept_translation"] = "something"
     sp["evidence_pack"] = ["alpha", "beta", "gamma"]
     ap = _heuristic_angle_pack(sp)
     out = format_handoff(sp, ap, "X" * 1800)
-    assert len(out) <= 1800
+    assert len(out) <= _HANDOFF_HARD_MAX
     # 5 고정 블록은 반드시 남아야 한다
     for title in (
         "## 원문 초안",

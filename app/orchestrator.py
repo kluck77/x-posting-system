@@ -846,12 +846,7 @@ class Orchestrator:
         # Pack sidecar 저장 (pack chain 활성 시만, draft.id 확보 이후)
         if pack_chain_data:
             try:
-                _handoff_text = format_handoff(
-                    pack_chain_data["source_pack"],
-                    pack_chain_data["angle_pack"],
-                    review.body,
-                )
-                # Layer 2: Post Linter — 라벨만 생성 (재작성 0, fail-open)
+                # Layer 2: Post Linter 를 먼저 계산 (handoff 에 신호로 넣기 위함).
                 try:
                     from app.services.post_linter import run_post_linter
                     _labels = run_post_linter(
@@ -864,6 +859,21 @@ class Orchestrator:
                 except Exception as _lint_e:
                     logger.warning(f"[post_linter] 실패 (무시): {_lint_e}")
                     _labels = {}
+                # Layer 2: Strategy OS 도 편집 신호로 전달 (load 는 fail-open).
+                try:
+                    from app.services.strategy_os import load_strategy_os
+                    _so_for_handoff = load_strategy_os()
+                except Exception as _so_e:
+                    logger.warning(f"[strategy_os] handoff 전달용 로드 실패 (무시): {_so_e}")
+                    _so_for_handoff = None
+                _handoff_text = format_handoff(
+                    pack_chain_data["source_pack"],
+                    pack_chain_data["angle_pack"],
+                    review.body,
+                    final_hook=review.hook,
+                    strategy_os=_so_for_handoff,
+                    linter_labels=_labels,
+                )
                 save_pack(draft.id, {
                     "source":     pack_chain_data["source_pack"],
                     "angle":      pack_chain_data["angle_pack"],
