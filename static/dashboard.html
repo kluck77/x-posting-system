@@ -1650,6 +1650,82 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     #tab-crypto-intel .ci-empty{
       text-align:center;padding:24px 8px;color:var(--text-mut);font-size:13px;
     }
+
+    /* ── Phase 3: 상태 가시 피드백 ───────────────────────────────── */
+    /* 상단 배너 (4 상태: idle / loading / success / error) */
+    #tab-crypto-intel .ci-status{
+      display:flex;align-items:center;gap:8px;
+      font-size:12px;color:var(--text-sec);
+      padding:6px 2px;font-family:var(--font);
+    }
+    #tab-crypto-intel .ci-status .ci-dot{
+      display:inline-block;width:8px;height:8px;border-radius:50%;
+      background:var(--text-mut);flex-shrink:0;
+    }
+    #tab-crypto-intel .ci-status.state-idle .ci-dot   { background:var(--text-mut); }
+    #tab-crypto-intel .ci-status.state-loading .ci-dot{ background:var(--amber); animation:ci-pulse 1.2s ease-in-out infinite; }
+    #tab-crypto-intel .ci-status.state-success .ci-dot{ background:var(--green); }
+    #tab-crypto-intel .ci-status.state-error .ci-dot  { background:var(--red); }
+    #tab-crypto-intel .ci-status.state-success .ci-status-text{ color:var(--green); }
+    #tab-crypto-intel .ci-status.state-error .ci-status-text  { color:var(--red); }
+    #tab-crypto-intel .ci-status.state-loading .ci-status-text{ color:var(--amber); }
+
+    /* 회전 아이콘 (새로고침 버튼) */
+    #tab-crypto-intel .ci-spin{display:inline-block;will-change:transform;}
+    #tab-crypto-intel .ci-btn.is-busy .ci-spin{animation:ci-spin 1s linear infinite;}
+    #tab-crypto-intel .ci-btn.is-busy{opacity:.7;cursor:default;}
+
+    /* Skeleton 카드 (loading 중) */
+    #tab-crypto-intel .ci-skel{
+      display:grid;grid-template-columns:56px 1fr;gap:10px;
+      background:var(--bg-surface);border:1px solid var(--border-subtle);
+      border-radius:var(--r-lg);padding:12px;margin-bottom:10px;
+      animation:ci-pulse 1.2s ease-in-out infinite;
+    }
+    #tab-crypto-intel .ci-skel-score{
+      background:var(--bg-raised);border-radius:var(--r-md);min-height:56px;
+    }
+    #tab-crypto-intel .ci-skel-body{
+      display:flex;flex-direction:column;gap:8px;justify-content:center;
+    }
+    #tab-crypto-intel .ci-skel-line{
+      height:10px;border-radius:4px;
+      background:linear-gradient(90deg,
+        var(--bg-raised) 0%,
+        rgba(255,255,255,.06) 50%,
+        var(--bg-raised) 100%);
+      background-size:200% 100%;
+      animation:ci-shim 1.4s linear infinite;
+    }
+    #tab-crypto-intel .ci-skel-line.l-wide  { width:90%; }
+    #tab-crypto-intel .ci-skel-line.l-mid   { width:70%; }
+    #tab-crypto-intel .ci-skel-line.l-narrow{ width:45%; }
+
+    @keyframes ci-spin  { to { transform:rotate(360deg); } }
+    @keyframes ci-pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+    @keyframes ci-shim  { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+    /* Toast — bottom-nav 위 고정 pill */
+    #ci-toast{
+      position:fixed;left:50%;transform:translate(-50%,8px);
+      bottom:calc(var(--nav-h) + 12px + var(--safe-b));
+      background:var(--bg-surface);color:var(--text-pri);
+      border:1px solid var(--border-normal);border-radius:999px;
+      padding:10px 18px;font-size:13px;font-weight:500;
+      box-shadow:0 6px 20px rgba(0,0,0,.35);
+      opacity:0;pointer-events:none;z-index:60;
+      max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      transition:opacity .18s ease, transform .18s ease;
+    }
+    #ci-toast.is-visible{opacity:1;transform:translate(-50%,0);}
+    #ci-toast[data-kind="success"]{
+      background:var(--green-dim);color:var(--green);
+      border-color:rgba(45,212,191,.35);
+    }
+    #ci-toast[data-kind="error"]{
+      background:var(--red-dim);color:var(--red);
+      border-color:rgba(239,68,68,.35);
+    }
   </style>
 
   <div class="ci-toolbar">
@@ -1672,10 +1748,13 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       <option value="unsent">전송 전</option>
       <option value="sent">전송됨</option>
     </select>
-    <button id="ci-refresh" class="ci-btn" type="button">↻ 새로고침</button>
+    <button id="ci-refresh" class="ci-btn" type="button"><span class="ci-spin">↻</span> 새로고침</button>
     <button id="ci-collect" class="ci-btn" type="button">수집 실행</button>
   </div>
-  <div id="ci-status" class="ci-status">대기 중</div>
+  <div id="ci-status" class="ci-status state-idle">
+    <span class="ci-dot" aria-hidden="true"></span>
+    <span class="ci-status-text">대기 중</span>
+  </div>
   <div id="ci-list"></div>
 </section>
 
@@ -4242,6 +4321,50 @@ setInterval(loadPulseOverview,20000);
   let ciItems  = [];                 // 마지막 로드된 카드 캐시 (promote 후 부분 갱신용)
   const promotingIds = new Set();    // UI 버튼 중복 클릭 방지
 
+  // Phase 3 — 상태 가시 피드백 유틸 ────────────────────────────────────
+  let _idleTimer = null;
+  function setStatus(state, text){
+    const el = document.getElementById('ci-status');
+    if(!el) return;
+    el.classList.remove('state-idle','state-loading','state-success','state-error');
+    el.classList.add('state-' + (state || 'idle'));
+    const t = el.querySelector('.ci-status-text');
+    if(t) t.textContent = text || '';
+    if(_idleTimer){ clearTimeout(_idleTimer); _idleTimer = null; }
+    if(state === 'success'){
+      _idleTimer = setTimeout(() => setStatus('idle','대기 중'), 3000);
+    }
+  }
+  function setBusy(btnId, on){
+    const b = document.getElementById(btnId);
+    if(!b) return;
+    if(on){ b.classList.add('is-busy'); b.setAttribute('disabled','disabled'); }
+    else  { b.classList.remove('is-busy'); b.removeAttribute('disabled'); }
+  }
+  let _toastTimer = null;
+  function showToast(kind, text, ms){
+    const el = document.getElementById('ci-toast');
+    if(!el) return;
+    const t = el.querySelector('.ci-toast-text');
+    if(t) t.textContent = text || '';
+    el.setAttribute('data-kind', kind || 'info');
+    requestAnimationFrame(() => el.classList.add('is-visible'));
+    if(_toastTimer){ clearTimeout(_toastTimer); }
+    _toastTimer = setTimeout(() => el.classList.remove('is-visible'), ms || 3000);
+  }
+  function renderSkeleton(n){
+    const list = document.getElementById('ci-list');
+    if(!list) return;
+    const one = `<div class="ci-skel">
+      <div class="ci-skel-score"></div>
+      <div class="ci-skel-body">
+        <div class="ci-skel-line l-wide"></div>
+        <div class="ci-skel-line l-mid"></div>
+        <div class="ci-skel-line l-narrow"></div>
+      </div></div>`;
+    list.innerHTML = one.repeat(n || 3);
+  }
+
   function esc(s){
     return (s==null?'':String(s))
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -4315,15 +4438,19 @@ setInterval(loadPulseOverview,20000);
       if(list) list.innerHTML = ciItems.map(renderCard).join('');
     }
   }
-  async function ciLoad(){
-    const status = document.getElementById('ci-status');
+  async function ciLoad(opts){
+    opts = opts || {};
     const list   = document.getElementById('ci-list');
     const selCat = document.getElementById('ci-filter-category');
     const selSort= document.getElementById('ci-sort');
     const selSt  = document.getElementById('ci-status-filter');
-    if(!status||!list) return;
+    if(!list) return;
+    // 첫 진입 / 명시적 skeleton 요청 시에만 자리잡기. refresh 는 깜빡임 방지
+    // 위해 기존 카드 유지한 채 상단 배너만 loading.
+    if(opts.skeleton){ renderSkeleton(3); }
+    setBusy('ci-refresh', true);
+    setStatus('loading', '불러오는 중…');
     try{
-      status.textContent = '불러오는 중…';
       const qs = new URLSearchParams();
       if(selCat && selCat.value)  qs.set('category', selCat.value);
       if(selSort && selSort.value)qs.set('sort', selSort.value);
@@ -4338,47 +4465,56 @@ setInterval(loadPulseOverview,20000);
       } else {
         list.innerHTML = ciItems.map(renderCard).join('');
       }
-      status.textContent = ciItems.length + ' 건 · ' + (data.sort||'score');
+      setStatus('success', ciItems.length + ' 건 · ' + (data.sort||'score'));
     } catch(e){
-      status.textContent = '로드 실패: ' + (e && e.message ? e.message : e);
+      const msg = (e && e.message) ? e.message : String(e);
+      setStatus('error', '로드 실패: ' + msg);
+      showToast('error', '로드 실패: ' + msg);
       list.innerHTML = '';
+    } finally {
+      setBusy('ci-refresh', false);
     }
   }
   async function ciCollect(){
     const btn = document.getElementById('ci-collect');
-    const status = document.getElementById('ci-status');
     if(ciBusy) return;
     ciBusy = true;
-    if(btn) btn.setAttribute('disabled','disabled');
-    if(status) status.textContent = '수집 중… (수 초 소요 가능)';
+    const origLabel = btn ? btn.textContent : null;
+    if(btn){ btn.setAttribute('disabled','disabled'); btn.textContent = '⏳ 수집 중…'; }
+    setStatus('loading', '수집 중… (수 초 소요 가능)');
+    renderSkeleton(3);
     try{
       const res = await fetch(API+'/control/intel/collect', {method:'POST'});
       if(!res.ok) throw new Error('HTTP '+res.status);
       const s = await res.json();
-      if(status) status.textContent =
-        `수집 완료 — fetched=${s.fetched||0} new=${s.new||0} shortlisted=${s.shortlisted||0}`;
+      const summary = `수집 완료 · fetched=${s.fetched||0} new=${s.new||0} shortlist=${s.shortlisted||0}`;
+      setStatus('success', summary);
+      showToast('success', summary);
       await ciLoad();
     } catch(e){
-      if(status) status.textContent = '수집 실패: ' + (e && e.message ? e.message : e);
+      const msg = (e && e.message) ? e.message : String(e);
+      setStatus('error', '수집 실패: ' + msg);
+      showToast('error', '수집 실패: ' + msg);
     } finally {
       ciBusy = false;
-      if(btn) btn.removeAttribute('disabled');
+      if(btn){ btn.removeAttribute('disabled'); if(origLabel) btn.textContent = origLabel; }
     }
   }
   async function ciPromote(itemId){
     if(!itemId || promotingIds.has(itemId)) return;
     promotingIds.add(itemId);
     rerenderOne({id: itemId});
-    const status = document.getElementById('ci-status');
+    setStatus('loading', '텔레그램 초안 전송 중…');
     try{
       const res = await fetch(API+'/control/intel/items/'+itemId+'/promote', {method:'POST'});
       if(res.status === 409){
-        // 이미 sent — 서버에 기록된 상태로 갱신
         let dj = {};
         try{ dj = await res.json(); } catch(_){}
         const did = (dj && dj.detail && dj.detail.draft_id) || null;
         rerenderOne({id: itemId, promotion_status:'sent', promoted_draft_id: did});
-        if(status) status.textContent = `이미 전송됨 — draft #${did||'?'}`;
+        const msg = `이미 전송됨 · draft #${did||'?'}`;
+        setStatus('success', msg);
+        showToast('info', msg);
         return;
       }
       if(!res.ok) throw new Error('HTTP '+res.status);
@@ -4386,15 +4522,21 @@ setInterval(loadPulseOverview,20000);
       if(d.ok){
         rerenderOne({id: itemId, promotion_status:'sent',
                      promoted_draft_id: d.draft_id, promoted_at: d.promoted_at});
-        if(status) status.textContent = `전송 완료 — draft #${d.draft_id}` +
-          (d.telegram_sent===false ? ' (텔레그램 미전송: 설정 확인)' : '');
+        const tgNote = (d.telegram_sent === false) ? ' · 텔레그램 미전송' : '';
+        const msg = `전송 완료 · draft #${d.draft_id}` + tgNote;
+        setStatus('success', msg);
+        showToast('success', msg);
       } else {
         rerenderOne({id: itemId, promotion_status:'failed'});
-        if(status) status.textContent = '전송 실패: ' + (d.error || 'unknown');
+        const msg = '전송 실패: ' + (d.error || 'unknown');
+        setStatus('error', msg);
+        showToast('error', msg);
       }
     } catch(e){
       rerenderOne({id: itemId, promotion_status:'failed'});
-      if(status) status.textContent = '전송 실패: ' + (e && e.message ? e.message : e);
+      const msg = '전송 실패: ' + ((e && e.message) ? e.message : e);
+      setStatus('error', msg);
+      showToast('error', msg);
     } finally {
       promotingIds.delete(itemId);
     }
@@ -4403,7 +4545,7 @@ setInterval(loadPulseOverview,20000);
   document.addEventListener('click', function(ev){
     const t = ev.target && ev.target.closest ? ev.target.closest('.nav-btn[data-tab="crypto-intel"]') : null;
     if(!t) return;
-    if(!ciLoaded){ ciLoaded = true; ciLoad(); }
+    if(!ciLoaded){ ciLoaded = true; ciLoad({skeleton:true}); }
   });
   // 카드 내부 promote 버튼 delegation — 재렌더 후에도 유효
   document.addEventListener('click', function(ev){
@@ -4424,5 +4566,9 @@ setInterval(loadPulseOverview,20000);
   if(selSt) selSt.addEventListener('change', ciLoad);
 })();
 </script>
+
+<!-- Phase 3: Crypto Intel toast (하단 nav 위, 3초 후 자동 사라짐) -->
+<div id="ci-toast" data-kind="info"><span class="ci-toast-text"></span></div>
+
 </body>
 </html>
