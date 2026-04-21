@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     naver_client_id: str = Field(default="", description="Naver API Client ID (뉴스 검색)")
     naver_client_secret: str = Field(default="", description="Naver API Client Secret")
 
+    # --- Crypto Intel Sources (수집 단계 AI 미사용, 키 없으면 adapter 비활성) ---
+    open_dart_api_key: str = Field(default="", description="Open DART (한국 전자공시)")
+    congress_api_key: str = Field(default="", description="US Congress API (법안)")
+    finnhub_api_key: str = Field(default="", description="Finnhub (마켓/기업 뉴스)")
+    cryptopanic_api_key: str = Field(default="", description="CryptoPanic (크립토 뉴스 스트림)")
+    newsapi_api_key: str = Field(default="", description="NewsAPI — Phase 2 옵션, 현재 stub")
+    coingecko_api_key: str = Field(default="", description="CoinGecko — Phase 2 옵션, 현재 stub")
+
     # --- 활성 프로바이더 선택 ---
     active_draft_provider: str = Field(default="mock", description="초안 작성 프로바이더")
     active_research_provider: str = Field(default="mock", description="리서치 프로바이더")
@@ -120,6 +128,43 @@ class Settings(BaseSettings):
     @property
     def has_perplexity(self) -> bool:
         return self._has(self.perplexity_api_key)
+
+    # ── Crypto Intel Sources ────────────────────────────────────────────────
+
+    @property
+    def has_open_dart(self) -> bool:
+        return self._has(self.open_dart_api_key)
+
+    @property
+    def has_congress(self) -> bool:
+        return self._has(self.congress_api_key)
+
+    @property
+    def has_finnhub(self) -> bool:
+        return self._has(self.finnhub_api_key)
+
+    @property
+    def has_cryptopanic(self) -> bool:
+        return self._has(self.cryptopanic_api_key)
+
+    @property
+    def has_newsapi(self) -> bool:
+        return self._has(self.newsapi_api_key)
+
+    @property
+    def has_coingecko(self) -> bool:
+        return self._has(self.coingecko_api_key)
+
+    def intel_sources_status(self) -> dict[str, bool]:
+        """Crypto Intel adapter 별 키 보유 여부 (True=enabled 가능)."""
+        return {
+            "open_dart":   self.has_open_dart,
+            "congress":    self.has_congress,
+            "finnhub":     self.has_finnhub,
+            "cryptopanic": self.has_cryptopanic,
+            "newsapi":     self.has_newsapi,
+            "coingecko":   self.has_coingecko,
+        }
 
     @property
     def has_any_ai(self) -> bool:
@@ -250,6 +295,12 @@ def validate_settings(s: Settings) -> list[str]:
         )
 
     # X 자동 게시 제거됨 — 수동 게시 전용
+
+    if not any(s.intel_sources_status().values()):
+        warnings.append(
+            "[Crypto Intel] 모든 수집 키 비어있음 (open_dart/congress/"
+            "finnhub/cryptopanic). 대시보드 탭은 렌더되지만 수집 결과는 0 건."
+        )
 
     return warnings
 

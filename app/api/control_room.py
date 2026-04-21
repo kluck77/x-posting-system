@@ -46,6 +46,10 @@ def _is_dismissed(url: str) -> bool:
 
 router = APIRouter(prefix="/control", tags=["control-room"])
 
+# Crypto Intel (Phase 1) — /control/intel/* 로 흡수
+from app.api.intel import router as _intel_router
+router.include_router(_intel_router)
+
 
 # ── Pack Sidecar 조회 (Grok Handoff Phase 1) ─────────────────────────────────
 

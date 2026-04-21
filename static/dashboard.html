@@ -1541,6 +1541,82 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="tab-footer" id="soFooter"></div>
 </section>
 
+<!-- Crypto Intel (Phase 1 — read-only shortlist) -->
+<section class="tab-pane" id="tab-crypto-intel">
+  <style>
+    #tab-crypto-intel { --ci-pad:10px; --ci-gap:8px; }
+    #tab-crypto-intel .ci-toolbar{
+      display:flex;gap:var(--ci-gap);flex-wrap:wrap;align-items:center;
+      padding:var(--ci-pad) 2px;position:sticky;top:0;z-index:5;
+      background:var(--bg-deep);
+    }
+    #tab-crypto-intel .ci-select, #tab-crypto-intel .ci-btn{
+      background:var(--bg-raised);color:var(--text-pri);
+      border:1px solid var(--border-normal);border-radius:var(--r-md);
+      padding:8px 12px;font-size:13px;font-weight:500;
+      cursor:pointer;-webkit-tap-highlight-color:transparent;
+    }
+    #tab-crypto-intel .ci-btn:active{transform:scale(.97);}
+    #tab-crypto-intel .ci-btn[disabled]{opacity:.55;cursor:default;}
+    #tab-crypto-intel .ci-status{
+      font-size:var(--fs-meta);color:var(--text-sec);
+      font-family:var(--mono);padding:4px 2px;
+    }
+    #tab-crypto-intel .ci-card{
+      background:var(--bg-surface);border:1px solid var(--border-subtle);
+      border-radius:var(--r-lg);padding:12px;margin-bottom:10px;
+    }
+    #tab-crypto-intel .ci-card-top{
+      display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+      font-size:var(--fs-meta);color:var(--text-mut);margin-bottom:6px;
+    }
+    #tab-crypto-intel .ci-badge{
+      background:var(--indigo-dim);color:var(--text-acc);
+      padding:2px 8px;border-radius:var(--r-sm);
+      font-weight:var(--fw-label);letter-spacing:.5px;
+    }
+    #tab-crypto-intel .ci-badge.cat{background:var(--purple-dim);color:var(--purple);}
+    #tab-crypto-intel .ci-time{margin-left:auto;font-family:var(--mono);}
+    #tab-crypto-intel .ci-title{
+      font-size:var(--fs-body);font-weight:600;color:var(--text-pri);
+      margin:2px 0 6px;line-height:1.35;
+    }
+    #tab-crypto-intel .ci-summary{
+      font-size:13px;color:var(--text-sec);line-height:1.4;
+      display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+      overflow:hidden;margin-bottom:6px;
+    }
+    #tab-crypto-intel .ci-meta{
+      font-size:var(--fs-meta);color:var(--text-mut);
+      display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;
+    }
+    #tab-crypto-intel .ci-reason{color:var(--amber);font-family:var(--mono);}
+    #tab-crypto-intel .ci-link{
+      font-size:var(--fs-meta);color:var(--indigo);text-decoration:none;
+    }
+    #tab-crypto-intel .ci-empty{
+      text-align:center;padding:24px 8px;color:var(--text-mut);
+      font-size:13px;
+    }
+  </style>
+
+  <div class="ci-toolbar">
+    <select id="ci-filter-category" class="ci-select">
+      <option value="">전체 카테고리</option>
+      <option value="korea_filings">Korea Filings</option>
+      <option value="us_policy_bills">US Policy / Bills</option>
+      <option value="market_company">Market / Company News</option>
+      <option value="crypto_stream">Crypto News Stream</option>
+      <option value="macro_policy">General Macro / Policy</option>
+      <option value="asset_context">Asset Context</option>
+    </select>
+    <button id="ci-refresh" class="ci-btn" type="button">↻ 새로고침</button>
+    <button id="ci-collect" class="ci-btn" type="button">수집 실행</button>
+  </div>
+  <div id="ci-status" class="ci-status">대기 중</div>
+  <div id="ci-list"></div>
+</section>
+
 <!-- Ops drill-down bottom sheet -->
 <div class="pp2-sheet-mask" id="opsSheetMask" onclick="closeOpsSheet()"></div>
 <div class="pp2-sheet" id="opsSheet">
@@ -1558,6 +1634,7 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <button class="nav-btn" data-tab="pipeline"><span class="nav-icon">🔄</span>Pipeline</button>
   <button class="nav-btn" data-tab="ops"><span class="nav-icon">⚙️</span>Ops</button>
   <button class="nav-btn" data-tab="strategy-os"><span class="nav-icon">🧭</span>Strategy OS</button>
+  <button class="nav-btn" data-tab="crypto-intel"><span class="nav-icon">🛰️</span>Crypto Intel</button>
 </nav>
 
 <script>
@@ -4094,6 +4171,100 @@ setInterval(loadAll,30000);
 setInterval(loadNaverLive,15000);
 // Pulse 히어로/스트림도 20초마다 — 첫 화면 살아있는 느낌
 setInterval(loadPulseOverview,20000);
+
+// ── CRYPTO INTEL (Phase 1 — read-only) ──────────────────────────────────
+// IIFE scope 격리. 전역 오염 0. fetch 실패는 이 탭 안에서만 봉쇄.
+(function(){
+  let ciLoaded = false;
+  let ciBusy   = false;
+
+  function esc(s){
+    return (s==null?'':String(s))
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+  function fmtTime(iso){
+    if(!iso) return '';
+    try{ return new Date(iso).toLocaleString('ko-KR',{hour12:false}); }
+    catch(_){ return iso; }
+  }
+  function renderCard(it){
+    const host = it.url ? (()=>{ try{return new URL(it.url).hostname;}catch(_){return '';} })() : '';
+    const link = it.url ? `<a class="ci-link" href="${esc(it.url)}" target="_blank" rel="noopener">원문 열기 ↗ ${esc(host)}</a>` : '';
+    return `
+      <div class="ci-card">
+        <div class="ci-card-top">
+          <span class="ci-badge">${esc(it.source||'')}</span>
+          <span class="ci-badge cat">${esc(it.category||'')}</span>
+          <span class="ci-time">${esc(fmtTime(it.published_at))}</span>
+        </div>
+        <div class="ci-title">${esc(it.title||'')}</div>
+        ${it.summary ? `<div class="ci-summary">${esc(it.summary)}</div>` : ''}
+        <div class="ci-meta">
+          ${it.entity ? `<span>entity: ${esc(it.entity)}</span>` : ''}
+          ${it.why_flagged ? `<span class="ci-reason">${esc(it.why_flagged)}</span>` : ''}
+        </div>
+        ${link}
+      </div>`;
+  }
+  async function ciLoad(){
+    const status = document.getElementById('ci-status');
+    const list   = document.getElementById('ci-list');
+    const sel    = document.getElementById('ci-filter-category');
+    if(!status||!list||!sel) return;
+    try{
+      status.textContent = '불러오는 중…';
+      const cat = sel.value;
+      const qs  = cat ? ('?category='+encodeURIComponent(cat)) : '';
+      const res = await fetch(API+'/control/intel/shortlist'+qs);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      if(items.length===0){
+        list.innerHTML = '<div class="ci-empty">shortlist 결과 없음 — "수집 실행" 으로 adapter 를 돌리거나 키를 .env 에 추가하세요.</div>';
+      } else {
+        list.innerHTML = items.map(renderCard).join('');
+      }
+      status.textContent = items.length + ' 건';
+    } catch(e){
+      status.textContent = '로드 실패: ' + (e && e.message ? e.message : e);
+      list.innerHTML = '';
+    }
+  }
+  async function ciCollect(){
+    const btn = document.getElementById('ci-collect');
+    const status = document.getElementById('ci-status');
+    if(ciBusy) return;
+    ciBusy = true;
+    if(btn) btn.setAttribute('disabled','disabled');
+    if(status) status.textContent = '수집 중… (수 초 소요 가능)';
+    try{
+      const res = await fetch(API+'/control/intel/collect', {method:'POST'});
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const s = await res.json();
+      if(status) status.textContent =
+        `수집 완료 — fetched=${s.fetched||0} new=${s.new||0} shortlisted=${s.shortlisted||0}`;
+      await ciLoad();
+    } catch(e){
+      if(status) status.textContent = '수집 실패: ' + (e && e.message ? e.message : e);
+    } finally {
+      ciBusy = false;
+      if(btn) btn.removeAttribute('disabled');
+    }
+  }
+  // 탭 첫 진입 시 1 회만 lazy fetch
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('.nav-btn[data-tab="crypto-intel"]') : null;
+    if(!t) return;
+    if(!ciLoaded){ ciLoaded = true; ciLoad(); }
+  });
+  const btnRefresh = document.getElementById('ci-refresh');
+  if(btnRefresh) btnRefresh.addEventListener('click', ciLoad);
+  const btnCollect = document.getElementById('ci-collect');
+  if(btnCollect) btnCollect.addEventListener('click', ciCollect);
+  const selCat = document.getElementById('ci-filter-category');
+  if(selCat) selCat.addEventListener('change', ciLoad);
+})();
 </script>
 </body>
 </html>

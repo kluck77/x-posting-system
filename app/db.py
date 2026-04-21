@@ -318,6 +318,7 @@ def init_db():
     """
     from app.models.content import Base  # 순환 import 방지
     import app.models.dedup  # noqa: F401 — 테이블 등록 (dedup + candidate pool)
+    import app.models.intel  # noqa: F401 — 테이블 등록 (intel_items, Phase 1)
     Base.metadata.create_all(bind=engine)
     _run_schema_migrations()
     _ensure_eval_records_table()  # PR 30
