@@ -1726,8 +1726,109 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       background:var(--red-dim);color:var(--red);
       border-color:rgba(239,68,68,.35);
     }
+
+    /* ── Phase 4: 정보 구조 교정 ─────────────────────────────────── */
+    /* 상단 요약 바 + 탭 설명 */
+    #tab-crypto-intel .ci-summary{
+      display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;
+      padding:4px 2px 2px;font-size:12px;color:var(--text-sec);
+      font-family:var(--mono);
+    }
+    #tab-crypto-intel .ci-summary .ci-sum-chip{
+      display:inline-flex;align-items:center;gap:4px;
+    }
+    #tab-crypto-intel .ci-summary .s-strong{color:var(--green);}
+    #tab-crypto-intel .ci-summary .s-watch { color:var(--amber);}
+    #tab-crypto-intel .ci-summary .s-weak  { color:var(--text-sec);}
+    #tab-crypto-intel .ci-summary .s-noise { color:var(--text-mut);}
+    #tab-crypto-intel .ci-tab-desc{
+      font-size:10px;color:var(--text-mut);padding:2px 2px 8px;
+      line-height:1.4;
+    }
+
+    /* 카드 밀도 압축 — Phase 2 값 override */
+    #tab-crypto-intel .ci-card{
+      grid-template-columns:48px 1fr;gap:10px;
+      padding:10px;margin-bottom:8px;
+    }
+    #tab-crypto-intel .ci-score{min-height:48px;padding:4px 2px;}
+    #tab-crypto-intel .ci-score .n{font-size:20px;}
+    #tab-crypto-intel .ci-score .l{font-size:8px;margin-top:3px;}
+    #tab-crypto-intel .ci-title{
+      font-size:14px;font-weight:700;margin:1px 0 4px;line-height:1.3;
+    }
+    #tab-crypto-intel .ci-summary-line{
+      font-size:12px;color:var(--text-mut);line-height:1.35;
+      display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;
+      overflow:hidden;margin-bottom:4px;
+    }
+    #tab-crypto-intel .ci-reason-human{
+      font-size:12.5px;color:var(--text-pri);line-height:1.35;
+      font-weight:500;margin:0 0 6px;
+    }
+    #tab-crypto-intel .ci-chips{
+      display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;
+    }
+    #tab-crypto-intel .ci-chip{
+      font-size:10px;letter-spacing:.3px;color:var(--text-mut);
+      background:transparent;border:1px solid var(--border-subtle);
+      padding:1px 6px;border-radius:var(--r-sm);
+      font-weight:500;
+    }
+    #tab-crypto-intel .ci-chip.c-src { color:var(--text-acc); border-color:var(--border-accent);}
+    #tab-crypto-intel .ci-chip.c-cat { color:var(--purple);   border-color:rgba(192,132,252,.25);}
+    #tab-crypto-intel .ci-chip.c-lab { color:var(--text-sec); }
+    #tab-crypto-intel .ci-card-meta{
+      display:flex;align-items:center;gap:8px;margin-bottom:4px;
+      font-size:var(--fs-meta);color:var(--text-mut);
+    }
+    #tab-crypto-intel .ci-card-meta .ci-time{margin-left:auto;font-family:var(--mono);}
+    #tab-crypto-intel .ci-actions{gap:6px;}
+    #tab-crypto-intel .ci-action{min-height:34px;padding:6px 10px;font-size:12.5px;}
+
+    /* 전송 상태 좌측 side-bar + border */
+    #tab-crypto-intel .ci-card.is-sent{
+      border-color:rgba(45,212,191,.35);
+      box-shadow:inset 3px 0 0 var(--green);
+    }
+    #tab-crypto-intel .ci-card.is-failed{
+      border-color:rgba(239,68,68,.35);
+      box-shadow:inset 3px 0 0 var(--red);
+    }
+
+    /* 버튼 중요도 차등 (label 기반) */
+    #tab-crypto-intel .ci-card.l-strong .ci-action.primary{
+      background:var(--indigo);color:#fff;border-color:var(--indigo);
+    }
+    #tab-crypto-intel .ci-card.l-watch .ci-action.primary{
+      /* Phase 2 기본 primary 유지 */
+    }
+    #tab-crypto-intel .ci-card.l-weak .ci-action.primary{
+      background:transparent;color:var(--text-sec);
+      border-color:var(--border-normal);
+    }
+    #tab-crypto-intel .ci-card.l-noise .ci-action.primary{
+      background:transparent;color:var(--text-mut);
+      border-color:var(--border-subtle);opacity:.75;
+    }
+
+    /* 숨긴 noise 섹션 */
+    #tab-crypto-intel .ci-hidden-noise{
+      margin:8px 0;padding:8px 4px;text-align:center;
+      font-size:12px;color:var(--text-mut);
+      border-top:1px solid var(--border-subtle);
+    }
+    #tab-crypto-intel .ci-hidden-noise .ci-expand{
+      background:var(--bg-raised);color:var(--text-sec);
+      border:1px solid var(--border-normal);border-radius:999px;
+      padding:6px 14px;font-size:12px;cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #tab-crypto-intel .ci-hidden-noise .ci-expand:active{transform:scale(.97);}
   </style>
 
+  <div id="ci-summary" class="ci-summary"></div>
+  <div id="ci-tab-desc" class="ci-tab-desc">원문/정책/공시 기반 후보 선별 작업판 · 추천순은 score 기준, noise 기본 숨김</div>
   <div class="ci-toolbar">
     <select id="ci-filter-category" class="ci-select">
       <option value="">전체 카테고리</option>
@@ -1742,6 +1843,11 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       <option value="score">추천순</option>
       <option value="recent">최신순</option>
       <option value="category">카테고리순</option>
+    </select>
+    <select id="ci-score-filter" class="ci-select">
+      <option value="60" selected>추천만 (60↑)</option>
+      <option value="40">weak 포함 (40↑)</option>
+      <option value="0">전체</option>
     </select>
     <select id="ci-status-filter" class="ci-select">
       <option value="all">전체</option>
@@ -4319,6 +4425,8 @@ setInterval(loadPulseOverview,20000);
   let ciLoaded = false;
   let ciBusy   = false;
   let ciItems  = [];                 // 마지막 로드된 카드 캐시 (promote 후 부분 갱신용)
+  let ciScoreCutoff = 60;            // Phase 4: 기본 추천만 (strong+watch)
+  let ciShowNoise   = false;         // Phase 4: "숨긴 noise N 건 보기" 토글
   const promotingIds = new Set();    // UI 버튼 중복 클릭 방지
 
   // Phase 3 — 상태 가시 피드백 유틸 ────────────────────────────────────
@@ -4403,28 +4511,74 @@ setInterval(loadPulseOverview,20000);
   function renderCard(it){
     const lab = it.score_label || 'noise';
     const n   = Math.max(0, Math.min(100, it.priority_score|0));
+    const st  = it.promotion_status || 'none';
+    const stateClass = (st === 'sent') ? ' is-sent'
+                     : (st === 'failed') ? ' is-failed' : '';
     const host = hostOf(it.url);
-    const hostLine = host ? `<span class="ci-time">${esc(host)}</span>` : '';
+    const labEmoji = labelText(lab);
+    // 칩 행: source / category / entity / host (있을 때만)
+    const chips = [
+      it.source   ? `<span class="ci-chip c-src">${esc(it.source)}</span>` : '',
+      it.category ? `<span class="ci-chip c-cat">${esc(it.category)}</span>` : '',
+      it.entity   ? `<span class="ci-chip">${esc(String(it.entity).slice(0,40))}</span>` : '',
+      host        ? `<span class="ci-chip">${esc(host)}</span>` : '',
+    ].filter(Boolean).join('');
     return `
-      <div class="ci-card l-${esc(lab)}" data-id="${it.id}">
+      <div class="ci-card l-${esc(lab)}${stateClass}" data-id="${it.id}">
         <div class="ci-score l-${esc(lab)}">
           <span class="n">${n}</span>
           <span class="l">${esc(lab)}</span>
         </div>
         <div class="ci-body">
-          <div class="ci-card-top">
-            <span class="ci-badge">${esc(it.source||'')}</span>
-            <span class="ci-badge cat">${esc(it.category||'')}</span>
-            ${labelText(lab) ? `<span class="ci-badge">${esc(labelText(lab))}</span>` : ''}
+          <div class="ci-card-meta">
+            ${labEmoji ? `<span class="ci-chip c-lab">${esc(labEmoji)}</span>` : ''}
             <span class="ci-time">${esc(fmtTime(it.published_at))}</span>
           </div>
           <div class="ci-title">${esc(it.title||'')}</div>
-          ${it.summary ? `<div class="ci-summary">${esc(it.summary)}</div>` : ''}
           ${it.why_flagged_human ? `<div class="ci-reason-human">${esc(it.why_flagged_human)}</div>` : ''}
-          ${hostLine ? `<div class="ci-card-top">${hostLine}</div>` : ''}
+          ${it.summary ? `<div class="ci-summary-line">${esc(it.summary)}</div>` : ''}
+          ${chips ? `<div class="ci-chips">${chips}</div>` : ''}
           ${actionButtons(it)}
         </div>
       </div>`;
+  }
+
+  // Phase 4 — 요약 바 집계 / 점수 컷 필터 / 숨긴 noise 섹션
+  function computeCounts(items){
+    const c = {total: items.length, strong:0, watch:0, weak:0, noise:0};
+    for(const it of items){
+      const lab = it.score_label || 'noise';
+      if(c[lab] != null) c[lab] += 1;
+    }
+    return c;
+  }
+  function renderSummaryBar(counts){
+    const el = document.getElementById('ci-summary');
+    if(!el) return;
+    el.innerHTML = `
+      <span class="ci-sum-chip">수집 <b>${counts.total}</b></span>
+      <span class="ci-sum-chip s-strong">🔥 강추천 <b>${counts.strong}</b></span>
+      <span class="ci-sum-chip s-watch">👀 볼만함 <b>${counts.watch}</b></span>
+      <span class="ci-sum-chip s-weak">➖ 약함 <b>${counts.weak}</b></span>
+      <span class="ci-sum-chip s-noise">📉 noise <b>${counts.noise}</b></span>`;
+  }
+  function splitByCutoff(items){
+    const visible = [], hidden = [];
+    for(const it of items){
+      const n = (it.priority_score|0);
+      if(ciShowNoise || n >= ciScoreCutoff) visible.push(it);
+      else hidden.push(it);
+    }
+    return {visible, hidden};
+  }
+  function renderHiddenNoiseFooter(hiddenCount){
+    if(hiddenCount <= 0) return '';
+    const label = ciShowNoise
+      ? `숨긴 ${hiddenCount}건 다시 접기 ▴`
+      : `숨긴 ${hiddenCount}건 보기 ▾`;
+    return `<div class="ci-hidden-noise">
+      <button class="ci-expand" type="button" id="ci-toggle-noise">${label}</button>
+    </div>`;
   }
   function rerenderOne(updated){
     const idx = ciItems.findIndex(x => x.id === updated.id);
@@ -4460,12 +4614,19 @@ setInterval(loadPulseOverview,20000);
       if(!res.ok) throw new Error('HTTP '+res.status);
       const data = await res.json();
       ciItems = Array.isArray(data.items) ? data.items : [];
-      if(ciItems.length===0){
+      // 전체 집계는 서버에서 온 목록 그대로 (요약 숫자는 숨김 유무와 무관)
+      const counts = computeCounts(ciItems);
+      renderSummaryBar(counts);
+      const {visible, hidden} = splitByCutoff(ciItems);
+      if(ciItems.length === 0){
         list.innerHTML = '<div class="ci-empty">shortlist 결과 없음 — "수집 실행" 으로 adapter 를 돌리거나 키를 .env 에 추가하세요.</div>';
+      } else if(visible.length === 0){
+        list.innerHTML = '<div class="ci-empty">현재 점수 컷(' + ciScoreCutoff + '↑)을 넘는 항목이 없습니다. 점수 필터를 "전체"로 바꾸거나 수집을 실행하세요.</div>'
+          + renderHiddenNoiseFooter(hidden.length);
       } else {
-        list.innerHTML = ciItems.map(renderCard).join('');
+        list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
       }
-      setStatus('success', ciItems.length + ' 건 · ' + (data.sort||'score'));
+      setStatus('success', `${visible.length}/${ciItems.length} 건 · ${data.sort||'score'}`);
     } catch(e){
       const msg = (e && e.message) ? e.message : String(e);
       setStatus('error', '로드 실패: ' + msg);
@@ -4564,6 +4725,40 @@ setInterval(loadPulseOverview,20000);
   if(selSort) selSort.addEventListener('change', ciLoad);
   const selSt = document.getElementById('ci-status-filter');
   if(selSt) selSt.addEventListener('change', ciLoad);
+  // Phase 4 — 점수 컷 select
+  const selScore = document.getElementById('ci-score-filter');
+  if(selScore) selScore.addEventListener('change', function(e){
+    const v = parseInt(e.target.value, 10);
+    ciScoreCutoff = isNaN(v) ? 0 : v;
+    ciShowNoise = false;
+    // 서버 재호출 없이 현재 캐시로 재렌더 (빠름)
+    if(ciItems.length){
+      renderSummaryBar(computeCounts(ciItems));
+      const {visible, hidden} = splitByCutoff(ciItems);
+      const list = document.getElementById('ci-list');
+      if(list){
+        if(visible.length === 0 && ciItems.length){
+          list.innerHTML = '<div class="ci-empty">현재 점수 컷(' + ciScoreCutoff + '↑)을 넘는 항목이 없습니다.</div>'
+            + renderHiddenNoiseFooter(hidden.length);
+        } else {
+          list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
+        }
+      }
+    } else {
+      ciLoad();
+    }
+  });
+  // Phase 4 — "숨긴 noise N 건 보기" 토글 (delegation)
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('#ci-toggle-noise') : null;
+    if(!t) return;
+    ciShowNoise = !ciShowNoise;
+    const list = document.getElementById('ci-list');
+    if(list && ciItems.length){
+      const {visible, hidden} = splitByCutoff(ciItems);
+      list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
+    }
+  });
 })();
 </script>
 
