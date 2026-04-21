@@ -1825,8 +1825,116 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       -webkit-tap-highlight-color:transparent;
     }
     #tab-crypto-intel .ci-hidden-noise .ci-expand:active{transform:scale(.97);}
+
+    /* ── Phase 5: Ops-style hero + tiles (cyan 계열) ─────────────── */
+    #tab-crypto-intel .ci-hero{
+      margin:4px 0 10px;
+      background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(129,140,248,.08));
+      border:1px solid rgba(34,211,238,.30);
+      border-radius:var(--r-lg);
+      padding:12px;
+    }
+    #tab-crypto-intel .ci-hero-head{
+      display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;
+    }
+    #tab-crypto-intel .ci-hero-badge{
+      background:rgba(34,211,238,.18);color:var(--cyan);
+      border:1px solid rgba(34,211,238,.45);
+      padding:2px 8px;border-radius:var(--r-sm);
+      font-size:10px;font-weight:700;letter-spacing:1.5px;
+    }
+    #tab-crypto-intel .ci-hero-title{
+      font-size:15px;font-weight:700;color:var(--text-pri);
+    }
+    #tab-crypto-intel .ci-hero-sub{
+      margin-left:auto;font-size:11px;color:var(--text-sec);font-family:var(--mono);
+    }
+    #tab-crypto-intel .ci-hero-kpis{
+      display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;
+    }
+    #tab-crypto-intel .ci-kpi{
+      background:var(--bg-surface);border:1px solid var(--border-subtle);
+      border-radius:var(--r-md);padding:8px 10px;min-height:54px;
+      display:flex;flex-direction:column;justify-content:center;
+    }
+    #tab-crypto-intel .ci-kpi-n{
+      font-size:22px;font-weight:800;color:var(--cyan);
+      font-family:var(--mono);line-height:1;
+    }
+    #tab-crypto-intel .ci-kpi-l{
+      font-size:10px;color:var(--text-mut);margin-top:4px;
+      letter-spacing:.5px;text-transform:uppercase;
+    }
+    #tab-crypto-intel .ci-hero-chips{
+      display:flex;flex-wrap:wrap;gap:4px;
+    }
+    #tab-crypto-intel .ci-h-chip{
+      font-size:11px;padding:3px 8px;border-radius:var(--r-sm);
+      border:1px solid var(--border-subtle);color:var(--text-mut);
+      background:var(--bg-surface);
+    }
+    #tab-crypto-intel .ci-h-chip.is-on{
+      color:var(--cyan);border-color:rgba(34,211,238,.40);
+      background:rgba(34,211,238,.10);
+    }
+
+    /* 하단 상태 타일 4 개 (Ops "평가 저장소" 스타일) */
+    #tab-crypto-intel .ci-tiles{
+      display:grid;grid-template-columns:1fr 1fr;gap:8px;
+      margin:12px 0 20px;
+    }
+    #tab-crypto-intel .ci-tile{
+      text-align:left;cursor:pointer;
+      background:var(--bg-surface);border:1px solid var(--border-subtle);
+      border-radius:var(--r-lg);padding:12px;color:var(--text-pri);
+      -webkit-tap-highlight-color:transparent;
+      transition:transform 80ms ease,border-color 140ms ease;
+    }
+    #tab-crypto-intel .ci-tile:active{transform:scale(.98);}
+    #tab-crypto-intel .ci-tile-n{
+      font-size:24px;font-weight:800;font-family:var(--mono);line-height:1;
+    }
+    #tab-crypto-intel .ci-tile-u{
+      font-size:12px;font-weight:500;color:var(--text-mut);margin-left:2px;
+    }
+    #tab-crypto-intel .ci-tile-l{
+      font-size:12px;margin-top:6px;font-weight:600;color:var(--text-pri);
+    }
+    #tab-crypto-intel .ci-tile-s{
+      font-size:10px;color:var(--text-mut);margin-top:2px;
+    }
+    #tab-crypto-intel .ci-tile.t-strong .ci-tile-n { color:var(--green); }
+    #tab-crypto-intel .ci-tile.t-sent   .ci-tile-n { color:var(--cyan);  }
+    #tab-crypto-intel .ci-tile.t-failed .ci-tile-n { color:var(--red);   }
+    #tab-crypto-intel .ci-tile.t-noise  .ci-tile-n { color:var(--text-mut); }
+    #tab-crypto-intel .ci-tile.t-strong { border-color:rgba(45,212,191,.28); }
+    #tab-crypto-intel .ci-tile.t-sent   { border-color:rgba(34,211,238,.30); }
+    #tab-crypto-intel .ci-tile.t-failed { border-color:rgba(239,68,68,.28); }
   </style>
 
+  <!-- Phase 5: Ops-style hero (cyan ACTIVE + 3 KPI + adapter chips) -->
+  <div id="ci-hero" class="ci-hero">
+    <div class="ci-hero-head">
+      <span class="ci-hero-badge">ACTIVE</span>
+      <div class="ci-hero-title">Crypto Intel 수집</div>
+      <div class="ci-hero-sub" id="ci-hero-sub">상태 로딩…</div>
+    </div>
+    <div class="ci-hero-kpis">
+      <div class="ci-kpi">
+        <div class="ci-kpi-n" id="ci-kpi-last">—</div>
+        <div class="ci-kpi-l">마지막 수집</div>
+      </div>
+      <div class="ci-kpi">
+        <div class="ci-kpi-n" id="ci-kpi-short">—</div>
+        <div class="ci-kpi-l">shortlist</div>
+      </div>
+      <div class="ci-kpi">
+        <div class="ci-kpi-n" id="ci-kpi-sent">—</div>
+        <div class="ci-kpi-l">전송됨</div>
+      </div>
+    </div>
+    <div class="ci-hero-chips" id="ci-hero-chips"></div>
+  </div>
   <div id="ci-summary" class="ci-summary"></div>
   <div id="ci-tab-desc" class="ci-tab-desc">원문/정책/공시 기반 후보 선별 작업판 · 추천순은 score 기준, noise 기본 숨김</div>
   <div class="ci-toolbar">
@@ -1862,6 +1970,30 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     <span class="ci-status-text">대기 중</span>
   </div>
   <div id="ci-list"></div>
+
+  <!-- Phase 5: 하단 상태 타일 4 개 (클릭 시 필터 이동) -->
+  <div id="ci-tiles" class="ci-tiles">
+    <button class="ci-tile t-strong" type="button" data-ci-tile="strong">
+      <div class="ci-tile-n"><span id="ci-tile-strong-n">0</span><span class="ci-tile-u">건</span></div>
+      <div class="ci-tile-l">🔥 강추천</div>
+      <div class="ci-tile-s">점수 80↑ · 추천만 필터</div>
+    </button>
+    <button class="ci-tile t-sent" type="button" data-ci-tile="sent">
+      <div class="ci-tile-n"><span id="ci-tile-sent-n">0</span><span class="ci-tile-u">건</span></div>
+      <div class="ci-tile-l">✓ 전송됨</div>
+      <div class="ci-tile-s">draft 합류 완료</div>
+    </button>
+    <button class="ci-tile t-failed" type="button" data-ci-tile="failed">
+      <div class="ci-tile-n"><span id="ci-tile-failed-n">0</span><span class="ci-tile-u">건</span></div>
+      <div class="ci-tile-l">↻ 실패</div>
+      <div class="ci-tile-s">재시도 대기</div>
+    </button>
+    <button class="ci-tile t-noise" type="button" data-ci-tile="noise">
+      <div class="ci-tile-n"><span id="ci-tile-noise-n">0</span><span class="ci-tile-u">건</span></div>
+      <div class="ci-tile-l">📉 noise</div>
+      <div class="ci-tile-s">기본 숨김 · 전체 보기</div>
+    </button>
+  </div>
 </section>
 
 <!-- Ops drill-down bottom sheet -->
@@ -4580,6 +4712,93 @@ setInterval(loadPulseOverview,20000);
       <button class="ci-expand" type="button" id="ci-toggle-noise">${label}</button>
     </div>`;
   }
+
+  // Phase 5 — Ops-style hero / tiles / status polling ──────────────────
+  function timeAgo(iso){
+    if(!iso) return '—';
+    try{
+      const d = new Date(iso);
+      const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
+      if(diff < 60)    return Math.floor(diff) + '초 전';
+      if(diff < 3600)  return Math.floor(diff/60) + '분 전';
+      if(diff < 86400) return Math.floor(diff/3600) + '시간 전';
+      return Math.floor(diff/86400) + '일 전';
+    } catch(_){ return '—'; }
+  }
+  function renderHero(status){
+    const sub    = document.getElementById('ci-hero-sub');
+    const kpiL   = document.getElementById('ci-kpi-last');
+    const kpiS   = document.getElementById('ci-kpi-short');
+    const kpiSnt = document.getElementById('ci-kpi-sent');
+    const chips  = document.getElementById('ci-hero-chips');
+    if(!status) return;
+    const adapters = status.adapters || {};
+    const enabled = Object.keys(adapters).filter(k => adapters[k]).length;
+    const total = (status.totals && status.totals.total) || 0;
+    const short = (status.totals && status.totals.shortlisted) || 0;
+    const sentCnt = ciItems.filter(it => (it.promotion_status||'none') === 'sent').length;
+    if(sub)  sub.textContent = `adapter ${enabled}/${Object.keys(adapters).length} 활성 · 저장 ${total}`;
+    if(kpiL) kpiL.textContent = timeAgo(status.last_collect_at);
+    if(kpiS) kpiS.textContent = short;
+    if(kpiSnt) kpiSnt.textContent = sentCnt;
+    if(chips){
+      const order = ['open_dart','congress','finnhub','cryptopanic','newsapi','coingecko'];
+      chips.innerHTML = order.map(k =>
+        `<span class="ci-h-chip${adapters[k] ? ' is-on' : ''}">${esc(k)}</span>`
+      ).join('');
+    }
+  }
+  function renderTiles(items){
+    const c = {strong:0, watch:0, weak:0, noise:0, sent:0, failed:0};
+    for(const it of items){
+      const lab = it.score_label || 'noise';
+      if(c[lab] != null) c[lab] += 1;
+      const st = it.promotion_status || 'none';
+      if(st === 'sent') c.sent += 1;
+      if(st === 'failed') c.failed += 1;
+    }
+    const set = (id, n) => { const e = document.getElementById(id); if(e) e.textContent = n; };
+    set('ci-tile-strong-n', c.strong + c.watch);
+    set('ci-tile-sent-n',   c.sent);
+    set('ci-tile-failed-n', c.failed);
+    set('ci-tile-noise-n',  c.noise);
+  }
+  async function ciFetchStatus(){
+    try{
+      const res = await fetch(API+'/control/intel/status');
+      if(!res.ok) return;
+      const data = await res.json();
+      renderHero(data);
+    } catch(_){ /* hero 는 장식용, 실패해도 탭 동작 유지 */ }
+  }
+  function applyTileFilter(kind){
+    // 타일 클릭 → 필터 select 값 변경 후 ciLoad 재실행
+    const selScore  = document.getElementById('ci-score-filter');
+    const selStatus = document.getElementById('ci-status-filter');
+    const selSort   = document.getElementById('ci-sort');
+    const selCat    = document.getElementById('ci-filter-category');
+    // 공통: category 초기화 (타일이 카테고리를 덮지 않음)
+    if(selCat) selCat.value = '';
+    if(kind === 'strong'){
+      if(selScore)  { selScore.value = '60';  ciScoreCutoff = 60; ciShowNoise = false; }
+      if(selStatus) selStatus.value = 'all';
+      if(selSort)   selSort.value   = 'score';
+    } else if(kind === 'sent'){
+      if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
+      if(selStatus) selStatus.value = 'sent';
+      if(selSort)   selSort.value   = 'recent';
+    } else if(kind === 'failed'){
+      if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
+      // 서버 shortlist 는 sent|unsent|all. failed 는 unsent 에 포함.
+      if(selStatus) selStatus.value = 'unsent';
+      if(selSort)   selSort.value   = 'recent';
+    } else if(kind === 'noise'){
+      if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
+      if(selStatus) selStatus.value = 'all';
+      if(selSort)   selSort.value   = 'score';
+    }
+    ciLoad();
+  }
   function rerenderOne(updated){
     const idx = ciItems.findIndex(x => x.id === updated.id);
     if(idx >= 0) ciItems[idx] = Object.assign({}, ciItems[idx], updated);
@@ -4617,6 +4836,8 @@ setInterval(loadPulseOverview,20000);
       // 전체 집계는 서버에서 온 목록 그대로 (요약 숫자는 숨김 유무와 무관)
       const counts = computeCounts(ciItems);
       renderSummaryBar(counts);
+      renderTiles(ciItems);
+      ciFetchStatus();  // hero 는 별도 비동기, 실패해도 본 로직 영향 없음
       const {visible, hidden} = splitByCutoff(ciItems);
       if(ciItems.length === 0){
         list.innerHTML = '<div class="ci-empty">shortlist 결과 없음 — "수집 실행" 으로 adapter 를 돌리거나 키를 .env 에 추가하세요.</div>';
@@ -4758,6 +4979,13 @@ setInterval(loadPulseOverview,20000);
       const {visible, hidden} = splitByCutoff(ciItems);
       list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
     }
+  });
+  // Phase 5 — 하단 타일 클릭 → 필터 이동
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('[data-ci-tile]') : null;
+    if(!t) return;
+    const kind = t.getAttribute('data-ci-tile');
+    if(kind) applyTileFilter(kind);
   });
 })();
 </script>
