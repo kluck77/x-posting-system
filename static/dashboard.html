@@ -1910,6 +1910,46 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     #tab-crypto-intel .ci-tile.t-strong { border-color:rgba(45,212,191,.28); }
     #tab-crypto-intel .ci-tile.t-sent   { border-color:rgba(34,211,238,.30); }
     #tab-crypto-intel .ci-tile.t-failed { border-color:rgba(239,68,68,.28); }
+    #tab-crypto-intel .ci-tile.t-cleanup .ci-tile-n { color:var(--amber); }
+    #tab-crypto-intel .ci-tile.t-cleanup { border-color:rgba(245,158,11,.28); }
+    #tab-crypto-intel .ci-tiles.ci-tiles-5{
+      grid-template-columns:repeat(2, 1fr);
+    }
+    @media (min-width: 640px){
+      #tab-crypto-intel .ci-tiles.ci-tiles-5{
+        grid-template-columns:repeat(5, 1fr);
+      }
+    }
+
+    /* Phase 6 — 오래된 / noise 접힘 섹션 */
+    #tab-crypto-intel .ci-section-wrap{
+      margin-top:8px;padding:8px 2px 4px;
+      border-top:1px solid var(--border-subtle);
+    }
+    #tab-crypto-intel .ci-section-body{margin-top:8px;}
+    #tab-crypto-intel .ci-empty-main{
+      background:var(--bg-surface);
+      border:1px dashed var(--border-subtle);
+      border-radius:var(--r-lg);padding:20px 12px;
+      text-align:center;color:var(--text-sec);font-size:13px;
+      margin-bottom:10px;
+    }
+    #tab-crypto-intel .ci-empty-main .ci-empty-title{
+      font-size:14px;font-weight:600;color:var(--text-pri);margin-bottom:4px;
+    }
+    #tab-crypto-intel .ci-empty-main .ci-empty-sub{
+      font-size:11px;color:var(--text-mut);margin-bottom:10px;
+    }
+    #tab-crypto-intel .ci-empty-main .ci-empty-actions{
+      display:flex;gap:6px;justify-content:center;flex-wrap:wrap;
+    }
+    #tab-crypto-intel .ci-empty-main .ci-empty-btn{
+      background:var(--bg-raised);color:var(--text-sec);
+      border:1px solid var(--border-normal);border-radius:999px;
+      padding:6px 14px;font-size:12px;cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #tab-crypto-intel .ci-empty-main .ci-empty-btn:active{transform:scale(.97);}
   </style>
 
   <!-- Phase 5: Ops-style hero (cyan ACTIVE + 3 KPI + adapter chips) -->
@@ -1971,17 +2011,27 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   </div>
   <div id="ci-list"></div>
 
-  <!-- Phase 5: 하단 상태 타일 4 개 (클릭 시 필터 이동) -->
-  <div id="ci-tiles" class="ci-tiles">
+  <!-- Phase 6: 오래된 추천 / noise 접힘 섹션 -->
+  <div id="ci-aged-wrap" class="ci-section-wrap" hidden>
+    <button class="ci-expand" type="button" id="ci-toggle-aged">오래된 추천 <span id="ci-aged-count">0</span> 건 보기 ▾</button>
+    <div id="ci-aged-list" class="ci-section-body" hidden></div>
+  </div>
+  <div id="ci-sec-wrap" class="ci-section-wrap" hidden>
+    <button class="ci-expand" type="button" id="ci-toggle-sec">noise <span id="ci-sec-count">0</span> 건 보기 ▾</button>
+    <div id="ci-sec-list" class="ci-section-body" hidden></div>
+  </div>
+
+  <!-- Phase 5+6: 하단 상태 타일 5 개 (클릭 시 필터 이동) -->
+  <div id="ci-tiles" class="ci-tiles ci-tiles-5">
     <button class="ci-tile t-strong" type="button" data-ci-tile="strong">
       <div class="ci-tile-n"><span id="ci-tile-strong-n">0</span><span class="ci-tile-u">건</span></div>
       <div class="ci-tile-l">🔥 강추천</div>
-      <div class="ci-tile-s">점수 80↑ · 추천만 필터</div>
+      <div class="ci-tile-s">main 슬롯 · 최신</div>
     </button>
     <button class="ci-tile t-sent" type="button" data-ci-tile="sent">
       <div class="ci-tile-n"><span id="ci-tile-sent-n">0</span><span class="ci-tile-u">건</span></div>
       <div class="ci-tile-l">✓ 전송됨</div>
-      <div class="ci-tile-s">draft 합류 완료</div>
+      <div class="ci-tile-s">draft 합류</div>
     </button>
     <button class="ci-tile t-failed" type="button" data-ci-tile="failed">
       <div class="ci-tile-n"><span id="ci-tile-failed-n">0</span><span class="ci-tile-u">건</span></div>
@@ -1991,7 +2041,12 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     <button class="ci-tile t-noise" type="button" data-ci-tile="noise">
       <div class="ci-tile-n"><span id="ci-tile-noise-n">0</span><span class="ci-tile-u">건</span></div>
       <div class="ci-tile-l">📉 noise</div>
-      <div class="ci-tile-s">기본 숨김 · 전체 보기</div>
+      <div class="ci-tile-s">6h 이내만</div>
+    </button>
+    <button class="ci-tile t-cleanup" type="button" data-ci-tile="cleanup">
+      <div class="ci-tile-n"><span id="ci-tile-cleanup-n">0</span><span class="ci-tile-u">건</span></div>
+      <div class="ci-tile-l">🧹 정리 후보</div>
+      <div class="ci-tile-s">오래 + 미전송</div>
     </button>
   </div>
 </section>
@@ -4559,6 +4614,8 @@ setInterval(loadPulseOverview,20000);
   let ciItems  = [];                 // 마지막 로드된 카드 캐시 (promote 후 부분 갱신용)
   let ciScoreCutoff = 60;            // Phase 4: 기본 추천만 (strong+watch)
   let ciShowNoise   = false;         // Phase 4: "숨긴 noise N 건 보기" 토글
+  let ciSlot        = 'main';        // Phase 6: 서버 slot 파라미터 (main|aged|secondary|cleanup|all)
+  let ciSlotCounts  = {main:0, aged:0, secondary:0, hidden:0, cleanup:0};
   const promotingIds = new Set();    // UI 버튼 중복 클릭 방지
 
   // Phase 3 — 상태 가시 피드백 유틸 ────────────────────────────────────
@@ -4777,25 +4834,32 @@ setInterval(loadPulseOverview,20000);
     const selStatus = document.getElementById('ci-status-filter');
     const selSort   = document.getElementById('ci-sort');
     const selCat    = document.getElementById('ci-filter-category');
-    // 공통: category 초기화 (타일이 카테고리를 덮지 않음)
     if(selCat) selCat.value = '';
     if(kind === 'strong'){
       if(selScore)  { selScore.value = '60';  ciScoreCutoff = 60; ciShowNoise = false; }
       if(selStatus) selStatus.value = 'all';
       if(selSort)   selSort.value   = 'score';
+      ciSlot = 'main';
     } else if(kind === 'sent'){
       if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
       if(selStatus) selStatus.value = 'sent';
       if(selSort)   selSort.value   = 'recent';
+      ciSlot = 'all';
     } else if(kind === 'failed'){
       if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
-      // 서버 shortlist 는 sent|unsent|all. failed 는 unsent 에 포함.
       if(selStatus) selStatus.value = 'unsent';
       if(selSort)   selSort.value   = 'recent';
+      ciSlot = 'all';
     } else if(kind === 'noise'){
       if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
       if(selStatus) selStatus.value = 'all';
-      if(selSort)   selSort.value   = 'score';
+      if(selSort)   selSort.value   = 'recent';
+      ciSlot = 'secondary';
+    } else if(kind === 'cleanup'){
+      if(selScore)  { selScore.value = '0';   ciScoreCutoff = 0; ciShowNoise = true; }
+      if(selStatus) selStatus.value = 'all';
+      if(selSort)   selSort.value   = 'recent';
+      ciSlot = 'cleanup';
     }
     ciLoad();
   }
@@ -4823,31 +4887,32 @@ setInterval(loadPulseOverview,20000);
     if(opts.skeleton){ renderSkeleton(3); }
     setBusy('ci-refresh', true);
     setStatus('loading', '불러오는 중…');
+    // 숨김 섹션은 main 로드 때마다 접힌 상태로 초기화
+    hideAgedSection();
+    hideSecondarySection();
     try{
       const qs = new URLSearchParams();
       if(selCat && selCat.value)  qs.set('category', selCat.value);
       if(selSort && selSort.value)qs.set('sort', selSort.value);
       if(selSt && selSt.value)    qs.set('status', selSt.value);
-      const q = qs.toString();
-      const res = await fetch(API+'/control/intel/shortlist'+(q?('?'+q):''));
+      qs.set('slot', ciSlot || 'main');
+      const res = await fetch(API+'/control/intel/shortlist?'+qs.toString());
       if(!res.ok) throw new Error('HTTP '+res.status);
       const data = await res.json();
       ciItems = Array.isArray(data.items) ? data.items : [];
-      // 전체 집계는 서버에서 온 목록 그대로 (요약 숫자는 숨김 유무와 무관)
-      const counts = computeCounts(ciItems);
-      renderSummaryBar(counts);
+      ciSlotCounts = data.slot_counts || {main:0,aged:0,secondary:0,hidden:0,cleanup:0};
+      // 요약 바: slot_counts 기반 (전체 수집 집계에 가까움)
+      renderSummaryBarFromSlots(data);
       renderTiles(ciItems);
       ciFetchStatus();  // hero 는 별도 비동기, 실패해도 본 로직 영향 없음
-      const {visible, hidden} = splitByCutoff(ciItems);
+      updateSectionToggleLabels();
+      // 메인 슬롯 렌더
       if(ciItems.length === 0){
-        list.innerHTML = '<div class="ci-empty">shortlist 결과 없음 — "수집 실행" 으로 adapter 를 돌리거나 키를 .env 에 추가하세요.</div>';
-      } else if(visible.length === 0){
-        list.innerHTML = '<div class="ci-empty">현재 점수 컷(' + ciScoreCutoff + '↑)을 넘는 항목이 없습니다. 점수 필터를 "전체"로 바꾸거나 수집을 실행하세요.</div>'
-          + renderHiddenNoiseFooter(hidden.length);
+        list.innerHTML = renderEmptyMain();
       } else {
-        list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
+        list.innerHTML = ciItems.map(renderCard).join('');
       }
-      setStatus('success', `${visible.length}/${ciItems.length} 건 · ${data.sort||'score'}`);
+      setStatus('success', `${ciItems.length} 건 · slot=${data.slot || ciSlot}`);
     } catch(e){
       const msg = (e && e.message) ? e.message : String(e);
       setStatus('error', '로드 실패: ' + msg);
@@ -4855,6 +4920,97 @@ setInterval(loadPulseOverview,20000);
       list.innerHTML = '';
     } finally {
       setBusy('ci-refresh', false);
+    }
+  }
+
+  // Phase 6 유틸 — 요약 바 / empty state / 섹션 토글 ────────────────────
+  function renderSummaryBarFromSlots(data){
+    const el = document.getElementById('ci-summary');
+    if(!el) return;
+    const sc = data.slot_counts || {};
+    const total = (sc.main||0) + (sc.aged||0) + (sc.secondary||0) + (sc.hidden||0);
+    // label 별 집계는 요약 바 목적상 현재 응답 items 로만 (main 슬롯 기준).
+    const c = {strong:0, watch:0, weak:0, noise:0};
+    for(const it of (data.items || [])){
+      const lab = it.score_label || 'noise';
+      if(c[lab] != null) c[lab] += 1;
+    }
+    el.innerHTML = `
+      <span class="ci-sum-chip">수집 <b>${total}</b></span>
+      <span class="ci-sum-chip s-strong">🔥 <b>${c.strong}</b></span>
+      <span class="ci-sum-chip s-watch">👀 <b>${c.watch}</b></span>
+      <span class="ci-sum-chip s-weak">➖ <b>${c.weak}</b></span>
+      <span class="ci-sum-chip s-noise">📉 <b>${sc.hidden||0 + sc.secondary||0}</b></span>
+      <span class="ci-sum-chip">🧹 <b>${sc.cleanup||0}</b></span>`;
+  }
+  function renderEmptyMain(){
+    const aged = ciSlotCounts.aged || 0;
+    const sec  = ciSlotCounts.secondary || 0;
+    const actions = [];
+    if(aged > 0) actions.push(`<button class="ci-empty-btn" type="button" data-ci-jump="aged">오래된 추천 ${aged}건 보기</button>`);
+    if(sec  > 0) actions.push(`<button class="ci-empty-btn" type="button" data-ci-jump="sec">noise ${sec}건 보기</button>`);
+    actions.push(`<button class="ci-empty-btn" type="button" data-ci-jump="collect">수집 실행</button>`);
+    return `<div class="ci-empty-main">
+      <div class="ci-empty-title">지금 바로 볼만한 항목 없음</div>
+      <div class="ci-empty-sub">main 슬롯이 비어 있습니다. 아래에서 오래된 추천이나 noise 를 펼쳐보거나 새로 수집하세요.</div>
+      <div class="ci-empty-actions">${actions.join('')}</div>
+    </div>`;
+  }
+  function updateSectionToggleLabels(){
+    const agedWrap = document.getElementById('ci-aged-wrap');
+    const secWrap  = document.getElementById('ci-sec-wrap');
+    const agedN = ciSlotCounts.aged || 0;
+    const secN  = ciSlotCounts.secondary || 0;
+    if(agedWrap){
+      agedWrap.hidden = agedN === 0;
+      const n = document.getElementById('ci-aged-count'); if(n) n.textContent = agedN;
+    }
+    if(secWrap){
+      secWrap.hidden = secN === 0;
+      const n = document.getElementById('ci-sec-count'); if(n) n.textContent = secN;
+    }
+  }
+  function hideAgedSection(){
+    const body = document.getElementById('ci-aged-list');
+    const btn  = document.getElementById('ci-toggle-aged');
+    if(body){ body.hidden = true; body.innerHTML = ''; }
+    if(btn){ btn.textContent = `오래된 추천 ${ciSlotCounts.aged||0} 건 보기 ▾`; }
+  }
+  function hideSecondarySection(){
+    const body = document.getElementById('ci-sec-list');
+    const btn  = document.getElementById('ci-toggle-sec');
+    if(body){ body.hidden = true; body.innerHTML = ''; }
+    if(btn){ btn.textContent = `noise ${ciSlotCounts.secondary||0} 건 보기 ▾`; }
+  }
+  async function loadSubSlot(slotKey, bodyId, btnId, label){
+    const body = document.getElementById(bodyId);
+    const btn  = document.getElementById(btnId);
+    if(!body || !btn) return;
+    if(!body.hidden){  // 이미 열려있으면 토글 닫기
+      body.hidden = true; body.innerHTML = '';
+      btn.textContent = `${label} ▾`;
+      return;
+    }
+    btn.textContent = `${label} 불러오는 중…`;
+    try{
+      const selCat = document.getElementById('ci-filter-category');
+      const selSt  = document.getElementById('ci-status-filter');
+      const qs = new URLSearchParams();
+      if(selCat && selCat.value) qs.set('category', selCat.value);
+      if(selSt  && selSt.value ) qs.set('status',   selSt.value);
+      qs.set('slot', slotKey);
+      const res = await fetch(API+'/control/intel/shortlist?'+qs.toString());
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      const items = data.items || [];
+      body.innerHTML = items.length
+        ? items.map(renderCard).join('')
+        : '<div class="ci-empty">항목 없음</div>';
+      body.hidden = false;
+      btn.textContent = `${label} ▴ 접기`;
+    } catch(e){
+      btn.textContent = `${label} ▾`;
+      showToast('error', '로드 실패: ' + ((e && e.message) ? e.message : e));
     }
   }
   async function ciCollect(){
@@ -4946,28 +5102,14 @@ setInterval(loadPulseOverview,20000);
   if(selSort) selSort.addEventListener('change', ciLoad);
   const selSt = document.getElementById('ci-status-filter');
   if(selSt) selSt.addEventListener('change', ciLoad);
-  // Phase 4 — 점수 컷 select
+  // Phase 4 — 점수 컷 select (Phase 6: 서버 slot 재조회로 연결)
   const selScore = document.getElementById('ci-score-filter');
   if(selScore) selScore.addEventListener('change', function(e){
     const v = parseInt(e.target.value, 10);
     ciScoreCutoff = isNaN(v) ? 0 : v;
     ciShowNoise = false;
-    // 서버 재호출 없이 현재 캐시로 재렌더 (빠름)
-    if(ciItems.length){
-      renderSummaryBar(computeCounts(ciItems));
-      const {visible, hidden} = splitByCutoff(ciItems);
-      const list = document.getElementById('ci-list');
-      if(list){
-        if(visible.length === 0 && ciItems.length){
-          list.innerHTML = '<div class="ci-empty">현재 점수 컷(' + ciScoreCutoff + '↑)을 넘는 항목이 없습니다.</div>'
-            + renderHiddenNoiseFooter(hidden.length);
-        } else {
-          list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
-        }
-      }
-    } else {
-      ciLoad();
-    }
+    ciSlot = (ciScoreCutoff === 0) ? 'all' : 'main';
+    ciLoad();
   });
   // Phase 4 — "숨긴 noise N 건 보기" 토글 (delegation)
   document.addEventListener('click', function(ev){
@@ -4980,12 +5122,41 @@ setInterval(loadPulseOverview,20000);
       list.innerHTML = visible.map(renderCard).join('') + renderHiddenNoiseFooter(hidden.length);
     }
   });
-  // Phase 5 — 하단 타일 클릭 → 필터 이동
+  // Phase 5+6 — 하단 타일 클릭 → 필터 이동 (5번째 tile: cleanup 포함)
   document.addEventListener('click', function(ev){
     const t = ev.target && ev.target.closest ? ev.target.closest('[data-ci-tile]') : null;
     if(!t) return;
     const kind = t.getAttribute('data-ci-tile');
     if(kind) applyTileFilter(kind);
+  });
+  // Phase 6 — "오래된 추천" 섹션 토글
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('#ci-toggle-aged') : null;
+    if(!t) return;
+    loadSubSlot('aged', 'ci-aged-list', 'ci-toggle-aged',
+                `오래된 추천 ${ciSlotCounts.aged||0} 건`);
+  });
+  // Phase 6 — "noise 보기" 섹션 토글 (보조 슬롯, 6h 이내)
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('#ci-toggle-sec') : null;
+    if(!t) return;
+    loadSubSlot('secondary', 'ci-sec-list', 'ci-toggle-sec',
+                `noise ${ciSlotCounts.secondary||0} 건`);
+  });
+  // Phase 6 — empty state 점프 버튼 (aged / sec / collect)
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('[data-ci-jump]') : null;
+    if(!t) return;
+    const k = t.getAttribute('data-ci-jump');
+    if(k === 'aged'){
+      loadSubSlot('aged', 'ci-aged-list', 'ci-toggle-aged',
+                  `오래된 추천 ${ciSlotCounts.aged||0} 건`);
+    } else if(k === 'sec'){
+      loadSubSlot('secondary', 'ci-sec-list', 'ci-toggle-sec',
+                  `noise ${ciSlotCounts.secondary||0} 건`);
+    } else if(k === 'collect'){
+      ciCollect();
+    }
   });
 })();
 </script>

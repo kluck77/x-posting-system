@@ -207,3 +207,116 @@ def compose_why_flagged_human(
         # flagged_reason 이 있으면 fallback 으로 첫 항목만 취한다 (노출 최소).
         text = (flagged_reason.split(";")[0] if flagged_reason else "신호 없음")
     return text[:120]
+
+
+# ─── Phase 6 — 시간 감쇠 / 슬롯 분류 / cleanup 후보 ───────────────────
+
+def compute_freshness_penalty(age_hours: float) -> int:
+    """
+    경과 시간에 따른 감쇠 계단:
+       0 <= age <  2h → 0
+       2 <= age <  6h → 5
+       6 <= age < 12h → 10
+      12 <= age < 24h → 20
+      age >= 24h      → 30
+    """
+    if age_hours is None or age_hours < 0:
+        age_hours = 0.0
+    if age_hours < 2:
+        return 0
+    if age_hours < 6:
+        return 5
+    if age_hours < 12:
+        return 10
+    if age_hours < 24:
+        return 20
+    return 30
+
+
+def compute_display_score(priority_score: int, penalty: int) -> int:
+    """표시/정렬용 점수 = max(0, priority - penalty). priority 원값은 유지."""
+    try:
+        p = int(priority_score or 0)
+        pen = int(penalty or 0)
+    except Exception:
+        return 0
+    return max(0, p - pen)
+
+
+# Visibility window (Phase 6 지시 그대로)
+_WINDOW_MAIN_STRONG_WATCH_H = 24.0
+_WINDOW_AGED_STRONG_WATCH_H = 24.0 * 7
+_WINDOW_MAIN_WEAK_H = 12.0
+_WINDOW_AGED_WEAK_H = 72.0
+_WINDOW_MAIN_NOISE_H = 6.0
+
+
+def classify_visibility_slot(
+    label: str,
+    age_hours: float,
+    promotion_status: str,
+) -> str:
+    """
+    'main' | 'aged' | 'secondary' | 'hidden'
+
+    - strong / watch : 24h main, 7d 까지 aged, 그 뒤 hidden
+    - weak           : 12h main, 72h 까지 aged, 그 뒤 hidden
+    - noise          : 6h secondary, 그 뒤 hidden
+    - promotion_status == 'sent' 이면 hidden 강등 대신 aged 유지 (이력 보존)
+    """
+    lab = (label or "noise").lower()
+    age = float(age_hours or 0.0)
+    st = (promotion_status or "none").lower()
+
+    if lab in ("strong", "watch"):
+        if age <= _WINDOW_MAIN_STRONG_WATCH_H:
+            slot = "main"
+        elif age <= _WINDOW_AGED_STRONG_WATCH_H:
+            slot = "aged"
+        else:
+            slot = "hidden"
+    elif lab == "weak":
+        if age <= _WINDOW_MAIN_WEAK_H:
+            slot = "main"
+        elif age <= _WINDOW_AGED_WEAK_H:
+            slot = "aged"
+        else:
+            slot = "hidden"
+    else:  # noise 또는 알 수 없는 라벨
+        if age <= _WINDOW_MAIN_NOISE_H:
+            slot = "secondary"
+        else:
+            slot = "hidden"
+
+    # 전송된 이력은 최소 aged 로 보존
+    if st == "sent" and slot == "hidden":
+        slot = "aged"
+    return slot
+
+
+def is_cleanup_candidate(
+    label: str,
+    age_hours: float,
+    promotion_status: str,
+) -> bool:
+    """
+    자동 삭제 아님. UI 에서 정리 후보 타일/필터로 노출.
+
+      sent                → 항상 False (보존)
+      noise + 48h+        → True
+      weak  + 72h+        → True
+      strong/watch + 7d+  → True
+      그 외               → False
+    """
+    lab = (label or "noise").lower()
+    age = float(age_hours or 0.0)
+    st = (promotion_status or "none").lower()
+    if st == "sent":
+        return False
+    if lab == "noise" and age > 48:
+        return True
+    if lab == "weak" and age > 72:
+        return True
+    if lab in ("strong", "watch") and age > 24 * 7:
+        return True
+    return False

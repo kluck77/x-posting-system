@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import desc
@@ -36,6 +36,12 @@ from app.services.intel.collect import (
     get_total_counts,
 )
 from app.services.intel.schema import IntelCategory
+from app.services.intel.score import (
+    classify_visibility_slot,
+    compute_display_score,
+    compute_freshness_penalty,
+    is_cleanup_candidate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +50,31 @@ router = APIRouter(prefix="/intel", tags=["crypto-intel"])
 _HANGUL_RE = re.compile(r"[가-힣]")
 
 
-def _card(item: IntelItem) -> dict:
+def _age_hours(item: IntelItem, now: datetime) -> float:
+    ref = item.published_at or item.created_at
+    if not ref:
+        return 0.0
+    # DB 에서 오는 datetime 은 naive (utc) — 안전하게 tz 제거 비교
+    try:
+        ref_naive = ref.replace(tzinfo=None) if ref.tzinfo else ref
+        now_naive = now.replace(tzinfo=None) if now.tzinfo else now
+        delta = (now_naive - ref_naive).total_seconds()
+        return max(0.0, delta / 3600.0)
+    except Exception:
+        return 0.0
+
+
+def _card(item: IntelItem, now: Optional[datetime] = None) -> dict:
     """UI 카드 직렬화 — raw_payload / raw flagged_reason 미포함."""
+    if now is None:
+        now = datetime.now(timezone.utc)
+    label = item.score_label or "noise"
+    promo = item.promotion_status or "none"
+    age_h = _age_hours(item, now)
+    penalty = compute_freshness_penalty(age_h)
+    disp = compute_display_score(int(item.priority_score or 0), penalty)
+    slot = classify_visibility_slot(label, age_h, promo)
+    cleanup = is_cleanup_candidate(label, age_h, promo)
     return {
         "id":                item.id,
         "source":            item.source,
@@ -57,11 +86,16 @@ def _card(item: IntelItem) -> dict:
         "published_at":      item.published_at.isoformat() if item.published_at else None,
         "entity":            item.entity,
         "priority_score":    int(item.priority_score or 0),
-        "score_label":       item.score_label or "noise",
+        "score_label":       label,
         "why_flagged_human": item.why_flagged_human or "",
-        "promotion_status":  item.promotion_status or "none",
+        "promotion_status":  promo,
         "promoted_draft_id": item.promoted_draft_id,
         "promoted_at":       item.promoted_at.isoformat() if item.promoted_at else None,
+        # Phase 6 — 시간 감쇠 / 슬롯 / cleanup
+        "age_hours":             round(age_h, 2),
+        "display_score":         disp,
+        "visibility_slot":       slot,
+        "is_cleanup_candidate":  cleanup,
     }
 
 
@@ -79,16 +113,25 @@ async def intel_collect(
         db.close()
 
 
+_MAIN_SLOT_LIMIT_CAP = 30  # Phase 6: main 슬롯은 30 건 상한 (컨베이어벨트)
+
+
 @router.get("/shortlist")
 async def intel_shortlist(
     category: Optional[str] = Query(default=None),
     sort: str = Query(default="score", description="score | recent | category"),
     status: str = Query(default="all", description="all | unsent | sent"),
+    slot: str = Query(default="main", description="main | aged | secondary | cleanup | all"),
     limit: int = Query(default=50, ge=1, le=200),
 ):
     """
-    shortlisted=True 카드 목록. category/sort/status 필터.
-    - raw_payload 미포함, raw flagged_reason 미포함.
+    Phase 6 — 슬롯 분리 + 시간 감쇠 정렬.
+      slot=main        : 기본 노출 (strong/watch 24h, weak 12h)
+      slot=aged        : 기본 window 초과한 strong/watch/weak 보조
+      slot=secondary   : 6h 이내 noise
+      slot=cleanup     : is_cleanup_candidate=True
+      slot=all         : hidden 제외 전부 (디버그/운영자 전체보기)
+    raw_payload / raw flagged_reason 미포함.
     """
     cat_value: Optional[str] = None
     if category:
@@ -109,31 +152,63 @@ async def intel_shortlist(
         elif s == "unsent":
             q = q.filter(IntelItem.promotion_status != "sent")
 
+        # DB 단계에선 status/category 까지만 필터. slot 은 파생이므로 파이썬에서.
+        # 정렬은 display_score 가 파생이라 파이썬에서 최종 적용.
+        # created_at desc 로 당겨 놓고 (cap 보장) 파이썬에서 재정렬.
+        rows = (
+            q.order_by(desc(IntelItem.created_at)).limit(500).all()
+        )
+        now = datetime.now(timezone.utc)
+        cards: list[dict[str, Any]] = [_card(r, now) for r in rows]
+
+        # 슬롯 카운트 (hidden 포함 전체 집계 — UI 라벨용)
+        slot_counts = {"main": 0, "aged": 0, "secondary": 0, "hidden": 0, "cleanup": 0}
+        for c in cards:
+            slot_counts[c["visibility_slot"]] = slot_counts.get(c["visibility_slot"], 0) + 1
+            if c["is_cleanup_candidate"]:
+                slot_counts["cleanup"] += 1
+
+        # 슬롯 선택
+        slot_key = (slot or "main").lower()
+        if slot_key == "main":
+            selected = [c for c in cards if c["visibility_slot"] == "main"]
+        elif slot_key == "aged":
+            selected = [c for c in cards if c["visibility_slot"] == "aged"]
+        elif slot_key == "secondary":
+            selected = [c for c in cards if c["visibility_slot"] == "secondary"]
+        elif slot_key == "cleanup":
+            selected = [c for c in cards if c["is_cleanup_candidate"]]
+        else:  # "all" — hidden 제외
+            selected = [c for c in cards if c["visibility_slot"] != "hidden"]
+
+        # 정렬
         sort_key = (sort or "score").lower()
         if sort_key == "recent":
-            q = q.order_by(
-                desc(IntelItem.published_at), desc(IntelItem.created_at),
+            selected.sort(
+                key=lambda c: (c["published_at"] or "", c["id"]), reverse=True,
             )
         elif sort_key == "category":
-            q = q.order_by(
-                IntelItem.category.asc(),
-                desc(IntelItem.priority_score),
-                desc(IntelItem.created_at),
+            selected.sort(
+                key=lambda c: (c["category"] or "", -c["display_score"]),
             )
-        else:  # "score" (default)
-            q = q.order_by(
-                desc(IntelItem.priority_score),
-                desc(IntelItem.published_at),
-                desc(IntelItem.created_at),
+        else:  # "score" (default) — display_score desc
+            selected.sort(
+                key=lambda c: (c["display_score"], c["published_at"] or "", c["id"]),
+                reverse=True,
             )
 
-        rows = q.limit(limit).all()
+        # limit — main 슬롯은 cap 적용 (운영자 "컨베이어벨트" 요구)
+        effective_limit = min(limit, _MAIN_SLOT_LIMIT_CAP) if slot_key == "main" else limit
+        selected = selected[:effective_limit]
+
         return {
-            "items":           [_card(r) for r in rows],
-            "count":           len(rows),
+            "items":           selected,
+            "count":           len(selected),
             "filter_category": cat_value,
             "sort":            sort_key,
             "status":          s,
+            "slot":            slot_key,
+            "slot_counts":     slot_counts,
         }
     finally:
         db.close()
