@@ -1541,10 +1541,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <div class="tab-footer" id="soFooter"></div>
 </section>
 
-<!-- Crypto Intel (Phase 1 — read-only shortlist) -->
+<!-- Crypto Intel (Phase 2 — scoring + human reason + telegram promote) -->
 <section class="tab-pane" id="tab-crypto-intel">
   <style>
-    #tab-crypto-intel { --ci-pad:10px; --ci-gap:8px; }
+    #tab-crypto-intel { --ci-pad:10px; --ci-gap:6px; }
     #tab-crypto-intel .ci-toolbar{
       display:flex;gap:var(--ci-gap);flex-wrap:wrap;align-items:center;
       padding:var(--ci-pad) 2px;position:sticky;top:0;z-index:5;
@@ -1553,8 +1553,9 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     #tab-crypto-intel .ci-select, #tab-crypto-intel .ci-btn{
       background:var(--bg-raised);color:var(--text-pri);
       border:1px solid var(--border-normal);border-radius:var(--r-md);
-      padding:8px 12px;font-size:13px;font-weight:500;
+      padding:8px 10px;font-size:13px;font-weight:500;
       cursor:pointer;-webkit-tap-highlight-color:transparent;
+      min-height:38px;
     }
     #tab-crypto-intel .ci-btn:active{transform:scale(.97);}
     #tab-crypto-intel .ci-btn[disabled]{opacity:.55;cursor:default;}
@@ -1562,41 +1563,92 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       font-size:var(--fs-meta);color:var(--text-sec);
       font-family:var(--mono);padding:4px 2px;
     }
+
+    /* ── 카드 ── */
     #tab-crypto-intel .ci-card{
       background:var(--bg-surface);border:1px solid var(--border-subtle);
       border-radius:var(--r-lg);padding:12px;margin-bottom:10px;
+      display:grid;grid-template-columns:56px 1fr;gap:10px;
     }
+    #tab-crypto-intel .ci-card.l-noise{opacity:.55;}
+    #tab-crypto-intel .ci-card.l-strong{border-color:rgba(45,212,191,.35);}
+    #tab-crypto-intel .ci-card.l-watch{border-color:rgba(245,158,11,.30);}
+
+    /* ── score badge ── */
+    #tab-crypto-intel .ci-score{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      border-radius:var(--r-md);padding:6px 4px;min-height:56px;
+      background:var(--bg-raised);
+    }
+    #tab-crypto-intel .ci-score .n{
+      font-size:var(--fs-h1);font-weight:var(--fw-h1);line-height:1;
+      font-family:var(--mono);
+    }
+    #tab-crypto-intel .ci-score .l{
+      font-size:9px;letter-spacing:1px;text-transform:uppercase;margin-top:4px;
+      font-weight:var(--fw-label);
+    }
+    #tab-crypto-intel .ci-score.l-strong{background:var(--green-dim);color:var(--green);}
+    #tab-crypto-intel .ci-score.l-watch{background:var(--amber-dim);color:var(--amber);}
+    #tab-crypto-intel .ci-score.l-weak{background:var(--bg-raised);color:var(--text-sec);}
+    #tab-crypto-intel .ci-score.l-noise{
+      background:transparent;color:var(--text-mut);
+      border:1px solid var(--border-subtle);
+    }
+
+    /* ── 카드 본문 ── */
+    #tab-crypto-intel .ci-body{min-width:0;}
     #tab-crypto-intel .ci-card-top{
       display:flex;gap:6px;flex-wrap:wrap;align-items:center;
-      font-size:var(--fs-meta);color:var(--text-mut);margin-bottom:6px;
+      font-size:var(--fs-meta);color:var(--text-mut);margin-bottom:4px;
     }
     #tab-crypto-intel .ci-badge{
       background:var(--indigo-dim);color:var(--text-acc);
-      padding:2px 8px;border-radius:var(--r-sm);
-      font-weight:var(--fw-label);letter-spacing:.5px;
+      padding:2px 7px;border-radius:var(--r-sm);
+      font-weight:var(--fw-label);letter-spacing:.5px;font-size:var(--fs-meta);
     }
     #tab-crypto-intel .ci-badge.cat{background:var(--purple-dim);color:var(--purple);}
     #tab-crypto-intel .ci-time{margin-left:auto;font-family:var(--mono);}
     #tab-crypto-intel .ci-title{
       font-size:var(--fs-body);font-weight:600;color:var(--text-pri);
-      margin:2px 0 6px;line-height:1.35;
+      margin:2px 0 6px;line-height:1.35;word-break:keep-all;
     }
     #tab-crypto-intel .ci-summary{
       font-size:13px;color:var(--text-sec);line-height:1.4;
-      display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
       overflow:hidden;margin-bottom:6px;
     }
-    #tab-crypto-intel .ci-meta{
-      font-size:var(--fs-meta);color:var(--text-mut);
-      display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;
+    #tab-crypto-intel .ci-reason-human{
+      font-size:12px;color:var(--text-sec);line-height:1.4;margin-bottom:8px;
     }
-    #tab-crypto-intel .ci-reason{color:var(--amber);font-family:var(--mono);}
-    #tab-crypto-intel .ci-link{
-      font-size:var(--fs-meta);color:var(--indigo);text-decoration:none;
+
+    /* ── actions ── */
+    #tab-crypto-intel .ci-actions{
+      display:flex;gap:6px;flex-wrap:wrap;
+    }
+    #tab-crypto-intel .ci-action{
+      flex:1;min-width:120px;min-height:38px;
+      border-radius:var(--r-md);padding:8px 10px;font-size:13px;font-weight:600;
+      border:1px solid var(--border-normal);background:var(--bg-raised);
+      color:var(--text-pri);cursor:pointer;text-align:center;text-decoration:none;
+      display:inline-flex;align-items:center;justify-content:center;gap:4px;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #tab-crypto-intel .ci-action:active{transform:scale(.97);}
+    #tab-crypto-intel .ci-action[disabled], #tab-crypto-intel .ci-action.is-disabled{
+      opacity:.5;cursor:default;pointer-events:none;
+    }
+    #tab-crypto-intel .ci-action.primary{
+      background:var(--indigo-dim);color:var(--text-acc);border-color:var(--border-accent);
+    }
+    #tab-crypto-intel .ci-action.sent{
+      background:var(--green-dim);color:var(--green);border-color:rgba(45,212,191,.35);
+    }
+    #tab-crypto-intel .ci-action.failed{
+      background:var(--red-dim);color:var(--red);border-color:rgba(239,68,68,.35);
     }
     #tab-crypto-intel .ci-empty{
-      text-align:center;padding:24px 8px;color:var(--text-mut);
-      font-size:13px;
+      text-align:center;padding:24px 8px;color:var(--text-mut);font-size:13px;
     }
   </style>
 
@@ -1609,6 +1661,16 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       <option value="crypto_stream">Crypto News Stream</option>
       <option value="macro_policy">General Macro / Policy</option>
       <option value="asset_context">Asset Context</option>
+    </select>
+    <select id="ci-sort" class="ci-select">
+      <option value="score">추천순</option>
+      <option value="recent">최신순</option>
+      <option value="category">카테고리순</option>
+    </select>
+    <select id="ci-status-filter" class="ci-select">
+      <option value="all">전체</option>
+      <option value="unsent">전송 전</option>
+      <option value="sent">전송됨</option>
     </select>
     <button id="ci-refresh" class="ci-btn" type="button">↻ 새로고침</button>
     <button id="ci-collect" class="ci-btn" type="button">수집 실행</button>
@@ -4172,11 +4234,13 @@ setInterval(loadNaverLive,15000);
 // Pulse 히어로/스트림도 20초마다 — 첫 화면 살아있는 느낌
 setInterval(loadPulseOverview,20000);
 
-// ── CRYPTO INTEL (Phase 1 — read-only) ──────────────────────────────────
+// ── CRYPTO INTEL (Phase 2 — scoring + human reason + telegram promote) ──
 // IIFE scope 격리. 전역 오염 0. fetch 실패는 이 탭 안에서만 봉쇄.
 (function(){
   let ciLoaded = false;
   let ciBusy   = false;
+  let ciItems  = [];                 // 마지막 로드된 카드 캐시 (promote 후 부분 갱신용)
+  const promotingIds = new Set();    // UI 버튼 중복 클릭 방지
 
   function esc(s){
     return (s==null?'':String(s))
@@ -4188,44 +4252,93 @@ setInterval(loadPulseOverview,20000);
     try{ return new Date(iso).toLocaleString('ko-KR',{hour12:false}); }
     catch(_){ return iso; }
   }
+  function hostOf(u){
+    if(!u) return '';
+    try{ return new URL(u).hostname; } catch(_){ return ''; }
+  }
+  function labelText(lab){
+    return ({strong:'🔥 강추천', watch:'👀 볼만함', weak:'➖ 약함', noise:'📉 noise'})[lab] || '';
+  }
+  function actionButtons(it){
+    const urlBtn = it.url
+      ? `<a class="ci-action" href="${esc(it.url)}" target="_blank" rel="noopener">원문 보기 ↗</a>`
+      : `<button class="ci-action is-disabled" type="button" disabled>원문 없음</button>`;
+    const st = it.promotion_status || 'none';
+    let promoBtn = '';
+    if(promotingIds.has(it.id)){
+      promoBtn = `<button class="ci-action primary is-disabled" type="button" disabled>전송 중…</button>`;
+    } else if(st === 'sent'){
+      const did = it.promoted_draft_id ? ('#'+it.promoted_draft_id) : '';
+      promoBtn = `<button class="ci-action sent is-disabled" type="button" disabled>✓ 전송됨 ${esc(did)}</button>`;
+    } else if(st === 'failed'){
+      promoBtn = `<button class="ci-action failed" type="button" data-ci-promote="${it.id}">↻ 다시 전송</button>`;
+    } else {
+      promoBtn = `<button class="ci-action primary" type="button" data-ci-promote="${it.id}">텔레그램 초안 전송</button>`;
+    }
+    return `<div class="ci-actions">${urlBtn}${promoBtn}</div>`;
+  }
   function renderCard(it){
-    const host = it.url ? (()=>{ try{return new URL(it.url).hostname;}catch(_){return '';} })() : '';
-    const link = it.url ? `<a class="ci-link" href="${esc(it.url)}" target="_blank" rel="noopener">원문 열기 ↗ ${esc(host)}</a>` : '';
+    const lab = it.score_label || 'noise';
+    const n   = Math.max(0, Math.min(100, it.priority_score|0));
+    const host = hostOf(it.url);
+    const hostLine = host ? `<span class="ci-time">${esc(host)}</span>` : '';
     return `
-      <div class="ci-card">
-        <div class="ci-card-top">
-          <span class="ci-badge">${esc(it.source||'')}</span>
-          <span class="ci-badge cat">${esc(it.category||'')}</span>
-          <span class="ci-time">${esc(fmtTime(it.published_at))}</span>
+      <div class="ci-card l-${esc(lab)}" data-id="${it.id}">
+        <div class="ci-score l-${esc(lab)}">
+          <span class="n">${n}</span>
+          <span class="l">${esc(lab)}</span>
         </div>
-        <div class="ci-title">${esc(it.title||'')}</div>
-        ${it.summary ? `<div class="ci-summary">${esc(it.summary)}</div>` : ''}
-        <div class="ci-meta">
-          ${it.entity ? `<span>entity: ${esc(it.entity)}</span>` : ''}
-          ${it.why_flagged ? `<span class="ci-reason">${esc(it.why_flagged)}</span>` : ''}
+        <div class="ci-body">
+          <div class="ci-card-top">
+            <span class="ci-badge">${esc(it.source||'')}</span>
+            <span class="ci-badge cat">${esc(it.category||'')}</span>
+            ${labelText(lab) ? `<span class="ci-badge">${esc(labelText(lab))}</span>` : ''}
+            <span class="ci-time">${esc(fmtTime(it.published_at))}</span>
+          </div>
+          <div class="ci-title">${esc(it.title||'')}</div>
+          ${it.summary ? `<div class="ci-summary">${esc(it.summary)}</div>` : ''}
+          ${it.why_flagged_human ? `<div class="ci-reason-human">${esc(it.why_flagged_human)}</div>` : ''}
+          ${hostLine ? `<div class="ci-card-top">${hostLine}</div>` : ''}
+          ${actionButtons(it)}
         </div>
-        ${link}
       </div>`;
+  }
+  function rerenderOne(updated){
+    const idx = ciItems.findIndex(x => x.id === updated.id);
+    if(idx >= 0) ciItems[idx] = Object.assign({}, ciItems[idx], updated);
+    const list = document.getElementById('ci-list');
+    const el = list && list.querySelector('.ci-card[data-id="'+updated.id+'"]');
+    if(el){
+      el.outerHTML = renderCard(ciItems[idx] || updated);
+    } else {
+      // 리스트에 없으면 전체 재렌더
+      if(list) list.innerHTML = ciItems.map(renderCard).join('');
+    }
   }
   async function ciLoad(){
     const status = document.getElementById('ci-status');
     const list   = document.getElementById('ci-list');
-    const sel    = document.getElementById('ci-filter-category');
-    if(!status||!list||!sel) return;
+    const selCat = document.getElementById('ci-filter-category');
+    const selSort= document.getElementById('ci-sort');
+    const selSt  = document.getElementById('ci-status-filter');
+    if(!status||!list) return;
     try{
       status.textContent = '불러오는 중…';
-      const cat = sel.value;
-      const qs  = cat ? ('?category='+encodeURIComponent(cat)) : '';
-      const res = await fetch(API+'/control/intel/shortlist'+qs);
+      const qs = new URLSearchParams();
+      if(selCat && selCat.value)  qs.set('category', selCat.value);
+      if(selSort && selSort.value)qs.set('sort', selSort.value);
+      if(selSt && selSt.value)    qs.set('status', selSt.value);
+      const q = qs.toString();
+      const res = await fetch(API+'/control/intel/shortlist'+(q?('?'+q):''));
       if(!res.ok) throw new Error('HTTP '+res.status);
       const data = await res.json();
-      const items = Array.isArray(data.items) ? data.items : [];
-      if(items.length===0){
+      ciItems = Array.isArray(data.items) ? data.items : [];
+      if(ciItems.length===0){
         list.innerHTML = '<div class="ci-empty">shortlist 결과 없음 — "수집 실행" 으로 adapter 를 돌리거나 키를 .env 에 추가하세요.</div>';
       } else {
-        list.innerHTML = items.map(renderCard).join('');
+        list.innerHTML = ciItems.map(renderCard).join('');
       }
-      status.textContent = items.length + ' 건';
+      status.textContent = ciItems.length + ' 건 · ' + (data.sort||'score');
     } catch(e){
       status.textContent = '로드 실패: ' + (e && e.message ? e.message : e);
       list.innerHTML = '';
@@ -4252,11 +4365,52 @@ setInterval(loadPulseOverview,20000);
       if(btn) btn.removeAttribute('disabled');
     }
   }
+  async function ciPromote(itemId){
+    if(!itemId || promotingIds.has(itemId)) return;
+    promotingIds.add(itemId);
+    rerenderOne({id: itemId});
+    const status = document.getElementById('ci-status');
+    try{
+      const res = await fetch(API+'/control/intel/items/'+itemId+'/promote', {method:'POST'});
+      if(res.status === 409){
+        // 이미 sent — 서버에 기록된 상태로 갱신
+        let dj = {};
+        try{ dj = await res.json(); } catch(_){}
+        const did = (dj && dj.detail && dj.detail.draft_id) || null;
+        rerenderOne({id: itemId, promotion_status:'sent', promoted_draft_id: did});
+        if(status) status.textContent = `이미 전송됨 — draft #${did||'?'}`;
+        return;
+      }
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const d = await res.json();
+      if(d.ok){
+        rerenderOne({id: itemId, promotion_status:'sent',
+                     promoted_draft_id: d.draft_id, promoted_at: d.promoted_at});
+        if(status) status.textContent = `전송 완료 — draft #${d.draft_id}` +
+          (d.telegram_sent===false ? ' (텔레그램 미전송: 설정 확인)' : '');
+      } else {
+        rerenderOne({id: itemId, promotion_status:'failed'});
+        if(status) status.textContent = '전송 실패: ' + (d.error || 'unknown');
+      }
+    } catch(e){
+      rerenderOne({id: itemId, promotion_status:'failed'});
+      if(status) status.textContent = '전송 실패: ' + (e && e.message ? e.message : e);
+    } finally {
+      promotingIds.delete(itemId);
+    }
+  }
   // 탭 첫 진입 시 1 회만 lazy fetch
   document.addEventListener('click', function(ev){
     const t = ev.target && ev.target.closest ? ev.target.closest('.nav-btn[data-tab="crypto-intel"]') : null;
     if(!t) return;
     if(!ciLoaded){ ciLoaded = true; ciLoad(); }
+  });
+  // 카드 내부 promote 버튼 delegation — 재렌더 후에도 유효
+  document.addEventListener('click', function(ev){
+    const t = ev.target && ev.target.closest ? ev.target.closest('button[data-ci-promote]') : null;
+    if(!t) return;
+    const id = parseInt(t.getAttribute('data-ci-promote'), 10);
+    if(!isNaN(id)) ciPromote(id);
   });
   const btnRefresh = document.getElementById('ci-refresh');
   if(btnRefresh) btnRefresh.addEventListener('click', ciLoad);
@@ -4264,6 +4418,10 @@ setInterval(loadPulseOverview,20000);
   if(btnCollect) btnCollect.addEventListener('click', ciCollect);
   const selCat = document.getElementById('ci-filter-category');
   if(selCat) selCat.addEventListener('change', ciLoad);
+  const selSort = document.getElementById('ci-sort');
+  if(selSort) selSort.addEventListener('change', ciLoad);
+  const selSt = document.getElementById('ci-status-filter');
+  if(selSt) selSt.addEventListener('change', ciLoad);
 })();
 </script>
 </body>

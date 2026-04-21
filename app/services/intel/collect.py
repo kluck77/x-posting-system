@@ -28,6 +28,11 @@ from app.services.intel.adapters.base import BaseAdapter
 from app.services.intel.dedup import compute_content_hash
 from app.services.intel.filter import decide_shortlist, reclassify_category
 from app.services.intel.schema import NormalizedIntelItem
+from app.services.intel.score import (
+    compose_why_flagged_human,
+    compute_priority_score,
+    derive_score_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +111,11 @@ async def collect_all(
             # 필터
             shortlisted, reason = decide_shortlist(item)
 
+            # Phase 2 — 점수 / 라벨 / 사람용 이유 (순수 함수, AI 없음)
+            score = compute_priority_score(item)
+            label = derive_score_label(score)
+            human_reason = compose_why_flagged_human(item, reason, score)
+
             row = IntelItem(
                 source=item.source,
                 source_type=item.source_type,
@@ -119,6 +129,10 @@ async def collect_all(
                 raw_payload=_dump_raw(item.raw_payload),
                 shortlisted=shortlisted,
                 flagged_reason=reason or None,
+                priority_score=score,
+                score_label=label,
+                why_flagged_human=human_reason,
+                promotion_status="none",
             )
             try:
                 db.add(row)

@@ -248,19 +248,59 @@ def _run_schema_migrations():
             "column": "resonance_fallback_used",
             "ddl": "ALTER TABLE drafts ADD COLUMN resonance_fallback_used BOOLEAN DEFAULT 0 NOT NULL",
         },
+        # ── intel_items (Phase 2: scoring + promote state) ─────────────────
+        # SQLite ALTER TABLE 제약으로 FK 제약은 추가하지 않음 (모델 쪽에만 선언).
+        {
+            "table": "intel_items",
+            "column": "priority_score",
+            "ddl": "ALTER TABLE intel_items ADD COLUMN priority_score INTEGER NOT NULL DEFAULT 0",
+        },
+        {
+            "table": "intel_items",
+            "column": "score_label",
+            "ddl": "ALTER TABLE intel_items ADD COLUMN score_label VARCHAR(20) NOT NULL DEFAULT 'noise'",
+        },
+        {
+            "table": "intel_items",
+            "column": "why_flagged_human",
+            "ddl": "ALTER TABLE intel_items ADD COLUMN why_flagged_human TEXT",
+        },
+        {
+            "table": "intel_items",
+            "column": "promoted_draft_id",
+            "ddl": "ALTER TABLE intel_items ADD COLUMN promoted_draft_id INTEGER",
+        },
+        {
+            "table": "intel_items",
+            "column": "promoted_at",
+            "ddl": "ALTER TABLE intel_items ADD COLUMN promoted_at DATETIME",
+        },
+        {
+            "table": "intel_items",
+            "column": "promotion_status",
+            "ddl": "ALTER TABLE intel_items ADD COLUMN promotion_status VARCHAR(20) NOT NULL DEFAULT 'none'",
+        },
     ]
     with engine.connect() as conn:
-        existing_cols = _get_existing_columns(conn, "drafts")
+        # drafts + intel_items 혼재 지원 — 테이블별 existing_cols 캐시.
+        cached_cols: dict[str, set] = {}
         for m in migrations:
-            if m["column"] not in existing_cols:
+            tbl = m["table"]
+            if tbl not in cached_cols:
+                try:
+                    cached_cols[tbl] = _get_existing_columns(conn, tbl)
+                except Exception:
+                    cached_cols[tbl] = set()
+            if m["column"] not in cached_cols[tbl]:
                 try:
                     conn.execute(text(m["ddl"]))
                     conn.commit()
-                    logger.info(f"[migration] 컬럼 추가: {m['column']}")
+                    cached_cols[tbl].add(m["column"])
+                    logger.info(f"[migration] 컬럼 추가: {tbl}.{m['column']}")
                 except Exception as e:
-                    logger.error(f"[migration] 오류: {m['column']} — {e}")
+                    logger.error(f"[migration] 오류: {tbl}.{m['column']} — {e}")
             else:
-                logger.debug(f"[migration] 이미 존재: {m['column']}")
+                logger.debug(f"[migration] 이미 존재: {tbl}.{m['column']}")
 
 
 def _ensure_eval_records_table():
