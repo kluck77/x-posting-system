@@ -126,7 +126,11 @@ def compute_priority_score(item: NormalizedIntelItem) -> int:
 
     # generic macro noise 감점
     if item.source_type == "market_news" and not crypto_hit and not policy_hit:
-        score += _NOISE_PENALTY
+        score += _NOISE_PENALTY      # -25
+
+    # crypto_news 중 정책/엔티티 신호 없는 일반 가격 뉴스 부분 감점
+    if item.source_type == "crypto_news" and not policy_hit and not entity_hit:
+        score += -15
 
     # 지나치게 짧은 제목 감점
     if len((item.title or "").strip()) < _TITLE_MIN_LEN:
