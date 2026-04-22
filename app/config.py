@@ -120,6 +120,13 @@ class Settings(BaseSettings):
                     "활성화하면 30분마다 Grok API 호출 (월 $2~3 예상).",
     )
 
+    # --- Phase A critic skip (Haiku Judge 로 대체) ---
+    skip_phase_a: bool = Field(
+        default=True,
+        description="True 시 Step 5.9 Haiku Judge 만 사용. "
+                    "False 로 되돌리면 기존 voice/hook/ending/fact 4 critic 복원.",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

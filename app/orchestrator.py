@@ -51,6 +51,8 @@ from app.services.korean_context import build_korean_entity_brief
 from app.services.frame_classifier import select_frame
 from app.services.thread_structurer import structure as structure_thread
 from app.services.hook_variants import generate_variants as generate_hook_variants
+from app.services.hard_rule_checker import check as hard_check
+from app.services.haiku_judge import judge as haiku_judge
 
 logger = logging.getLogger(__name__)
 
@@ -777,51 +779,161 @@ class Orchestrator:
             }
         # --- end Step 5.7 ---
 
-        # --- Phase A: critic pass (voice / hook / ending / fact) ---
-        # review 확정 기준. 실패 시 provider 메서드가 fallback dict 반환 →
-        # 파이프라인 중단 없음. publish_block=True 는 자동 차단 아님 — Telegram
-        # 승인 단계에서 운영자가 수동 결정.
-        _critic_meta: dict = {}
-        review_text = f"{review.hook}\n{review.body}"
+        # editorial_meta: Step 5.8/5.9 결과 누적 → 후단 pack_sidecar 에서 _meta 와 merge
+        editorial_meta: dict = {}
+
+        # openai_provider 가 tone_notes 에 archetype 을 실어 옴 — editorial_meta 로 이동
         try:
-            _voice_result = await self.ai.reviewer.voice_critic(review_text)
-            _hook_result = await self.ai.reviewer.hook_critic(review_text)
-            _ending_result = await self.ai.reviewer.ending_critic(review_text)
-            _critic_meta["voice_flags"] = _voice_result
-            _critic_meta["hook_score"] = _hook_result
-            _critic_meta["ending_score"] = _ending_result
-        except Exception as _cr_e:
-            logger.warning(f"[critic] voice/hook/ending 호출 실패 (무시): {_cr_e}")
+            _archetype_from_draft = (getattr(draft_result, "tone_notes", "") or "").strip()
+            if _archetype_from_draft and _archetype_from_draft in (
+                "onchain_1person", "breaking_news", "researcher",
+                "policy_definitive", "macro_contrast", "semiconductor", "builder",
+            ):
+                editorial_meta["archetype"] = _archetype_from_draft
+        except Exception:
+            pass
+
+        # --- Step 5.8: Hard Rule Checker (L1 결정론적 강제) ---
+        # editorial/banned_terms.yaml 기반 regex + morpheme + 문체 검사.
+        # fail-soft: 예외 시 _hard_result = None.
+        _hard_result = None
         try:
-            _factcheck_dict = (
-                {
-                    "verified": getattr(factcheck, "verified", None),
-                    "confidence": getattr(factcheck, "confidence", None),
-                    "corrections": list(getattr(factcheck, "corrections", []) or []),
-                    "sources": list(getattr(factcheck, "sources", []) or []),
+            _draft_text_for_check = "\n\n".join(filter(None, [
+                (getattr(review, "hook", "") or getattr(draft_result, "hook", "") or ""),
+                (getattr(review, "body", "") or getattr(draft_result, "body", "") or ""),
+            ]))
+            _hard_result = hard_check(_draft_text_for_check)
+            logger.info(
+                f"[Step 5.8 HardRule] passed={_hard_result.passed} "
+                f"violations={len(_hard_result.violations)} "
+                f"ms={_hard_result.duration_ms:.1f}"
+            )
+            editorial_meta["hard_rule_result"] = {
+                "passed": _hard_result.passed,
+                "violations": [
+                    {"id": v.rule_id, "surface": v.surface, "severity": v.severity}
+                    for v in _hard_result.violations
+                ],
+            }
+        except Exception as _hr_e:
+            logger.warning(f"[Step 5.8 HardRule] 실패 (무시): {_hr_e}")
+
+        # --- Step 5.9: Haiku Soft Rule Judge (L2 정성 평가 + 최대 2회 재생성) ---
+        _judge_result = None
+        _MAX_JUDGE_RETRY = 2
+        for _judge_attempt in range(_MAX_JUDGE_RETRY + 1):
+            try:
+                _judge_text = "\n\n".join(filter(None, [
+                    (getattr(review, "hook", "") or getattr(draft_result, "hook", "") or ""),
+                    (getattr(review, "body", "") or getattr(draft_result, "body", "") or ""),
+                ]))
+                _judge_result = await haiku_judge(_judge_text)
+                logger.info(
+                    f"[Step 5.9 Judge] attempt={_judge_attempt} "
+                    f"pass={_judge_result.passed} "
+                    f"total={_judge_result.total}/130 "
+                    f"cached={_judge_result.cached_tokens} "
+                    f"ms={_judge_result.duration_ms:.0f}"
+                )
+                editorial_meta["judge_result"] = {
+                    "passed": _judge_result.passed,
+                    "total":  _judge_result.total,
+                    "scores": _judge_result.scores,
+                    "violations":          _judge_result.violations,
+                    "must_regenerate_ids": _judge_result.must_regenerate_ids,
+                    "attempt": _judge_attempt,
                 }
-                if factcheck is not None
-                else {}
-            )
-            _fact_critic_result = await self.ai.fact_checker.fact_critic(
-                review_text, _factcheck_dict,
-            )
-            _critic_meta["factcheck_guard"] = _fact_critic_result
-            if _fact_critic_result.get("publish_block"):
-                _critic_meta["publish_block"] = True
-                _critic_meta["publish_block_reason"] = _fact_critic_result.get(
-                    "publish_block_reason",
-                    "fact_critic: unverified claim detected",
+                if _judge_result.passed:
+                    break
+                if _judge_attempt >= _MAX_JUDGE_RETRY:
+                    logger.warning("[Step 5.9 Judge] 최대 재시도 초과. 현재 결과 사용.")
+                    break
+                # 재생성 지시 조립
+                _regen_parts: list[str] = []
+                if _judge_result.must_regenerate_ids:
+                    _regen_parts.append(
+                        f"[Judge 위반 수정 필수]: "
+                        f"{', '.join(_judge_result.must_regenerate_ids)}"
+                    )
+                if _judge_result.targeted_fixes:
+                    _regen_parts.append(
+                        f"[수정 사항]: {'; '.join(_judge_result.targeted_fixes)}"
+                    )
+                if _hard_result is not None and not _hard_result.passed:
+                    _regen_parts.append(
+                        f"[Hard Rule 위반]: {_hard_result.rewrite_instruction}"
+                    )
+                if _regen_parts:
+                    draft_criteria_ctx = (
+                        draft_criteria_ctx + "\n\n" + "\n".join(_regen_parts)
+                    ).strip()
+                # draft_writer 재호출 (review 는 update 하지 않음 → 후단 review 가
+                # 새 draft 로 덮일 때까지 유지. 본 구현은 draft_result 만 갱신)
+                try:
+                    draft_result = await self.ai.draft_writer.generate_draft(
+                        title=data.title,
+                        source_text=enriched_source[:3000],
+                        language=data.language or settings.default_language,
+                        source_type=data.source_type,
+                        criteria_context=draft_criteria_ctx,
+                    )
+                    # 다음 Judge 가 새 draft 를 평가하도록 review.hook/body 동기화
+                    review.hook = draft_result.hook
+                    review.body = draft_result.body
+                except Exception as _re:
+                    logger.warning(f"[Step 5.9 Judge] 재생성 실패 (현재 결과 유지): {_re}")
+                    break
+            except Exception as _je:
+                logger.warning(f"[Step 5.9 Judge] 오류 (무시): {_je}")
+                break
+
+        # --- Phase A: critic pass (voice / hook / ending / fact) ---
+        # settings.skip_phase_a = True (기본) 이면 Haiku Judge 로 대체됨.
+        # False 로 되돌리면 기존 4 critic 복원.
+        _critic_meta: dict = {}
+        if not settings.skip_phase_a:
+            review_text = f"{review.hook}\n{review.body}"
+            try:
+                _voice_result = await self.ai.reviewer.voice_critic(review_text)
+                _hook_result = await self.ai.reviewer.hook_critic(review_text)
+                _ending_result = await self.ai.reviewer.ending_critic(review_text)
+                _critic_meta["voice_flags"] = _voice_result
+                _critic_meta["hook_score"] = _hook_result
+                _critic_meta["ending_score"] = _ending_result
+            except Exception as _cr_e:
+                logger.warning(f"[critic] voice/hook/ending 호출 실패 (무시): {_cr_e}")
+            try:
+                _factcheck_dict = (
+                    {
+                        "verified": getattr(factcheck, "verified", None),
+                        "confidence": getattr(factcheck, "confidence", None),
+                        "corrections": list(getattr(factcheck, "corrections", []) or []),
+                        "sources": list(getattr(factcheck, "sources", []) or []),
+                    }
+                    if factcheck is not None
+                    else {}
                 )
-                logger.warning(
-                    "[critic] publish_block=True — approval_status 는 pending 유지, "
-                    "자동 차단 아님. Telegram 승인 단계에서 수동 결정."
+                _fact_critic_result = await self.ai.fact_checker.fact_critic(
+                    review_text, _factcheck_dict,
                 )
-            else:
-                _critic_meta["publish_block"] = False
-                _critic_meta["publish_block_reason"] = None
-        except Exception as _fc_e:
-            logger.warning(f"[critic] fact_critic 호출 실패 (무시): {_fc_e}")
+                _critic_meta["factcheck_guard"] = _fact_critic_result
+                if _fact_critic_result.get("publish_block"):
+                    _critic_meta["publish_block"] = True
+                    _critic_meta["publish_block_reason"] = _fact_critic_result.get(
+                        "publish_block_reason",
+                        "fact_critic: unverified claim detected",
+                    )
+                    logger.warning(
+                        "[critic] publish_block=True — approval_status 는 pending 유지, "
+                        "자동 차단 아님. Telegram 승인 단계에서 수동 결정."
+                    )
+                else:
+                    _critic_meta["publish_block"] = False
+                    _critic_meta["publish_block_reason"] = None
+            except Exception as _fc_e:
+                logger.warning(f"[critic] fact_critic 호출 실패 (무시): {_fc_e}")
+        else:
+            logger.info("[Phase A] skip_phase_a=True — Haiku Judge 로 대체됨")
         # --- end Phase A critic pass ---
 
         # Step 6: 분류 & 위험도 확정
@@ -1048,6 +1160,14 @@ class Orchestrator:
                 except Exception as _s7m_e:
                     logger.warning(f"[step57_meta] merge 실패 (무시): {_s7m_e}")
                 # --- end Step 5.7 merge ---
+                # --- Step 5.8/5.9 + archetype editorial_meta merge (setdefault) ---
+                try:
+                    if isinstance(_meta, dict) and editorial_meta:
+                        for _ek, _ev in editorial_meta.items():
+                            _meta.setdefault(_ek, _ev)
+                except Exception as _em_e:
+                    logger.warning(f"[editorial_meta] merge 실패 (무시): {_em_e}")
+                # --- end editorial_meta merge ---
                 _handoff_text = format_handoff(
                     pack_chain_data["source_pack"],
                     pack_chain_data["angle_pack"],

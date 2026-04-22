@@ -13,6 +13,7 @@ import json
 import logging
 import httpx
 from app.config import settings
+from app.services.prompt_cache import wrap_anthropic_cache
 from app.providers.base import (
     BaseDraftWriter, BaseReviewer,
     DraftResult, ReviewResult, ResearchResult, FactCheckResult,
@@ -342,11 +343,12 @@ class AnthropicReviewer(BaseReviewer):
                         "x-api-key": settings.anthropic_api_key,
                         "anthropic-version": "2023-06-01",
                         "content-type": "application/json",
+                        "anthropic-beta": "prompt-caching-2024-07-31",
                     },
                     json={
                         "model": CLAUDE_MODEL,
                         "max_tokens": 1024,
-                        "system": system_prompt,
+                        "system": wrap_anthropic_cache(system_prompt),
                         "messages": [{"role": "user", "content": draft}],
                     },
                 )
@@ -379,11 +381,12 @@ class AnthropicReviewer(BaseReviewer):
                         "x-api-key": settings.anthropic_api_key,
                         "anthropic-version": "2023-06-01",
                         "content-type": "application/json",
+                        "anthropic-beta": "prompt-caching-2024-07-31",
                     },
                     json={
                         "model": CLAUDE_MODEL,
                         "max_tokens": 512,
-                        "system": system_prompt,
+                        "system": wrap_anthropic_cache(system_prompt),
                         "messages": [{"role": "user", "content": first_two_lines}],
                     },
                 )
@@ -419,11 +422,12 @@ class AnthropicReviewer(BaseReviewer):
                         "x-api-key": settings.anthropic_api_key,
                         "anthropic-version": "2023-06-01",
                         "content-type": "application/json",
+                        "anthropic-beta": "prompt-caching-2024-07-31",
                     },
                     json={
                         "model": CLAUDE_MODEL,
                         "max_tokens": 512,
-                        "system": system_prompt,
+                        "system": wrap_anthropic_cache(system_prompt),
                         "messages": [{"role": "user", "content": last_two_lines}],
                     },
                 )

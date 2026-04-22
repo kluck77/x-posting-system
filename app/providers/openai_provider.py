@@ -16,6 +16,51 @@ logger = logging.getLogger(__name__)
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL = "gpt-4o-mini"
 
+# v3 JSON Schema — strict mode 로 응답 shape 강제.
+# response 5 fields (hook/body/stake/point/archetype) 는
+# DraftResult (hook/body/thread_continuation/category_suggestion/tone_notes)
+# 로 plumbing: stake+point → body 에 합성, archetype → tone_notes.
+_ARCHETYPE_ENUM = [
+    "onchain_1person",
+    "breaking_news",
+    "researcher",
+    "policy_definitive",
+    "macro_contrast",
+    "semiconductor",
+    "builder",
+]
+
+# archetype → category_suggestion 매핑 (기존 enum 유지)
+_ARCHETYPE_TO_CATEGORY = {
+    "onchain_1person":   "crypto",
+    "breaking_news":     "crypto",
+    "researcher":        "crypto",
+    "policy_definitive": "policy",
+    "macro_contrast":    "economy",
+    "semiconductor":     "economy",
+    "builder":           "crypto",
+}
+
+_RESPONSE_FORMAT_KO = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "draft_output_v3",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "hook":      {"type": "string"},
+                "body":      {"type": "string"},
+                "stake":     {"type": "string"},
+                "point":     {"type": "string"},
+                "archetype": {"type": "string", "enum": _ARCHETYPE_ENUM},
+            },
+            "required": ["hook", "body", "stake", "point", "archetype"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 SYSTEM_PROMPT_KO = """당신은 한국어 X(Twitter) 상위 계정(크립토·정책·매크로·반도체)의 말투로 글을 쓰는 @sskorea02의 드래프트 라이터다. 아래 규칙과 멀티샷 예시를 엄격히 따른다.
 
 ## 0. 시점·톤 기본값
@@ -202,6 +247,12 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 f"Respond in JSON only."
             )
 
+        # KO 경로만 v3 json_schema strict 적용. EN 은 기존 json_object 유지.
+        _response_format: dict = (
+            _RESPONSE_FORMAT_KO if language == "ko"
+            else {"type": "json_object"}
+        )
+
         try:
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(
@@ -217,12 +268,20 @@ class OpenAIDraftWriter(BaseDraftWriter):
                             {"role": "user", "content": user_msg},
                         ],
                         "temperature": 0.7,
-                        "response_format": {"type": "json_object"},
+                        "response_format": _response_format,
                     },
                 )
                 resp.raise_for_status()
                 resp_data = resp.json()
                 usage = resp_data.get("usage", {})
+                # Prompt caching 히트 로그 (gpt-4o-mini 자동 캐싱 — 4096+ 토큰 system)
+                try:
+                    ptd = usage.get("prompt_tokens_details") or {}
+                    cached_tok = ptd.get("cached_tokens", 0) if isinstance(ptd, dict) else 0
+                    if cached_tok:
+                        logger.info(f"[PromptCache] openai cached_tokens={cached_tok}")
+                except Exception:
+                    pass
                 logger.info(
                     f"[API-COST] openai {OPENAI_MODEL} "
                     f"in={usage.get('prompt_tokens', '?')} "
@@ -238,13 +297,35 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 data = json.loads(resp_data["choices"][0]["message"]["content"])
 
             logger.info("[OpenAI DraftWriter] 초안 생성 성공")
-            return DraftResult(
-                hook=data.get("hook", title),
-                body=data.get("body", ""),
-                thread_continuation=data.get("thread_continuation"),
-                category_suggestion=data.get("category_suggestion", "evergreen"),
-                tone_notes=data.get("tone_notes", ""),
-            )
+            if language == "ko":
+                # v3 strict schema: hook/body/stake/point/archetype
+                _hook = str(data.get("hook", "") or title)
+                _body = str(data.get("body", "") or "")
+                _stake = str(data.get("stake", "") or "").strip()
+                _point = str(data.get("point", "") or "").strip()
+                _archetype = str(data.get("archetype", "") or "")
+                # body 에 stake + point 합성 (⚠️/📌 형식 검증은 downstream 에서)
+                combined_body = _body
+                if _stake:
+                    combined_body = f"{combined_body}\n\n{_stake}" if combined_body else _stake
+                if _point:
+                    combined_body = f"{combined_body}\n{_point}" if combined_body else _point
+                return DraftResult(
+                    hook=_hook,
+                    body=combined_body,
+                    thread_continuation=None,
+                    category_suggestion=_ARCHETYPE_TO_CATEGORY.get(_archetype, "evergreen"),
+                    tone_notes=_archetype,  # orchestrator 가 editorial_meta["archetype"] 로 이동
+                )
+            else:
+                # EN 기존 json_object 계약 유지
+                return DraftResult(
+                    hook=data.get("hook", title),
+                    body=data.get("body", ""),
+                    thread_continuation=data.get("thread_continuation"),
+                    category_suggestion=data.get("category_suggestion", "evergreen"),
+                    tone_notes=data.get("tone_notes", ""),
+                )
 
         except Exception as e:
             logger.error(f"OpenAI DraftWriter 오류: {e}")

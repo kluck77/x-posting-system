@@ -71,6 +71,16 @@ context_for_foreigners: 이 뉴스를 이해하는 데 필요한 한국 시장 �
     "fact 내용": "challenges_assumption | missing_context | confirms_common_narrative"
   }
 }
+
+## 파급 효과 분석 (필수)
+
+이 뉴스의 파급 효과를 반드시 3단계로 분석해서 interpretation_gaps 에 포함시켜라:
+
+- 1차 파급: 직접적인 시장·가격·거래량 영향 (오늘~이번 주)
+- 2차 파급: 관련 산업·기업·경쟁자·정책 변화 (이번 달~이번 분기)
+- 3차 파급: 한국 투자자·소비자·규제 환경의 구조적 재편 (6개월~1년)
+
+한국 연결이 없어 보이는 글로벌 뉴스도 반드시 3차까지 추론하라.
 """
 
 
