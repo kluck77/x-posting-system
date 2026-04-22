@@ -48,6 +48,7 @@ from app.services.grok_handoff import (
 )
 from app.services.pack_sidecar import save_pack
 from app.services.korean_context import build_korean_entity_brief
+from app.services.frame_classifier import select_frame
 
 logger = logging.getLogger(__name__)
 
@@ -462,6 +463,26 @@ class Orchestrator:
                 pack_chain_data = None
                 _precomputed_factcheck = None
 
+        # Step 2.7: Frame Classifier — CONSTITUTION v2 섹션 4 12 프레임 중 하나 선택
+        # 순서: angle_pack 매핑 → Claude Haiku LLM → default(3). 실패해도 default 반환.
+        _frame_selection = None
+        try:
+            _angle_pack_for_frame = (
+                pack_chain_data.get("angle_pack") if pack_chain_data else None
+            )
+            _frame_selection = await select_frame(
+                title=data.title,
+                source_text=data.source_text,
+                angle_pack=_angle_pack_for_frame,
+            )
+            logger.info(
+                f"[2.7/6] frame: {_frame_selection.frame_id}.{_frame_selection.frame_name} "
+                f"(src={_frame_selection.source})"
+            )
+        except Exception as _fr_e:
+            logger.warning(f"[frame_classifier] 호출 실패 (무시): {_fr_e}")
+            _frame_selection = None
+
         # Step 3: DraftWriter — 초안 생성
         logger.info("[3/6] DraftWriter: 초안 생성")
 
@@ -525,6 +546,13 @@ class Orchestrator:
                 draft_criteria_ctx = (
                     f"{_kr_brief}\n\n{draft_criteria_ctx}".strip()
                     if draft_criteria_ctx else _kr_brief
+                )
+            # Frame 블록은 맨 위에 prepend — DraftWriter 가 본문 구조 고정에 사용
+            if _frame_selection is not None:
+                _frame_block = _frame_selection.to_context_block()
+                draft_criteria_ctx = (
+                    f"{_frame_block}\n\n{draft_criteria_ctx}".strip()
+                    if draft_criteria_ctx else _frame_block
                 )
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
