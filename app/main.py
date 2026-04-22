@@ -13,7 +13,9 @@ from app.config import settings, validate_settings
 from app.db import init_db
 from app.utils.logging_config import setup_logging
 from app.services.growth.ring_dispatcher import ring_a_loop, ring_c_loop
-from app.services.growth.comment_hunter_cycle import comment_hunter_cycle, make_hunter_runner
+from app.services.growth.comment_hunter_cycle import (
+    comment_hunter_cycle, make_hunter_runner, set_runner_mode,
+)
 from app.services.growth.post_queue import get_post_queue
 
 logger = logging.getLogger(__name__)
@@ -162,9 +164,12 @@ async def _build_hunter_runner():
         async def _send(text: str) -> None:
             await tg_send(text)
 
-        return await make_hunter_runner(_send)
+        runner = await make_hunter_runner(_send)
+        set_runner_mode("real", "")
+        return runner
     except Exception as e:
         logger.warning(f"[Hunter] runner 초기화 실패 (noop fallback): {e}")
+        set_runner_mode("noop", str(e))
 
         async def _noop() -> int:
             return 0

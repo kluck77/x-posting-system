@@ -1226,6 +1226,87 @@ async def get_pulse_overview():
     }
 
 
+@router.get("/scheduler-status")
+async def get_scheduler_status():
+    """
+    Ring A / Ring C / Comment Hunter 루프 운영 상태.
+
+    대시보드 Pulse 탭에서 30초마다 폴링. 1초 안에 "살아있나?" 답이 나오게끔
+    필드 최소 구성:
+      ring_a : last_fired_at / today_count / daily_cap / next_slot_kst /
+               minutes_to_next
+      ring_c : mode / note / last_fired_at / today_count / daily_cap
+      hunter : last_polled_at / today_count / daily_cap / runner_mode / reason
+               seconds_since_poll (노랑/빨강 경고 재료)
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    try:
+        from app.services.growth.ring_dispatcher import (
+            get_ring_a_state, get_ring_c_state, next_slot_iso,
+            DAILY_CAP_RING_A, DAILY_CAP_BREAKING, RING_A_SLOTS,
+        )
+        from app.services.growth.comment_hunter_cycle import (
+            get_hunter_state, DAILY_REPLY_CAP,
+        )
+    except Exception as e:
+        return {"error": f"모듈 로드 실패: {e}"}
+
+    now_kst = _dt.now(KST)
+
+    def _iso_kst(dt) -> str | None:
+        if dt is None:
+            return None
+        try:
+            return dt.astimezone(KST).isoformat()
+        except Exception:
+            return None
+
+    def _seconds_since(dt) -> int | None:
+        if dt is None:
+            return None
+        try:
+            return int((now_kst - dt.astimezone(KST)).total_seconds())
+        except Exception:
+            return None
+
+    def _minutes_to_next_slot() -> int:
+        today = [now_kst.replace(hour=h, minute=m, second=0, microsecond=0)
+                 for h, m in RING_A_SLOTS]
+        future = [s for s in today if s > now_kst]
+        target = future[0] if future else (today[0] + _td(days=1))
+        return int((target - now_kst).total_seconds() // 60)
+
+    ra = get_ring_a_state()
+    rc = get_ring_c_state()
+    hu = get_hunter_state()
+
+    return {
+        "now_kst": now_kst.isoformat(),
+        "ring_a": {
+            "last_fired_at": _iso_kst(ra.get("last_fired_at")),
+            "today_count": ra.get("today_count", 0),
+            "daily_cap": DAILY_CAP_RING_A,
+            "next_slot_kst": next_slot_iso(),
+            "minutes_to_next": _minutes_to_next_slot(),
+        },
+        "ring_c": {
+            "mode": rc.get("mode", "stub"),
+            "note": rc.get("note", ""),
+            "last_fired_at": _iso_kst(rc.get("last_fired_at")),
+            "today_count": rc.get("today_count", 0),
+            "daily_cap": DAILY_CAP_BREAKING,
+        },
+        "hunter": {
+            "last_polled_at": _iso_kst(hu.get("last_polled_at")),
+            "seconds_since_poll": _seconds_since(hu.get("last_polled_at")),
+            "today_count": hu.get("today_count", 0),
+            "daily_cap": DAILY_REPLY_CAP,
+            "runner_mode": hu.get("runner_mode", "unset"),
+            "reason": hu.get("reason", ""),
+        },
+    }
+
+
 @router.get("/naver/live")
 async def get_naver_live():
     """

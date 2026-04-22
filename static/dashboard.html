@@ -1211,6 +1211,19 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     </div>
   </div>
 
+  <!-- F0. 스케줄러 상태 (Ring A + Hunter) -->
+  <div class="sec-head pulse-head">스케줄러</div>
+  <div class="next-grid">
+    <div class="next-box" id="schRingABox">
+      <div class="nb-lbl">Ring A 📤 <span id="schRingAHead" style="color:var(--text-sec);font-weight:400">—</span></div>
+      <div class="nb-val" id="schRingAMain">—<small id="schRingASub"></small></div>
+    </div>
+    <div class="next-box" id="schHunterBox">
+      <div class="nb-lbl">Hunter 💬 <span id="schHunterHead" style="color:var(--text-sec);font-weight:400">—</span></div>
+      <div class="nb-val" id="schHunterMain">—<small id="schHunterSub"></small></div>
+    </div>
+  </div>
+
   <!-- F. 최근 알림 / 활동 스트림 -->
   <div class="sec-head pulse-head" id="recentAlertsHead">최근 활동</div>
   <div id="recentAlerts">
@@ -3002,6 +3015,66 @@ async function loadPulseOverview(){
   }catch(e){console.warn('pulse-overview:',e)}
 }
 
+// ── Scheduler Status (Ring A + Hunter) ──
+async function loadSchedulerStatus(){
+  try{
+    const r=await fetch(API+'/control/scheduler-status');
+    if(!r.ok)return;
+    const d=await r.json();
+
+    // Ring A
+    const ra=d.ring_a||{};
+    const raHead=document.getElementById('schRingAHead');
+    const raMain=document.getElementById('schRingAMain');
+    const raSub =document.getElementById('schRingASub');
+    const raBox =document.getElementById('schRingABox');
+    if(raMain && raSub){
+      raMain.firstChild.nodeValue=`${ra.today_count||0}/${ra.daily_cap||6}`;
+      const nextLbl=ra.next_slot_kst||'--';
+      let lastHHMM='미발송';
+      if(ra.last_fired_at){
+        try{
+          lastHHMM=new Date(ra.last_fired_at).toLocaleTimeString('ko-KR',
+            {hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Seoul'});
+        }catch(_){}
+      }
+      raSub.textContent=` · 다음 ${nextLbl} · 마지막 ${lastHHMM}`;
+      if(raHead)raHead.textContent=`(${ra.minutes_to_next!=null?ra.minutes_to_next+'분':'—'})`;
+      if(raBox){
+        raBox.style.borderLeft='';
+        if((ra.today_count||0)>=(ra.daily_cap||6)){
+          raBox.style.borderLeft='3px solid var(--green)';
+        }else if((ra.minutes_to_next||9999)<=15){
+          raBox.style.borderLeft='3px solid var(--amber)';
+        }
+      }
+    }
+
+    // Hunter
+    const hu=d.hunter||{};
+    const huHead=document.getElementById('schHunterHead');
+    const huMain=document.getElementById('schHunterMain');
+    const huSub =document.getElementById('schHunterSub');
+    const huBox =document.getElementById('schHunterBox');
+    if(huMain && huSub){
+      huMain.firstChild.nodeValue=`${hu.today_count||0}개`;
+      const mode=hu.runner_mode||'unset';
+      const secs=hu.seconds_since_poll;
+      const lastLbl=secs==null?'미폴링':(secs<120?`${secs}s 전`:`${Math.floor(secs/60)}m 전`);
+      huSub.textContent=` · ${mode} · ${lastLbl}`;
+      if(huHead)huHead.textContent=mode==='noop'?'(noop)':(mode==='real'?'(live)':'(unset)');
+      if(huBox){
+        huBox.style.borderLeft='';
+        if(mode==='noop'){
+          huBox.style.borderLeft='3px solid var(--amber)';
+        }else if(secs!=null && secs>180){
+          huBox.style.borderLeft='3px solid var(--red)';
+        }
+      }
+    }
+  }catch(e){console.warn('scheduler-status:',e)}
+}
+
 function _agoKR(iso){
   if(!iso)return '';
   try{
@@ -4595,7 +4668,7 @@ async function loadAll(){
   await Promise.allSettled([
     loadStatus(),loadEditorial(),loadProviders(),
     loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),loadNaverLive(),
-    loadPulseOverview(),
+    loadPulseOverview(),loadSchedulerStatus(),
     loadBiz(),loadRejected(),loadOpsExtras()
   ]);
 }
@@ -4605,6 +4678,8 @@ setInterval(loadAll,30000);
 setInterval(loadNaverLive,15000);
 // Pulse 히어로/스트림도 20초마다 — 첫 화면 살아있는 느낌
 setInterval(loadPulseOverview,20000);
+// 스케줄러 상태 — Ring A 슬롯 카운트 + Hunter 폴링 (20초)
+setInterval(loadSchedulerStatus,20000);
 
 // ── CRYPTO INTEL (Phase 2 — scoring + human reason + telegram promote) ──
 // IIFE scope 격리. 전역 오염 0. fetch 실패는 이 탭 안에서만 봉쇄.

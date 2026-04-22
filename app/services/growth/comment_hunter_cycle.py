@@ -21,6 +21,26 @@ DAILY_REPLY_CAP = 25
 PER_ACCOUNT_DAILY_CAP = 1
 
 
+# ── 모듈 레벨 상태 — 대시보드 scheduler-status 에서 읽음 ───────────────
+_hunter_state: dict = {
+    "last_polled_at": None,      # datetime (KST-aware) or None
+    "today_count": 0,
+    "last_reset_date": None,
+    "runner_mode": "unset",      # "unset" | "real" | "noop"
+    "reason": "",                # noop 사유
+}
+
+
+def get_hunter_state() -> dict:
+    return dict(_hunter_state)
+
+
+def set_runner_mode(mode: str, reason: str = "") -> None:
+    """main.py 가 runner 빌드 결과를 기록할 때 호출."""
+    _hunter_state["runner_mode"] = mode
+    _hunter_state["reason"] = reason
+
+
 async def comment_hunter_cycle(run_hunter_fn) -> None:
     """Comment Hunter 주기 실행 루프.
 
@@ -31,6 +51,8 @@ async def comment_hunter_cycle(run_hunter_fn) -> None:
     """
     daily_count = 0
     last_reset_date = datetime.now(KST).date()
+    _hunter_state["today_count"] = 0
+    _hunter_state["last_reset_date"] = last_reset_date.isoformat()
 
     while True:
         try:
@@ -38,6 +60,8 @@ async def comment_hunter_cycle(run_hunter_fn) -> None:
             if today != last_reset_date:
                 daily_count = 0
                 last_reset_date = today
+                _hunter_state["today_count"] = 0
+                _hunter_state["last_reset_date"] = last_reset_date.isoformat()
 
             if daily_count >= DAILY_REPLY_CAP:
                 logger.info(f"[CommentHunter] 일일 한도 도달 ({DAILY_REPLY_CAP}). 대기.")
@@ -45,8 +69,10 @@ async def comment_hunter_cycle(run_hunter_fn) -> None:
                 continue
 
             new_drafts = await run_hunter_fn()
+            _hunter_state["last_polled_at"] = datetime.now(KST)
             if new_drafts > 0:
                 daily_count += new_drafts
+                _hunter_state["today_count"] = daily_count
                 logger.info(
                     f"[CommentHunter] 리플 초안 {new_drafts}개 생성. "
                     f"오늘 {daily_count}/{DAILY_REPLY_CAP}"
