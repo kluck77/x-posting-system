@@ -241,13 +241,17 @@ async def run_all():
     )
     logger.info("[ring-c] Breaking 즉시 전송 등록 (stub — Step 1.6 보완용)")
 
-    # Comment Hunter — 대형 계정 리플 사이클 (async 팩토리 초기화)
-    _hunter_runner = await _build_hunter_runner()
-    asyncio.create_task(
-        comment_hunter_cycle(_hunter_runner),
-        name="comment_hunter",
-    )
-    logger.info("[comment-hunter] 60초 주기 사이클 등록 (CommentHunter + tg_send)")
+    # Comment Hunter — 대형 계정 리플 사이클 (팔로워 확보 전까지 off)
+    # .env 에서 COMMENT_HUNTER_ENABLED=true 주면 재활성화.
+    if settings.comment_hunter_enabled:
+        _hunter_runner = await _build_hunter_runner()
+        asyncio.create_task(
+            comment_hunter_cycle(_hunter_runner),
+            name="comment_hunter",
+        )
+        logger.info("[comment-hunter] 30분 주기 사이클 등록 (CommentHunter + tg_send)")
+    else:
+        logger.info("[comment-hunter] 비활성 — COMMENT_HUNTER_ENABLED=true 설정 시 활성화")
 
     # 텔레그램 봇 실행
     if settings.has_telegram_config:

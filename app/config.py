@@ -113,6 +113,13 @@ class Settings(BaseSettings):
     affiliate_enabled: bool = Field(default=False, description="Affiliate 링크 삽입 킬스위치")
     affiliate_links_path: str = Field(default="data/affiliate_links.json")
 
+    # --- Growth / CommentHunter 킬스위치 (팔로워 확보 전까지 off) ---
+    comment_hunter_enabled: bool = Field(
+        default=False,
+        description="Grok live search 기반 대형 계정 리플 사이클. "
+                    "활성화하면 30분마다 Grok API 호출 (월 $2~3 예상).",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
