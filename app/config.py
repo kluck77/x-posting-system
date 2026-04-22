@@ -99,6 +99,20 @@ class Settings(BaseSettings):
                     "실패 시 legacy 경로로 fallback.",
     )
 
+    # --- Stibee 뉴스레터 (email_sender/stibee_sender.py 가 사용) ---
+    stibee_api_key: str = Field(default="", description="Stibee AccessToken")
+    stibee_list_id: str = Field(default="", description="Stibee 리스트 ID")
+    stibee_sender_email: str = Field(default="", description="발신자 이메일")
+
+    # --- UTM (email_sender/url_builder.py 가 사용) ---
+    utm_source_default: str = Field(default="sskorea02")
+    utm_medium_newsletter: str = Field(default="email")
+    utm_campaign_default: str = Field(default="brief")
+
+    # --- Affiliate (affiliate_registry.py 가 사용) ---
+    affiliate_enabled: bool = Field(default=False, description="Affiliate 링크 삽입 킬스위치")
+    affiliate_links_path: str = Field(default="data/affiliate_links.json")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
