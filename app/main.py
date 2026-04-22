@@ -12,6 +12,8 @@ import uvicorn
 from app.config import settings, validate_settings
 from app.db import init_db
 from app.utils.logging_config import setup_logging
+from app.services.growth.ring_dispatcher import ring_a_loop, ring_c_loop
+from app.services.growth.comment_hunter_cycle import comment_hunter_cycle
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,34 @@ async def _morning_digest_loop() -> None:
             logger.warning(f"[morning-digest] 실행 실패 (fail-open): {e}")
 
 
+# ── Ring / CommentHunter connector stubs ─────────────────────────────
+# 기존 텔레그램 승인 흐름(telegram_bot /queue, /hunt, send_approval_card)과
+# 이중 디스패치 방지를 위해 실 연결은 보류. 루프는 살아있고 로그만 남긴다.
+# 실 연결 시 여기 4 + 1 stub 을 교체하면 됨.
+
+async def _ring_a_send_next_card_stub() -> bool:
+    logger.info("[stub][ring-a] send_next_card 호출 — 실 연결 대기")
+    return False
+
+
+def _ring_a_pending_count_stub() -> int:
+    return 0
+
+
+async def _ring_c_send_breaking_card_stub() -> bool:
+    logger.info("[stub][ring-c] send_breaking_card 호출 — 실 연결 대기")
+    return False
+
+
+def _ring_c_breaking_pending_stub() -> int:
+    return 0
+
+
+async def _comment_hunter_run_stub() -> int:
+    logger.info("[stub][comment-hunter] run_hunter 호출 — 실 연결 대기")
+    return 0
+
+
 def run_fastapi_server():
     """FastAPI 서버를 실행합니다."""
     uvicorn.run(
@@ -157,6 +187,27 @@ async def run_all():
     # Draft 자동 정리 (04:00 KST)
     asyncio.create_task(_draft_cleanup_loop())
     logger.info("[draft-cleanup] 04:00 KST 자동 정리 등록")
+
+    # Ring A — 최적 시각 텔레그램 카드 전송 (07:30/12:00/18:30/22:30 KST)
+    asyncio.create_task(
+        ring_a_loop(_ring_a_send_next_card_stub, _ring_a_pending_count_stub),
+        name="ring_a",
+    )
+    logger.info("[ring-a] 슬롯 기반 카드 전송 등록 (stub connector)")
+
+    # Ring C — Breaking priority=0 즉시 전송
+    asyncio.create_task(
+        ring_c_loop(_ring_c_send_breaking_card_stub, _ring_c_breaking_pending_stub),
+        name="ring_c",
+    )
+    logger.info("[ring-c] Breaking 즉시 전송 등록 (stub connector)")
+
+    # Comment Hunter — 대형 계정 리플 사이클
+    asyncio.create_task(
+        comment_hunter_cycle(_comment_hunter_run_stub),
+        name="comment_hunter",
+    )
+    logger.info("[comment-hunter] 60초 주기 사이클 등록 (stub connector)")
 
     # 텔레그램 봇 실행
     if settings.has_telegram_config:
