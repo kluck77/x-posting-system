@@ -1,0 +1,126 @@
+# Editorial banned_terms — source of truth
+# ==========================================
+# 모든 critic prompt (voice_checker / hook_checker / ending_checker /
+# fact_checker) 가 이 파일을 단일 참조점으로 사용한다.
+# 카테고리 추가/삭제 시 editorial/CONSTITUTION.md 버전도 함께 갱신.
+#
+# 사용법:
+#   import yaml; banned = yaml.safe_load(open("editorial/banned_terms.yaml"))
+#   flat = [t for cat in banned.values() for t in cat]
+#
+# v1 — 2026-04-22
+
+# AI-tell (출처: tropes.fyi, aisdr.com, Jodie Cook ban list)
+ai_tells:
+  - delve
+  - tapestry
+  - landscape
+  - realm
+  - harness
+  - leverage
+  - robust
+  - streamline
+  - utilize
+  - intricate
+  - nuanced
+  - multifaceted
+  - paradigm
+  - synergy
+  - cutting-edge
+  - revolutionize
+  - testament
+  - groundbreaking
+  - game-changer
+  - innovative
+
+# Hype (출처: @sskorea02 Editorial Constitution v1)
+hype:
+  - moon
+  - parabolic
+  - HUGE
+  - MASSIVE
+  - "to the moon"
+  - "this changes everything"
+  - "next 100x"
+  - "don't miss this"
+  - legendary
+
+# Hedge (출처: Economist Style Guide 12th ed.)
+hedge:
+  - possibly
+  - "may have"
+  - "might be"
+  - "could suggest"
+  - "likely to mean"
+  - "it remains to be seen"
+  - "only time will tell"
+  - "it is unclear whether"
+
+# Sycophancy (출처: Claude 4 system prompt — simonwillison.net/2025/May/25/claude-4-system-prompt/)
+sycophancy:
+  - "Great question"
+  - "You're absolutely right"
+  - "Excellent point"
+  - "Fascinating"
+  - "That's a great observation"
+  - "Certainly!"
+  - "Of course!"
+
+# PR passive (출처: @sskorea02 Editorial Constitution v1)
+pr_passive:
+  - "is positioned to"
+  - "is poised for"
+  - "represents a significant milestone"
+  - "is pleased to announce"
+  - "has demonstrated commitment to"
+
+# Formula openers (출처: Axios Smart Brevity + Orwell)
+formula_openers:
+  - "In today's ever-evolving world"
+  - "In conclusion"
+  - "In summary"
+  - "In essence"
+  - "Let's dive in"
+  - "In this thread"
+  - "It is important to note"
+  - "It goes without saying"
+  - "At the end of the day"
+
+# Formula closers (출처: @sskorea02 Editorial Constitution v1)
+formula_closers:
+  - "Stay tuned"
+  - "Only time will tell"
+  - "What do you think?"
+  - "DYOR"
+  - "NFA"
+  - "Feel free to share"
+  - "Hope you found this helpful"
+  - "Let me know your thoughts"
+
+# Korean calque (출처: @sskorea02 Editorial Constitution v1)
+korean_calque:
+  - "it is known that"
+  - "it is expected that concerned authorities"
+  - "according to related industry sources"
+  - "it has been confirmed by multiple parties"
+  - "it is anticipated that"
+
+# Perplexity leak banned (출처: github.com/jujumilk3/leaked-system-prompts/perplexity.ai_20250112.md)
+perplexity_leak_banned:
+  - "It is important to"
+  - "It is inappropriate"
+  - "It is subjective"
+
+# Filler qualifiers (출처: Zinsser On Writing Well)
+filler_qualifiers:
+  - " really "
+  - " very "
+  - " quite "
+  - " kind of "
+  - " pretty much "
+  - " rather "
+  - "due to the fact that"
+  - "in order to"
+  - "at this point in time"
+  - "numerous"
+  - "facilitate"
