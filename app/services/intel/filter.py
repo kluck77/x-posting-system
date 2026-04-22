@@ -41,9 +41,22 @@ R1_CRYPTO_KEYWORDS: tuple[str, ...] = (
 
 # R2 — 엔티티 allow-list (기관/회사/법안 등장 시 매칭)
 R2_ENTITIES: tuple[str, ...] = (
+    # 글로벌 기관·기업 (기존 유지)
     "microstrategy", "coinbase", "sec", "cftc", "tesla", "samsung",
     "blackrock", "fidelity",
+    # 한국 정부·규제 (기존 유지)
     "한국전자공시", "금융위원회", "금감원", "국회", "기획재정부",
+    # 한국 정부·규제 추가
+    "한국은행", "한은", "fiu", "daxa", "금융정보분석원",
+    # 한국 거래소
+    "업비트", "빗썸", "코르빗", "고팍스", "두나무", "upbit", "bithumb", "dunamu",
+    # 한국 핀테크·은행
+    "카카오페이", "토스", "카카오뱅크", "케이뱅크", "토스뱅크",
+    "kakao", "kakaopay", "toss",
+    # 한국 대기업
+    "현대", "lg", "sk", "카카오", "네이버", "hybe", "lotte",
+    # 규제·법안 키워드
+    "vasp", "가상자산이용자보호법", "디지털자산법", "daba",
 )
 
 # R3 — 단계 변화
