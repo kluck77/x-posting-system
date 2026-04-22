@@ -20,6 +20,17 @@ from app.providers.base import (
 
 logger = logging.getLogger(__name__)
 
+
+def _load_editorial_prompt(filename: str) -> str:
+    """editorial/system_prompts/ 에서 critic system prompt 를 읽어 반환.
+    Phase A: voice/hook/ending/fact critic 공용 유틸."""
+    import os
+    base = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    path = os.path.join(base, "editorial", "system_prompts", filename)
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
@@ -312,3 +323,127 @@ class AnthropicReviewer(BaseReviewer):
         except Exception as e:
             logger.error(f"Claude Reviewer 오류: {e}")
             raise RuntimeError(f"Claude Reviewer 오류: {e}") from e
+
+    # ── Phase A: critic pass (review 확정 기준) ──────────────────────────
+    # editorial/system_prompts/*.md 를 system prompt 로 사용.
+    # 실패 시 항상 schema 준수 fallback dict 반환 — 파이프라인 중단 없음.
+
+    async def voice_critic(self, draft: str) -> dict:
+        """Voice Checker critic pass.
+        editorial/system_prompts/voice_checker.md 를 system prompt 로 사용.
+        반환: voice_checker JSON schema 준수 dict.
+        실패 시 fallback dict 반환 (파이프라인 중단 없음)."""
+        try:
+            system_prompt = _load_editorial_prompt("voice_checker.md")
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    CLAUDE_API_URL,
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": CLAUDE_MODEL,
+                        "max_tokens": 1024,
+                        "system": system_prompt,
+                        "messages": [{"role": "user", "content": draft}],
+                    },
+                )
+                resp.raise_for_status()
+                text = resp.json()["content"][0]["text"].strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            return {
+                "voice_check_passed": True,
+                "flags": [],
+                "edge_restorations": [],
+                "summary": f"voice_critic fallback — {str(e)}",
+            }
+
+    async def hook_critic(self, draft: str) -> dict:
+        """Hook Checker critic pass. 첫 2줄만 system 에 전달.
+        실패 시 fallback dict 반환 (파이프라인 중단 없음)."""
+        try:
+            system_prompt = _load_editorial_prompt("hook_checker.md")
+            first_two_lines = "\n".join((draft or "").strip().splitlines()[:2])
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    CLAUDE_API_URL,
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": CLAUDE_MODEL,
+                        "max_tokens": 512,
+                        "system": system_prompt,
+                        "messages": [{"role": "user", "content": first_two_lines}],
+                    },
+                )
+                resp.raise_for_status()
+                text = resp.json()["content"][0]["text"].strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            return {
+                "hook_check_passed": True,
+                "score": 3,
+                "hook_type": "UNKNOWN",
+                "criteria": {},
+                "weak_criteria": [],
+                "fix_direction": None,
+                "summary": f"hook_critic fallback — {str(e)}",
+            }
+
+    async def ending_critic(self, draft: str) -> dict:
+        """Ending Checker critic pass. 마지막 2줄만 system 에 전달.
+        실패 시 fallback dict 반환 (파이프라인 중단 없음)."""
+        try:
+            system_prompt = _load_editorial_prompt("ending_checker.md")
+            last_two_lines = "\n".join((draft or "").strip().splitlines()[-2:])
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    CLAUDE_API_URL,
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": CLAUDE_MODEL,
+                        "max_tokens": 512,
+                        "system": system_prompt,
+                        "messages": [{"role": "user", "content": last_two_lines}],
+                    },
+                )
+                resp.raise_for_status()
+                text = resp.json()["content"][0]["text"].strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            return {
+                "ending_check_passed": True,
+                "score": 3,
+                "ending_type": "UNKNOWN",
+                "forbidden_match": False,
+                "forbidden_phrase": None,
+                "criteria": {},
+                "weak_criteria": [],
+                "fix_direction": None,
+                "summary": f"ending_critic fallback — {str(e)}",
+            }

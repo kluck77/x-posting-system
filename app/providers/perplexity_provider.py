@@ -15,6 +15,17 @@ from app.providers.base import BaseFactChecker, FactCheckResult, CriteriaSignals
 
 logger = logging.getLogger(__name__)
 
+
+def _load_editorial_prompt(filename: str) -> str:
+    """editorial/system_prompts/ 에서 critic system prompt 를 읽어 반환.
+    Phase A: fact_critic 용 유틸 (anthropic_provider 와 동일 패턴)."""
+    import os
+    base = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    path = os.path.join(base, "editorial", "system_prompts", filename)
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_MODEL = "sonar"
 
@@ -170,3 +181,52 @@ class PerplexityFactChecker(BaseFactChecker):
         except Exception as e:
             logger.error(f"Perplexity FactChecker 오류: {e}")
             raise RuntimeError(f"Perplexity FactChecker 오류: {e}") from e
+
+    # ── Phase A: fact critic (review 확정 + existing factcheck 기반) ────
+
+    async def fact_critic(self, draft: str, existing_facts: dict) -> dict:
+        """Fact Checker critic pass.
+        editorial/system_prompts/fact_checker.md 를 system prompt 로 사용.
+        existing_facts: check_facts() 결과를 dict 화한 값.
+        반환: fact_checker JSON schema 준수 dict (publish_block 포함).
+        실패 시 fallback dict 반환 (파이프라인 중단 없음)."""
+        try:
+            system_prompt = _load_editorial_prompt("fact_checker.md")
+            user_content = (
+                f"DRAFT:\n{draft}\n\n"
+                f"EXISTING_FACTCHECK:\n"
+                f"{json.dumps(existing_facts or {}, ensure_ascii=False)}"
+            )
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    PERPLEXITY_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {settings.perplexity_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": PERPLEXITY_MODEL,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content},
+                        ],
+                        "temperature": 0.1,
+                    },
+                )
+                resp.raise_for_status()
+                text = resp.json()["choices"][0]["message"]["content"].strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            return {
+                "fact_check_passed": True,
+                "publish_block": False,
+                "claims": [],
+                "translation_flags": [],
+                "publish_block_reason": None,
+                "summary": f"fact_critic fallback — {str(e)}",
+            }

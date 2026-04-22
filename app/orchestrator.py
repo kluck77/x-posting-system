@@ -673,6 +673,53 @@ class Orchestrator:
                 + review.ai_rationale
             )
 
+        # --- Phase A: critic pass (voice / hook / ending / fact) ---
+        # review 확정 기준. 실패 시 provider 메서드가 fallback dict 반환 →
+        # 파이프라인 중단 없음. publish_block=True 는 자동 차단 아님 — Telegram
+        # 승인 단계에서 운영자가 수동 결정.
+        _critic_meta: dict = {}
+        review_text = f"{review.hook}\n{review.body}"
+        try:
+            _voice_result = await self.ai.reviewer.voice_critic(review_text)
+            _hook_result = await self.ai.reviewer.hook_critic(review_text)
+            _ending_result = await self.ai.reviewer.ending_critic(review_text)
+            _critic_meta["voice_flags"] = _voice_result
+            _critic_meta["hook_score"] = _hook_result
+            _critic_meta["ending_score"] = _ending_result
+        except Exception as _cr_e:
+            logger.warning(f"[critic] voice/hook/ending 호출 실패 (무시): {_cr_e}")
+        try:
+            _factcheck_dict = (
+                {
+                    "verified": getattr(factcheck, "verified", None),
+                    "confidence": getattr(factcheck, "confidence", None),
+                    "corrections": list(getattr(factcheck, "corrections", []) or []),
+                    "sources": list(getattr(factcheck, "sources", []) or []),
+                }
+                if factcheck is not None
+                else {}
+            )
+            _fact_critic_result = await self.ai.fact_checker.fact_critic(
+                review_text, _factcheck_dict,
+            )
+            _critic_meta["factcheck_guard"] = _fact_critic_result
+            if _fact_critic_result.get("publish_block"):
+                _critic_meta["publish_block"] = True
+                _critic_meta["publish_block_reason"] = _fact_critic_result.get(
+                    "publish_block_reason",
+                    "fact_critic: unverified claim detected",
+                )
+                logger.warning(
+                    "[critic] publish_block=True — approval_status 는 pending 유지, "
+                    "자동 차단 아님. Telegram 승인 단계에서 수동 결정."
+                )
+            else:
+                _critic_meta["publish_block"] = False
+                _critic_meta["publish_block_reason"] = None
+        except Exception as _fc_e:
+            logger.warning(f"[critic] fact_critic 호출 실패 (무시): {_fc_e}")
+        # --- end Phase A critic pass ---
+
         # Step 6: 분류 & 위험도 확정
         logger.info("[6/6] 분류 & 위험도 확정")
         try:
@@ -881,6 +928,14 @@ class Orchestrator:
                 except Exception as _em_e:
                     logger.warning(f"[editorial_meta] 실패 (무시): {_em_e}")
                     _meta = {}
+                # --- Phase A: critic 결과 merge (신규 슬롯만, setdefault 로 기존 키 보호) ---
+                try:
+                    if isinstance(_meta, dict) and _critic_meta:
+                        for _ck, _cv in _critic_meta.items():
+                            _meta.setdefault(_ck, _cv)
+                except Exception as _cm_e:
+                    logger.warning(f"[critic_meta] merge 실패 (무시): {_cm_e}")
+                # --- end Phase A merge ---
                 _handoff_text = format_handoff(
                     pack_chain_data["source_pack"],
                     pack_chain_data["angle_pack"],
