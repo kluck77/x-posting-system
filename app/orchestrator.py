@@ -49,6 +49,8 @@ from app.services.grok_handoff import (
 from app.services.pack_sidecar import save_pack
 from app.services.korean_context import build_korean_entity_brief
 from app.services.frame_classifier import select_frame
+from app.services.thread_structurer import structure as structure_thread
+from app.services.hook_variants import generate_variants as generate_hook_variants
 
 logger = logging.getLogger(__name__)
 
@@ -722,6 +724,59 @@ class Orchestrator:
                 + review.ai_rationale
             )
 
+        # --- Step 5.7: Thread Structurer + Hook Variants ---
+        # review 확정 후 단일포스트/스레드 분해 + 훅 3변형 생성. 모두 fail-soft.
+        # 결과는 _step57_meta 에 적재 — 후단 editorial_meta(_meta) 에 setdefault 머지.
+        _step57_meta: dict = {}
+        _frame_name_for_57 = (
+            _frame_selection.frame_name if _frame_selection is not None else ""
+        )
+        try:
+            _thread_result = structure_thread(
+                hook=review.hook or draft_result.hook or "",
+                body=review.body or draft_result.body or "",
+                frame_name=_frame_name_for_57,
+            )
+            logger.info(
+                f"[Step 5.7 Thread] is_thread={_thread_result.is_thread} "
+                f"tweets={_thread_result.tweet_count}"
+            )
+        except Exception as _ts_e:
+            logger.warning(f"[Step 5.7 Thread] 실패 (무시): {_ts_e}")
+            _thread_result = None
+
+        try:
+            _hook_variants = await generate_hook_variants(
+                hook=review.hook or draft_result.hook or "",
+                body=review.body or draft_result.body or "",
+                frame_name=_frame_name_for_57,
+            )
+            logger.info(
+                f"[Step 5.7 Hook] selected={_hook_variants.selected_type} "
+                f"hook={_hook_variants.selected[:30]}"
+            )
+        except Exception as _hv_e:
+            logger.warning(f"[Step 5.7 Hook] 실패 (무시): {_hv_e}")
+            _hook_variants = None
+
+        if _thread_result is not None:
+            _step57_meta["thread_structure"] = {
+                "is_thread":    _thread_result.is_thread,
+                "tweet_count":  _thread_result.tweet_count,
+                "tweets":       _thread_result.tweets,
+                "single_post":  _thread_result.single_post,
+            }
+        if _hook_variants is not None:
+            _step57_meta["hook_variants"] = {
+                "original":       _hook_variants.original,
+                "data_shock":     _hook_variants.data_shock,
+                "contrarian":     _hook_variants.contrarian,
+                "forcing":        _hook_variants.forcing,
+                "selected":       _hook_variants.selected,
+                "selected_type":  _hook_variants.selected_type,
+            }
+        # --- end Step 5.7 ---
+
         # --- Phase A: critic pass (voice / hook / ending / fact) ---
         # review 확정 기준. 실패 시 provider 메서드가 fallback dict 반환 →
         # 파이프라인 중단 없음. publish_block=True 는 자동 차단 아님 — Telegram
@@ -985,6 +1040,14 @@ class Orchestrator:
                 except Exception as _cm_e:
                     logger.warning(f"[critic_meta] merge 실패 (무시): {_cm_e}")
                 # --- end Phase A merge ---
+                # --- Step 5.7: thread/hook 결과 merge (setdefault — 기존 키 보호) ---
+                try:
+                    if isinstance(_meta, dict) and _step57_meta:
+                        for _sk, _sv in _step57_meta.items():
+                            _meta.setdefault(_sk, _sv)
+                except Exception as _s7m_e:
+                    logger.warning(f"[step57_meta] merge 실패 (무시): {_s7m_e}")
+                # --- end Step 5.7 merge ---
                 _handoff_text = format_handoff(
                     pack_chain_data["source_pack"],
                     pack_chain_data["angle_pack"],
