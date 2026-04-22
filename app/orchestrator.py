@@ -47,6 +47,7 @@ from app.services.grok_handoff import (
     format_handoff, compose_enriched_source, compose_pack_context,
 )
 from app.services.pack_sidecar import save_pack
+from app.services.korean_context import build_korean_entity_brief
 
 logger = logging.getLogger(__name__)
 
@@ -372,11 +373,25 @@ class Orchestrator:
         else:
             logger.info("[2/6] 수동 입력 — AI rate limit 우회")
 
+        # 한국 맥락 엔티티 프리페치 (Gemini·DraftWriter 공통 주입)
+        _kr_brief = ""
+        try:
+            _kr_brief = build_korean_entity_brief(data.title, data.source_text)
+        except Exception as _kc_e:
+            logger.warning(f"[korean_context] 프리페치 실패 (무시): {_kc_e}")
+
+        _gemini_ctx = data.source_text[:1000]
+        if _kr_brief:
+            _gemini_ctx = f"{_kr_brief}\n\n{_gemini_ctx}"
+            logger.info(
+                f"[korean_context] Gemini 에 KR 엔티티 브리프 주입 ({len(_kr_brief)}자)"
+            )
+
         # Step 2: Researcher — 배경 리서치
         logger.info("[2/6] Researcher: 리서치")
         try:
             research = await self.ai.researcher.research(
-                query=data.title, context=data.source_text[:1000],
+                query=data.title, context=_gemini_ctx,
             )
             if research.criteria_signals.any_populated():
                 logger.info(
@@ -504,6 +519,12 @@ class Orchestrator:
                 draft_criteria_ctx = (
                     (draft_criteria_ctx + "\n\n" + _pack_ctx).strip()
                     if draft_criteria_ctx else _pack_ctx
+                )
+            # 한국 맥락 엔티티 브리프 prepend (Step 2 에서 생성된 _kr_brief 재사용)
+            if _kr_brief:
+                draft_criteria_ctx = (
+                    f"{_kr_brief}\n\n{draft_criteria_ctx}".strip()
+                    if draft_criteria_ctx else _kr_brief
                 )
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
