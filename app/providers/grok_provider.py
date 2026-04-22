@@ -286,3 +286,93 @@ JSON으로만 응답:
                 "reason": str(e),
                 "elapsed_ms": _elapsed_ms,
             }
+
+    # ── Grok live search (CommentHunter 용) ───────────────────────────────
+    # self.api_url / self.model / self.api_key 는 module-level 상수/settings 로
+    # 대체. mock_mode 판정을 위해 api_key 는 @property 로 노출.
+    @property
+    def api_key(self) -> str:
+        return settings.grok_api_key
+
+    @property
+    def api_url(self) -> str:
+        return GROK_API_URL
+
+    @property
+    def model(self) -> str:
+        return GROK_MODEL
+
+    async def search_tweets(
+        self,
+        query: str,
+        max_results: int = 10,
+    ) -> list[dict]:
+        """Grok live search 로 X 트윗 검색.
+
+        Args:
+            query: 검색 쿼리 문자열
+            max_results: 최대 결과 수
+
+        Returns:
+            list of {text, author_username, like_count, tweet_id, url}
+        """
+        system_prompt = (
+            "You are a tweet search assistant. "
+            "Search for recent tweets matching the query. "
+            "Return JSON only: "
+            '{"tweets": [{"text": "", "author_username": "", '
+            '"like_count": 0, "tweet_id": "", "url": ""}]}'
+        )
+        user_msg = (
+            f"Search X/Twitter for recent tweets about: {query}\n"
+            f"Find up to {max_results} tweets posted within the last 2 hours.\n"
+            f"Filter: 10-200 likes, not from accounts with over 50000 followers.\n"
+            f"Return JSON only."
+        )
+
+        try:
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                "search_parameters": {
+                    "mode": "on",
+                    "sources": [{"type": "x"}],
+                    "max_search_results": max_results,
+                },
+                "max_tokens": 1024,
+                "temperature": 0.1,
+            }
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    self.api_url,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                text = data["choices"][0]["message"]["content"].strip()
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                    text = text.strip()
+                import json
+                parsed = json.loads(text)
+                return parsed.get("tweets", [])
+        except Exception as e:
+            logger.warning(
+                f"[GrokProvider.search_tweets] 실패 (무시): {e}"
+            )
+            return []
+
+
+# ── Alias for CommentHunter import path ──────────────────────────────────
+# comment_hunter.py 는 `from app.providers.grok_provider import GrokProvider`
+# 로 가져오므로 기존 클래스에 alias 를 제공. 기존 경로는 그대로 유지.
+GrokProvider = GrokTrendHunter

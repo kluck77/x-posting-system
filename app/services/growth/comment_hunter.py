@@ -86,36 +86,65 @@ class CommentTarget:
 
 
 class CommentHunter:
-    """X API v2 기반 댓글 타겟 탐지기."""
+    """Grok live search 기반 댓글 타겟 탐지기."""
 
-    def __init__(self):
-        self._bearer_token = settings.x_bearer_token
-        self._mock_mode = not bool(self._bearer_token)
+    def __init__(self) -> None:
+        from app.providers.grok_provider import GrokProvider
+        self._grok = GrokProvider()
+        self._mock_mode = not bool(getattr(self._grok, "api_key", None))
 
     async def hunt(self, max_results: int = 10) -> list[CommentTarget]:
-        """
-        키워드 기반으로 댓글 달기 좋은 게시물 탐지.
-        X API 없으면 Mock 데이터 반환.
-        """
+        """Grok live search 로 대형 계정 최신 트윗 검색."""
         if self._mock_mode:
             return self._mock_results()
 
-        targets: list[CommentTarget] = []
+        results: list[CommentTarget] = []
         seen_ids: set[str] = set()
+        _now_utc = datetime.now(timezone.utc)
 
-        for keyword in HUNT_KEYWORDS[:5]:  # Rate limit 고려, 상위 5개만
+        for keyword in HUNT_KEYWORDS[:5]:
             try:
-                results = await self._search(keyword)
-                for t in results:
-                    if t.tweet_id not in seen_ids:
-                        seen_ids.add(t.tweet_id)
-                        targets.append(t)
-            except Exception as e:
-                logger.warning(f"키워드 '{keyword}' 검색 실패: {e}")
+                tweets = await self._grok.search_tweets(
+                    query=keyword,
+                    max_results=5,
+                )
+                for tw in tweets:
+                    tweet_id = str(tw.get("tweet_id") or tw.get("url") or "")
+                    if not tweet_id or tweet_id in seen_ids:
+                        continue
+                    seen_ids.add(tweet_id)
 
-        # 점수 기반 정렬: 빠른 성장 + 높은 좋아요
-        targets.sort(key=lambda t: (t.like_count / max(t.age_minutes, 1)), reverse=True)
-        return targets[:max_results]
+                    like_count = int(tw.get("like_count") or 0)
+                    if not (MIN_LIKES <= like_count <= MAX_LIKES):
+                        continue
+
+                    author = tw.get("author_username", "")
+                    url = tw.get("url") or (
+                        f"https://x.com/{author}/status/{tweet_id}" if author else ""
+                    )
+                    target = CommentTarget(
+                        tweet_id=tweet_id,
+                        tweet_url=url,
+                        text=tw.get("text", ""),
+                        author_username=author,
+                        author_followers=0,
+                        like_count=like_count,
+                        reply_count=0,
+                        created_at=_now_utc,
+                        matched_keyword=keyword,
+                        suggested_reply_type=self._suggest_reply_type(
+                            tw.get("text", "")
+                        ),
+                    )
+                    results.append(target)
+            except Exception as e:
+                logger.warning(
+                    f"[CommentHunter] keyword={keyword} 실패 (무시): {e}"
+                )
+
+        # like_count 내림차순
+        results.sort(key=lambda x: x.like_count, reverse=True)
+        return results[:max_results]
 
     async def _search(self, keyword: str) -> list[CommentTarget]:
         """X API v2 검색 실행."""

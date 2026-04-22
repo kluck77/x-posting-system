@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 logger = logging.getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
-CYCLE_INTERVAL_SEC = 60
+CYCLE_INTERVAL_SEC = 1800     # 30분 — Grok live search 비용 절감 (월 7.2k 호출)
 DAILY_REPLY_CAP = 25
 PER_ACCOUNT_DAILY_CAP = 1
 
