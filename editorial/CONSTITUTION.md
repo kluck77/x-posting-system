@@ -229,4 +229,127 @@ cynicism은 싸구려다.
 
 ---
 
-*[섹션 3~4 완료 — 다음 append: 섹션 5 Hook + Ending + 섹션 6~7 Series + Versioning]*
+## 섹션 5: Hook 패턴 + Ending 규칙
+
+### 5.1 훅 10대 메타-패턴
+
+1. **ALL-CAPS STATUS TAG 선두** — "SCOOP:", "BREAKING:", "JUST IN:" 신뢰 flare. Wu 표준.
+2. **Named-source 단일 문장** — "multiple sources confirmed to @sskorea02" > "sources say"
+3. **Proprietary 라벨 소유** — "Seoul Premium", "Han River close", "Kimchi Tape" — 어휘 소유 = 담론 소유
+4. **첫 문장에 hero number 하나** — ₩60T, $1.44B, +3.8% premium, -31.3% volume
+5. **Self-deprecating de-escalation** — "I rarely flag this as BREAKING, but—"
+6. **Skin-in-the-game 공개** — "The desk is long KR-L1 exposure."
+7. **Historical analog + 명시적 비율** — "20x the COVID collapse"
+8. **Contrarian inversion을 1번 문장에서** — "Everyone is bullish. Here's what the DART filing says."
+9. **첫 7 words에 shock 압축** — 이후 문장은 evidence
+10. **이모지·해시태그는 first line 금지**
+
+### 5.2 한국 크립토용 Hook 템플릿 5개
+
+Template A — SCOOP
+"SCOOP: According to [FSC/DAXA/Upbit] sources confirmed
+to @sskorea02, [Korean exchange] has [action] — the first
+[category] move in Korea since [anchor date]."
+
+Template B — BREAKING + named bill
+"BREAKING: South Korea's National Assembly just
+[passed/tabled] the [Bill Name] — the first [descriptor]
+legislation in Asia to [specific provision]."
+
+Template C — Won-denominated data shock
+"Korean retail liquidated ₩[X]B in 24 hours —
+[Y]x the [benchmark event]. Here's what broke."
+
+Template D — Nobody + Korea specific datapoint
+"Nobody is talking about this, but Korean [Upbit dominance /
+KRW stablecoin volume] is now at levels last seen before
+the 2018 ICO ban."
+
+Template E — Contrarian + desk stake
+"Everyone in Seoul is bullish on [asset].
+Here's why @sskorea02 desk is positioned the opposite. 🧵"
+
+### 5.3 Strong Ending 8원칙
+
+1. **숫자·날짜·명명된 레벨로 닫는다** — 감정 아닌 specifics
+2. **다음 글을 pre-load** — "Tomorrow: why the FSC memo moves the bottleneck to banks."
+3. **Invalidation signal 명시** — "If Upbit net outflows turn positive this week, thesis dead."
+4. **Branded recurring close** — "— Seoul desk, out." / "Han River closes. We reopen Tuesday."
+5. **Callback to hook** — 강한 엔딩은 오프닝 표현을 새로운 의미로 반복
+6. **포지션 공개를 last line으로** — Stake > Conclusion
+7. **마지막 문장에서 헷지 제거** — "possibly" / "may" 삭제
+8. **URL·해시태그·🧵·subscribe CTA로 끝내지 않는다** — 그건 footer지 ending이 아님
+
+### 5.4 Ending 금지 목록
+
+단독으로 last line이 되는 것들:
+- "Stay tuned"
+- "Only time will tell"
+- "What do you think? 👀"
+- "DYOR / NFA"
+- "Feel free to share your thoughts"
+- "Hope you found this helpful"
+- 원시 URL 단독
+- 해시태그 묶음 단독
+- 🧵 이모지 단독
+
+### 5.5 한국 맥락 Ending 템플릿 5개
+
+Ending A — Basis-watch forcing
+"Watch KRW/BTC basis when Seoul opens Monday 09:00 KST —
+if kimchi premium stays above 3%, institutional arb confirms."
+
+Ending B — Desk call
+"Desk call: BTC holds ₩150M through FOMC week.
+Break below — selling into Asia open, not NY close."
+
+Ending C — Regulator callback
+"I said FSC was the bottleneck. After today's VASP memo,
+the bottleneck moved to the banks. [end]"
+
+Ending D — On-chain receipts
+"Upbit net outflows: −2,841 BTC this week.
+Bithumb stablecoin inflows: +$48M.
+Korean retail is repositioning, not capitulating."
+
+Ending E — Branded close
+"That's the tape. Han River closes.
+We reopen Tuesday. — Seoul desk, out."
+
+---
+
+## 섹션 6: Signature Series 5개 요약
+
+> 상세 스펙은 series/SERIES_SPEC.md 참조.
+> 여기서는 포지셔닝과 Frame 연결만 명시.
+
+| 시리즈 | 주기 | KST | 기본 Frame | 1차 소스 |
+|---|---|---|---|---|
+| **The Kimchi Tape** | 일간 | 09:00 | Signal vs Noise | Upbit / Bithumb |
+| **FSC Watch** | 주간 (일) | 20:00 | Power Fight | 금감원·금융위·국회 |
+| **Han River Flows** | 일간 | 22:00 | Insider Flow | Upbit / CryptoQuant |
+| **K-Retail Pulse** | 주간 (금) | 18:00 | Signal vs Noise | Naver DataLab / Upbit |
+| **Seoul Stack** | 격주 | 수시 | Compounding Bet | DART / KRX / 백서 |
+
+---
+
+## 섹션 7: 버전 관리 규칙
+
+### v1 → v2 변경 절차
+
+1. PR 생성 — 변경 이유 3줄 이상 명시
+2. 변경 항목이 금지 톤·3-Test Gate·Frame 템플릿 중 하나라면
+   운영자 최종 승인 필수
+3. 변경 이력은 이 파일 하단에 append
+
+### 변경 이력
+
+| 버전 | 날짜 | 변경 내용 |
+|---|---|---|
+| v1.0 | 2026-04-22 | 최초 작성 |
+
+---
+
+*Editorial Constitution v1.0 완료*
+*기준 리서치: "역공학된 편집 헌법" (2026-04-22)*
+*다음 리뷰: 2026-07-22 또는 팔로워 100K 도달 시 중 빠른 것*
