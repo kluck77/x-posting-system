@@ -13,7 +13,8 @@ from app.config import settings, validate_settings
 from app.db import init_db
 from app.utils.logging_config import setup_logging
 from app.services.growth.ring_dispatcher import ring_a_loop, ring_c_loop
-from app.services.growth.comment_hunter_cycle import comment_hunter_cycle
+from app.services.growth.comment_hunter_cycle import comment_hunter_cycle, make_hunter_runner
+from app.services.growth.post_queue import get_post_queue
 
 logger = logging.getLogger(__name__)
 
@@ -110,22 +111,40 @@ async def _morning_digest_loop() -> None:
             logger.warning(f"[morning-digest] 실행 실패 (fail-open): {e}")
 
 
-# ── Ring / CommentHunter connector stubs ─────────────────────────────
-# 기존 텔레그램 승인 흐름(telegram_bot /queue, /hunt, send_approval_card)과
-# 이중 디스패치 방지를 위해 실 연결은 보류. 루프는 살아있고 로그만 남긴다.
-# 실 연결 시 여기 4 + 1 stub 을 교체하면 됨.
+# ── Ring / CommentHunter connector ────────────────────────────────────
+# Ring A : post_queue 연결 (real)
+# Ring C : Breaking 큐 없음 — orchestrator Step 1.6 이 즉시 처리 (stub 유지)
+# Hunter : CommentHunter + tg_send 래퍼 (real, async builder)
 
-async def _ring_a_send_next_card_stub() -> bool:
-    logger.info("[stub][ring-a] send_next_card 호출 — 실 연결 대기")
-    return False
-
-
-def _ring_a_pending_count_stub() -> int:
-    return 0
+# Ring A — post_queue 연결 (모듈 레벨 싱글턴)
+_post_queue = get_post_queue()
 
 
+async def _ring_a_send_next_card() -> bool:
+    """대기 중 draft 1개 꺼내 텔레그램 승인 카드 전송."""
+    try:
+        pending = _post_queue.list_pending()
+        if not pending:
+            return False
+        post = pending[0]
+        await _post_queue._send_approval_notification(post)
+        return True
+    except Exception as e:
+        logger.warning(f"[Ring A] 전송 실패 (무시): {e}")
+        return False
+
+
+def _ring_a_pending_count() -> int:
+    """대기 중 draft 수."""
+    try:
+        return _post_queue.count_pending()
+    except Exception:
+        return 0
+
+
+# Ring C — stub 유지 (Breaking 은 orchestrator Step 1.6 에서 즉시 처리)
 async def _ring_c_send_breaking_card_stub() -> bool:
-    logger.info("[stub][ring-c] send_breaking_card 호출 — 실 연결 대기")
+    logger.debug("[Ring C][stub] Breaking 큐 없음 — skip")
     return False
 
 
@@ -133,9 +152,24 @@ def _ring_c_breaking_pending_stub() -> int:
     return 0
 
 
-async def _comment_hunter_run_stub() -> int:
-    logger.info("[stub][comment-hunter] run_hunter 호출 — 실 연결 대기")
-    return 0
+# Comment Hunter — 실 연결 (async 팩토리)
+# spec 의 telegram_service.send_message 는 미존재 → 실제 동등 함수
+# growth/_tg_helper.tg_send (async fn(text, parse_mode, disable_preview) -> bool) 사용.
+async def _build_hunter_runner():
+    try:
+        from app.services.growth._tg_helper import tg_send
+
+        async def _send(text: str) -> None:
+            await tg_send(text)
+
+        return await make_hunter_runner(_send)
+    except Exception as e:
+        logger.warning(f"[Hunter] runner 초기화 실패 (noop fallback): {e}")
+
+        async def _noop() -> int:
+            return 0
+
+        return _noop
 
 
 def run_fastapi_server():
@@ -190,24 +224,25 @@ async def run_all():
 
     # Ring A — 최적 시각 텔레그램 카드 전송 (07:30/12:00/18:30/22:30 KST)
     asyncio.create_task(
-        ring_a_loop(_ring_a_send_next_card_stub, _ring_a_pending_count_stub),
+        ring_a_loop(_ring_a_send_next_card, _ring_a_pending_count),
         name="ring_a",
     )
-    logger.info("[ring-a] 슬롯 기반 카드 전송 등록 (stub connector)")
+    logger.info("[ring-a] 슬롯 기반 카드 전송 등록 (post_queue 연결)")
 
-    # Ring C — Breaking priority=0 즉시 전송
+    # Ring C — Breaking priority=0 즉시 전송 (stub: orchestrator Step 1.6 처리)
     asyncio.create_task(
         ring_c_loop(_ring_c_send_breaking_card_stub, _ring_c_breaking_pending_stub),
         name="ring_c",
     )
-    logger.info("[ring-c] Breaking 즉시 전송 등록 (stub connector)")
+    logger.info("[ring-c] Breaking 즉시 전송 등록 (stub — Step 1.6 보완용)")
 
-    # Comment Hunter — 대형 계정 리플 사이클
+    # Comment Hunter — 대형 계정 리플 사이클 (async 팩토리 초기화)
+    _hunter_runner = await _build_hunter_runner()
     asyncio.create_task(
-        comment_hunter_cycle(_comment_hunter_run_stub),
+        comment_hunter_cycle(_hunter_runner),
         name="comment_hunter",
     )
-    logger.info("[comment-hunter] 60초 주기 사이클 등록 (stub connector)")
+    logger.info("[comment-hunter] 60초 주기 사이클 등록 (CommentHunter + tg_send)")
 
     # 텔레그램 봇 실행
     if settings.has_telegram_config:

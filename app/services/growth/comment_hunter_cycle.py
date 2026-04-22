@@ -60,3 +60,46 @@ async def comment_hunter_cycle(run_hunter_fn) -> None:
         except Exception as e:
             logger.warning(f"[CommentHunter] 오류 (무시): {e}")
             await asyncio.sleep(CYCLE_INTERVAL_SEC)
+
+
+async def make_hunter_runner(telegram_send_fn):
+    """CommentHunter 1회 실행 래퍼 팩토리.
+
+    Args:
+        telegram_send_fn: async fn(text: str) -> Any
+            텔레그램으로 리플 초안 카드 전송. 반환값 무시.
+
+    Returns:
+        run_hunter_fn — async () -> int (생성된 초안 수)
+    """
+    from app.services.growth.comment_hunter import CommentHunter, generate_reply_draft
+
+    hunter = CommentHunter()
+
+    async def _run() -> int:
+        try:
+            targets = await hunter.hunt(max_results=10)
+            count = 0
+            for target in targets:
+                try:
+                    target.reply_draft = await generate_reply_draft(target)
+                    card_text = (
+                        f"💬 리플 초안\n\n"
+                        f"대상: @{target.author_username}\n"
+                        f"원문: {target.text[:100]}...\n\n"
+                        f"초안:\n{target.reply_draft}\n\n"
+                        f"좋아요: {target.like_count} | "
+                        f"유형: {target.suggested_reply_type}"
+                    )
+                    await telegram_send_fn(card_text)
+                    count += 1
+                except Exception as e:
+                    logger.warning(
+                        f"[Hunter] 리플 초안 생성 실패 (무시): {e}"
+                    )
+            return count
+        except Exception as e:
+            logger.warning(f"[Hunter] hunt 실패 (무시): {e}")
+            return 0
+
+    return _run
