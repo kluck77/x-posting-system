@@ -27,6 +27,7 @@ from app.services.intel.adapters import get_all_adapters
 from app.services.intel.adapters.base import BaseAdapter
 from app.services.intel.dedup import compute_content_hash
 from app.services.intel.filter import decide_shortlist, reclassify_category
+from app.services.intel.stale_filter import classify, is_stale
 from app.services.intel.schema import NormalizedIntelItem
 from app.services.intel.score import (
     compose_why_flagged_human,
@@ -102,6 +103,11 @@ async def collect_all(
         stats.fetched += len(items)
 
         for item in items:
+            # stale filter — 30일 초과 일반 뉴스는 저장 전 discard
+            if is_stale(item):
+                per["stale"] = per.get("stale", 0) + 1
+                stats.stale = getattr(stats, "stale", 0) + 1
+                continue
             # content_hash 채우기
             item.content_hash = compute_content_hash(
                 item.source, item.url, item.title, item.published_at,
