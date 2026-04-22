@@ -64,26 +64,20 @@ def _korean_ratio(text: str) -> float:
 
 
 def _sanitize_ko(text: Any, *, label: str = "원문", fallback: str = "") -> str:
-    """영어 dominant 텍스트를 편집장용 placeholder 로 대체.
-    한국어 토큰이 하나라도 있으면 혼합 표기 그대로 유지 (고유명사·영문 용어는
-    편집장이 한국어 문맥에서 이해 가능). 한글 0 + 영어 5자+ 일 때만 placeholder.
-
-    결과: `"{label} 영어 — 편집장 한국어 압축 필요"` 고정 문구 (번역하지 않음).
-    """
+    """입력 문자열을 그대로 반환. 영어 필드도 Grok 편집장에게 전달.
+    (Phase 5의 placeholder 교체 동작 제거 — v2 한국어 운영 이후 불필요)
+    기존 fallback 처리만 유지."""
     s = str(text or "").strip()
     if not s:
         return fallback
-    has_ko = bool(_KO_RE.search(s))
-    alpha = len(_ALPHA_ONLY_RE.findall(s))
-    if not has_ko and alpha >= 5:
-        return f"{label} 영어 — 편집장 한국어 압축 필요"
     return s
 
 
 def _reformat_unverified(items: Any) -> list[str]:
     """`[unverified] X` → `X는 현재 검증 부족` 한국어 재포맷.
-    `[en] X` → `원문 영어 — 한국어 압축 필요`.
-    기타 태그는 제거만 하고 본문 노출 (한국어면 유지, 영어면 sanitize)."""
+    `[en] X` → 본문 그대로 (영어 원문도 Grok 편집장에게 전달).
+    기타 태그는 제거만 하고 본문 노출 (placeholder 교체 제거 — v2).
+    """
     if not isinstance(items, list):
         return []
     out: list[str] = []
@@ -94,27 +88,22 @@ def _reformat_unverified(items: Any) -> list[str]:
         s = _strip_urls(s)
         if s.startswith("[unverified]"):
             body = s[len("[unverified]"):].strip()
-            # 한글 토큰이 하나라도 있으면 그대로 "~는 현재 검증 부족" 접미사.
-            # (인명/회사명이 영어여도 한국어 본문 안에 있으면 편집장이 이해함.)
-            # 한글 0 이면 영어 dominant 로 간주 → placeholder.
-            if len(_KO_RE.findall(body)) >= 1:
-                out.append(f"{body}는 현재 검증 부족")
-            else:
-                out.append(f"원문 영어 — 한국어 압축 필요 ({_clip_head(body, 40)})")
+            if not body:
+                continue
+            # 한글 토큰 유무와 무관하게 "~는 현재 검증 부족" 접미사 적용.
+            # (영어 원문도 그대로 노출, 편집장 판단에 맡김)
+            out.append(f"{body}는 현재 검증 부족")
             continue
         if s.startswith("[en]"):
             body = s[len("[en]"):].strip()
-            out.append(f"원문 영어 — 한국어 압축 필요 ({_clip_head(body, 40)})")
+            if body:
+                out.append(body)
             continue
-        # 일반 태그 prefix 제거
+        # 일반 태그 prefix 제거 후 원문 그대로 노출 (영어/한국어 구분 없이)
         cleaned = re.sub(r"^\[[a-zA-Z_]+\]\s*", "", s).strip()
         if not cleaned:
             continue
-        # 영어 dominant 면 placeholder
-        if _korean_ratio(cleaned) < _NEED_KOREAN_THRESHOLD and len(_ALPHA_ONLY_RE.findall(cleaned)) >= 5:
-            out.append(f"원문 영어 — 한국어 압축 필요 ({_clip_head(cleaned, 40)})")
-        else:
-            out.append(cleaned)
+        out.append(cleaned)
     return out
 
 

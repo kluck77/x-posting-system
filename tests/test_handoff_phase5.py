@@ -70,9 +70,12 @@ def test_korean_ratio_english_dominant():
     assert _korean_ratio("Nvidia CEO comment fuels crypto") < 0.1
 
 
-def test_sanitize_ko_english_replaced_with_placeholder():
-    out = _sanitize_ko("This will be Japan's first warship export project")
-    assert "한국어 압축 필요" in out
+def test_sanitize_ko_english_passes_through():
+    """v2: placeholder 교체 제거. 영어 원문 그대로 반환."""
+    s = "This will be Japan's first warship export project"
+    out = _sanitize_ko(s)
+    assert out == s
+    assert "한국어 압축 필요" not in out
 
 
 def test_sanitize_ko_korean_passes_through():
@@ -91,21 +94,22 @@ def test_reformat_unverified_korean():
     assert out == ["Peter Thiel 친분는 현재 검증 부족", "AI 낙관론자 규정는 현재 검증 부족"]
 
 
-def test_reformat_unverified_english_body_becomes_placeholder():
-    """[unverified] 뒤 영어 body → 한국어 압축 필요 placeholder."""
+def test_reformat_unverified_english_body_passes_through():
+    """v2: [unverified] 뒤 영어 body → placeholder 없이 원문 + '는 현재 검증 부족'."""
     out = _reformat_unverified(["[unverified] Peter Thiel close relationship rumor"])
-    assert len(out) == 1
-    assert "한국어 압축 필요" in out[0]
+    assert out == ["Peter Thiel close relationship rumor는 현재 검증 부족"]
+    assert "한국어 압축 필요" not in out[0]
 
 
 def test_reformat_drops_empty_strings():
     assert _reformat_unverified(["", "  ", None]) == []
 
 
-def test_reformat_en_prefix_becomes_placeholder():
+def test_reformat_en_prefix_passes_through():
+    """v2: [en] prefix 는 벗겨내고 본문만 그대로 (placeholder 제거)."""
     out = _reformat_unverified(["[en] Australia picks Japan Mogami-class frigate"])
-    assert len(out) == 1
-    assert "한국어 압축 필요" in out[0]
+    assert out == ["Australia picks Japan Mogami-class frigate"]
+    assert "한국어 압축 필요" not in out[0]
 
 
 # ─── 3. _dedupe_evidence ────────────────────────────────────────────────
@@ -282,9 +286,9 @@ def test_why_push_block_includes_tension_and_trigger():
     assert "보험료+스팟" in why_block
 
 
-def test_why_push_block_skips_english_tension_and_trigger():
-    """영어 dominant core_tension / share_trigger 는 placeholder 로 전환되어
-    해당 줄 자체가 생략됨 (한글 0 + 영어 5+ → sanitize 버림)."""
+def test_why_push_block_keeps_english_tension_and_trigger():
+    """v2: 영어 core_tension / share_trigger 가 placeholder 없이 원문 그대로
+    '## 🔥 왜 이 글을 세게 써야 하는가' 블록에 노출된다."""
     ap = _min_ap(
         core_tension="Uncertainty on record: Nvidia comment fuels rally",
         share_trigger="Global markets recovered fast while Korea lagged",
@@ -293,11 +297,13 @@ def test_why_push_block_skips_english_tension_and_trigger():
     why_idx = out.index("## 🔥 왜 이 글을 세게 써야 하는가")
     flat_idx = out.index("## 🏴") if "## 🏴" in out else len(out)
     why_block = out[why_idx:flat_idx]
-    # 영어 문장이 그대로 나오면 안 됨
-    assert "Uncertainty on record" not in why_block
-    assert "Global markets recovered" not in why_block
-    # 편집 목표 / RT 동기 같은 다른 줄은 있을 수 있음 (rich_meta 기반)
+    # 영어 원문이 그대로 노출되어야 함
+    assert "Uncertainty on record" in why_block
+    assert "Global markets recovered" in why_block
+    # 편집 목표 줄도 유지
     assert "- 편집 목표:" in why_block
+    # placeholder 문자열은 출력 어디에도 없어야 함
+    assert "한국어 압축 필요" not in out
 
 
 def test_format_handoff_salvageability_is_last_block():
@@ -324,17 +330,17 @@ def test_format_handoff_phase5_what_to_sharpen_rendered():
 
 # ─── 7. 영어 sanitize 통합 ──────────────────────────────────────────────
 
-def test_format_handoff_english_angle_sanitized():
-    """winner_angle.angle 이 영어면 handoff 에 '앵글 원문 영어 — 편집장 한국어 압축 필요'."""
+def test_format_handoff_english_angle_passes_through():
+    """v2: winner_angle.angle 이 영어여도 placeholder 없이 원문 그대로 handoff 노출."""
     ap = _min_ap(
         winner_angle={"angle": "This will be Japan's first warship export project"},
         core_tension="Uncertainty on record: Nvidia CEO",
     )
     out = format_handoff(_min_sp(), ap, "본문")
-    assert "한국어 압축 필요" in out
-    # 영어 원문이 그대로 노출되면 안 됨
-    assert "This will be Japan" not in out
-    assert "Uncertainty on record" not in out
+    assert "한국어 압축 필요" not in out
+    # 영어 원문이 Grok 편집장 카드에 그대로 전달
+    assert "This will be Japan" in out
+    assert "Uncertainty on record" in out
 
 
 def test_format_handoff_unverified_sources_reformatted():
@@ -347,11 +353,13 @@ def test_format_handoff_unverified_sources_reformatted():
     assert "[unverified]" not in out
 
 
-def test_format_handoff_english_concept_translation_block_omitted():
-    """concept_translation 이 영어면 '어려운 개념 한 줄 번역' 블록 자체 생략."""
+def test_format_handoff_english_concept_translation_block_included():
+    """v2: concept_translation 이 영어여도 블록이 포함되고 원문 그대로 노출."""
     sp = _min_sp(concept_translation="Hormuz Strait: world's key oil transit chokepoint")
     out = format_handoff(sp, _min_ap(), "본문")
-    assert "## 어려운 개념 한 줄 번역" not in out
+    assert "## 어려운 개념 한 줄 번역" in out
+    assert "Hormuz Strait" in out
+    assert "한국어 압축 필요" not in out
 
 
 def test_format_handoff_evidence_dedupe_and_english_drop():
