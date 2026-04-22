@@ -131,4 +131,102 @@ cynicism은 싸구려다.
 
 ---
 
-*[섹션 1~2 완료 — 다음 append: 섹션 3 금지 톤 + 섹션 4 Frame 템플릿]*
+## 섹션 3: 금지 톤 10개
+
+아래 중 하나라도 감지되면 즉시 rewrite. 통과 없음.
+
+| # | 금지 톤 | 예시 | 왜 금지인가 |
+|---|---|---|---|
+| 1 | **Hype promoter** | "Korea is the crypto capital 🔥" | 팬덤 계정으로 분류됨 |
+| 2 | **Translated press release** | "FSC is pleased to announce…" | 1차 소스 해석 포기 |
+| 3 | **Nationalist cheerleader** | "We Koreans are built different" | 글로벌 오디언스 이탈 |
+| 4 | **Academic lecturer** | "the epistemological frameworks underlying…" | 독자 이탈 |
+| 5 | **Over-literal Korean calque** | "according to an industry source it is anticipated" | 신뢰 하락 |
+| 6 | **Diplomatic hedger** | "while challenges remain, opportunities exist" | 판단 없음 = 가치 없음 |
+| 7 | **Exoticizer** | "Land of the Morning Calm" | 서구 관광객 시선 |
+| 8 | **Honorifics-in-English** | "the esteemed Chairman graciously" | 어색함 + PR 냄새 |
+| 9 | **Ticker shill** | "$WEMIX +40% 🚀 don't miss" | 신뢰 파괴 |
+| 10 | **Western-pundit mimic** | "Just like Arthur Hayes says…" | 본인 목소리 없음 |
+
+---
+
+## 섹션 4: Frame 템플릿 12개
+
+> 편집장의 첫 질문: "이 글은 Frame 1~12 중 어디에 속하는가?"
+> 답이 안 나오면 쓸 가치가 없는 소재다.
+
+### Frame 1 — Power Fight (권력 다툼)
+**구조**: [Actor A] vs [Actor B] over [specific resource/rule]. Whoever wins controls [downstream consequence].
+**언제**: 규제기관·거래소·정당·대기업·은행 사이의 감독권·지분·정책 대립
+**한국 적용 예시**: "FSC vs BOK over KRW stablecoin issuance rights. Whoever wins sets the KRW on-ramp for the next decade."
+**레퍼런스**: @nic__carter "Operation Choke Point 2.0"
+
+### Frame 2 — Timeline Collapse (가설 → 가동)
+**구조**: In [year], X was a thesis. Today it is the operating condition. Here's the step that flipped it.
+**언제**: "언제 일어날까"가 "지금 일어났다"로 바뀌는 순간
+**한국 적용 예시**: "In 2023, KRW stablecoin issuance was a whitepaper. Today KakaoBank filed the first commercial blueprint."
+**레퍼런스**: @LynAldenContact "Nothing stops this train"
+
+### Frame 3 — Signal vs Noise (서구 오독 vs 한국 실제)
+**구조**: Western desks are reading [wrong frame]. Korean primary source actually says [right frame]. The gap matters because [implication].
+**언제**: 글로벌이 오해 중인 한국 뉴스 / 과대·과소평가된 데이터
+**한국 적용 예시**: "Western desks called Upbit's VASP renewal a win. The actual order excludes buy/sell/exchange — only custody and brokerage survived."
+**레퍼런스**: @WuBlockchain Asia regulatory exclusives
+
+### Frame 4 — Compounding Bet (누적 구조)
+**구조**: Alone, [event] is trivial. Stacked against [prior events], it's the Nth data point of a [structural shift].
+**언제**: 하나의 이벤트가 12~24개월 뒤 무엇을 만드는지 구조적으로 쌓이는 소재
+**한국 적용 예시**: "Alone, Hanwha Life buying 50 BTC is noise. Stacked with NPS allocation, KB custody trial, and Samsung SDS pilot — Korea's institutional on-ramp is forming."
+**레퍼런스**: @WuBlockchain MicroStrategy accumulation threads
+
+### Frame 5 — Plumbing Reveal (후드 아래 메커닉)
+**구조**: Price/policy did X. The reason isn't narrative — it's [specific settlement/reserve/facility mechanic].
+**언제**: 시장이 "왜"를 틀리게 읽고 있을 때
+**한국 적용 예시**: "USDT premium on Upbit isn't retail sentiment. It's the BOK FX swap line capacity x KRW custody rule creating a one-way valve."
+**레퍼런스**: @CryptoHayes "Exchange Stabilization Fund" mechanics
+
+### Frame 6 — Regime Change (옛 규칙이 깨졌다)
+**구조**: The rule for [prior era] was [X]. That rule no longer binds because [mechanism]. Assets priced under the old rule will reprice.
+**언제**: 법·정책·구조가 바뀌어 과거 플레이북이 틀려지는 순간
+**한국 적용 예시**: "The rule was: crypto gains are tax-free in Korea. That rule ends Jan 2027. Every KR retail holding decision made before that date is now mispriced."
+**레퍼런스**: @LynAldenContact fiscal dominance framing
+
+### Frame 7 — Incentive Reveal (돈을 따라가라)
+**구조**: Everyone is debating [stated reason]. Look at who gets paid if [policy/design] passes. That's the actual driver.
+**언제**: 공식 이유와 실제 인센티브 구조가 다를 때
+**한국 적용 예시**: "Everyone's debating investor protection. Track who captures listing-slot monopoly rent after the new VASP rule. That's the actual fight."
+**레퍼런스**: @hasufl MEV-as-health-indicator; Matt Levine "everything is securities fraud"
+
+### Frame 8 — Historical Rhyme (전례)
+**구조**: This looks new. It is a near-copy of [prior episode]. The resolution then was [Y]; the relevant difference now is [Z].
+**언제**: 현재 이벤트가 과거 패턴을 반복할 때
+**한국 적용 예시**: "FSC's 2024 enforcement playbook is the 2018 ICO ban rerun — same choke point (real-name accounts), different asset class. Resolution then: 18 months to partial re-open."
+**레퍼런스**: @nic__carter Operation Choke Point 1.0 → 2.0
+
+### Frame 9 — Counter-positioning (컨센서스가 틀렸다)
+**구조**: Consensus says [X]. The position, flow, or policy data says [Y]. Therefore [trade/thesis].
+**언제**: 시장·미디어 컨센서스와 실제 데이터가 어긋날 때
+**한국 적용 예시**: "Consensus: Korean ETF approval is 2026 H1. Policy data: futures market missing, index undefined, bank custody untested. Desk call: 2027 Q1 earliest."
+**레퍼런스**: @CryptoHayes "I think we are more likely to go down to $70k–75k"
+
+### Frame 10 — Aggregation / Disaggregation
+**구조**: [Incumbent] controlled [supply/distribution]. [New actor] now owns the user relationship, commoditizing the old moat.
+**언제**: 플랫폼·앱·프로토콜이 기존 강자를 disintermediate할 때
+**한국 적용 예시**: "Banks issue KRW stablecoins (supply). KakaoPay/Toss/Naver Pay own the user relationship (aggregation). Banks become the commodity layer."
+**레퍼런스**: Ben Thompson Aggregation Theory (stratechery.com)
+
+### Frame 11 — Insider Flow (실제로 누가 움직이나)
+**구조**: Headline says [X]. On-chain/exchange/filing data shows [specific cohort] is doing [Y]. The market hasn't priced this.
+**언제**: 헤드라인과 실제 포지션이 다를 때
+**한국 적용 예시**: "Headline: Korean retail is bearish. DART filing: 3 mid-cap Korean listed companies quietly added BTC to treasury Q1. Market hasn't noticed."
+**레퍼런스**: @WClementeIII whale cohort threads
+
+### Frame 12 — Stakes Escalation (이번엔 다른 이유)
+**구조**: Past [event class] was contained because [condition A]. This one isn't because [condition A has broken / condition B is new].
+**언제**: 비슷해 보이지만 이번엔 진짜 다를 때
+**한국 적용 예시**: "Past KR exchange failures were contained by deposit insurance. This time VAUPA explicitly excludes crypto-linked accounts. The floor is gone."
+**레퍼런스**: @nic__carter "biggest challenge to financial stability since 2008"
+
+---
+
+*[섹션 3~4 완료 — 다음 append: 섹션 5 Hook + Ending + 섹션 6~7 Series + Versioning]*
