@@ -145,8 +145,8 @@ _COOLDOWN_SECONDS = 3600
 
 
 def _get_alert_threshold() -> int:
-    """후보알림 임계값(설정 가능). 기본 45."""
-    return int(getattr(settings, "alert_score_threshold", 45))
+    """후보알림 임계값(설정 가능). 기본 40."""
+    return int(getattr(settings, "alert_score_threshold", 40))
 
 
 def _get_urgent_threshold() -> int:
