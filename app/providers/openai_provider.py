@@ -304,7 +304,12 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 _stake = str(data.get("stake", "") or "").strip()
                 _point = str(data.get("point", "") or "").strip()
                 _archetype = str(data.get("archetype", "") or "")
-                # body 에 stake + point 합성 (⚠️/📌 형식 검증은 downstream 에서)
+                # ⚠️/📌 prefix 자동 부착 (ensure_resonance_structure 통과 보장)
+                if _stake and not _stake.startswith("⚠️"):
+                    _stake = f"⚠️ {_stake.lstrip('⚠️').strip()}" if _stake else ""
+                if _point and not _point.startswith("📌"):
+                    _point = f"📌 {_point.lstrip('📌').strip()}" if _point else ""
+                # body 에 stake + point 합성
                 combined_body = _body
                 if _stake:
                     combined_body = f"{combined_body}\n\n{_stake}" if combined_body else _stake
