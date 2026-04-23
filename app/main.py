@@ -109,14 +109,17 @@ async def _competitor_monitor_loop() -> None:
 
 
 async def _polymarket_fetch_loop() -> None:
-    """30분 주기 폴리마켓 Gamma API 수집 + SQLite 저장. fail-open.
+    """30분 주기 폴리마켓 Gamma API 수집 + SQLite 저장 + intel_items 적재.
 
     psych_enabled=False 면 대기. 첫 주기 90초 후.
+    upsert_to_intel 은 55점 이상인 시장만 대시보드 shortlist 에 등록.
     """
     from app.config import settings
     await asyncio.sleep(90)
     try:
-        from app.sources.polymarket_fetcher import fetch_with_retry, save_to_db
+        from app.sources.polymarket_fetcher import (
+            fetch_with_retry, save_to_db, upsert_to_intel,
+        )
     except ImportError:
         logger.info("[polymarket-fetch] 모듈 없음 — 비활성")
         return
@@ -125,10 +128,14 @@ async def _polymarket_fetch_loop() -> None:
             await asyncio.sleep(1800)
             continue
         try:
-            items = await fetch_with_retry(limit=50)
+            items = await fetch_with_retry(limit=100)
             if items:
                 save_to_db(items)
-                logger.info(f"[polymarket-fetch] {len(items)}개 수집 저장")
+                intel_count = upsert_to_intel(items)
+                logger.info(
+                    f"[polymarket-fetch] 수집 {len(items)}개 → "
+                    f"intel 신규 {intel_count}개"
+                )
         except Exception as e:
             logger.warning(f"[polymarket-fetch] 실패: {e}")
         await asyncio.sleep(30 * 60)

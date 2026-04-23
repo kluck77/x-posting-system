@@ -2053,13 +2053,14 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
   <!-- Phase-final: 폴리마켓 위젯 (카테고리 기반, 5분 폴링) -->
   <div id="polymarket-widget" class="ci-summary" style="margin-bottom:6px;font-size:11px"></div>
   <div id="ci-summary" class="ci-summary"></div>
-  <!-- Phase-dart: 탭 필터 (전체 / 뉴스 / 공시 / 속보 / 중요) — compact 한 줄 -->
+  <!-- Phase-dart: 탭 필터 (전체 / 뉴스 / 공시 / 속보 / 중요 / 폴리마켓) — compact 한 줄 -->
   <div id="ci-tabs" class="ci-tabs" style="display:flex;gap:4px;margin:6px 0 4px;flex-wrap:wrap">
     <button class="ci-tab-btn active" data-ci-tab="all">전체</button>
     <button class="ci-tab-btn" data-ci-tab="news">📰 뉴스</button>
     <button class="ci-tab-btn" data-ci-tab="dart">📋 공시</button>
     <button class="ci-tab-btn" data-ci-tab="breaking">🔴 속보</button>
     <button class="ci-tab-btn" data-ci-tab="important">⭐ 중요</button>
+    <button class="ci-tab-btn" data-ci-tab="polymarket">📊 폴리마켓</button>
   </div>
   <div id="ci-tab-desc" class="ci-tab-desc">원문/정책/공시 기반 후보 선별 작업판 · 추천순은 score 기준, noise 기본 숨김</div>
   <div class="ci-toolbar">
@@ -4991,7 +4992,7 @@ setInterval(loadPolymarketWidget,300000);
     if(kpiS) kpiS.textContent = short;
     if(kpiSnt) kpiSnt.textContent = sentCnt;
     if(chips){
-      const order = ['open_dart','finnhub'];
+      const order = ['open_dart','finnhub','polymarket'];
       chips.innerHTML = order.map(k =>
         `<span class="ci-h-chip${adapters[k] ? ' is-on' : ''}">${esc(k)}</span>`
       ).join('');
@@ -5115,14 +5116,20 @@ setInterval(loadPolymarketWidget,300000);
     }
   }
 
-  // ── Tab filter (all / news / dart / breaking / important) ───────────
+  // ── Tab filter (all / news / dart / breaking / important / polymarket) ──
   function applyTabFilter(items){
     const tab = ciTab || 'all';
     let out = items;
     if(tab === 'news'){
-      out = items.filter(it => (it.source || '') !== 'open_dart');
+      // 뉴스 = 폴리마켓·DART 둘 다 제외 (일반 뉴스 소스만)
+      out = items.filter(it => {
+        const s = it.source || '';
+        return s !== 'open_dart' && s !== 'polymarket';
+      });
     } else if(tab === 'dart'){
       out = items.filter(it => (it.source || '') === 'open_dart');
+    } else if(tab === 'polymarket'){
+      out = items.filter(it => (it.source || '') === 'polymarket');
     } else if(tab === 'breaking'){
       // priority >= 80 (DART critical 또는 high intensity news)
       out = items.filter(it => (it.priority_score || 0) >= 80);
@@ -5130,6 +5137,7 @@ setInterval(loadPolymarketWidget,300000);
       out = items.filter(it => (it.priority_score || 0) >= 70);
     }
     // 공통: 40점 미만 숨김 (전체 탭에서도 routine/noise 기본 off)
+    // polymarket 탭은 55점 기준 보장을 위해 40 이상은 이미 통과
     out = out.filter(it => (it.display_score || it.priority_score || 0) >= 40);
     return out;
   }

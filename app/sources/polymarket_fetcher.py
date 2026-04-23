@@ -23,18 +23,56 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://gamma-api.polymarket.com"
 
-# 관심 키워드 (매크로·크립토·정책)
-FILTER_KEYWORDS = [
-    # 크립토
-    "bitcoin", "btc", "ethereum", "eth", "solana",
-    "etf", "sec", "crypto", "gensler",
-    # 매크로
-    "fed", "federal reserve", "recession", "inflation",
-    "cpi", "interest rate", "treasury", "gdp",
-    # 정책
-    "trump", "tariff", "sanctions", "trade",
-    # 한국
-    "korea", "kospi", "won",
+# 관심 키워드 — 5 카테고리 (crypto / macro / stocks / politics / economy)
+FILTER_KEYWORDS: dict[str, list[str]] = {
+    "crypto": [
+        "bitcoin", "btc", "ethereum", "eth", "solana", "sol",
+        "xrp", "ripple", "bnb", "dogecoin", "doge",
+        "etf", "sec", "crypto", "gensler", "coinbase",
+        "stablecoin", "defi", "nft", "blockchain",
+        "binance", "upbit", "bithumb", "kimchi",
+        "halving", "altcoin",
+    ],
+    "macro": [
+        "fed", "federal reserve", "recession", "inflation",
+        "cpi", "ppi", "interest rate", "treasury", "gdp",
+        "unemployment", "payroll", "nfp", "fomc",
+        "dollar", "dxy", "yield curve", "bond",
+        "bank of korea", "bok", "won", "krw",
+        "oil", "crude", "brent", "wti",
+        "gold", "silver", "commodity",
+    ],
+    "stocks": [
+        "nasdaq", "s&p", "sp500", "dow jones",
+        "nvidia", "apple", "microsoft", "tesla",
+        "samsung", "sk hynix", "tsmc",
+        "ipo", "earnings", "stock market",
+        "kospi", "kosdaq", "nikkei",
+        "hbm", "semiconductor", "chip",
+        "mag7", "magnificent",
+    ],
+    "politics": [
+        "trump", "biden", "harris",
+        "election", "president", "congress",
+        "tariff", "trade war", "sanctions",
+        "ukraine", "russia", "china", "taiwan",
+        "iran", "hormuz", "middle east",
+        "korea president", "yoon", "lee jaemyung",
+        "nato", "g7", "g20",
+    ],
+    "economy": [
+        "gdp growth", "economic",
+        "housing", "real estate", "mortgage",
+        "bankruptcy", "default", "debt ceiling",
+        "imf", "world bank", "oecd",
+        "supply chain", "inflation rate",
+        "consumer confidence", "retail sales",
+    ],
+}
+
+# 필터용 flat 리스트 (fetch 필터 빠른 매칭)
+ALL_KEYWORDS: list[str] = [
+    kw for kws in FILTER_KEYWORDS.values() for kw in kws
 ]
 
 
@@ -70,17 +108,52 @@ def _parse_outcome_prices(raw) -> tuple[float, float]:
         return 0.5, 0.5
 
 
-def _categorize(question: str) -> str:
+def _categorize_v2(question: str) -> str:
+    """5 카테고리 중 점수 최대인 카테고리 반환 (score>0 이어야).
+
+    crypto / macro / stocks / politics / economy / other.
+    """
     q = (question or "").lower()
-    if any(k in q for k in ["bitcoin", "btc", "ethereum", "eth",
-                            "crypto", "etf", "sec", "solana"]):
-        return "crypto"
-    if any(k in q for k in ["fed", "rate", "recession", "inflation",
-                            "cpi", "gdp", "treasury"]):
-        return "macro"
-    if any(k in q for k in ["trump", "tariff", "election", "trade"]):
-        return "policy"
-    return "other"
+    scores: dict[str, int] = {}
+    for cat, keywords in FILTER_KEYWORDS.items():
+        scores[cat] = sum(1 for k in keywords if k in q)
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "other"
+
+
+# backward compat alias (기존 호출부 보호)
+_categorize = _categorize_v2
+
+
+def _score_market(item: "PolymarketItem") -> int:
+    """폴리마켓 시장 중요도 점수 (0~100).
+
+    volume_24h 기준 base + 카테고리 가중치 + 극단 확률 페널티.
+    """
+    vol = item.volume_24h or 0.0
+    if   vol >= 10_000_000: base = 90
+    elif vol >= 1_000_000:  base = 80
+    elif vol >= 500_000:    base = 70
+    elif vol >= 100_000:    base = 60
+    elif vol >= 10_000:     base = 50
+    else:                   base = 35
+
+    cat_bonus = {
+        "crypto":   10,
+        "macro":    10,
+        "politics":  8,
+        "stocks":    7,
+        "economy":   5,
+        "other":     0,
+    }
+    base += cat_bonus.get(item.category or "other", 0)
+
+    # 확률 극단(결정 임박) 감점 — 99%/1% 는 이미 결정 수준
+    yp = item.yes_prob or 0.5
+    if yp >= 0.99 or yp <= 0.01:
+        base -= 20
+
+    return max(0, min(100, base))
 
 
 async def fetch_top_markets(limit: int = 50) -> list[PolymarketItem]:
@@ -106,7 +179,7 @@ async def fetch_top_markets(limit: int = 50) -> list[PolymarketItem]:
         for m in markets or []:
             question = m.get("question", "") or ""
             q_lower = question.lower()
-            if not any(k in q_lower for k in FILTER_KEYWORDS):
+            if not any(k in q_lower for k in ALL_KEYWORDS):
                 continue
             if not m.get("enableOrderBook", True):
                 continue
@@ -122,7 +195,7 @@ async def fetch_top_markets(limit: int = 50) -> list[PolymarketItem]:
                 liquidity=float(m.get("liquidity", 0) or 0),
                 end_date=str(m.get("endDate", "") or ""),
                 condition_id=str(m.get("conditionId", "") or ""),
-                category=_categorize(question),
+                category=_categorize_v2(question),
             ))
         logger.info(f"[Polymarket] 수집 {len(results)}개 시장")
         return results
@@ -229,3 +302,127 @@ def format_for_post(items: list[dict]) -> str:
         q = (item.get("question") or "")[:30]
         lines.append(f"• {q}... → {item.get('yes_pct', '')}")
     return "\n".join(lines)
+
+
+# polymarket category → IntelCategory 매핑
+_POLY_CAT_TO_INTEL = {
+    "crypto":   "crypto_stream",
+    "macro":    "macro_policy",
+    "economy":  "macro_policy",
+    "stocks":   "market_company",
+    "politics": "us_policy_bills",
+    "other":    "asset_context",
+}
+
+
+def upsert_to_intel(items: list[PolymarketItem]) -> int:
+    """Polymarket 시장을 intel_items 테이블에 뉴스카드로 적재.
+
+    - source = "polymarket"
+    - source_type = "prediction_market"
+    - category = _POLY_CAT_TO_INTEL 매핑
+    - shortlisted = True (score >= 55 일 때)
+    - 55점 미만 제외. content_hash 기준 dedup.
+
+    반환: 신규 적재 건수 (이미 존재하는 건은 priority_score 만 갱신).
+    """
+    import hashlib
+    from datetime import datetime, timezone
+    try:
+        from app.db import get_db
+        from app.models.intel import IntelItem
+    except Exception as e:
+        logger.warning(f"[Polymarket] intel 모듈 로드 실패: {e}")
+        return 0
+
+    inserted = 0
+    updated = 0
+    now_utc = datetime.now(timezone.utc)
+
+    db = get_db()
+    try:
+        for item in items:
+            score = _score_market(item)
+            if score < 55:
+                continue  # 낮은 건 dashboard 노출 안 함
+
+            cond_id = item.condition_id or item.slug or item.question
+            content_hash = hashlib.sha256(
+                f"polymarket:{cond_id}".encode("utf-8")
+            ).hexdigest()
+
+            url = f"https://polymarket.com/event/{item.slug}" if item.slug else None
+            yes_pct = round(item.yes_prob * 100)
+            no_pct  = round(item.no_prob  * 100)
+            title = f"[폴리마켓] {item.question[:120]}"
+            summary = (
+                f"Yes {yes_pct}% / No {no_pct}% · "
+                f"24h 거래량 ${int(item.volume_24h):,} · "
+                f"마감 {(item.end_date or '')[:10]}"
+            )
+            cat_intel = _POLY_CAT_TO_INTEL.get(item.category or "other", "asset_context")
+            label = (
+                "strong" if score >= 80
+                else ("watch" if score >= 65 else "weak")
+            )
+
+            existing = (
+                db.query(IntelItem)
+                .filter(IntelItem.content_hash == content_hash)
+                .first()
+            )
+            if existing is not None:
+                # priority_score + 요약(Yes% 변동) 갱신만, 이력 유지
+                existing.priority_score = score
+                existing.score_label    = label
+                existing.summary        = summary
+                existing.shortlisted    = True
+                updated += 1
+                continue
+
+            row = IntelItem(
+                source="polymarket",
+                source_type="prediction_market",
+                title=title,
+                summary=summary,
+                url=url,
+                published_at=now_utc,
+                entity=None,
+                category=cat_intel,
+                content_hash=content_hash,
+                raw_payload=None,
+                shortlisted=True,
+                flagged_reason=None,
+                priority_score=score,
+                score_label=label,
+                why_flagged_human=(
+                    f"폴리마켓 {item.category} 시장 · volume=${int(item.volume_24h):,} · "
+                    f"yes={yes_pct}%"
+                ),
+                promotion_status="none",
+            )
+            try:
+                db.add(row)
+                db.flush()
+                inserted += 1
+            except Exception as e:
+                db.rollback()
+                logger.debug(f"[Polymarket] intel insert skip: {e}")
+                continue
+        db.commit()
+        logger.info(
+            f"[Polymarket] intel_items 적재 new={inserted} updated={updated}"
+        )
+        return inserted
+    except Exception as e:
+        logger.warning(f"[Polymarket] upsert_to_intel 실패: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return 0
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
