@@ -221,8 +221,30 @@ def build_approval_card(
                 "skip":        "⏭️ 스킵",
             }.get(_em.get("route_decision", ""), "")
             _badges = [b for b in (_imp_badge, _tone_badge, _route_badge) if b]
+            # Phase 2 배지: viral / loss / reply hook
+            try:
+                _viral_score = _em.get("viral_score")
+                _viral_warn  = bool(_em.get("viral_warning", False))
+                if isinstance(_viral_score, (int, float)):
+                    _viral_badge = (
+                        f"⚠️ 바이럴 {int(_viral_score)}/100"
+                        if _viral_warn
+                        else f"✅ 바이럴 {int(_viral_score)}/100"
+                    )
+                    _badges.append(_viral_badge)
+                _loss_n = _em.get("loss_aversion_changes")
+                if isinstance(_loss_n, int) and _loss_n > 0:
+                    _badges.append(f"🔄 손실회피 {_loss_n}건")
+            except Exception:
+                pass
+
             if _badges:
                 _psych_header = " | ".join(_badges) + "\n"
+
+            # 리플 훅 전용 섹션 (카드 본문 아래 별도 라인)
+            _rh = _em.get("reply_hook") or ""
+            if _rh:
+                _psych_header += f"💬 리플 훅: {_rh[:80]}\n"
     except Exception:
         pass
 

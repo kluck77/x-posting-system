@@ -58,6 +58,11 @@ from app.sources.news_importance_classifier import classify_news
 from app.sources.breaking_news_dedup import check_and_register
 from app.sources.timing_router import route as psych_route, RouteDecision
 from app.psych.emotion_tone_analyzer import analyze as tone_analyze
+from app.psych.loss_aversion_rewriter import rewrite as loss_rewrite
+from app.psych.virality_scorer import score as viral_score
+from app.psych.reply_hook_generator import generate as reply_hook
+from app.psych.curiosity_gap_injector import inject as curiosity_inject
+from app.sources.x_trending_crypto import get_trending_crypto
 
 logger = logging.getLogger(__name__)
 
@@ -932,6 +937,94 @@ class Orchestrator:
                 )
             except Exception as _te:
                 logger.warning(f"[Step 5.85 EmotionTone] 실패 (무시): {_te}")
+
+        # ── Phase 2 Psych (Step 5.86~5.90) ──────────────────────────────
+        # 모두 fail-soft. editorial_meta 에 결과 누적.
+        if settings.psych_enabled:
+            # Step 5.86 — 손실회피 언어 변환
+            try:
+                _loss_result = await loss_rewrite(
+                    getattr(review, "body", "") or getattr(draft_result, "body", "") or ""
+                )
+                if _loss_result.get("changed"):
+                    logger.info(
+                        f"[Step 5.86 LossAversion] "
+                        f"변환 {_loss_result.get('changes_count', 0)}건 "
+                        f"src={_loss_result.get('source', '')}"
+                    )
+                    # review.body 가 canonical — 이후 단계도 동기화됨
+                    review.body = _loss_result.get("rewritten", review.body)
+                    editorial_meta["loss_aversion_changes"] = \
+                        _loss_result.get("changes_count", 0)
+                    editorial_meta["loss_aversion_source"] = \
+                        _loss_result.get("source", "")
+            except Exception as _le:
+                logger.warning(f"[Step 5.86 LossAversion] 실패 (무시): {_le}")
+
+            # Step 5.87 — 호기심 갭 삽입 (curiosity_gap_enabled=True 일 때만 실제 작동)
+            try:
+                _gap_result = await curiosity_inject(
+                    getattr(review, "body", "") or ""
+                )
+                if _gap_result.get("changed"):
+                    logger.info(
+                        f"[Step 5.87 CuriosityGap] "
+                        f"pattern={_gap_result.get('pattern', '')} "
+                        f"gap={(_gap_result.get('gap_text') or '')[:30]}"
+                    )
+                    review.body = _gap_result.get("injected_text", review.body)
+                    editorial_meta["curiosity_gap"] = _gap_result.get("gap_text", "")
+                    editorial_meta["curiosity_pattern"] = _gap_result.get("pattern", "")
+            except Exception as _ge:
+                logger.warning(f"[Step 5.87 CuriosityGap] 실패 (무시): {_ge}")
+
+            # Step 5.88 — 바이럴 스코어 (0-100, 70 미만 warning)
+            try:
+                _viral_text = "\n".join(filter(None, [
+                    getattr(review, "hook", "") or "",
+                    getattr(review, "body", "") or "",
+                ]))
+                _viral_result = await viral_score(_viral_text)
+                editorial_meta["viral_score"]    = _viral_result.get("total_score", 0)
+                editorial_meta["viral_warning"]  = _viral_result.get("is_warning", False)
+                editorial_meta["viral_feedback"] = _viral_result.get("feedback_ko", "")
+                editorial_meta["viral_breakdown"] = _viral_result.get("breakdown", {})
+                logger.info(
+                    f"[Step 5.88 ViralScore] "
+                    f"total={_viral_result.get('total_score', 0)}/100 "
+                    f"warning={_viral_result.get('is_warning', False)}"
+                )
+            except Exception as _ve:
+                logger.warning(f"[Step 5.88 ViralScore] 실패 (무시): {_ve}")
+
+            # Step 5.89 — 리플 유도 질문 append
+            try:
+                _tone = editorial_meta.get("tone", "neutral")
+                _hook_result = await reply_hook(
+                    getattr(review, "body", "") or "",
+                    _tone,
+                )
+                if _hook_result.get("hook"):
+                    editorial_meta["reply_hook"]      = _hook_result.get("hook", "")
+                    editorial_meta["reply_hook_type"] = _hook_result.get("type", "")
+                    # 본문에 append (이후 save 반영)
+                    review.body = _hook_result.get("appended_text", review.body)
+                    logger.info(
+                        f"[Step 5.89 ReplyHook] "
+                        f"type={_hook_result.get('type', '')} "
+                        f"hook={(_hook_result.get('hook') or '')[:30]}"
+                    )
+            except Exception as _he:
+                logger.warning(f"[Step 5.89 ReplyHook] 실패 (무시): {_he}")
+
+            # Step 5.90 — X 트렌딩 크립토 (telemetry only, 15분 캐시)
+            try:
+                _trending = await get_trending_crypto()
+                if _trending:
+                    editorial_meta["x_trending"] = _trending[:5]
+                    logger.info(f"[Step 5.90 XTrending] {_trending[:3]}")
+            except Exception as _xe:
+                logger.warning(f"[Step 5.90 XTrending] 실패 (무시): {_xe}")
 
         # --- Step 5.9: Haiku Soft Rule Judge (L2 정성 평가 + 최대 2회 재생성) ---
         _judge_result = None
