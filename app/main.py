@@ -108,6 +108,32 @@ async def _competitor_monitor_loop() -> None:
         await asyncio.sleep(6 * 3600)
 
 
+async def _polymarket_fetch_loop() -> None:
+    """30분 주기 폴리마켓 Gamma API 수집 + SQLite 저장. fail-open.
+
+    psych_enabled=False 면 대기. 첫 주기 90초 후.
+    """
+    from app.config import settings
+    await asyncio.sleep(90)
+    try:
+        from app.sources.polymarket_fetcher import fetch_with_retry, save_to_db
+    except ImportError:
+        logger.info("[polymarket-fetch] 모듈 없음 — 비활성")
+        return
+    while True:
+        if not getattr(settings, "psych_enabled", True):
+            await asyncio.sleep(1800)
+            continue
+        try:
+            items = await fetch_with_retry(limit=50)
+            if items:
+                save_to_db(items)
+                logger.info(f"[polymarket-fetch] {len(items)}개 수집 저장")
+        except Exception as e:
+            logger.warning(f"[polymarket-fetch] 실패: {e}")
+        await asyncio.sleep(30 * 60)
+
+
 async def _kor_community_trending_loop() -> None:
     """15분 주기 한국 커뮤니티 트렌딩 수집. fail-open.
 
@@ -281,6 +307,8 @@ async def run_all():
     logger.info("[competitor-monitor] 6시간 주기 Nitter RSS 수집 등록")
     asyncio.create_task(_kor_community_trending_loop(), name="kor_community_trending")
     logger.info("[kor-community-trending] 15분 주기 등록")
+    asyncio.create_task(_polymarket_fetch_loop(), name="polymarket_fetch")
+    logger.info("[polymarket-fetch] 30분 주기 Gamma API 수집 등록")
 
     # Ring A — 최적 시각 텔레그램 카드 전송 (07:30/12:00/18:30/22:30 KST)
     asyncio.create_task(

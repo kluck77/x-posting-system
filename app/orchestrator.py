@@ -66,6 +66,10 @@ from app.sources.x_trending_crypto import get_trending_crypto
 from app.psych.thread_arc_generator import decompose as thread_decompose
 from app.psych.ab_variant_generator import generate as ab_generate
 from app.psych.optimal_timing_predictor import format_timing_hint
+from app.sources.polymarket_fetcher import (
+    get_top_by_category as poly_top_by_cat,
+    format_for_post as poly_format_for_post,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1028,6 +1032,27 @@ class Orchestrator:
                     logger.info(f"[Step 5.90 XTrending] {_trending[:3]}")
             except Exception as _xe:
                 logger.warning(f"[Step 5.90 XTrending] 실패 (무시): {_xe}")
+
+            # Step 5.90B — 폴리마켓 컨텍스트 주입 (카테고리 매핑 + 상위 3개)
+            try:
+                _ctg_raw = editorial_meta.get("category", "crypto") or "crypto"
+                _poly_map = {
+                    "crypto":        "crypto",
+                    "macro":         "macro",
+                    "regulation":    "policy",
+                    "dart_critical": "crypto",
+                }
+                _poly_cat = _poly_map.get(_ctg_raw, "macro")
+                _poly_items = poly_top_by_cat(_poly_cat, limit=3)
+                if _poly_items:
+                    editorial_meta["polymarket_context"] = _poly_items
+                    editorial_meta["polymarket_text"] = poly_format_for_post(_poly_items)
+                    logger.info(
+                        f"[Step 5.90B Polymarket] {len(_poly_items)}개 시장 "
+                        f"(cat={_poly_cat})"
+                    )
+            except Exception as _pe:
+                logger.warning(f"[Step 5.90B Polymarket] 실패 (무시): {_pe}")
 
             # Step 5.91 — 타래 분해 판단 (complexity ≥ 2.0)
             try:

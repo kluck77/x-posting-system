@@ -1466,6 +1466,119 @@ async def get_dashboard_summary():
     }
 
 
+@router.get("/polymarket/top")
+async def get_polymarket_top(category: str = "crypto", limit: int = 5):
+    """폴리마켓 카테고리별 상위 시장 (volume 기준, 1h 이내 fetched)."""
+    try:
+        from app.sources.polymarket_fetcher import get_top_by_category
+        items = get_top_by_category(category, limit)
+        return {"markets": items, "category": category, "count": len(items)}
+    except Exception as e:
+        return {"markets": [], "category": category, "error": str(e)}
+
+
+@router.post("/youtube/highlights")
+async def upload_youtube_highlights(file: UploadFile = File(...)):
+    """로컬 PC 에서 추출한 YouTube 자막 하이라이트 JSON 업로드.
+
+    is_risky=True 항목은 저장하지 않음 (저작권 리스크).
+    서버에서 직접 YouTube 자막 추출 금지 — 로컬 실행 → 업로드 전용.
+    """
+    import sqlite3
+    import json as _json
+    import re as _re
+    try:
+        raw = await file.read()
+        highlights = _json.loads(raw)
+        if not isinstance(highlights, list):
+            return {"status": "error", "message": "JSON must be a list"}
+
+        url = settings.database_url or ""
+        m = _re.match(r"sqlite:///(.+)", url)
+        db_path = m.group(1) if m else "./x_poster.db"
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS yt_highlights (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel TEXT, video_id TEXT,
+                timestamp TEXT, timestamp_sec INTEGER,
+                text TEXT, url TEXT,
+                is_risky INTEGER DEFAULT 0,
+                fetched_at REAL,
+                used INTEGER DEFAULT 0
+            )
+        """)
+        saved = 0
+        for h in highlights:
+            if h.get("is_risky"):
+                continue
+            cursor.execute("""
+                INSERT INTO yt_highlights
+                (channel, video_id, timestamp, timestamp_sec,
+                 text, url, is_risky, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                h.get("channel", ""), h.get("video_id", ""),
+                h.get("timestamp", ""), int(h.get("timestamp_sec", 0) or 0),
+                h.get("text", ""), h.get("url", ""),
+                int(bool(h.get("is_risky"))), float(h.get("fetched_at", 0) or 0),
+            ))
+            saved += 1
+        conn.commit()
+        conn.close()
+        return {"status": "ok", "saved": saved, "received": len(highlights)}
+    except Exception as e:
+        logger.warning(f"[yt-highlights] upload 실패: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/youtube/highlights")
+async def list_youtube_highlights(limit: int = 10):
+    """최근 YouTube 하이라이트 조회 (used=0 AND is_risky=0 만)."""
+    import sqlite3
+    import re as _re
+    try:
+        url = settings.database_url or ""
+        m = _re.match(r"sqlite:///(.+)", url)
+        db_path = m.group(1) if m else "./x_poster.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS yt_highlights (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel TEXT, video_id TEXT, timestamp TEXT,
+                timestamp_sec INTEGER, text TEXT, url TEXT,
+                is_risky INTEGER DEFAULT 0, fetched_at REAL,
+                used INTEGER DEFAULT 0
+            )
+        """)
+        cursor.execute("""
+            SELECT channel, timestamp, text, url, fetched_at
+            FROM yt_highlights
+            WHERE used = 0 AND is_risky = 0
+            ORDER BY fetched_at DESC
+            LIMIT ?
+        """, (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return {
+            "highlights": [
+                {
+                    "channel":    r[0],
+                    "timestamp":  r[1],
+                    "text":       r[2],
+                    "url":        r[3],
+                    "fetched_at": r[4],
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        return {"highlights": [], "error": str(e)}
+
+
 @router.get("/naver/live")
 async def get_naver_live():
     """

@@ -260,6 +260,10 @@ def build_approval_card(
                 _timing = (_em.get("timing_hint") or "").strip()
                 if _timing:
                     _psych_header += f"{_timing}\n"
+                # 폴리마켓 컨텍스트 (상위 시장 확률 상위 3개)
+                _poly_text = (_em.get("polymarket_text") or "").strip()
+                if _poly_text:
+                    _psych_header += f"{_poly_text}\n"
             except Exception:
                 pass
     except Exception:

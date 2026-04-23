@@ -2048,6 +2048,10 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     </div>
     <div class="ci-hero-chips" id="ci-hero-chips"></div>
   </div>
+  <!-- Phase-final: 대시보드 상단 요약 바 (/control/dashboard-summary, 30s 폴링) -->
+  <div id="dashboard-summary-bar" class="ci-summary" style="margin-bottom:6px"></div>
+  <!-- Phase-final: 폴리마켓 위젯 (카테고리 기반, 5분 폴링) -->
+  <div id="polymarket-widget" class="ci-summary" style="margin-bottom:6px;font-size:11px"></div>
   <div id="ci-summary" class="ci-summary"></div>
   <!-- Phase-dart: 탭 필터 (전체 / 뉴스 / 공시 / 속보 / 중요) — compact 한 줄 -->
   <div id="ci-tabs" class="ci-tabs" style="display:flex;gap:4px;margin:6px 0 4px;flex-wrap:wrap">
@@ -3081,6 +3085,42 @@ async function loadPulseOverview(){
       nbSync.innerHTML=t;
     }
   }catch(e){console.warn('pulse-overview:',e)}
+}
+
+// ── Dashboard Summary Bar + Polymarket Widget ──
+async function loadDashboardSummaryBar(){
+  try{
+    const r = await fetch(API + '/control/dashboard-summary');
+    if(!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('dashboard-summary-bar');
+    if(!el) return;
+    el.innerHTML = `
+      <span class="ci-sum-chip" style="color:var(--red)">🔴 속보 <b>${d.breaking||0}</b></span>
+      <span class="ci-sum-chip" style="color:var(--amber)">📋 중요공시 <b>${d.important_dart||0}</b></span>
+      <span class="ci-sum-chip">📰 뉴스후보 <b>${d.news_candidates||0}</b></span>
+      <span class="ci-sum-chip">⏰ 다음링 <b>${d.next_ring||'--:--'}</b></span>
+      <span class="ci-sum-chip s-strong">오늘 <b>${d.today_posted||0}</b></span>
+      <span class="ci-sum-chip">바이럴 평균 <b>${d.avg_viral_score!=null?d.avg_viral_score:'—'}</b></span>`;
+  }catch(e){ /* fail-silent */ }
+}
+
+async function loadPolymarketWidget(){
+  try{
+    const r = await fetch(API + '/control/polymarket/top?category=crypto&limit=3');
+    if(!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('polymarket-widget');
+    if(!el) return;
+    const markets = d.markets || [];
+    if(markets.length === 0){
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = '📊 폴리마켓: ' + markets.map(m =>
+      `<span class="ci-sum-chip">${(m.question||'').slice(0, 26)} ${m.yes_pct}</span>`
+    ).join(' ');
+  }catch(e){ /* fail-silent */ }
 }
 
 // ── Scheduler Status (Ring A + Hunter) ──
@@ -4737,6 +4777,7 @@ async function loadAll(){
     loadStatus(),loadEditorial(),loadProviders(),
     loadFlowTrace(),loadLiveCandidates(),loadNews(),loadNaver(),loadNaverLive(),
     loadPulseOverview(),loadSchedulerStatus(),
+    loadDashboardSummaryBar(),loadPolymarketWidget(),
     loadBiz(),loadRejected(),loadOpsExtras()
   ]);
 }
@@ -4748,6 +4789,9 @@ setInterval(loadNaverLive,15000);
 setInterval(loadPulseOverview,20000);
 // 스케줄러 상태 — Ring A 슬롯 카운트 + Hunter 폴링 (20초)
 setInterval(loadSchedulerStatus,20000);
+// 대시보드 요약 바 30초, 폴리마켓 위젯 5분
+setInterval(loadDashboardSummaryBar,30000);
+setInterval(loadPolymarketWidget,300000);
 
 // ── CRYPTO INTEL (Phase 2 — scoring + human reason + telegram promote) ──
 // IIFE scope 격리. 전역 오염 0. fetch 실패는 이 탭 안에서만 봉쇄.
