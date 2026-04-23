@@ -113,7 +113,7 @@ async def intel_collect(
         db.close()
 
 
-_MAIN_SLOT_LIMIT_CAP = 30  # Phase 6: main 슬롯은 30 건 상한 (컨베이어벨트)
+_MAIN_SLOT_LIMIT_CAP = 100  # Phase 6: main 슬롯 상한 (페이지네이션 지원)
 
 
 @router.get("/shortlist")
