@@ -304,11 +304,25 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 _stake = str(data.get("stake", "") or "").strip()
                 _point = str(data.get("point", "") or "").strip()
                 _archetype = str(data.get("archetype", "") or "")
-                # ⚠️/📌 prefix 자동 부착 (ensure_resonance_structure 통과 보장)
-                if _stake and not _stake.startswith("⚠️"):
-                    _stake = f"⚠️ {_stake.lstrip('⚠️').strip()}" if _stake else ""
-                if _point and not _point.startswith("📌"):
-                    _point = f"📌 {_point.lstrip('📌').strip()}" if _point else ""
+                # ensure_resonance_structure 규격 준수: 전체 문구
+                # "⚠️ 진짜 쟁점:" / "📌 지금 봐야 할 포인트:" prefix 보장.
+                # 이미 해당 문구로 시작하면 skip, 이모지만 있으면 교체, 없으면 추가.
+                if _stake:
+                    if _stake.startswith("⚠️ 진짜 쟁점:"):
+                        pass
+                    elif _stake.startswith("⚠️"):
+                        _rest = _stake.lstrip("⚠️").lstrip(":").strip()
+                        _stake = f"⚠️ 진짜 쟁점: {_rest}"
+                    else:
+                        _stake = f"⚠️ 진짜 쟁점: {_stake}"
+                if _point:
+                    if _point.startswith("📌 지금 봐야 할 포인트:"):
+                        pass
+                    elif _point.startswith("📌"):
+                        _rest = _point.lstrip("📌").lstrip(":").strip()
+                        _point = f"📌 지금 봐야 할 포인트: {_rest}"
+                    else:
+                        _point = f"📌 지금 봐야 할 포인트: {_point}"
                 # body 에 stake + point 합성
                 combined_body = _body
                 if _stake:
