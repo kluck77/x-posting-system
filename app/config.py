@@ -37,11 +37,7 @@ class Settings(BaseSettings):
 
     # --- Crypto Intel Sources (수집 단계 AI 미사용, 키 없으면 adapter 비활성) ---
     open_dart_api_key: str = Field(default="", description="Open DART (한국 전자공시)")
-    congress_api_key: str = Field(default="", description="US Congress API (법안)")
     finnhub_api_key: str = Field(default="", description="Finnhub (마켓/기업 뉴스)")
-    cryptopanic_api_key: str = Field(default="", description="CryptoPanic (크립토 뉴스 스트림)")
-    newsapi_api_key: str = Field(default="", description="NewsAPI — Phase 2 옵션, 현재 stub")
-    coingecko_api_key: str = Field(default="", description="CoinGecko — Phase 2 옵션, 현재 stub")
 
     # --- 활성 프로바이더 선택 ---
     active_draft_provider: str = Field(default="mock", description="초안 작성 프로바이더")
@@ -213,34 +209,14 @@ class Settings(BaseSettings):
         return self._has(self.open_dart_api_key)
 
     @property
-    def has_congress(self) -> bool:
-        return self._has(self.congress_api_key)
-
-    @property
     def has_finnhub(self) -> bool:
         return self._has(self.finnhub_api_key)
-
-    @property
-    def has_cryptopanic(self) -> bool:
-        return self._has(self.cryptopanic_api_key)
-
-    @property
-    def has_newsapi(self) -> bool:
-        return self._has(self.newsapi_api_key)
-
-    @property
-    def has_coingecko(self) -> bool:
-        return self._has(self.coingecko_api_key)
 
     def intel_sources_status(self) -> dict[str, bool]:
         """Crypto Intel adapter 별 키 보유 여부 (True=enabled 가능)."""
         return {
-            "open_dart":   self.has_open_dart,
-            "congress":    self.has_congress,
-            "finnhub":     self.has_finnhub,
-            "cryptopanic": self.has_cryptopanic,
-            "newsapi":     self.has_newsapi,
-            "coingecko":   self.has_coingecko,
+            "open_dart": self.has_open_dart,
+            "finnhub":   self.has_finnhub,
         }
 
     @property
@@ -375,8 +351,8 @@ def validate_settings(s: Settings) -> list[str]:
 
     if not any(s.intel_sources_status().values()):
         warnings.append(
-            "[Crypto Intel] 모든 수집 키 비어있음 (open_dart/congress/"
-            "finnhub/cryptopanic). 대시보드 탭은 렌더되지만 수집 결과는 0 건."
+            "[Crypto Intel] 모든 수집 키 비어있음 (open_dart/finnhub). "
+            "대시보드 탭은 렌더되지만 수집 결과는 0 건."
         )
 
     return warnings

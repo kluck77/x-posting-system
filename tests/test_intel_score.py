@@ -50,7 +50,7 @@ def test_korea_filing_scores_at_least_watch():
 
 def test_us_bill_digital_asset_scores_watch_plus():
     it = _make(
-        source="congress", source_type="bill",
+        source="finnhub", source_type="bill",
         title="Digital Asset Market Structure Act proposed",
         summary="HR 4200 proposed in committee.",
         entity="HR 4200", category=IntelCategory.US_POLICY_BILLS,
@@ -149,7 +149,7 @@ def test_human_reason_noise_mentions_low_priority():
 def test_human_reason_capped_at_120_chars():
     long_title = "bitcoin " * 40
     it = _make(
-        source="cryptopanic", source_type="crypto_news",
+        source="finnhub", source_type="crypto_news",
         title=long_title, summary=long_title, entity="LongEntityName" * 5,
         category=IntelCategory.CRYPTO_STREAM,
     )

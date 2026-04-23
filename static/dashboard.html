@@ -4991,7 +4991,7 @@ setInterval(loadPolymarketWidget,300000);
     if(kpiS) kpiS.textContent = short;
     if(kpiSnt) kpiSnt.textContent = sentCnt;
     if(chips){
-      const order = ['open_dart','congress','finnhub','cryptopanic','newsapi','coingecko'];
+      const order = ['open_dart','finnhub'];
       chips.innerHTML = order.map(k =>
         `<span class="ci-h-chip${adapters[k] ? ' is-on' : ''}">${esc(k)}</span>`
       ).join('');

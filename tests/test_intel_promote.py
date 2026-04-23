@@ -35,7 +35,7 @@ def client(monkeypatch, tmp_path):
     # 테스트 레코드
     db = appdb.SessionLocal()
     db.add(IntelItem(
-        source="cryptopanic", source_type="crypto_news",
+        source="finnhub", source_type="crypto_news",
         title="SEC approved Bitcoin ETF",
         summary="Spot BTC ETF approved", url="https://example.com/x",
         published_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
