@@ -162,6 +162,20 @@ class Settings(BaseSettings):
                     "기본 False — Phase 3 완료 후 수동 활성화.",
     )
 
+    # --- OpenDart 공시 필터 전용 ---
+    dart_score_threshold: int = Field(
+        default=55,
+        description="OpenDart 공시 포스팅 임계점 (55점 이상만 중요 공시로 간주).",
+    )
+    dart_show_routine: bool = Field(
+        default=False,
+        description="True 시 routine(40~54점) 공시도 대시보드 shortlist 에 포함.",
+    )
+    dart_key_companies_only: bool = Field(
+        default=False,
+        description="True 시 KEY/CRYPTO_COMPANIES 리스트에 있는 기업 공시만 수집.",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

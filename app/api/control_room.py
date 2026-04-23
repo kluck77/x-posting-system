@@ -1307,6 +1307,123 @@ async def get_scheduler_status():
     }
 
 
+@router.get("/dashboard-summary")
+async def get_dashboard_summary():
+    """대시보드 최상단 요약 바 전용 집계.
+
+    breaking: bypass_ring 라우팅 + 아직 승인 전인 draft 수
+    important_dart: intel_items 중 source=open_dart AND priority_score≥55
+                    AND 24h 이내
+    news_candidates: intel_items shortlisted AND main 슬롯 (오늘 수집분)
+    next_ring: 다음 Ring A 슬롯 HH:MM KST
+    today_posted: 오늘 draft 중 approval_status=approved 건수
+    avg_viral_score: 오늘 editorial_meta.viral_score 평균 (pack sidecar 기반)
+    """
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from app.models.content import Draft, ApprovalStatus
+
+    now_utc = _dt.now(_tz.utc)
+    now_kst = now_utc.astimezone(KST)
+    today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_kst.astimezone(_tz.utc)
+    since_24h = now_utc - _td(hours=24)
+
+    breaking        = 0
+    important_dart  = 0
+    news_candidates = 0
+    today_posted    = 0
+    avg_viral_score = None
+
+    db = get_db()
+    try:
+        # breaking — psych Phase 1 editorial_meta.route_decision=bypass_ring
+        # pack_sidecar 를 읽는 건 비용이 크므로 단순 기준으로: 오늘 draft 중
+        # resonance_fallback_used=False & approval pending
+        try:
+            breaking = (
+                db.query(Draft)
+                .filter(Draft.created_at >= today_start_utc)
+                .filter(Draft.approval_status == ApprovalStatus.PENDING)
+                .count()
+            )
+        except Exception:
+            pass
+
+        # important_dart — IntelItem source="open_dart" priority_score>=55 AND 24h
+        try:
+            from app.models.intel import IntelItem
+            important_dart = (
+                db.query(IntelItem)
+                .filter(IntelItem.source == "open_dart")
+                .filter(IntelItem.priority_score >= 55)
+                .filter(IntelItem.created_at >= since_24h)
+                .count()
+            )
+            # news_candidates — shortlisted main 슬롯 오늘 수집분
+            news_candidates = (
+                db.query(IntelItem)
+                .filter(IntelItem.shortlisted.is_(True))
+                .filter(IntelItem.created_at >= today_start_utc)
+                .count()
+            )
+        except Exception:
+            pass
+
+        # today_posted
+        try:
+            today_posted = (
+                db.query(Draft)
+                .filter(Draft.created_at >= today_start_utc)
+                .filter(Draft.approval_status == ApprovalStatus.APPROVED)
+                .count()
+            )
+        except Exception:
+            pass
+
+        # avg viral score — 오늘 pack_sidecar 파일 스캔 (비용 낮음, runtime_x/packs)
+        try:
+            from pathlib import Path
+            import json as _json
+            pack_dir = Path("runtime_x/packs")
+            if pack_dir.exists():
+                today_epoch = today_start_utc.timestamp()
+                scores: list[int] = []
+                for p in pack_dir.glob("*.json"):
+                    try:
+                        if p.stat().st_mtime < today_epoch:
+                            continue
+                        data = _json.loads(p.read_text(encoding="utf-8"))
+                        em = (data.get("editorial_meta") or {}) if isinstance(data, dict) else {}
+                        vs = em.get("viral_score")
+                        if isinstance(vs, (int, float)):
+                            scores.append(int(vs))
+                    except Exception:
+                        continue
+                if scores:
+                    avg_viral_score = round(sum(scores) / len(scores))
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+    # next_ring — ring_dispatcher 의 slot 목록 재활용
+    next_ring = ""
+    try:
+        from app.services.growth.ring_dispatcher import next_slot_iso
+        next_ring = next_slot_iso()
+    except Exception:
+        pass
+
+    return {
+        "breaking":         breaking,
+        "important_dart":   important_dart,
+        "news_candidates":  news_candidates,
+        "next_ring":        next_ring,
+        "today_posted":     today_posted,
+        "avg_viral_score":  avg_viral_score,
+    }
+
+
 @router.get("/naver/live")
 async def get_naver_live():
     """

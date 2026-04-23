@@ -101,7 +101,22 @@ def _find_first(text: str, tokens: tuple[str, ...]) -> str | None:
 
 
 def compute_priority_score(item: NormalizedIntelItem) -> int:
-    """0~100 정수 점수."""
+    """0~100 정수 점수.
+
+    source=="open_dart" 면 공시 유형 필터(DART_TYPE_SCORES) 점수와
+    일반 키워드 점수 중 더 높은 값 사용 — 글로벌 크립토/정책 키워드가
+    있는 공시도 놓치지 않고, DART 전용 유형(상장폐지/유상증자 등)도
+    제대로 반영.
+    """
+    dart_score_candidate: int | None = None
+    if item.source == "open_dart":
+        try:
+            from app.sources.dart_importance_filter import score_dart
+            dart = score_dart(item.title, item.entity or "")
+            dart_score_candidate = int(dart.get("score", 0) or 0)
+        except Exception:
+            dart_score_candidate = None
+
     text = _haystack(item)
     score = 0
 
@@ -136,7 +151,11 @@ def compute_priority_score(item: NormalizedIntelItem) -> int:
     if len((item.title or "").strip()) < _TITLE_MIN_LEN:
         score += _SHORT_TITLE_PENALTY
 
-    return max(0, min(100, score))
+    final_score = max(0, min(100, score))
+    # DART 공시의 경우 일반 스코어와 DART 유형 스코어 중 큰 값 채택
+    if dart_score_candidate is not None:
+        final_score = max(final_score, dart_score_candidate)
+    return final_score
 
 
 def derive_score_label(score: int) -> str:

@@ -1576,6 +1576,16 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
       font-size:var(--fs-meta);color:var(--text-sec);
       font-family:var(--mono);padding:4px 2px;
     }
+    /* tabs (compact 한 줄) */
+    #tab-crypto-intel .ci-tab-btn{
+      height:26px;padding:0 10px;
+      background:var(--bg-surface);border:1px solid var(--border-subtle);
+      border-radius:6px;color:var(--text-sec);font-size:12px;cursor:pointer;
+    }
+    #tab-crypto-intel .ci-tab-btn:hover{background:var(--bg-raised);color:var(--text-pri);}
+    #tab-crypto-intel .ci-tab-btn.active{
+      background:var(--indigo);color:#fff;border-color:var(--indigo);font-weight:600;
+    }
     /* pagination */
     #tab-crypto-intel .ci-pg-btn{
       min-width:32px;height:32px;padding:0 8px;
@@ -2001,6 +2011,14 @@ html,body{height:100%;height:100dvh;background:var(--bg-void);color:var(--text-p
     <div class="ci-hero-chips" id="ci-hero-chips"></div>
   </div>
   <div id="ci-summary" class="ci-summary"></div>
+  <!-- Phase-dart: 탭 필터 (전체 / 뉴스 / 공시 / 속보 / 중요) — compact 한 줄 -->
+  <div id="ci-tabs" class="ci-tabs" style="display:flex;gap:4px;margin:6px 0 4px;flex-wrap:wrap">
+    <button class="ci-tab-btn active" data-ci-tab="all">전체</button>
+    <button class="ci-tab-btn" data-ci-tab="news">📰 뉴스</button>
+    <button class="ci-tab-btn" data-ci-tab="dart">📋 공시</button>
+    <button class="ci-tab-btn" data-ci-tab="breaking">🔴 속보</button>
+    <button class="ci-tab-btn" data-ci-tab="important">⭐ 중요</button>
+  </div>
   <div id="ci-tab-desc" class="ci-tab-desc">원문/정책/공시 기반 후보 선별 작업판 · 추천순은 score 기준, noise 기본 숨김</div>
   <div class="ci-toolbar">
     <select id="ci-filter-category" class="ci-select">
@@ -4705,6 +4723,9 @@ setInterval(loadSchedulerStatus,20000);
   let ciSlotCounts  = {main:0, aged:0, secondary:0, hidden:0, cleanup:0};
   let ciPage        = 1;             // pagination: 현재 페이지 (1-indexed)
   const CI_PAGE_SIZE = 10;           // pagination: 페이지당 카드 수
+  let ciTab         = (function(){   // 탭 필터 (all / news / dart / breaking / important)
+    try { return localStorage.getItem('ci_tab') || 'all'; } catch(_){ return 'all'; }
+  })();
   const promotingIds = new Set();    // UI 버튼 중복 클릭 방지
 
   // Phase 3 — 상태 가시 피드백 유틸 ────────────────────────────────────
@@ -5009,10 +5030,30 @@ setInterval(loadSchedulerStatus,20000);
     }
   }
 
+  // ── Tab filter (all / news / dart / breaking / important) ───────────
+  function applyTabFilter(items){
+    const tab = ciTab || 'all';
+    let out = items;
+    if(tab === 'news'){
+      out = items.filter(it => (it.source || '') !== 'open_dart');
+    } else if(tab === 'dart'){
+      out = items.filter(it => (it.source || '') === 'open_dart');
+    } else if(tab === 'breaking'){
+      // priority >= 80 (DART critical 또는 high intensity news)
+      out = items.filter(it => (it.priority_score || 0) >= 80);
+    } else if(tab === 'important'){
+      out = items.filter(it => (it.priority_score || 0) >= 70);
+    }
+    // 공통: 40점 미만 숨김 (전체 탭에서도 routine/noise 기본 off)
+    out = out.filter(it => (it.display_score || it.priority_score || 0) >= 40);
+    return out;
+  }
+
   // ── Pagination (10 건/페이지 + 네비게이션) ────────────────────────────
   function renderCurrentPage(){
     if(!list) return;
-    const n = ciItems.length;
+    const filtered = applyTabFilter(ciItems);
+    const n = filtered.length;
     if(n === 0){
       list.innerHTML = renderEmptyMain();
       return;
@@ -5022,7 +5063,7 @@ setInterval(loadSchedulerStatus,20000);
     if(ciPage > totalPages) ciPage = totalPages;
     const start = (ciPage - 1) * CI_PAGE_SIZE;
     const end   = start + CI_PAGE_SIZE;
-    const pageItems = ciItems.slice(start, end);
+    const pageItems = filtered.slice(start, end);
     const cardsHtml = pageItems.map(renderCard).join('');
     list.innerHTML = cardsHtml + renderPagination(totalPages);
     wirePaginationHandlers(totalPages);
@@ -5245,6 +5286,22 @@ setInterval(loadSchedulerStatus,20000);
   if(selSort) selSort.addEventListener('change', ciLoad);
   const selSt = document.getElementById('ci-status-filter');
   if(selSt) selSt.addEventListener('change', ciLoad);
+  // Phase-dart: 탭 필터 (client-side, reload 없이 즉시 필터 적용)
+  try {
+    document.querySelectorAll('#ci-tabs .ci-tab-btn').forEach(btn => {
+      // 초기 active 상태 복원 (localStorage)
+      const v = btn.getAttribute('data-ci-tab') || 'all';
+      if(v === ciTab) btn.classList.add('active');
+      else btn.classList.remove('active');
+      btn.addEventListener('click', () => {
+        ciTab = v;
+        try { localStorage.setItem('ci_tab', v); } catch(_){}
+        document.querySelectorAll('#ci-tabs .ci-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+        ciPage = 1;
+        renderCurrentPage();
+      });
+    });
+  } catch(_){}
   // Phase 4 — 점수 컷 select (Phase 6: 서버 slot 재조회로 연결)
   const selScore = document.getElementById('ci-score-filter');
   if(selScore) selScore.addEventListener('change', function(e){
