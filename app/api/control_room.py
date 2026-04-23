@@ -34,10 +34,46 @@ logger = logging.getLogger(__name__)
 KST = ZoneInfo("Asia/Seoul")
 
 # ─── 후보 dismiss 트래커 ──────────────────────────────────────────────────────
-# 사용자가 "다음 30개 ▶" 를 누르면 현재 노출 URL 이 여기 쌓여 다음 조회에서 제외됨.
-# 서버 메모리 only — 재시작(deploy-x) 하면 자동 리셋.
+# 사용자가 "다음 30개 ▶" / 카드 "❌ 무시" 를 누르면 여기 누적.
+# 디스크 영속화 (data/dismissed_urls.json) — 배포 재시작 후에도 유지 →
+# 이미 dismiss 한 후보에 대해 Telegram 알림 재발생 안 함.
 _dismissed_urls: set[str] = set()
 _dismissed_lock = threading.Lock()
+_DISMISSED_URLS_PATH = "data/dismissed_urls.json"
+
+
+def _load_dismissed_urls() -> None:
+    global _dismissed_urls
+    try:
+        from pathlib import Path
+        import json as _json
+        p = Path(_DISMISSED_URLS_PATH)
+        if not p.exists():
+            return
+        data = _json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            with _dismissed_lock:
+                _dismissed_urls = set(str(u) for u in data if u)
+            logger.info(f"[control] dismissed_urls 디스크 복원: {len(_dismissed_urls)}개")
+    except Exception as e:
+        logger.warning(f"[control] dismissed_urls 로드 실패 (무시): {e}")
+
+
+def _save_dismissed_urls() -> None:
+    try:
+        from pathlib import Path
+        import json as _json
+        with _dismissed_lock:
+            snapshot = list(_dismissed_urls)
+        p = Path(_DISMISSED_URLS_PATH)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(_json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"[control] dismissed_urls 저장 실패 (무시): {e}")
+
+
+# import 시점에 1회 복원
+_load_dismissed_urls()
 
 
 def _is_dismissed(url: str) -> bool:
@@ -774,8 +810,10 @@ class DismissRequest(BaseModel):
 @router.post("/candidates/dismiss")
 async def dismiss_candidates(req: DismissRequest):
     """
-    전달된 URL 들을 dismiss 목록에 등록해 /scored-candidates 응답에서 제외한다.
-    대시보드 "다음 30개 ▶" 버튼이 호출. 서버 재시작 시 자동 비움.
+    전달된 URL 들을 dismiss 목록에 등록.
+    - /scored-candidates 응답에서 제외
+    - news_monitor._send_scored_alert 가 이 URL 은 Telegram 알림 차단
+    - 디스크 영속화 — 재배포해도 유지
     """
     added = 0
     with _dismissed_lock:
@@ -785,17 +823,21 @@ async def dismiss_candidates(req: DismissRequest):
                 _dismissed_urls.add(u)
                 added += 1
         total = len(_dismissed_urls)
+    if added > 0:
+        _save_dismissed_urls()
     return {"ok": True, "added": added, "dismissed_total": total}
 
 
 @router.post("/candidates/reset")
 async def reset_candidates():
     """
-    dismiss 목록을 비운다. "↻ 리셋" 버튼이 호출 — 200건 풀을 처음부터 다시 훑고 싶을 때.
+    dismiss 목록을 비운다. "↻ 리셋" 버튼 — 200건 풀 처음부터 다시 훑고 싶을 때.
+    디스크 파일도 같이 비움.
     """
     with _dismissed_lock:
         n = len(_dismissed_urls)
         _dismissed_urls.clear()
+    _save_dismissed_urls()
     return {"ok": True, "cleared": n}
 
 

@@ -41,8 +41,51 @@ _CAT_EMOJI = {
 
 # ─── 인메모리 상태 ────────────────────────────────────────────────────────────
 
-# 이미 처리한 URL 세트
+# 이미 처리한 URL 세트 (디스크 영속화 — 재배포 후 후보알림 재발 방지)
 _seen_urls: set[str] = set()
+_SEEN_URLS_PATH = "data/news_seen_urls.json"
+_SEEN_URLS_MAX = 10000          # 메모리/파일 상한 (최근 10k 개만 유지)
+_seen_urls_dirty = False        # 저장 필요 여부
+
+
+def _load_seen_urls() -> None:
+    """startup 시 디스크에서 _seen_urls 복원."""
+    global _seen_urls
+    try:
+        import os
+        if not os.path.exists(_SEEN_URLS_PATH):
+            return
+        with open(_SEEN_URLS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            _seen_urls = set(str(u) for u in data if u)
+            logger.info(f"[news-monitor] _seen_urls 디스크 복원: {len(_seen_urls)}개")
+    except Exception as e:
+        logger.warning(f"[news-monitor] _seen_urls 로드 실패 (무시): {e}")
+
+
+def _save_seen_urls() -> None:
+    """매 사이클 끝에 디스크 저장. 상한 넘으면 오래된 것부터 제거."""
+    global _seen_urls, _seen_urls_dirty
+    if not _seen_urls_dirty:
+        return
+    try:
+        import os
+        os.makedirs("data", exist_ok=True)
+        # set 크기 관리 — 상한 초과 시 임의 원소 제거 (최근성 정보 없음)
+        if len(_seen_urls) > _SEEN_URLS_MAX:
+            extra = len(_seen_urls) - _SEEN_URLS_MAX
+            for _ in range(extra):
+                _seen_urls.pop()
+        with open(_SEEN_URLS_PATH, "w", encoding="utf-8") as f:
+            json.dump(list(_seen_urls), f, ensure_ascii=False)
+        _seen_urls_dirty = False
+    except Exception as e:
+        logger.warning(f"[news-monitor] _seen_urls 저장 실패 (무시): {e}")
+
+
+# 모듈 import 시점에 1회 복원 (run_monitor_cycle 가 매 사이클마다 안 건드려도 OK)
+_load_seen_urls()
 
 # pending 기사 저장소: hash → article dict (Telegram 콜백용)
 # 인메모리 상한: 운영자가 skip하지 않아도 오래된 항목이 자동 정리됨
@@ -274,6 +317,15 @@ async def _send_scored_alert(article_dict: dict, score: int, cluster: dict | Non
             f"{_title_raw[:40]}"
         )
         return
+
+    # 대시보드에서 dismiss 한 URL 은 텔레그램 알림 보내지 않음
+    try:
+        from app.api.control_room import _is_dismissed
+        if _url_raw and _is_dismissed(_url_raw):
+            logger.info(f"[후보알림-skip] 대시보드 dismiss: {_title_raw[:40]}")
+            return
+    except Exception:
+        pass
 
     if not settings.has_telegram_config:
         logger.info(f"[MOCK 후보알림] [{score}점] {article_dict.get('title','')[:50]}")
@@ -538,9 +590,11 @@ async def run_monitor_cycle() -> int:
             logger.debug("[Monitor] 신규 기사 없음")
             return 0
 
-        # seen_urls 업데이트
+        # seen_urls 업데이트 + dirty 플래그 (사이클 끝에 디스크 저장)
+        global _seen_urls_dirty
         for a in new_articles:
             _seen_urls.add(a.url)
+            _seen_urls_dirty = True
 
         # 오래된 클러스터 정리
         _cleanup_old_clusters()
@@ -618,6 +672,12 @@ async def run_monitor_cycle() -> int:
                 f"신규={len(new_articles)} DB중복={_db_dup_count} "
                 f"파이프라인={_pipeline_count}"
             )
+
+        # 사이클 끝 — _seen_urls 디스크 저장 (dirty 면 1회)
+        try:
+            _save_seen_urls()
+        except Exception:
+            pass
 
         return len(new_articles)
 

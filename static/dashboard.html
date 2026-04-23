@@ -5051,11 +5051,12 @@ setInterval(loadSchedulerStatus,20000);
 
   // ── Pagination (10 건/페이지 + 네비게이션) ────────────────────────────
   function renderCurrentPage(){
-    if(!list) return;
+    const listEl = document.getElementById('ci-list');
+    if(!listEl) return;
     const filtered = applyTabFilter(ciItems);
     const n = filtered.length;
     if(n === 0){
-      list.innerHTML = renderEmptyMain();
+      listEl.innerHTML = renderEmptyMain();
       return;
     }
     const totalPages = Math.max(1, Math.ceil(n / CI_PAGE_SIZE));
@@ -5065,7 +5066,7 @@ setInterval(loadSchedulerStatus,20000);
     const end   = start + CI_PAGE_SIZE;
     const pageItems = filtered.slice(start, end);
     const cardsHtml = pageItems.map(renderCard).join('');
-    list.innerHTML = cardsHtml + renderPagination(totalPages);
+    listEl.innerHTML = cardsHtml + renderPagination(totalPages);
     wirePaginationHandlers(totalPages);
   }
 
@@ -5089,7 +5090,9 @@ setInterval(loadSchedulerStatus,20000);
   }
 
   function wirePaginationHandlers(totalPages){
-    const pg = list.querySelectorAll('.ci-pg-btn');
+    const listEl = document.getElementById('ci-list');
+    if(!listEl) return;
+    const pg = listEl.querySelectorAll('.ci-pg-btn');
     pg.forEach(btn => {
       btn.addEventListener('click', () => {
         const v = btn.getAttribute('data-ci-pg');
@@ -5102,7 +5105,7 @@ setInterval(loadSchedulerStatus,20000);
         }
         renderCurrentPage();
         // 상단으로 스크롤 (카드 리스트 시작)
-        try{ list.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){}
+        try{ listEl.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){}
       });
     });
   }
