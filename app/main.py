@@ -82,6 +82,55 @@ async def _draft_cleanup_loop() -> None:
             logger.warning(f"[draft-cleanup] 실행 실패 (fail-open): {e}")
 
 
+async def _competitor_monitor_loop() -> None:
+    """6시간 주기 경쟁자 Nitter RSS 수집. fail-open.
+
+    psych_enabled=False 이면 비활성화. 첫 주기는 120초 후.
+    """
+    from app.config import settings
+    await asyncio.sleep(120)
+    try:
+        from app.sources.competitor_monitor import collect_all, save_to_db
+    except ImportError:
+        logger.info("[competitor-monitor] 모듈 없음 — 비활성")
+        return
+    while True:
+        if not getattr(settings, "psych_enabled", True):
+            await asyncio.sleep(3600)
+            continue
+        try:
+            posts = await collect_all()
+            if posts:
+                save_to_db(posts)
+                logger.info(f"[competitor-monitor] {len(posts)}개 수집 저장")
+        except Exception as e:
+            logger.warning(f"[competitor-monitor] 실패: {e}")
+        await asyncio.sleep(6 * 3600)
+
+
+async def _kor_community_trending_loop() -> None:
+    """15분 주기 한국 커뮤니티 트렌딩 수집. fail-open.
+
+    제목만 캐시, DB 저장 없음. 본문·로그인 금지 원칙 준수.
+    """
+    from app.config import settings
+    await asyncio.sleep(60)
+    try:
+        from app.sources.korean_community_trending import get_trending
+    except ImportError:
+        logger.info("[kor-community-trending] 모듈 없음 — 비활성")
+        return
+    while True:
+        if not getattr(settings, "psych_enabled", True):
+            await asyncio.sleep(900)
+            continue
+        try:
+            await get_trending()
+        except Exception as e:
+            logger.warning(f"[kor-community-trending] 실패: {e}")
+        await asyncio.sleep(15 * 60)
+
+
 async def _morning_digest_loop() -> None:
     """매일 05:01 KST 에 run_morning_digest() 를 실행하는 백그라운드 루프.
 
@@ -226,6 +275,12 @@ async def run_all():
     # Draft 자동 정리 (04:00 KST)
     asyncio.create_task(_draft_cleanup_loop())
     logger.info("[draft-cleanup] 04:00 KST 자동 정리 등록")
+
+    # Phase 3 psych: 경쟁자 모니터 (6시간 주기) + 한국 커뮤니티 트렌딩 (15분)
+    asyncio.create_task(_competitor_monitor_loop(), name="competitor_monitor")
+    logger.info("[competitor-monitor] 6시간 주기 Nitter RSS 수집 등록")
+    asyncio.create_task(_kor_community_trending_loop(), name="kor_community_trending")
+    logger.info("[kor-community-trending] 15분 주기 등록")
 
     # Ring A — 최적 시각 텔레그램 카드 전송 (07:30/12:00/18:30/22:30 KST)
     asyncio.create_task(

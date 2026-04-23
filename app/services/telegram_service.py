@@ -245,6 +245,23 @@ def build_approval_card(
             _rh = _em.get("reply_hook") or ""
             if _rh:
                 _psych_header += f"💬 리플 훅: {_rh[:80]}\n"
+
+            # ── Phase 3 배지 (타래 추천 / A/B 훅 / 타이밍) ────────────────
+            try:
+                if _em.get("is_thread_recommended"):
+                    _n = len(_em.get("thread_tweets_arc") or [])
+                    _psych_header += f"🧵 타래 추천 ({_n}트윗)\n"
+                _ab_a = (_em.get("ab_variant_a") or "").strip()
+                _ab_b = (_em.get("ab_variant_b") or "").strip()
+                if _ab_a and _ab_b:
+                    _psych_header += (
+                        f"🅰️ {_ab_a[:40]}\n🅱️ {_ab_b[:40]}\n"
+                    )
+                _timing = (_em.get("timing_hint") or "").strip()
+                if _timing:
+                    _psych_header += f"{_timing}\n"
+            except Exception:
+                pass
     except Exception:
         pass
 

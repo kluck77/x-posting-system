@@ -63,6 +63,9 @@ from app.psych.virality_scorer import score as viral_score
 from app.psych.reply_hook_generator import generate as reply_hook
 from app.psych.curiosity_gap_injector import inject as curiosity_inject
 from app.sources.x_trending_crypto import get_trending_crypto
+from app.psych.thread_arc_generator import decompose as thread_decompose
+from app.psych.ab_variant_generator import generate as ab_generate
+from app.psych.optimal_timing_predictor import format_timing_hint
 
 logger = logging.getLogger(__name__)
 
@@ -1025,6 +1028,64 @@ class Orchestrator:
                     logger.info(f"[Step 5.90 XTrending] {_trending[:3]}")
             except Exception as _xe:
                 logger.warning(f"[Step 5.90 XTrending] 실패 (무시): {_xe}")
+
+            # Step 5.91 — 타래 분해 판단 (complexity ≥ 2.0)
+            try:
+                _thread_src = "\n".join(filter(None, [
+                    getattr(review, "hook", "") or "",
+                    getattr(review, "body", "") or "",
+                ]))
+                _td_result = await thread_decompose(_thread_src)
+                editorial_meta["is_thread_recommended"] = _td_result.get("is_thread", False)
+                editorial_meta["complexity_score"]      = _td_result.get("complexity_score", 0.0)
+                if _td_result.get("is_thread"):
+                    editorial_meta["thread_tweets_arc"] = _td_result.get("tweets", [])
+                    logger.info(
+                        f"[Step 5.91 ThreadArc] 타래 추천 "
+                        f"complexity={_td_result.get('complexity_score', 0.0):.2f} "
+                        f"tweets={len(_td_result.get('tweets') or [])}"
+                    )
+                else:
+                    logger.info(
+                        f"[Step 5.91 ThreadArc] 단일 포스트 유지 "
+                        f"complexity={_td_result.get('complexity_score', 0.0):.2f}"
+                    )
+            except Exception as _tde:
+                logger.warning(f"[Step 5.91 ThreadArc] 실패 (무시): {_tde}")
+
+            # Step 5.92 — A/B 훅 생성 (ab_test_enabled=True 시에만 실제 호출)
+            try:
+                _news_id = str(
+                    getattr(source_item, "id", None)
+                    or getattr(data, "id", None)
+                    or hash(data.title or "")
+                )
+                _ab_src = "\n".join(filter(None, [
+                    getattr(review, "hook", "") or "",
+                    getattr(review, "body", "") or "",
+                ]))
+                _ab_result = await ab_generate(_ab_src, _news_id)
+                if _ab_result is not None:
+                    editorial_meta["ab_variant_a"] = _ab_result.variant_a
+                    editorial_meta["ab_variant_b"] = _ab_result.variant_b
+                    editorial_meta["ab_news_id"]   = _ab_result.news_id
+                    logger.info(
+                        f"[Step 5.92 ABVariant] "
+                        f"A={_ab_result.variant_a[:20]} "
+                        f"B={_ab_result.variant_b[:20]}"
+                    )
+            except Exception as _abe:
+                logger.warning(f"[Step 5.92 ABVariant] 실패 (무시): {_abe}")
+
+            # Step 5.93 — 최적 타이밍 힌트
+            try:
+                _ctg = editorial_meta.get("category", "crypto") or "crypto"
+                _timing_hint = format_timing_hint(_ctg)
+                if _timing_hint:
+                    editorial_meta["timing_hint"] = _timing_hint
+                    logger.info(f"[Step 5.93 Timing] {_timing_hint}")
+            except Exception as _time_e:
+                logger.warning(f"[Step 5.93 Timing] 실패 (무시): {_time_e}")
 
         # --- Step 5.9: Haiku Soft Rule Judge (L2 정성 평가 + 최대 2회 재생성) ---
         _judge_result = None

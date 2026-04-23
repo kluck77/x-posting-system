@@ -139,6 +139,29 @@ class Settings(BaseSettings):
         description="Phase 2 curiosity gap analyzer (미구현, 추후 활성화).",
     )
 
+    # --- Psych Phase 3 (경쟁자 모니터링 / AB / 타이밍) ---
+    competitor_accounts: list[str] = Field(
+        default_factory=lambda: [
+            "ki_young_ju",
+            "Semicon_player",
+            "fdd3001",
+            "ogunyo_macro",
+            "Jaemyung_Lee",
+            "unusual_whales",
+        ],
+        description="competitor_monitor 가 Nitter RSS 로 수집할 X 계정 목록.",
+    )
+    optimal_timing_enabled: bool = Field(
+        default=False,
+        description="True 시 90일 승인 데이터 기반 시간대 추천. "
+                    "기본 False — 데이터 축적 후 수동 활성화.",
+    )
+    ab_test_enabled: bool = Field(
+        default=False,
+        description="True 시 Step 5.92 에서 A/B 훅 2개 생성. "
+                    "기본 False — Phase 3 완료 후 수동 활성화.",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
