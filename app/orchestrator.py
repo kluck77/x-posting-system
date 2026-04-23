@@ -53,6 +53,11 @@ from app.services.thread_structurer import structure as structure_thread
 from app.services.hook_variants import generate_variants as generate_hook_variants
 from app.services.hard_rule_checker import check as hard_check
 from app.services.haiku_judge import judge as haiku_judge
+from app.sources.freshness_filter import is_fresh
+from app.sources.news_importance_classifier import classify_news
+from app.sources.breaking_news_dedup import check_and_register
+from app.sources.timing_router import route as psych_route, RouteDecision
+from app.psych.emotion_tone_analyzer import analyze as tone_analyze
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +222,23 @@ class Orchestrator:
         self.rate_limiter = RateLimiter(self.db)
         self.ai: AITeam = create_ai_team()
 
+    def _psych_skip_stub(
+        self, source_item, reason: str, label: str,
+    ) -> Draft:
+        """Psych Step 0.x 가 SKIP 결정한 경우 stub Draft 반환.
+
+        Lane early-return 패턴 재사용. AI 미호출, DB 에 마커만 기록.
+        호출자는 정상 Draft 반환으로 인식.
+        """
+        return self.draft_service.create_draft(
+            source_item=source_item,
+            hook=f"[PSYCH-SKIP:{reason}] {(source_item.title or '')[:80]}",
+            body=label,
+            category=ContentCategory.SOCIETY,
+            risk_level=RiskLevel.LOW,
+            risk_reasoning=f"Psych skip: {reason}",
+        )
+
     async def ingest_and_generate(self, data: SourceItemCreate) -> Draft:
         """
         소스를 입력받아 전체 AI 파이프라인을 실행합니다.
@@ -239,6 +261,72 @@ class Orchestrator:
         # Step 1: 소스 저장
         logger.info("[1/6] 소스 DB 저장")
         source_item = self.source_service.ingest_manual(data)
+
+        # ── Psych Upgrade Phase 1 (Step 0.5~0.8) ────────────────────────
+        # 소스 저장 직후 dedup → classify → freshness → routing.
+        # skip 결정 시 Lane early-return 패턴(stub Draft) 으로 호출자 contract 보존.
+        # 결과는 _psych_meta dict 에 누적 → Step 5.7 에서 editorial_meta 로 머지.
+        _psych_meta: dict = {}
+        if settings.psych_enabled:
+            # Step 0.5: dedup
+            try:
+                if check_and_register(data.title or ""):
+                    logger.info(f"[Step 0.5 Dedup] 중복 스킵: {data.title[:40]}")
+                    _psych_meta["psych_skip_reason"] = "duplicate"
+                    return self._psych_skip_stub(
+                        source_item, "duplicate", "[DEDUP] 중복 뉴스 — AI 미호출"
+                    )
+            except Exception as _de:
+                logger.warning(f"[Step 0.5 Dedup] 실패 (계속): {_de}")
+
+            # Step 0.6: classify
+            _classification = {}
+            try:
+                _classification = await classify_news(data.title, data.source_text or "")
+                _psych_meta["news_classification"] = _classification
+                logger.info(
+                    f"[Step 0.6 Classifier] importance={_classification.get('importance')} "
+                    f"category={_classification.get('category')}"
+                )
+            except Exception as _ce:
+                logger.warning(f"[Step 0.6 Classifier] 실패 (기본값): {_ce}")
+                _classification = {"importance": 5, "category": "opinion", "decay_hours": 12}
+
+            _imp = int(_classification.get("importance", 5) or 5)
+            _cat = str(_classification.get("category", "opinion") or "opinion")
+
+            # Step 0.7: freshness — source_item.created_at 기준 (live 수집은 거의 통과)
+            try:
+                _published = getattr(source_item, "created_at", None) or datetime.now(timezone.utc)
+                if not is_fresh(_published, _cat, _imp, data.title, data.source_text or ""):
+                    logger.info(f"[Step 0.7 Freshness] 오래된 뉴스 스킵 (cat={_cat})")
+                    _psych_meta["psych_skip_reason"] = "stale"
+                    return self._psych_skip_stub(
+                        source_item, "stale", f"[STALE] 오래된 뉴스 (decay 초과, cat={_cat})"
+                    )
+            except Exception as _fe:
+                logger.warning(f"[Step 0.7 Freshness] 실패 (계속): {_fe}")
+
+            # Step 0.8: routing
+            try:
+                _route = psych_route(data.title or "", _imp, _cat)
+                _psych_meta["route_decision"]   = _route.decision.value
+                _psych_meta["route_reason"]     = _route.reason
+                _psych_meta["route_deadline_m"] = _route.deadline_minutes
+                _psych_meta["importance"]       = _imp
+                _psych_meta["category"]         = _cat
+                if _route.decision == RouteDecision.SKIP:
+                    logger.info(f"[Step 0.8 Router] SKIP: {_route.reason}")
+                    _psych_meta["psych_skip_reason"] = "low_importance"
+                    return self._psych_skip_stub(
+                        source_item, "low_importance",
+                        f"[SKIP] {_route.reason} — AI 미호출"
+                    )
+                logger.info(
+                    f"[Step 0.8 Router] {_route.decision.value}: {_route.reason}"
+                )
+            except Exception as _re:
+                logger.warning(f"[Step 0.8 Router] 실패 (계속): {_re}")
 
         # Step 1.5: BREAKING 분류 (fail-open, 메모리 결과만, 알림 미전송)
         # - breaking_classifier 호출만 수행. 텔레그램 / Top5 / DB 저장 연결은 아직 없음.
@@ -782,6 +870,13 @@ class Orchestrator:
         # editorial_meta: Step 5.8/5.9 결과 누적 → 후단 pack_sidecar 에서 _meta 와 merge
         editorial_meta: dict = {}
 
+        # Psych Step 0.5~0.8 결과 머지 (importance/category/route_decision 등)
+        try:
+            for _pk, _pv in (_psych_meta or {}).items():
+                editorial_meta.setdefault(_pk, _pv)
+        except Exception:
+            pass
+
         # openai_provider 가 tone_notes 에 archetype 을 실어 옴 — editorial_meta 로 이동
         try:
             _archetype_from_draft = (getattr(draft_result, "tone_notes", "") or "").strip()
@@ -817,6 +912,26 @@ class Orchestrator:
             }
         except Exception as _hr_e:
             logger.warning(f"[Step 5.8 HardRule] 실패 (무시): {_hr_e}")
+
+        # --- Step 5.85: Emotion Tone Analyzer (KoELECTRA → Haiku fallback) ---
+        # Step 5.8 직후. 결과는 editorial_meta["tone"] / ["tone_confidence"].
+        if settings.psych_enabled:
+            try:
+                _tone_text = "\n".join(filter(None, [
+                    (getattr(review, "hook", "") or getattr(draft_result, "hook", "") or ""),
+                    (getattr(review, "body", "") or getattr(draft_result, "body", "") or ""),
+                ]))
+                _tone_result = await tone_analyze(_tone_text)
+                editorial_meta["tone"]            = _tone_result.get("tone", "neutral")
+                editorial_meta["tone_confidence"] = _tone_result.get("confidence", 0.5)
+                editorial_meta["tone_source"]     = _tone_result.get("source", "")
+                logger.info(
+                    f"[Step 5.85 EmotionTone] tone={_tone_result.get('tone','neutral')} "
+                    f"conf={float(_tone_result.get('confidence',0.5)):.2f} "
+                    f"src={_tone_result.get('source','')}"
+                )
+            except Exception as _te:
+                logger.warning(f"[Step 5.85 EmotionTone] 실패 (무시): {_te}")
 
         # --- Step 5.9: Haiku Soft Rule Judge (L2 정성 평가 + 최대 2회 재생성) ---
         _judge_result = None

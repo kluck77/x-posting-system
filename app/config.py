@@ -127,6 +127,18 @@ class Settings(BaseSettings):
                     "False 로 되돌리면 기존 voice/hook/ending/fact 4 critic 복원.",
     )
 
+    # --- Psych Upgrade Phase 1 (sources + emotion tone) ---
+    psych_enabled: bool = Field(
+        default=True,
+        description="freshness_filter / news_importance_classifier / dedup / "
+                    "timing_router / emotion_tone_analyzer 통합 활성화. "
+                    "False 시 Step 0.x + Step 5.85 전부 skip.",
+    )
+    curiosity_gap_enabled: bool = Field(
+        default=False,
+        description="Phase 2 curiosity gap analyzer (미구현, 추후 활성화).",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -196,8 +196,39 @@ def build_approval_card(
     _hook = html_mod.escape(_hook)
     _body = html_mod.escape(_body)
 
+    # ── Psych Phase 1 배지 (importance / tone / route) ──────────────
+    # pack_sidecar 의 editorial_meta 에서 읽음. 누락 시 출력 안 함 (fail-soft).
+    _psych_header = ""
+    try:
+        from app.services.pack_sidecar import load_pack
+        _pk = load_pack(getattr(draft, "id", 0)) or {}
+        _em = (_pk.get("editorial_meta") or {}) if isinstance(_pk, dict) else {}
+        if isinstance(_em, dict) and _em:
+            _imp = _em.get("importance")
+            _imp_badge = {9: "🔴 긴급", 8: "🟠 중요", 7: "🟡 주요"}.get(
+                int(_imp) if isinstance(_imp, (int, float)) else -1, ""
+            )
+            _tone_badge = {
+                "anxiety":    "😰 불안",
+                "excitement": "🔥 흥분",
+                "anger":      "😠 분노",
+                "awe":        "✨ 경외",
+                "neutral":    "😐 중립",
+            }.get(_em.get("tone", ""), "")
+            _route_badge = {
+                "bypass_ring": "⚡ 속보",
+                "next_ring":   "⏰ 다음 링",
+                "skip":        "⏭️ 스킵",
+            }.get(_em.get("route_decision", ""), "")
+            _badges = [b for b in (_imp_badge, _tone_badge, _route_badge) if b]
+            if _badges:
+                _psych_header = " | ".join(_badges) + "\n"
+    except Exception:
+        pass
+
     card = (
         f"📨 <b>새 초안 검토 요청</b>\n"
+        f"{_psych_header}"
         f"{'─' * 30}\n\n"
         f"🎯 <b>훅:</b>\n{_hook}\n\n"
     )
