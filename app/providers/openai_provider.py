@@ -304,6 +304,21 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 _stake = str(data.get("stake", "") or "").strip()
                 _point = str(data.get("point", "") or "").strip()
                 _archetype = str(data.get("archetype", "") or "")
+                # 빈 stake/point 방어선: 모델이 strict schema 지키면서 ""
+                # 반환하는 경우. body 에 인라인 ⚠️가 있으면 그 문구 재활용,
+                # 없으면 generic fallback.
+                if not _stake:
+                    if "⚠️" in _body:
+                        _inline = _body.split("⚠️", 1)[-1].split("\n", 1)[0].strip()
+                        _stake = f"⚠️ 진짜 쟁점: {_inline.lstrip(':').strip()}" if _inline else ""
+                    if not _stake:
+                        _stake = "⚠️ 진짜 쟁점: 해석 gap 확인 필요."
+                if not _point:
+                    if "📌" in _body:
+                        _inline = _body.split("📌", 1)[-1].split("\n", 1)[0].strip()
+                        _point = f"📌 지금 봐야 할 포인트: {_inline.lstrip(':').strip()}" if _inline else ""
+                    if not _point:
+                        _point = "📌 지금 봐야 할 포인트: 후속 지표 확인."
                 # ensure_resonance_structure 규격 준수: 전체 문구
                 # "⚠️ 진짜 쟁점:" / "📌 지금 봐야 할 포인트:" prefix 보장.
                 # 이미 해당 문구로 시작하면 skip, 이모지만 있으면 교체, 없으면 추가.
