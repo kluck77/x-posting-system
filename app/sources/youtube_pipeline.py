@@ -124,32 +124,6 @@ async def _gemini_post_with_retry(
 RISK_KW = re.compile(r"욕설|명예훼손|허위|개인정보|사생활")
 
 
-# ─── 스토리텔링 시스템 (OpenAI DraftWriter 가 source_text 안에서 읽음) ─
-YOUTUBE_OPENAI_SYSTEM = """[유튜브 영상 분석 모드]
-아래에 유튜브 영상의 전체 자막이 제공됩니다.
-
-처리 순서:
-1. 전체 자막을 처음부터 끝까지 읽고 영상 흐름 파악
-2. 발언자가 어떤 맥락에서 이 주장을 하게 됐는지 파악
-3. 아래 스토리텔링 7-step 구조로 포스트 작성
-
-[스토리텔링 구조 — 반드시 준수]
-① 배경     (독자가 이미 아는 현실 1~2줄)
-② 긴장     (이상한 점 발견 1~2줄)
-③ 반전     (아무도 말 안 하는 것 1~2줄)
-④ 내 해석  (1줄 단정)
-⑤ 스테이크 (독자 지갑·포지션 연결 1줄)
-⑥ 예측     (시간+레벨+반증조건)
-⑦ 리플 유도 질문
-
-[추가 규칙]
-- 발언자 주장은 큰따옴표로 인용 (자막 원문 그대로)
-- 출처: 채널명·타임스탬프 포스트 끝에 명시
-- 자막에 없는 사실 추가 금지
-- 모든 수치는 자막 원문 그대로 유지
-"""
-
-
 # ─── 데이터 모델 ─────────────────────────────────────────────────────
 @dataclass
 class YoutubeTranscript:
@@ -164,38 +138,37 @@ class YoutubeTranscript:
     extracted_at:   float = field(default_factory=time.time)
 
     def to_pipeline_input(self) -> dict:
-        """기존 파이프라인 SourceItemCreate 형식으로 변환.
+        """기존 뉴스 파이프라인 SourceItemCreate 형식으로 변환.
 
-        source_text 구조 (자연 truncation 으로 역할 분담):
-          ① YOUTUBE_OPENAI_SYSTEM 헤더 — 스토리텔링 7-step 구조 지시
-          ② [핵심 논지] summary       — Perplexity/Grok 자연 truncation 도달
-          ③ [전체 자막] full_text     — OpenAI DraftWriter 가 전부 읽음
-          ④ [지시사항] 인용/맥락/출처 규칙
+        뉴스 기사와 동일하게 처리되도록 body 를 순수 자막 + 최소 메타로 구성.
+        스토리텔링 / 요약 주입 없음 — 파이프라인이 스스로 분석.
         """
+        # 제목용 힌트: 자막 맨 앞 문장 하나 (너무 길면 잘라냄)
+        first_sentence = ""
+        for line in (self.full_text or "").splitlines():
+            stripped = re.sub(r"^\[\d+:\d+\]\s*", "", line.strip())
+            if stripped:
+                first_sentence = stripped[:60]
+                break
+
         body = (
-            f"{YOUTUBE_OPENAI_SYSTEM}\n\n"
-            f"[유튜브 영상 메타]\n"
             f"채널: {self.channel}\n"
             f"영상 URL: {self.url}\n"
             f"길이: {self.duration_min}분\n\n"
-            f"[핵심 논지]\n{self.summary or '(요약 없음)'}\n\n"
-            f"[전체 자막]\n{self.full_text}\n\n"
-            f"[지시사항]\n"
-            f"- 영상 발언을 큰따옴표로 인용하고 타임스탬프 명시\n"
-            f"- 위 [스토리텔링 구조] 7단계 그대로 적용\n"
-            f"- 임의 사실 추가 금지 — 자막에 있는 내용만 활용\n"
-            f"- 출처: 채널명·영상 URL 포스트 끝에 명시"
+            f"{self.full_text}"
         )
-        title_hint = (self.summary or "전체 자막 분석")[:50]
         return {
-            "title": f"[유튜브] {self.speaker or self.channel}: {title_hint}",
+            "title": (
+                f"[유튜브] {self.speaker or self.channel}"
+                + (f": {first_sentence}" if first_sentence else "")
+            ),
             "body": body,
             "url": self.url,
             "source": "youtube",
             "source_type": "youtube",
             "channel": self.channel,
             "speaker": self.speaker,
-            "summary": self.summary,
+            "summary": self.summary,  # 카드 미리보기용, 파이프라인엔 주입 안 됨
         }
 
 
@@ -443,55 +416,8 @@ async def _gemini_transcript_fallback(video_id: str) -> dict:
         return empty
 
 
-# ─── Gemini 핵심 논지 요약 (Perplexity/Grok 용) ─────────────────────
-SUMMARY_PROMPT_TEMPLATE = """아래는 한국 경제·크립토 유튜브 채널({channel})의 전체 자막입니다.
-
-다음을 한국어로 요약하세요:
-1. 발언자의 핵심 주장 1~2개 (대립각이 되는 주장)
-2. 주요 논거 3개 (근거·예시·수치)
-3. 결론 1문장 (독자에게 무엇을 시사하는가)
-
-500자 이내로 요약. 다른 설명 없이 요약문만 반환."""
-
-
-async def summarize_for_downstream(
-    full_text: str,
-    channel: str,
-) -> str:
-    """전체 자막 → 핵심 논지 요약. Perplexity/Grok 에 전달할 축약본."""
-    api_key = settings.gemini_api_key
-    if not api_key or not full_text:
-        return (full_text or "")[:500]
-
-    prompt = SUMMARY_PROMPT_TEMPLATE.format(channel=channel)
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": f"{prompt}\n\n자막:\n{full_text[:12000]}"}
-            ],
-        }],
-        "generationConfig": {
-            "temperature": 0.0,
-            "maxOutputTokens": 2000,
-        },
-    }
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await _gemini_post_with_retry(
-                client,
-                "https://generativelanguage.googleapis.com/v1beta/"
-                f"models/gemini-2.5-flash:generateContent?key={api_key}",
-                payload,
-            )
-            resp.raise_for_status()
-            summary = resp.json()[
-                "candidates"][0]["content"]["parts"][0]["text"]
-            summary = summary.strip()
-            logger.info(f"[YT] 핵심 논지 요약 완료: {len(summary)}자")
-            return summary
-    except Exception as e:
-        logger.warning(f"[YT] 요약 실패 ({type(e).__name__}): {e!r}")
-        return full_text[:500]
+# ─── (제거) Gemini 요약 호출 — 자막만 파이프라인 투입 정책으로 전환 ─
+# 카드 미리보기용 summary 는 _build_preview_summary 로 full_text 에서 발췌.
 
 
 # ─── DB 저장 ─────────────────────────────────────────────────────────
@@ -623,9 +549,8 @@ async def process_youtube_url(
     else:
         duration_min = 0
 
-    summary = await summarize_for_downstream(
-        full_text, channel_name or "알 수 없음"
-    )
+    # 카드 미리보기용 summary — full_text 앞 부분에서 발췌 (추가 AI 호출 없음)
+    summary = _build_preview_summary(full_text, max_chars=400)
 
     transcript = YoutubeTranscript(
         video_id=video_id,
@@ -640,6 +565,19 @@ async def process_youtube_url(
 
     logger.info(
         f"[YT] 처리 완료: {video_id} "
-        f"({duration_min}분 / {len(full_text)}자 / summary {len(summary)}자)"
+        f"({duration_min}분 / {len(full_text)}자)"
     )
     return transcript
+
+
+def _build_preview_summary(full_text: str, max_chars: int = 400) -> str:
+    """full_text 에서 카드 미리보기용 발췌. 타임스탬프 prefix 제거 후 앞부분만."""
+    if not full_text:
+        return ""
+    lines = []
+    for line in full_text.splitlines():
+        stripped = re.sub(r"^\[\d+:\d+\]\s*", "", line.strip())
+        if stripped:
+            lines.append(stripped)
+    joined = " ".join(lines)
+    return joined[:max_chars].rstrip() + ("…" if len(joined) > max_chars else "")
