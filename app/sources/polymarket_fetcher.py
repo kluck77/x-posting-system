@@ -94,6 +94,7 @@ class PolymarketItem:
     condition_id: str
     category:     str = ""
     change_24h:   float = 0.0
+    is_track1:    bool = False   # 거래량 TOP 20 (키워드 무관) — threshold 완화 대상
     fetched_at:   float = field(default_factory=time.time)
 
 
@@ -128,10 +129,11 @@ _categorize = _categorize_v2
 def _score_market(item: "PolymarketItem") -> int:
     """폴리마켓 시장 중요도 점수 (0~100).
 
-    volume_24h 기준 base + 카테고리 가중치 + 극단 확률 페널티.
+    volume_24h 기준 base + 카테고리 가중치 + 극단 확률 페널티 + 50% 근처 가점.
     """
     vol = item.volume_24h or 0.0
-    if   vol >= 10_000_000: base = 90
+    if   vol >= 50_000_000: base = 95
+    elif vol >= 10_000_000: base = 90
     elif vol >= 1_000_000:  base = 80
     elif vol >= 500_000:    base = 70
     elif vol >= 100_000:    base = 60
@@ -148,16 +150,26 @@ def _score_market(item: "PolymarketItem") -> int:
     }
     base += cat_bonus.get(item.category or "other", 0)
 
-    # 확률 극단(결정 임박) 감점 — 99%/1% 는 이미 결정 수준
     yp = item.yes_prob or 0.5
+    # 확률 극단(결정 임박) 감점 — 99%/1% 는 이미 결정 수준
     if yp >= 0.99 or yp <= 0.01:
         base -= 20
+    # 확률 50% 근처 가점 — 아직 불확실 → 토론 가치 있음
+    elif 0.35 <= yp <= 0.65:
+        base += 5
 
     return max(0, min(100, base))
 
 
-async def fetch_top_markets(limit: int = 50) -> list[PolymarketItem]:
-    """Gamma API 에서 volume24hr 상위 시장 수집 + 키워드 필터."""
+async def fetch_top_markets(limit: int = 100) -> list[PolymarketItem]:
+    """Gamma API 에서 volume24hr 상위 시장 수집 — 2트랙 병행.
+
+    트랙 1: 거래량 TOP 20 (키워드 무관, volume ≥ $100K)
+    트랙 2: 키워드 매칭 (기존 방식)
+    → condition_id 기준 dedup 후 track1 + track2 순서로 반환.
+
+    is_track1 플래그는 threshold 완화 대상 식별용.
+    """
     params = {
         "active":    "true",
         "closed":    "false",
@@ -165,7 +177,6 @@ async def fetch_top_markets(limit: int = 50) -> list[PolymarketItem]:
         "order":     "volume24hr",
         "ascending": "false",
     }
-    results: list[PolymarketItem] = []
     try:
         await asyncio.sleep(0.1)  # rate limit
         async with httpx.AsyncClient(timeout=15) as client:
@@ -175,33 +186,70 @@ async def fetch_top_markets(limit: int = 50) -> list[PolymarketItem]:
                 headers={"User-Agent": "sskorea02-bot/1.0"},
             )
             resp.raise_for_status()
-            markets = resp.json()
-        for m in markets or []:
-            question = m.get("question", "") or ""
-            q_lower = question.lower()
-            if not any(k in q_lower for k in ALL_KEYWORDS):
-                continue
-            if not m.get("enableOrderBook", True):
-                continue
-            yes_p, no_p = _parse_outcome_prices(
-                m.get("outcomePrices", "[0.5,0.5]")
-            )
-            results.append(PolymarketItem(
-                question=question,
-                slug=m.get("slug", "") or "",
-                yes_prob=yes_p,
-                no_prob=no_p,
-                volume_24h=float(m.get("volume24hr", 0) or 0),
-                liquidity=float(m.get("liquidity", 0) or 0),
-                end_date=str(m.get("endDate", "") or ""),
-                condition_id=str(m.get("conditionId", "") or ""),
-                category=_categorize_v2(question),
-            ))
-        logger.info(f"[Polymarket] 수집 {len(results)}개 시장")
-        return results
+            markets = resp.json() or []
     except Exception as e:
         logger.warning(f"[Polymarket] 수집 실패: {e}")
         return []
+
+    track1: list[PolymarketItem] = []  # 거래량 TOP 20
+    track2: list[PolymarketItem] = []  # 키워드 매칭
+    seen_ids: set[str] = set()
+
+    for i, m in enumerate(markets):
+        question = m.get("question", "") or ""
+        condition_id = str(m.get("conditionId", "") or "")
+        if not m.get("enableOrderBook", True):
+            continue
+        yes_p, no_p = _parse_outcome_prices(
+            m.get("outcomePrices", "[0.5,0.5]")
+        )
+        volume_24h = float(m.get("volume24hr", 0) or 0)
+
+        # 트랙 1 자격 — API 응답 상위 20개 중 volume ≥ $100K
+        is_t1 = (
+            i < 20
+            and volume_24h >= 100_000
+            and condition_id
+            and condition_id not in seen_ids
+        )
+
+        # 트랙 2 자격 — 키워드 매칭
+        q_lower = question.lower()
+        is_t2 = (
+            any(k in q_lower for k in ALL_KEYWORDS)
+            and condition_id
+            and condition_id not in seen_ids
+        )
+
+        if not (is_t1 or is_t2):
+            continue
+
+        item = PolymarketItem(
+            question=question,
+            slug=m.get("slug", "") or "",
+            yes_prob=yes_p,
+            no_prob=no_p,
+            volume_24h=volume_24h,
+            liquidity=float(m.get("liquidity", 0) or 0),
+            end_date=str(m.get("endDate", "") or ""),
+            condition_id=condition_id,
+            category=_categorize_v2(question),
+            is_track1=is_t1,
+        )
+        seen_ids.add(condition_id)
+        if is_t1:
+            track1.append(item)
+        else:
+            track2.append(item)
+
+    results = track1 + track2
+    logger.info(
+        f"[Polymarket] 수집 완료 "
+        f"트랙1(TOP20)={len(track1)}개 "
+        f"트랙2(키워드)={len(track2)}개 "
+        f"합계={len(results)}개"
+    )
+    return results
 
 
 async def fetch_with_retry(limit: int = 50) -> list[PolymarketItem]:
@@ -321,8 +369,11 @@ def upsert_to_intel(items: list[PolymarketItem]) -> int:
     - source = "polymarket"
     - source_type = "prediction_market"
     - category = _POLY_CAT_TO_INTEL 매핑
-    - shortlisted = True (score >= 55 일 때)
-    - 55점 미만 제외. content_hash 기준 dedup.
+    - threshold 분기:
+        * 트랙 1 (is_track1=True, 거래량 TOP 20) → 50점 이상 통과
+        * 트랙 2 (키워드 매칭)                   → 55점 이상 통과
+    - shortlisted = True (score ≥ 55 일 때만)
+    - content_hash 기준 dedup.
 
     반환: 신규 적재 건수 (이미 존재하는 건은 priority_score 만 갱신).
     """
@@ -343,7 +394,9 @@ def upsert_to_intel(items: list[PolymarketItem]) -> int:
     try:
         for item in items:
             score = _score_market(item)
-            if score < 55:
+            # threshold 분기 — track1 은 거래량 보장되어 관대
+            threshold = 50 if item.is_track1 else 55
+            if score < threshold:
                 continue  # 낮은 건 dashboard 노출 안 함
 
             cond_id = item.condition_id or item.slug or item.question
