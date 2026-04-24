@@ -101,6 +101,30 @@ def _loose_json_object(raw: str) -> dict | None:
     return None
 
 
+async def _gemini_post_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    payload: dict,
+    *,
+    max_attempts: int = 3,
+) -> httpx.Response:
+    """Gemini 호출 — 503/429/5xx 자동 재시도 (1s → 3s → 7s)."""
+    backoff = [1.0, 3.0, 7.0]
+    last: httpx.Response | None = None
+    for attempt in range(max_attempts):
+        resp = await client.post(url, json=payload)
+        last = resp
+        if resp.status_code < 500 and resp.status_code != 429:
+            return resp
+        wait = backoff[min(attempt, len(backoff) - 1)]
+        logger.info(
+            f"[YT] Gemini {resp.status_code} retry {attempt + 1}/{max_attempts} "
+            f"after {wait}s"
+        )
+        await asyncio.sleep(wait)
+    return last  # type: ignore
+
+
 HIGH_VALUE_KW = re.compile(
     r"fed|연준|기준금리|한은|인플레이션|cpi|ppi|고용|실업률"
     r"|비트코인|btc|이더리움|eth|sec|etf|폴리마켓"
@@ -219,10 +243,11 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
     }
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(
+            resp = await _gemini_post_with_retry(
+                client,
                 "https://generativelanguage.googleapis.com/v1beta/"
                 f"models/gemini-2.5-flash:generateContent?key={api_key}",
-                json=payload,
+                payload,
             )
             if resp.status_code != 200:
                 logger.warning(
@@ -342,10 +367,11 @@ async def extract_quotes(
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
+            resp = await _gemini_post_with_retry(
+                client,
                 "https://generativelanguage.googleapis.com/v1beta/"
                 f"models/gemini-2.5-flash:generateContent?key={api_key}",
-                json=payload,
+                payload,
             )
             resp.raise_for_status()
             raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
