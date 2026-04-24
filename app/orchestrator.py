@@ -251,42 +251,36 @@ class Orchestrator:
             risk_reasoning=f"Psych skip: {reason}",
         )
 
-    async def process_youtube_quote(
-        self, quote, chat_id: int | str | None = None,
+    async def process_youtube_transcript(
+        self, transcript, chat_id: int | str | None = None,
     ) -> Draft | None:
-        """YoutubeQuote → SourceItemCreate 변환 후 기존 파이프라인 투입.
+        """YoutubeTranscript → SourceItemCreate 변환 후 5-AI 파이프라인 투입.
 
-        발언 원문·맥락·출처를 source_text 에 인코딩해서 DraftWriter 에
-        전달. 기존 Step 0.5~5.9 파이프라인 그대로 타서 텔레그램 승인
-        카드까지 생성. 자동 포스팅 없음.
+        역할 분담 (source_text 구조 + 자연 truncation 으로 달성):
+          - OpenAI DraftWriter: source_text 전체 ≈ [핵심 논지] + [전체 자막]
+          - Gemini researcher: source_text[:1000] 등 앞부분 → 논지 중심
+          - Perplexity / Grok:  source_text[:1000] ≈ [핵심 논지] 만
+          - Haiku Reviewer:     초안만 수신 (변동 없음)
+
+        자동 포스팅 없음. 텔레그램 승인 카드 전송까지만 수행.
         """
         try:
-            from app.sources.youtube_pipeline import YoutubeQuote, mark_used
+            from app.sources.youtube_pipeline import (
+                YoutubeTranscript, mark_transcript_used,
+            )
         except Exception as e:
             logger.warning(f"[orchestrator YT] 모듈 로드 실패: {e}")
             return None
-        if not isinstance(quote, YoutubeQuote):
-            logger.warning("[orchestrator YT] quote 인스턴스 아님")
+        if not isinstance(transcript, YoutubeTranscript):
+            logger.warning("[orchestrator YT] transcript 인스턴스 아님")
             return None
 
-        # 발언 중심 source_text 구성 (DraftWriter 가 인용 구조로 포스트 작성)
-        body = (
-            f'[유튜브 발언 소재]\n'
-            f'발언자: {quote.speaker}\n'
-            f'채널: {quote.channel}\n'
-            f'원문: "{quote.text}"\n'
-            f'타임스탬프: {quote.timestamp}\n'
-            f'앞 맥락: {quote.context_before}\n'
-            f'뒤 맥락: {quote.context_after}\n'
-            f'출처 URL: {quote.url}\n\n'
-            f'위 발언을 중심으로 포스트 작성. 발언 원문은 큰따옴표로 인용하고, '
-            f'출처(채널명·타임스탬프)를 포스트 끝에 명시할 것.'
-        )
+        src = transcript.to_pipeline_input()
         try:
             data = SourceItemCreate(
-                title=f"[유튜브 발언] {quote.speaker}: {quote.text[:60]}",
-                url=quote.url,
-                source_text=body,
+                title=src["title"],
+                url=src["url"],
+                source_text=src["body"],
                 source_type="youtube",
                 language="ko",
             )
@@ -300,9 +294,8 @@ class Orchestrator:
             logger.warning(f"[orchestrator YT] 파이프라인 실패: {e}")
             return None
 
-        # used=1 마킹 (초안 생성 성공 시)
         try:
-            mark_used(quote.video_id, quote.timestamp_sec)
+            mark_transcript_used(transcript.video_id)
         except Exception:
             pass
 

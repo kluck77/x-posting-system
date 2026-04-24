@@ -293,55 +293,38 @@ async def _run_analysis_and_show_card(
 
 
 # =============================================================================
-# 유튜브 발언 카드 플로우
+# 유튜브 전체 자막 카드 플로우 (v2)
 # =============================================================================
-
-_YT_TOPIC_KO = {
-    "macro":       "매크로",
-    "crypto":      "크립토",
-    "policy":      "정책",
-    "semi":        "반도체",
-    "geo":         "지정학",
-    "real_estate": "부동산",
-    "equity":      "주식",
-}
-
-
-def _yt_score_badge(score: int) -> str:
-    if score >= 85:
-        return "🔥 HOT"
-    if score >= 70:
-        return "⭐ GOOD"
-    return "📌 OK"
-
 
 async def _handle_youtube_url(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
 ):
-    """유튜브 URL 수신 → 자막/발언 추출 → 발언 카드 N개 송출."""
+    """유튜브 URL 수신 → 전체 자막 + 요약 추출 → 분석 카드 1장 송출."""
     processing_msg = await update.message.reply_text(
-        "⏳ 자막/발언 추출 중... (영상 길이에 따라 1~5분 소요)\n"
+        "⏳ 자막 + 요약 추출 중... (영상 길이에 따라 1~5분 소요)\n"
         "• 1차: youtube-transcript-api\n"
         "• 2차: Gemini 영상 분석 (느림)"
     )
     try:
         from app.sources.youtube_pipeline import process_youtube_url
-        quotes = await process_youtube_url(url)
+        transcript = await process_youtube_url(url)
     except Exception as e:
         logger.error(f"[YT handler] 추출 실패: {e}", exc_info=True)
         try:
-            await processing_msg.edit_text(f"❌ 유튜브 처리 실패: {_safe_error_msg(e)}")
+            await processing_msg.edit_text(
+                f"❌ 유튜브 처리 실패: {_safe_error_msg(e)}"
+            )
         except Exception:
             pass
         return
 
-    if not quotes:
+    if not transcript:
         try:
             await processing_msg.edit_text(
-                "⚠️ 발언을 추출하지 못했습니다.\n"
-                "자막이 없거나, 관련 발언이 없거나, 중요도가 낮을 수 있습니다."
+                "⚠️ 자막을 추출하지 못했습니다.\n"
+                "자막이 없거나 접근이 차단되었을 수 있습니다."
             )
         except Exception:
             pass
@@ -349,98 +332,80 @@ async def _handle_youtube_url(
 
     try:
         await processing_msg.edit_text(
-            f"✅ 발언 {len(quotes)}개 추출 완료!\n발언 카드를 보낼게요."
+            f"✅ 자막 추출 완료 — 요약 카드 전송"
         )
     except Exception:
         pass
 
-    for i, quote in enumerate(quotes, 1):
-        try:
-            await _send_quote_card(update, context, quote, i)
-        except Exception as e:
-            logger.warning(f"[YT handler] quote card {i} 실패: {e}")
-        await asyncio.sleep(0.4)
+    try:
+        await _send_transcript_card(update, context, transcript)
+    except Exception as e:
+        logger.warning(f"[YT handler] transcript card 실패: {e}", exc_info=True)
 
 
-async def _send_quote_card(
+async def _send_transcript_card(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    quote,
-    index: int,
+    transcript,
 ):
-    """단일 YoutubeQuote 를 카드 + [초안 만들기/건너뛰기] 버튼으로 전송."""
+    """유튜브 전체 자막 + 핵심 논지 요약 카드 전송."""
     import html as _html
 
-    # 발언자 미확인 경고 + 점수 -20 패널티
-    speaker_warning = ""
-    if (quote.speaker or "").strip() == "발언자 미확인":
-        speaker_warning = "\n⚠️ 출처 미확인 — 중요도 -20점"
-        quote.importance_score = max(0, int(quote.importance_score or 0) - 20)
+    summary_preview = (transcript.summary or "").strip()
+    if len(summary_preview) > 450:
+        summary_preview = summary_preview[:447] + "..."
 
-    badge  = _yt_score_badge(int(quote.importance_score or 0))
-    cat_ko = _YT_TOPIC_KO.get(quote.topic_tag, quote.topic_tag or "기타")
-
-    # 영상 논지 발췌 (맥락 주입으로 앞에 붙어있음)
-    ctx_before = (quote.context_before or "").strip()
-    ctx_hint = ""
-    if ctx_before:
-        head = ctx_before.split("\n", 1)[0].strip()
-        if head:
-            ctx_hint = _html.escape(head[:120])
-
-    text_esc     = _html.escape(quote.text or "")
-    speaker_esc  = _html.escape(quote.speaker or "")
-    channel_esc  = _html.escape(quote.channel or "")
-    ts_esc       = _html.escape(quote.timestamp or "")
-    url_esc      = _html.escape(quote.url or "")
+    channel_esc  = _html.escape(transcript.channel or "")
+    summary_esc  = _html.escape(summary_preview or "(요약 없음)")
+    url_esc      = _html.escape(transcript.url or "")
+    duration     = int(transcript.duration_min or 0)
+    chars        = len(transcript.full_text or "")
 
     card_text = (
-        f"🎬 <b>발언 {index}</b>\n"
+        f"🎬 <b>유튜브 분석 완료</b>\n"
         f"{'─' * 20}\n"
-        f"{badge} | {cat_ko} | {int(quote.importance_score or 0)}점"
-        f"{speaker_warning}\n\n"
-        f"📢 <b>{speaker_esc}</b> ({channel_esc})\n"
-        f"⏱ {ts_esc}\n\n"
-        f"<blockquote>\"{text_esc}\"</blockquote>\n"
+        f"📺 {channel_esc}\n"
+        f"⏱ {duration}분 영상 · 📝 자막 {chars:,}자\n\n"
+        f"💡 <b>핵심 논지</b>\n"
+        f"<blockquote>{summary_esc}</blockquote>\n"
+        f"🔗 {url_esc}"
     )
-    if ctx_hint:
-        card_text += f"💡 {ctx_hint}\n"
-    card_text += f"📺 {url_esc}"
 
-    cb_draft = f"yt_draft:{quote.video_id}:{quote.timestamp_sec}"
-    cb_skip  = f"yt_skip:{quote.video_id}:{quote.timestamp_sec}"
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✍️ 초안 만들기", callback_data=cb_draft),
-        InlineKeyboardButton("⏭ 건너뛰기",     callback_data=cb_skip),
-    ]])
+    cb_draft = f"yt_draft:{transcript.video_id}"
+    cb_skip  = f"yt_skip:{transcript.video_id}"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "✍️ 이 영상으로 초안 만들기", callback_data=cb_draft,
+        )],
+        [InlineKeyboardButton(
+            "⏭ 건너뛰기", callback_data=cb_skip,
+        )],
+    ])
 
     try:
         await update.message.reply_text(
             card_text, parse_mode="HTML", reply_markup=keyboard,
-            disable_web_page_preview=False,
+            disable_web_page_preview=True,
         )
     except Exception:
         plain = (
-            f"🎬 발언 {index}\n"
-            f"{badge} | {cat_ko} | {int(quote.importance_score or 0)}점"
-            f"{speaker_warning}\n\n"
-            f"📢 {quote.speaker} ({quote.channel})\n"
-            f"⏱ {quote.timestamp}\n\n"
-            f"\"{quote.text}\"\n\n"
-            f"📺 {quote.url}"
+            f"🎬 유튜브 분석 완료\n"
+            f"📺 {transcript.channel}\n"
+            f"⏱ {duration}분 · 자막 {chars:,}자\n\n"
+            f"💡 {summary_preview}\n\n"
+            f"🔗 {transcript.url}"
         )
         await update.message.reply_text(plain, reply_markup=keyboard)
 
 
 async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
     """
-    yt_draft:{video_id}:{timestamp_sec}  — 저장된 발언을 파이프라인에 투입
-    yt_skip:{video_id}:{timestamp_sec}   — 발언 스킵 (카드 버튼만 제거)
+    yt_draft:{video_id}  — DB 에서 transcript 복원 후 파이프라인 투입
+    yt_skip:{video_id}   — 건너뛰기 (카드 버튼만 제거)
     """
     callback_data = query.data or ""
     try:
-        action, video_id, ts_str = callback_data.split(":", 2)
-        timestamp_sec = int(ts_str)
+        action, video_id = callback_data.split(":", 1)
     except Exception:
         logger.warning(f"[YT cb] 잘못된 callback_data: {callback_data}")
         await _safe_remove_markup(query)
@@ -449,7 +414,7 @@ async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
     if action == "yt_skip":
         await _safe_remove_markup(query)
         try:
-            await query.message.reply_text("⏭ 발언을 건너뛰었습니다.")
+            await query.message.reply_text("⏭ 건너뛰었습니다.")
         except Exception:
             pass
         return
@@ -457,27 +422,29 @@ async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
     # yt_draft
     await _safe_remove_markup(query)
     status_msg = await query.message.reply_text(
-        "✍️ 초안 생성 중... (30~90초 소요)"
+        "✍️ 초안 생성 중... (30~120초 소요)"
     )
 
     try:
-        from app.sources.youtube_pipeline import get_quote_by_key
-        quote = get_quote_by_key(video_id, timestamp_sec)
+        from app.sources.youtube_pipeline import get_transcript_by_id
+        transcript = get_transcript_by_id(video_id)
     except Exception as e:
-        logger.warning(f"[YT cb] get_quote 실패: {e}")
-        quote = None
+        logger.warning(f"[YT cb] get_transcript 실패: {e}")
+        transcript = None
 
-    if not quote:
+    if not transcript:
         try:
-            await status_msg.edit_text("⚠️ 저장된 발언을 찾지 못했습니다. 다시 URL을 보내주세요.")
+            await status_msg.edit_text(
+                "⚠️ 저장된 자막을 찾지 못했습니다. 다시 URL을 보내주세요."
+            )
         except Exception:
             pass
         return
 
     orchestrator = Orchestrator()
     try:
-        draft = await orchestrator.process_youtube_quote(
-            quote, chat_id=query.message.chat_id,
+        draft = await orchestrator.process_youtube_transcript(
+            transcript, chat_id=query.message.chat_id,
         )
     except Exception as e:
         logger.error(f"[YT cb] 파이프라인 실패: {e}", exc_info=True)
@@ -485,7 +452,6 @@ async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.edit_text(f"❌ 초안 생성 실패: {_safe_error_msg(e)}")
         except Exception:
             pass
-        orchestrator.close()
         return
     finally:
         try:
