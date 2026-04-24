@@ -305,23 +305,50 @@ async def _gemini_transcript_fallback(video_id: str) -> dict:
         return empty
     url = f"https://www.youtube.com/watch?v={video_id}"
     prompt = (
-        "이 유튜브 영상의 자막을 추출하세요.\n"
+        "이 유튜브 영상의 자막을 추출하세요. "
+        "**영상을 끝까지 전부 분석**하고 전체 길이(초)를 정확히 측정해야 합니다.\n"
         "\n"
-        "규칙:\n"
-        "1. 영상 전체에 골고루 분포된 최소 30개 이상 스니펫\n"
-        "2. 각 스니펫은 완전한 문장 1~3개 포함 (50자 이상)\n"
-        "3. 앞부분·중간·후반부 균등하게 포함\n"
-        "4. 영상 실제 총 길이(초, duration_sec)도 반환\n"
+        "절대 규칙 (위반 시 응답 reject):\n"
+        "1. duration_sec 필드는 반드시 영상의 **실제 총 길이(초)** 로 채움.\n"
+        "   0 또는 추정 없이 응답 불가.\n"
+        "2. snippets 는 **영상을 5 구간으로 균등 분할**하여 각 구간마다\n"
+        "   최소 6개 이상 (총 30개 이상) 포함. 영상 끝부분(마지막 20%) 반드시 포함.\n"
+        "3. 가장 마지막 snippet 의 start 값은 duration_sec 의 80% 이상이어야 함.\n"
+        "4. 각 snippet 은 완전한 문장 1~3개 (50자 이상).\n"
+        "5. 영상이 1분 미만인 경우에만 snippets 개수 완화 가능.\n"
         "\n"
-        "JSON만 반환 (다른 텍스트 절대 금지):\n"
+        "JSON 만 반환 (다른 텍스트 금지):\n"
         "{\n"
         '  "duration_sec": 1020,\n'
         '  "snippets": [\n'
-        '    {"start": 15, "text": "완전한 문장으로 된 발언 내용"},\n'
-        '    {"start": 120, "text": "완전한 문장으로 된 발언 내용"}\n'
+        '    {"start": 15,   "text": "..."},\n'
+        '    {"start": 230,  "text": "..."},\n'
+        '    {"start": 500,  "text": "..."},\n'
+        '    {"start": 780,  "text": "..."},\n'
+        '    {"start": 1000, "text": "..."}\n'
         "  ]\n"
         "}"
     )
+    # responseSchema 로 Gemini 출력 강제 — duration_sec required, snippets minItems=15
+    response_schema = {
+        "type": "object",
+        "properties": {
+            "duration_sec": {"type": "integer", "minimum": 1},
+            "snippets": {
+                "type": "array",
+                "minItems": 15,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "start": {"type": "integer", "minimum": 0},
+                        "text":  {"type": "string",  "minLength": 10},
+                    },
+                    "required": ["start", "text"],
+                },
+            },
+        },
+        "required": ["duration_sec", "snippets"],
+    }
     payload = {
         "contents": [{
             "parts": [
@@ -333,6 +360,7 @@ async def _gemini_transcript_fallback(video_id: str) -> dict:
             "temperature": 0.0,
             "maxOutputTokens": 15000,
             "responseMimeType": "application/json",
+            "responseSchema": response_schema,
         },
     }
     try:
@@ -380,6 +408,19 @@ async def _gemini_transcript_fallback(video_id: str) -> dict:
                 logger.warning(
                     f"[YT] Gemini fallback {len(snippets_raw)}개 (권장 30+)"
                 )
+            # duration_sec 보정 — Gemini 가 0 반환해도 snippet 의 max start 로 추정
+            if duration_sec <= 0 and snippets_raw:
+                try:
+                    max_start = max(
+                        int(s.get("start", 0) or 0) for s in snippets_raw
+                    )
+                    # 마지막 발언 이후 평균 3초 마진 + 대략 10% 여유
+                    duration_sec = int(max_start * 1.1) + 3
+                    logger.warning(
+                        f"[YT] duration_sec 누락 — max_start 기준 추정: {duration_sec}초"
+                    )
+                except Exception:
+                    pass
             logger.info(
                 f"[YT] Gemini fallback 성공: {len(snippets_raw)}개 "
                 f"duration={duration_sec}초"
