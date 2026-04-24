@@ -277,6 +277,13 @@ EXTRACTION_PROMPT = """당신은 한국 매크로·크립토 전문 편집자입
 
 제외: 투자 권유 면책·인사말·추임새
 
+is_risky 는 다음 중 하나에 해당할 때만 true (아니면 전부 false):
+- 특정 실명 인물·기업 비방·명예훼손 소지
+- 욕설·혐오표현·성적 표현
+- 개인정보·사생활 노출
+- 검증 불가 허위 주장을 단정적으로 표현
+※ 의견·예측·단정은 is_risky 가 아님. 시장 예측은 기본 false.
+
 JSON만 반환 (다른 텍스트 금지):
 {
   "video_title": "...",
@@ -359,8 +366,15 @@ async def extract_quotes(
     raw_quotes = data.get("quotes", []) or []
     logger.info(
         f"[YT] Gemini 반환 quotes={len(raw_quotes)}개 "
-        f"(score: {[int(q.get('importance_score', 0) or 0) for q in raw_quotes]})"
+        f"(score: {[int(q.get('importance_score', 0) or 0) for q in raw_quotes]}, "
+        f"risky: {[bool(q.get('is_risky')) for q in raw_quotes]})"
     )
+    # is_risky=true 발언은 어떤 내용인지 요약 로그 (스팸/위험 판단 감사용)
+    for q in raw_quotes:
+        if q.get("is_risky"):
+            logger.info(
+                f"[YT] is_risky=true drop: \"{(q.get('text') or '')[:60]}\""
+            )
 
     quotes: list[YoutubeQuote] = []
     drop_risky = drop_score = drop_riskkw = 0
