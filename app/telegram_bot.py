@@ -459,7 +459,9 @@ async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
 
     orchestrator = Orchestrator()
     try:
-        draft = await orchestrator.process_youtube_quote(quote)
+        draft = await orchestrator.process_youtube_quote(
+            quote, chat_id=query.message.chat_id,
+        )
     except Exception as e:
         logger.error(f"[YT cb] 파이프라인 실패: {e}", exc_info=True)
         try:

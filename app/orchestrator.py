@@ -251,7 +251,9 @@ class Orchestrator:
             risk_reasoning=f"Psych skip: {reason}",
         )
 
-    async def process_youtube_quote(self, quote) -> Draft | None:
+    async def process_youtube_quote(
+        self, quote, chat_id: int | str | None = None,
+    ) -> Draft | None:
         """YoutubeQuote → SourceItemCreate 변환 후 기존 파이프라인 투입.
 
         발언 원문·맥락·출처를 source_text 에 인코딩해서 DraftWriter 에
@@ -294,15 +296,29 @@ class Orchestrator:
 
         try:
             draft = await self.ingest_and_generate(data)
-            # used=1 마킹 (파이프라인 성공 시에만)
-            try:
-                mark_used(quote.video_id, quote.timestamp_sec)
-            except Exception:
-                pass
-            return draft
         except Exception as e:
             logger.warning(f"[orchestrator YT] 파이프라인 실패: {e}")
             return None
+
+        # used=1 마킹 (초안 생성 성공 시)
+        try:
+            mark_used(quote.video_id, quote.timestamp_sec)
+        except Exception:
+            pass
+
+        # 텔레그램 승인 카드 전송 — 수동 트리거이므로 일일 한도 skip
+        try:
+            sent = await self.send_for_approval(
+                draft.id, chat_id=chat_id, skip_telegram_limit=True,
+            )
+            if not sent:
+                logger.warning(
+                    f"[orchestrator YT] 승인 카드 전송 실패: draft_id={draft.id}"
+                )
+        except Exception as e:
+            logger.warning(f"[orchestrator YT] send_for_approval 예외: {e}")
+
+        return draft
 
     async def ingest_and_generate(self, data: SourceItemCreate) -> Draft:
         """
