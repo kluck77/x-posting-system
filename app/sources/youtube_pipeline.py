@@ -174,7 +174,7 @@ GEMINI_VIDEO_ANALYSIS_PROMPT = """당신은 한국 매크로·크립토·경제 
 
 
 # ─── Gemini 직접 분석 ────────────────────────────────────────────────
-_GEMINI_MODEL = "gemini-2.5-flash-preview-05-20"
+_GEMINI_MODEL = "gemini-2.5-flash"
 
 
 async def analyze_video_with_gemini(
