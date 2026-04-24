@@ -371,8 +371,22 @@ async def _send_quote_card(
     """단일 YoutubeQuote 를 카드 + [초안 만들기/건너뛰기] 버튼으로 전송."""
     import html as _html
 
+    # 발언자 미확인 경고 + 점수 -20 패널티
+    speaker_warning = ""
+    if (quote.speaker or "").strip() == "발언자 미확인":
+        speaker_warning = "\n⚠️ 출처 미확인 — 중요도 -20점"
+        quote.importance_score = max(0, int(quote.importance_score or 0) - 20)
+
     badge  = _yt_score_badge(int(quote.importance_score or 0))
     cat_ko = _YT_TOPIC_KO.get(quote.topic_tag, quote.topic_tag or "기타")
+
+    # 영상 논지 발췌 (맥락 주입으로 앞에 붙어있음)
+    ctx_before = (quote.context_before or "").strip()
+    ctx_hint = ""
+    if ctx_before:
+        head = ctx_before.split("\n", 1)[0].strip()
+        if head:
+            ctx_hint = _html.escape(head[:120])
 
     text_esc     = _html.escape(quote.text or "")
     speaker_esc  = _html.escape(quote.speaker or "")
@@ -383,12 +397,15 @@ async def _send_quote_card(
     card_text = (
         f"🎬 <b>발언 {index}</b>\n"
         f"{'─' * 20}\n"
-        f"{badge} | {cat_ko} | {int(quote.importance_score or 0)}점\n\n"
+        f"{badge} | {cat_ko} | {int(quote.importance_score or 0)}점"
+        f"{speaker_warning}\n\n"
         f"📢 <b>{speaker_esc}</b> ({channel_esc})\n"
         f"⏱ {ts_esc}\n\n"
         f"<blockquote>\"{text_esc}\"</blockquote>\n"
-        f"📺 {url_esc}"
     )
+    if ctx_hint:
+        card_text += f"💡 {ctx_hint}\n"
+    card_text += f"📺 {url_esc}"
 
     cb_draft = f"yt_draft:{quote.video_id}:{quote.timestamp_sec}"
     cb_skip  = f"yt_skip:{quote.video_id}:{quote.timestamp_sec}"
@@ -403,10 +420,10 @@ async def _send_quote_card(
             disable_web_page_preview=False,
         )
     except Exception:
-        # HTML 파싱 실패 시 일반 텍스트 fallback
         plain = (
             f"🎬 발언 {index}\n"
-            f"{badge} | {cat_ko} | {int(quote.importance_score or 0)}점\n\n"
+            f"{badge} | {cat_ko} | {int(quote.importance_score or 0)}점"
+            f"{speaker_warning}\n\n"
             f"📢 {quote.speaker} ({quote.channel})\n"
             f"⏱ {quote.timestamp}\n\n"
             f"\"{quote.text}\"\n\n"

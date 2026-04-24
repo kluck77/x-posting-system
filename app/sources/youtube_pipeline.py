@@ -137,6 +137,21 @@ HIGH_VALUE_KW = re.compile(
 RISK_KW = re.compile(r"욕설|명예훼손|허위|개인정보|사생활")
 
 
+def _format_full_transcript(snippets: list[dict]) -> str:
+    """전체 자막을 타임스탬프 포함 텍스트로 변환."""
+    lines = []
+    for s in snippets:
+        sec = int(s.get("start", 0) or 0)
+        mm, ss = sec // 60, sec % 60
+        lines.append(f"[{mm:02d}:{ss:02d}] {s.get('text', '')}")
+    return "\n".join(lines)
+
+
+def _filter_intro(snippets: list[dict]) -> list[dict]:
+    """첫 180초(3분) 스니펫 제외 — 인트로·티저 차단."""
+    return [s for s in snippets if float(s.get("start", 0) or 0) >= 180]
+
+
 @dataclass
 class YoutubeQuote:
     text:              str
@@ -155,16 +170,19 @@ class YoutubeQuote:
     extracted_at:      float = field(default_factory=time.time)
 
     def to_news_format(self) -> dict:
-        """기존 파이프라인 주입용 dict (SourceItemCreate adapter 에서 소비)."""
+        """기존 파이프라인에 주입할 뉴스 포맷 (맥락·영상 논지 포함)."""
         return {
-            "title": f"[유튜브 발언] {self.speaker}: {self.text[:60]}",
+            "title": f"[유튜브 발언] {self.speaker}: {self.text[:50]}",
             "body": (
-                f"발언자: {self.speaker}\n"
-                f"채널: {self.channel}\n"
-                f'발언 원문: "{self.text}"\n\n'
-                f"맥락(앞): {self.context_before}\n"
-                f"맥락(뒤): {self.context_after}\n\n"
-                f"출처: {self.channel} · {self.url}"
+                f"[발언 원문]\n"
+                f'"{self.text}"\n\n'
+                f"[발언자] {self.speaker} · {self.channel} · {self.timestamp}\n\n"
+                f"[앞 맥락]\n{self.context_before}\n\n"
+                f"[뒤 맥락]\n{self.context_after}\n\n"
+                f"[출처] {self.url}\n\n"
+                f"위 발언을 중심으로 포스트를 작성하세요.\n"
+                f"발언 원문은 큰따옴표로 인용하고 "
+                f"서사는 앞뒤 맥락을 활용하세요."
             ),
             "url": self.url,
             "source": "youtube",
@@ -290,38 +308,55 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
 
 # ─── 발언 추출 (Gemini) ───────────────────────────────────────────────
 EXTRACTION_PROMPT = """당신은 한국 매크로·크립토 전문 편집자입니다.
-아래 유튜브 자막에서 X 포스트 소재가 될 발언을 추출하세요.
+아래는 유튜브 영상의 전체 자막입니다.
 
-선택 기준 (4개 이상 충족):
+다음 2단계로 처리하세요:
+
+## Step 1: 영상 전체 논지 파악
+영상 전체를 읽고 핵심 주장 1~2개를 파악합니다.
+발언자가 영상 전체에서 말하려는 핵심이 무엇인지 정리합니다.
+
+## Step 2: 발언 추출
+핵심 논지를 뒷받침하는 발언 3~5개를 추출합니다.
+
+발언 선택 기준 (4개 이상 충족):
 1. 맥락 없이도 이해 가능
 2. 첫 10단어에 훅이 있음
 3. 반박 가능한 주장
 4. 숫자·비교·예측 포함
 5. 단정·비유·격언 포함
-6. 7일 이내 시장 사건과 연관
+6. 핵심 논지와 직접 연결됨
 
-제외: 투자 권유 면책·인사말·추임새
+제외:
+- 첫 3분 발언 (인트로·티저)
+- 투자 권유 면책 발언
+- 인사말·소개
+- 의미 없는 추임새
 
-is_risky 는 다음 중 하나에 해당할 때만 true (아니면 전부 false):
-- 특정 실명 인물·기업 비방·명예훼손 소지
-- 욕설·혐오표현·성적 표현
+is_risky 는 다음 중 하나에 해당할 때만 true (아니면 false):
+- 특정 실명 인물·기업 비방·명예훼손
+- 욕설·혐오·성적 표현
 - 개인정보·사생활 노출
-- 검증 불가 허위 주장을 단정적으로 표현
-※ 의견·예측·단정은 is_risky 가 아님. 시장 예측은 기본 false.
+- 검증 불가 허위 단정
+※ 의견·예측·단정·시장 전망은 is_risky=false 가 기본.
 
-JSON만 반환 (다른 텍스트 금지):
+## 출력 형식
+JSON만 반환 (다른 텍스트 절대 금지):
 {
-  "video_title": "...",
-  "speaker": "발언자 이름 또는 채널명",
+  "video_summary": "영상 전체 핵심 논지 2~3문장 한국어 요약",
+  "main_argument": "발언자의 핵심 주장 1문장",
+  "speaker": "발언자 이름 (자막에서 추정, 모르면 '발언자 미확인')",
+  "video_title": "영상 제목 추정 또는 빈 문자열",
   "quotes": [
     {
-      "text": "발언 원문 (80자 이내)",
+      "text": "발언 원문 그대로 (80자 이내)",
       "timestamp_sec": 734,
       "timestamp": "12:14",
       "topic_tag": "macro|crypto|policy|semi|geo|real_estate|equity",
       "importance_score": 0-100,
-      "context_before": "앞 맥락 1-2문장",
-      "context_after": "뒤 맥락 1-2문장",
+      "context_before": "이 발언이 나온 앞 맥락 3~5문장",
+      "context_after": "이 발언 이후 전개 3~5문장",
+      "why_important": "이 발언이 핵심 논지와 어떻게 연결되는가 1문장",
       "has_number": true,
       "has_prediction": true,
       "is_contrarian": false,
@@ -335,17 +370,15 @@ async def extract_quotes(
     snippets: list[dict],
     video_meta: dict,
 ) -> list[YoutubeQuote]:
-    """Gemini 로 발언 단위 추출 + 스코어링."""
+    """Gemini 로 발언 단위 추출 + 스코어링. 전체 자막 사용."""
     if not snippets:
         return []
     api_key = settings.gemini_api_key
     if not api_key:
         return []
 
-    transcript_text = "\n".join(
-        f"[{int(s['start']//60):02d}:{int(s['start']%60):02d}] {s['text']}"
-        for s in snippets
-    )[:4000]
+    # 전체 자막 (길이 제한 없음) — 2-step 프롬프트가 영상 전체 논지 파악 요구
+    transcript_text = _format_full_transcript(snippets)
 
     payload = {
         "systemInstruction": {"parts": [{"text": EXTRACTION_PROMPT}]},
@@ -353,14 +386,14 @@ async def extract_quotes(
             "parts": [{
                 "text": (
                     f"채널: {video_meta.get('channel', '알 수 없음')}\n"
-                    f"영상: {video_meta.get('title', '')}\n\n"
-                    f"자막:\n{transcript_text}"
+                    f"영상 URL: {video_meta.get('url', '')}\n\n"
+                    f"전체 자막:\n{transcript_text}"
                 ),
             }],
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 3000,
+            "maxOutputTokens": 4000,
             "responseMimeType": "application/json",
         },
     }
@@ -389,13 +422,25 @@ async def extract_quotes(
     video_id = video_meta.get("video_id", "")
     channel  = video_meta.get("channel", "알 수 없음")
 
+    # Step 1 결과 — 영상 전체 논지
+    video_summary = str(data.get("video_summary", "") or "")
+    main_argument = str(data.get("main_argument", "") or "")
+    if main_argument:
+        logger.info(f"[YT] 영상 논지: {main_argument}")
+    if video_summary:
+        logger.info(f"[YT] 요약: {video_summary[:100]}")
+
+    # 발언자 처리 — 빈 값이면 '발언자 미확인'
+    speaker_raw = str(data.get("speaker", "") or "").strip()
+    if not speaker_raw or speaker_raw in ("알 수 없음", "Unknown", "unknown"):
+        speaker_raw = "발언자 미확인"
+
     raw_quotes = data.get("quotes", []) or []
     logger.info(
         f"[YT] Gemini 반환 quotes={len(raw_quotes)}개 "
         f"(score: {[int(q.get('importance_score', 0) or 0) for q in raw_quotes]}, "
         f"risky: {[bool(q.get('is_risky')) for q in raw_quotes]})"
     )
-    # is_risky=true 발언은 어떤 내용인지 요약 로그 (스팸/위험 판단 감사용)
     for q in raw_quotes:
         if q.get("is_risky"):
             logger.info(
@@ -408,16 +453,20 @@ async def extract_quotes(
         if q.get("is_risky"):
             drop_risky += 1
             continue
-        if int(q.get("importance_score", 0) or 0) < 50:
+        if int(q.get("importance_score", 0) or 0) < 55:
             drop_score += 1
             continue
         if RISK_KW.search(q.get("text", "") or ""):
             drop_riskkw += 1
             continue
         ts = int(q.get("timestamp_sec", 0) or 0)
+        ctx_before = str(q.get("context_before", "") or "")
+        # 영상 전체 논지를 앞 맥락에 주입 — DraftWriter 가 서사 뼈대로 활용
+        if main_argument:
+            ctx_before = f"[영상 핵심 논지] {main_argument}\n\n{ctx_before}".strip()
         quotes.append(YoutubeQuote(
             text=str(q.get("text", "") or ""),
-            speaker=str(data.get("speaker", channel) or channel),
+            speaker=speaker_raw,
             channel=channel,
             video_id=video_id,
             video_title=str(data.get("video_title", "") or ""),
@@ -425,7 +474,7 @@ async def extract_quotes(
             timestamp_sec=ts,
             topic_tag=str(q.get("topic_tag", "macro") or "macro"),
             importance_score=int(q.get("importance_score", 60) or 60),
-            context_before=str(q.get("context_before", "") or ""),
+            context_before=ctx_before,
             context_after=str(q.get("context_after", "") or ""),
             url=f"https://youtu.be/{video_id}?t={ts}",
             is_risky=False,
@@ -434,7 +483,7 @@ async def extract_quotes(
     quotes = _dedup_quotes(quotes)
     logger.info(
         f"[YT] 발언 추출 완료: {len(quotes)}개 "
-        f"(drop risky={drop_risky}, score<50={drop_score}, riskkw={drop_riskkw})"
+        f"(drop risky={drop_risky}, score<55={drop_score}, riskkw={drop_riskkw})"
     )
     return quotes
 
@@ -586,6 +635,15 @@ async def process_youtube_url(
     snippets = await fetch_transcript(video_id)
     if not snippets:
         logger.warning(f"[YT] 자막 추출 실패: {video_id}")
+        return []
+    total = len(snippets)
+    snippets = _filter_intro(snippets)
+    logger.info(
+        f"[YT] 인트로(3분 이내) 제외: {total - len(snippets)}건 drop, "
+        f"{len(snippets)}건 유지"
+    )
+    if not snippets:
+        logger.warning(f"[YT] 인트로 제외 후 남은 자막 없음: {video_id}")
         return []
     quotes = await extract_quotes(snippets, video_meta)
     if quotes:
