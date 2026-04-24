@@ -277,11 +277,15 @@ class Orchestrator:
 
         src = transcript.to_pipeline_input()
         try:
+            # source_type="manual" — 사용자가 직접 URL 을 입력한 수동 트리거.
+            # "youtube" 로 지정하면 Lane early-return 이 자동수집으로 오인해
+            # AI 파이프라인을 건너뛰므로 "manual" 로 강제.
+            # (유튜브 출처 정보는 title prefix + body 헤더에 이미 포함됨)
             data = SourceItemCreate(
                 title=src["title"],
                 url=src["url"],
                 source_text=src["body"],
-                source_type="youtube",
+                source_type="manual",
                 language="ko",
             )
         except Exception as e:
