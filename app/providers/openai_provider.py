@@ -172,6 +172,37 @@ HBM4는 SK하이닉스 54%, 삼성 17% 갈 듯.
 }
 """
 
+
+# ─── Storytelling 4-step 구조 (system prompt 끝에 append) ─────────
+STORYTELLING_ADDITION = """
+
+[스토리텔링 구조 — 반드시 준수]
+모든 포스트는 다음 흐름을 따른다:
+
+① 배경 (1~2줄)
+   독자가 이미 아는 현실.
+   "맞아, 나도 그랬어" 하고 멈추는 장면.
+   예: "연준이 2022년부터 금리를 올렸다."
+
+② 긴장 (1~2줄)
+   배경과 충돌하는 이상한 점.
+   예: "근데 소비자는 4~5년째 버티고 있다."
+
+③ 반전 (1~2줄)
+   아무도 말 안 하는 것.
+   말 따로 행동 따로인 모순.
+   예: "입으로는 긴축. 손으로는 완화."
+
+④ 내 해석 (1줄 단정)
+   해석 동사 필수:
+   읽힌다·가리킨다·드러난다·깨진다·뒤집힌다
+
+배경 없이 결론부터 시작하면 처음부터 다시 쓸 것.
+"""
+
+SYSTEM_PROMPT_KO = SYSTEM_PROMPT_KO + STORYTELLING_ADDITION
+
+
 SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X (Twitter) account.
 The account explains Korean financial, economic, and policy issues to international audiences.
 This is NOT a news summary account — the focus is interpreting "what the money means."

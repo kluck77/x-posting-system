@@ -513,4 +513,18 @@ def build_editorial_meta(
     except Exception as e:
         logger.warning(f"[editorial_meta] salvageability 실패: {e}")
 
+    # 영어 누출 차단 — handoff 사용자 노출 필드 한국어 강제 (fail-open)
+    try:
+        from app.services.angle_pack import _ensure_korean
+        if out.get("editorial_goal"):
+            out["editorial_goal"] = _ensure_korean(out["editorial_goal"])
+        if out.get("hidden_variable"):
+            out["hidden_variable"] = _ensure_korean(out["hidden_variable"])
+        if out.get("stake_sentence"):
+            out["stake_sentence"] = _ensure_korean(out["stake_sentence"])
+        if out.get("stop_scroll_line"):
+            out["stop_scroll_line"] = _ensure_korean(out["stop_scroll_line"])
+    except Exception as e:
+        logger.warning(f"[editorial_meta] 한국어 강제 실패 (무시): {e}")
+
     return out
