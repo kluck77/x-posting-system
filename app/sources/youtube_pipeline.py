@@ -149,7 +149,7 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 "https://generativelanguage.googleapis.com/v1beta/"
-                f"models/gemini-2.5-flash-preview:generateContent?key={api_key}",
+                f"models/gemini-2.5-flash:generateContent?key={api_key}",
                 json=payload,
             )
             resp.raise_for_status()
@@ -240,7 +240,7 @@ async def extract_quotes(
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 "https://generativelanguage.googleapis.com/v1beta/"
-                f"models/gemini-2.5-flash-preview:generateContent?key={api_key}",
+                f"models/gemini-2.5-flash:generateContent?key={api_key}",
                 json=payload,
             )
             resp.raise_for_status()
