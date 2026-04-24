@@ -254,8 +254,14 @@ def _filter_intro_adaptive(
 
 
 # ─── 자막 추출 ───────────────────────────────────────────────────────
-async def fetch_full_transcript(video_id: str) -> list[dict]:
-    """1차 youtube-transcript-api → 실패 시 2차 Gemini fallback."""
+async def fetch_full_transcript(video_id: str) -> tuple[list[dict], int]:
+    """1차 youtube-transcript-api → 실패 시 2차 Gemini fallback.
+
+    반환: (snippets, duration_sec).
+      - duration_sec = 0 이면 추정 불가 (호출자가 fallback 로직으로 추정).
+      - youtube-transcript-api 는 duration 미제공 → 마지막 snippet 기준 추정.
+      - Gemini fallback 은 영상 메타의 실제 duration_sec 반환.
+    """
     try:
         from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore
         ytt = YouTubeTranscriptApi()
@@ -269,30 +275,52 @@ async def fetch_full_transcript(video_id: str) -> list[dict]:
             for s in fetched
         ]
         logger.info(f"[YT] 자막 추출 성공: {len(snippets)}개 스니펫")
-        return snippets
+        # duration_sec 추정: 마지막 snippet.start + duration
+        if snippets:
+            last = max(snippets, key=lambda s: s.get("start", 0) or 0)
+            estimated = int(
+                (last.get("start", 0) or 0) + (last.get("duration", 30) or 30)
+            )
+        else:
+            estimated = 0
+        return snippets, estimated
     except Exception as e:
         logger.warning(f"[YT] youtube-transcript-api 실패: {e}")
 
-    return await _gemini_transcript_fallback(video_id)
+    result = await _gemini_transcript_fallback(video_id)
+    if isinstance(result, dict):
+        return result.get("snippets", []), int(result.get("duration_sec", 0) or 0)
+    # 구버전 호환 (리스트 반환 경로) — 사실상 미도달
+    return (result or []), 0
 
 
-async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
-    """Gemini 2.5 Flash file_data fallback — 영상 전체 균등 커버 요구."""
+async def _gemini_transcript_fallback(video_id: str) -> dict:
+    """Gemini 2.5 Flash file_data fallback — 영상 전체 균등 커버 요구.
+
+    반환: {"snippets": [...], "duration_sec": int}. 실패 시 {"snippets": [], "duration_sec": 0}.
+    """
+    empty = {"snippets": [], "duration_sec": 0}
     api_key = settings.gemini_api_key
     if not api_key:
-        return []
+        return empty
     url = f"https://www.youtube.com/watch?v={video_id}"
     prompt = (
-        "이 유튜브 영상의 자막을 타임스탬프(초) 단위로 추출하세요.\n"
+        "이 유튜브 영상의 자막을 추출하세요.\n"
         "\n"
-        "필수 준수 사항:\n"
-        "1. 영상 전체에 걸쳐 균등하게 분포된 최소 20개 이상의 스니펫 추출\n"
-        "2. 앞부분·중간·후반부 골고루 포함 (첫 3분 편중 금지)\n"
-        "3. 각 항목의 'start' 는 정수초 (다양한 구간에서)\n"
-        "4. 최대 200개까지\n"
+        "규칙:\n"
+        "1. 영상 전체에 골고루 분포된 최소 30개 이상 스니펫\n"
+        "2. 각 스니펫은 완전한 문장 1~3개 포함 (50자 이상)\n"
+        "3. 앞부분·중간·후반부 균등하게 포함\n"
+        "4. 영상 실제 총 길이(초, duration_sec)도 반환\n"
         "\n"
-        "JSON 배열로만 반환 (설명·코멘트 금지):\n"
-        '[{"start": 정수초, "text": "발언 내용"}, ...]'
+        "JSON만 반환 (다른 텍스트 절대 금지):\n"
+        "{\n"
+        '  "duration_sec": 1020,\n'
+        '  "snippets": [\n'
+        '    {"start": 15, "text": "완전한 문장으로 된 발언 내용"},\n'
+        '    {"start": 120, "text": "완전한 문장으로 된 발언 내용"}\n'
+        "  ]\n"
+        "}"
     )
     payload = {
         "contents": [{
@@ -303,7 +331,7 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 8000,
+            "maxOutputTokens": 15000,
             "responseMimeType": "application/json",
         },
     }
@@ -320,7 +348,7 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                     f"[YT] Gemini fallback HTTP {resp.status_code}: "
                     f"{resp.text[:500]}"
                 )
-                return []
+                return empty
             body = resp.json()
             try:
                 text = body["candidates"][0]["content"]["parts"][0]["text"]
@@ -329,33 +357,49 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                     f"[YT] Gemini fallback 응답 구조 이상 ({type(ke).__name__}): "
                     f"{json.dumps(body)[:500]}"
                 )
-                return []
+                return empty
             text = text.strip().strip("```json").strip("```").strip()
-            data = _loose_json_array(text)
-            if data is None:
+
+            # 신 스키마: {duration_sec, snippets}. 구 스키마: [...] 배열.
+            parsed = _loose_json_object(text)
+            if parsed is not None and isinstance(parsed, dict):
+                duration_sec = int(parsed.get("duration_sec", 0) or 0)
+                snippets_raw = parsed.get("snippets", []) or []
+            else:
+                arr = _loose_json_array(text)
+                if arr is None:
+                    logger.warning(
+                        f"[YT] Gemini fallback JSON 파싱 실패 — 원문 앞 500자: "
+                        f"{text[:500]!r}"
+                    )
+                    return empty
+                duration_sec = 0
+                snippets_raw = arr
+
+            if len(snippets_raw) < 20:
                 logger.warning(
-                    f"[YT] Gemini fallback JSON 파싱 실패 — 원문 앞 500자: "
-                    f"{text[:500]!r}"
+                    f"[YT] Gemini fallback {len(snippets_raw)}개 (권장 30+)"
                 )
-                return []
-            if len(data) < 20:
-                logger.warning(
-                    f"[YT] Gemini fallback 스니펫 {len(data)}개 (권장 20+)"
-                )
-            logger.info(f"[YT] Gemini fallback 성공: {len(data)}개")
-            return [
-                {
-                    "start":    float(d.get("start", 0) or 0),
-                    "duration": 3.0,
-                    "text":     str(d.get("text", "") or ""),
-                }
-                for d in (data or [])
-            ]
+            logger.info(
+                f"[YT] Gemini fallback 성공: {len(snippets_raw)}개 "
+                f"duration={duration_sec}초"
+            )
+            return {
+                "snippets": [
+                    {
+                        "start":    float(d.get("start", 0) or 0),
+                        "duration": 3.0,
+                        "text":     str(d.get("text", "") or ""),
+                    }
+                    for d in snippets_raw
+                ],
+                "duration_sec": duration_sec,
+            }
     except Exception as e:
         logger.warning(
             f"[YT] Gemini fallback 실패 ({type(e).__name__}): {e!r}"
         )
-        return []
+        return empty
 
 
 # ─── Gemini 핵심 논지 요약 (Perplexity/Grok 용) ─────────────────────
@@ -382,12 +426,12 @@ async def summarize_for_downstream(
     payload = {
         "contents": [{
             "parts": [
-                {"text": f"{prompt}\n\n자막:\n{full_text[:8000]}"}
+                {"text": f"{prompt}\n\n자막:\n{full_text[:12000]}"}
             ],
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 1500,
+            "maxOutputTokens": 2000,
         },
     }
     try:
@@ -514,7 +558,7 @@ async def process_youtube_url(
         logger.warning(f"[YT] 유효하지 않은 URL: {url}")
         return None
 
-    snippets = await fetch_full_transcript(video_id)
+    snippets, duration_sec = await fetch_full_transcript(video_id)
     if not snippets:
         logger.warning(f"[YT] 자막 추출 실패: {video_id}")
         return None
@@ -525,10 +569,18 @@ async def process_youtube_url(
         return None
 
     full_text = _snippets_to_text(filtered)
-    duration_min = 0
-    if snippets:
-        last_start = max(float(s.get("start", 0) or 0) for s in snippets)
-        duration_min = int(last_start / 60)
+
+    # duration_min — Gemini 가 반환한 실제 영상 길이 우선, 없으면 마지막 snippet 기준 추정
+    if duration_sec > 0:
+        duration_min = int(duration_sec / 60)
+    elif snippets:
+        last = max(snippets, key=lambda s: s.get("start", 0) or 0)
+        estimated_sec = int(
+            (last.get("start", 0) or 0) + (last.get("duration", 30) or 30)
+        )
+        duration_min = int(estimated_sec / 60)
+    else:
+        duration_min = 0
 
     summary = await summarize_for_downstream(
         full_text, channel_name or "알 수 없음"
