@@ -74,6 +74,52 @@ from app.sources.polymarket_fetcher import (
 logger = logging.getLogger(__name__)
 
 
+# ─── 재료 품질 차단 캐시 ─────────────────────────────────────────────
+# ingest_and_generate 에서 BLOCK_RECOMMENDED 감지 시 draft_id → quality dict 기록.
+# send_for_approval 가드에서 참조해서 승인 카드 전송 차단.
+# 최근 200 건만 유지 (LRU 대용 간이).
+_BLOCK_RECOMMENDED_CACHE: dict[int, dict] = {}
+
+
+def _mark_block_recommended(draft_id: int, quality: dict) -> None:
+    if len(_BLOCK_RECOMMENDED_CACHE) >= 200:
+        try:
+            oldest = next(iter(_BLOCK_RECOMMENDED_CACHE))
+            _BLOCK_RECOMMENDED_CACHE.pop(oldest, None)
+        except Exception:
+            _BLOCK_RECOMMENDED_CACHE.clear()
+    _BLOCK_RECOMMENDED_CACHE[draft_id] = quality
+
+
+def _get_block_recommended(draft_id: int) -> dict | None:
+    return _BLOCK_RECOMMENDED_CACHE.get(draft_id)
+
+
+async def _send_admin_warning(
+    chat_id: int | str | None, text: str,
+) -> None:
+    """승인 카드 차단 시 운영자에게 간이 경고 메시지 — Telegram Bot API 직접 호출.
+
+    chat_id / telegram_bot_token 없으면 로그만 남기고 fail-open.
+    """
+    try:
+        from app.config import settings as _s
+        token = getattr(_s, "telegram_bot_token", "") or ""
+        target = chat_id or getattr(_s, "telegram_chat_id", "")
+        if not token or not target:
+            logger.warning(f"[send-guard] 경고 전송 skip (설정 없음): {text[:80]}")
+            return
+        import httpx
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                url,
+                json={"chat_id": target, "text": text, "parse_mode": "HTML"},
+            )
+    except Exception as e:
+        logger.warning(f"[send-guard] 경고 전송 실패 (무시): {e}")
+
+
 # =============================================================================
 # Layer 2 헬퍼 — criteria 신호 → 프롬프트 컨텍스트 빌더
 # =============================================================================
@@ -625,6 +671,25 @@ class Orchestrator:
                     f"spine={'/'.join(str(p) for p in (_angle_pack.get('story_spine') or [])[:5])} "
                     f"risk={_angle_pack.get('readability_risk', '?')}"
                 )
+
+                # 재료 품질 게이트 — BLOCK_RECOMMENDED 감지 시 후단 차단 플래그 기록.
+                # 실제 차단은 send_for_approval 의 block_recommended 가드에서 수행.
+                try:
+                    from app.services.handoff_quality_guard import run_quality_guard
+                    _guard_input = dict(_source_pack)
+                    _guard_input["angle_pack"] = _angle_pack
+                    _quality = run_quality_guard(_guard_input)
+                    pack_chain_data["quality_guard"] = _quality
+                    if _quality.get("block_recommended"):
+                        logger.warning(
+                            f"[pack_chain] BLOCK_RECOMMENDED — HIGH "
+                            f"{_quality.get('high_count', 0)}개 감지. "
+                            f"승인 카드 전송 차단 대상."
+                        )
+                except Exception as _qg_e:
+                    logger.warning(
+                        f"[pack_chain] quality_guard 실패 (무시): {_qg_e}"
+                    )
             except Exception as _pc_e:
                 logger.warning(
                     f"[PACK_CHAIN_FALLBACK] {type(_pc_e).__name__}: {_pc_e}"
@@ -1362,6 +1427,18 @@ class Orchestrator:
             resonance_fallback_used=_resonance_fallback_used,
         )
 
+        # BLOCK_RECOMMENDED 감지 시 draft_id 기반 캐시 기록 (send_for_approval 차단용)
+        try:
+            _q = pack_chain_data.get("quality_guard") if pack_chain_data else None
+            if _q and _q.get("block_recommended"):
+                _mark_block_recommended(draft.id, _q)
+                logger.warning(
+                    f"[block-guard] draft_id={draft.id} BLOCK_RECOMMENDED — "
+                    f"HIGH={_q.get('high_count', 0)}개 (승인 카드 차단 예정)"
+                )
+        except Exception as _bg_e:
+            logger.debug(f"[block-guard] mark 실패 (무시): {_bg_e}")
+
         # 커뮤니티 경고 저장
         if community_warning:
             draft.community_warning = community_warning
@@ -1578,6 +1655,25 @@ class Orchestrator:
                 f"[send-guard] Resonance fallback 초안 텔레그램 전송 차단: "
                 f"draft_id={draft_id} "
                 f"meta_flag={bool(getattr(draft, 'resonance_fallback_used', False))}"
+            )
+            return False
+
+        # 재료 품질 BLOCK_RECOMMENDED 감지 시 전송 차단 + 운영자 경고
+        _quality = _get_block_recommended(draft_id)
+        if _quality and _quality.get("block_recommended"):
+            high_count = _quality.get("high_count", 0)
+            logger.warning(
+                f"[send-guard] BLOCK_RECOMMENDED — draft_id={draft_id} "
+                f"HIGH={high_count}개 → 승인 카드 차단"
+            )
+            # 운영자에게 간이 경고 메시지 (승인 카드는 안 보냄)
+            await _send_admin_warning(
+                chat_id,
+                (
+                    f"⚠️ <b>재료 품질 부족</b> (draft #{draft_id})\n"
+                    f"HIGH 경고 {high_count}개 감지 — 파이프라인 재실행 필요.\n"
+                    f"승인 카드는 전송되지 않았습니다."
+                ),
             )
             return False
 

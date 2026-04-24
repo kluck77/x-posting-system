@@ -148,13 +148,34 @@ def _pick_concept_translation(research) -> str:
     return ""
 
 
+_EVIDENCE_MAX_ITEM_CHAR = 100   # handoff key_evidence 각 항목 최대 100자
+_TRANSCRIPT_DUMP_MIN_LEN = 180  # 180자 초과 원문 덩어리는 자막 복붙 의심
+
+
+def _is_transcript_dump(text: str) -> bool:
+    """자막 원문 덩어리 여부 감지 — 타임스탬프 다수 또는 180자 초과 연속 문장."""
+    if not text:
+        return False
+    from app.services.angle_pack import _YT_TS_BRACKET, _YT_TS_LINE_HEAD, _YT_TS_INLINE
+    ts_count = (
+        len(_YT_TS_BRACKET.findall(text))
+        + len(_YT_TS_LINE_HEAD.findall(text))
+        + len(_YT_TS_INLINE.findall(text))
+    )
+    if ts_count >= 2:
+        return True
+    return len(text) > _TRANSCRIPT_DUMP_MIN_LEN
+
+
 def _build_evidence_pack(research, factcheck) -> list[str]:
     """숫자/기관명/실명/quote 후보 최대 5개. 원문 문자열만 통과.
 
-    각 항목은 HTML/URL/뉴스 파싱 잔재 클렌징 후 담긴다. 클렌징 후 10자
-    미만이면 드랍 — 유효 근거만 유지.
+    각 항목은:
+      1. HTML/URL/뉴스 파싱/유튜브 타임스탬프 클렌징
+      2. 자막 원문 덩어리 (타임스탬프 다수 또는 180자 초과) 차단
+      3. 각 항목 100자 캡
+      4. 숫자·기관명·인용부호 중 하나 있어야 통과
     """
-    # 내부 import (순환 의존 회피)
     try:
         from app.services.angle_pack import _clean_text_field
     except Exception:
@@ -177,7 +198,9 @@ def _build_evidence_pack(research, factcheck) -> list[str]:
         s = str(raw).strip()
         if not s:
             continue
-        # HTML/URL/nav 잔재 제거 후 재검증
+        # 자막 원문 덩어리 차단 (타임스탬프 다수 또는 너무 긴 문장)
+        if _is_transcript_dump(s):
+            continue
         cleaned = _clean_text_field(s) or ""
         if not cleaned or cleaned in seen:
             continue
@@ -186,8 +209,10 @@ def _build_evidence_pack(research, factcheck) -> list[str]:
         has_quote = bool(_QUOTE_RE.search(cleaned))
         if not (has_num or has_org or has_quote):
             continue
+        # 각 항목 100자 캡 (한 줄 근거 원칙)
+        cleaned = cleaned[:_EVIDENCE_MAX_ITEM_CHAR].rstrip()
         seen.add(cleaned)
-        out.append(cleaned[:_EVIDENCE_ITEM_LEN])
+        out.append(cleaned)
         if len(out) >= _EVIDENCE_MAX:
             break
     return out

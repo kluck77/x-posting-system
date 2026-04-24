@@ -60,9 +60,14 @@ _NAV_JUNK_PATTERNS = [
     re.compile(r"공유하기\s*트위터\s*페이스북"),
 ]
 
+# 유튜브 자막 타임스탬프 패턴 — 3종 (bracket / 줄시작 / inline)
+_YT_TS_BRACKET   = re.compile(r"\[\d{1,2}:\d{2}(?::\d{2})?\]")
+_YT_TS_LINE_HEAD = re.compile(r"(?:^|\n)\s*\d{1,2}:\d{2}(?::\d{2})?\s+")
+_YT_TS_INLINE    = re.compile(r"(?<![\w가-힣])\d{1,2}:\d{2}(?::\d{2})?(?![\w가-힣])")
+
 
 def _clean_text_field(text: str) -> str:
-    """핸드오프 텍스트 필드 클렌징 — HTML/URL/뉴스 파싱 잔재 제거.
+    """핸드오프 텍스트 필드 클렌징 — HTML/URL/뉴스 파싱/유튜브 타임스탬프 제거.
 
     반환: 클렌징된 문자열. 클렌징 후 10자 미만이면 빈 문자열.
     """
@@ -75,6 +80,10 @@ def _clean_text_field(text: str) -> str:
     s = re.sub(r"&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);", "", s)
     # URL
     s = re.sub(r"https?://\S+", "", s)
+    # 유튜브 자막 타임스탬프 (3 가지 형태)
+    s = _YT_TS_BRACKET.sub(" ", s)
+    s = _YT_TS_LINE_HEAD.sub(" ", s)
+    s = _YT_TS_INLINE.sub(" ", s)
     # 뉴스 파싱 잔재
     for pat in _NAV_JUNK_PATTERNS:
         s = pat.sub(" ", s)
@@ -95,11 +104,40 @@ def _korean_dominant(text: str) -> bool:
     return ko >= en  # 한국어 동률 이상이면 통과
 
 
+# 의미없이 단독 노출되는 enum 류 단어 (이런 게 필드 단독으로 남으면 제거)
+_MEANINGLESS_STANDALONE = {
+    "global", "regional", "local", "high", "medium", "low",
+    "unclear", "unknown", "none", "n/a", "na",
+}
+
+
+def _is_meaningless_standalone(text: str) -> bool:
+    """'global', 'high' 등 enum 값만 단독 노출된 경우 True.
+
+    필드에 완전한 문장이 아닌 enum 류 단어 하나만 담긴 경우는
+    의미 전달이 안 되므로 drop 대상.
+    """
+    if not text:
+        return False
+    s = str(text).strip().strip('"\'.').lower()
+    if s in _MEANINGLESS_STANDALONE:
+        return True
+    # 10자 미만 한 토큰 영단어 → 의미 불충분
+    if len(s) < 15 and len(s.split()) <= 2 and not any(
+        c in s for c in "가나다라마바사아자차카타파하"
+    ):
+        # 영어 한두 단어만 있고 한글 0자 → 공허
+        if _EN_ALPHA_RE.search(s) and not _KO_CHAR_RE.search(s):
+            return True
+    return False
+
+
 def _ensure_korean(text: str, *, max_chars: int = 200) -> str:
     """HTML/URL 잔재 제거 → 영어 비율 50%+ 이면 Haiku 번역.
 
     실패/키 없음 → 클렌징된 원문 유지.
     handoff angle_pack / editorial_meta 영어·파싱 잔재 누출 차단.
+    단독 enum 류 단어 ('global', 'high' 등) 는 drop.
     """
     if not text:
         return text
@@ -107,10 +145,13 @@ def _ensure_korean(text: str, *, max_chars: int = 200) -> str:
     cleaned = _clean_text_field(text)
     if not cleaned:
         return ""
-    # 2. 한국어 지배적이면 그대로
+    # 2. 의미없는 enum 단독 단어 차단
+    if _is_meaningless_standalone(cleaned):
+        return ""
+    # 3. 한국어 지배적이면 그대로
     if _korean_dominant(cleaned):
         return cleaned
-    # 3. 영어 dominant → Haiku 번역 (실패 시 clean 원문)
+    # 4. 영어 dominant → Haiku 번역 (실패 시 clean 원문)
     api_key = getattr(settings, "anthropic_api_key", "")
     if not api_key:
         return cleaned
