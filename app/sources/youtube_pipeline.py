@@ -148,8 +148,18 @@ def _format_full_transcript(snippets: list[dict]) -> str:
 
 
 def _filter_intro(snippets: list[dict]) -> list[dict]:
-    """첫 180초(3분) 스니펫 제외 — 인트로·티저 차단."""
-    return [s for s in snippets if float(s.get("start", 0) or 0) >= 180]
+    """첫 180초(3분) 스니펫 제외 — 인트로·티저 차단.
+
+    적응형: 필터 적용 후 너무 적게 남으면 원본 유지 (짧은 영상 / 앞부분
+    편중된 Gemini fallback 대응).
+    """
+    if not snippets:
+        return snippets
+    filtered = [s for s in snippets if float(s.get("start", 0) or 0) >= 180]
+    # 필터 후 5건 이상 남으면 적용. 아니면 원본 유지.
+    if len(filtered) >= 5:
+        return filtered
+    return snippets
 
 
 @dataclass
@@ -241,10 +251,16 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
         return []
     url = f"https://www.youtube.com/watch?v={video_id}"
     prompt = (
-        "이 유튜브 영상의 자막을 타임스탬프(초) 단위로 추출해 "
-        "JSON 배열로만 반환 (설명·코멘트 금지): "
-        '[{"start": 정수초, "text": "한 문장"}, ...]. '
-        "최대 200개 항목까지. 발언 전체가 아닌 주요 문장만 남겨도 됨."
+        "이 유튜브 영상의 자막을 타임스탬프(초) 단위로 추출하세요.\n"
+        "\n"
+        "필수 준수 사항:\n"
+        "1. 영상 전체를 균등하게 커버 — 처음·중간·끝 모두 반드시 포함\n"
+        "2. 인트로 3분 이후 구간이 전체의 70% 이상을 차지해야 함\n"
+        "3. 최소 20개 이상, 최대 200개 항목\n"
+        "4. 각 항목의 'start' 는 정수초 (영상 첫 부분에 편중 금지)\n"
+        "\n"
+        "JSON 배열로만 반환 (설명·코멘트 금지):\n"
+        '[{"start": 정수초, "text": "한 문장"}, ...]'
     )
     payload = {
         "contents": [{
