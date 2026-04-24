@@ -322,7 +322,9 @@ async def _handle_youtube_url(
 ):
     """유튜브 URL 수신 → 자막/발언 추출 → 발언 카드 N개 송출."""
     processing_msg = await update.message.reply_text(
-        "⏳ 자막 추출 중... (10~30초 소요)"
+        "⏳ 자막/발언 추출 중... (영상 길이에 따라 1~5분 소요)\n"
+        "• 1차: youtube-transcript-api\n"
+        "• 2차: Gemini 영상 분석 (느림)"
     )
     try:
         from app.sources.youtube_pipeline import process_youtube_url

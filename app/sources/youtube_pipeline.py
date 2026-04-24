@@ -133,8 +133,10 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
         return []
     url = f"https://www.youtube.com/watch?v={video_id}"
     prompt = (
-        "이 유튜브 영상의 주요 발언을 타임스탬프(초)와 함께 추출해 "
-        'JSON 배열로만 반환: [{"start": 초, "text": "발언 내용"}, ...]'
+        "이 유튜브 영상의 자막을 타임스탬프(초) 단위로 추출해 "
+        "JSON 배열로만 반환 (설명·코멘트 금지): "
+        '[{"start": 정수초, "text": "한 문장"}, ...]. '
+        "최대 200개 항목까지. 발언 전체가 아닌 주요 문장만 남겨도 됨."
     )
     payload = {
         "contents": [{
@@ -143,10 +145,10 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                 {"file_data": {"mime_type": "video/youtube", "file_uri": url}},
             ],
         }],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 8000},
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 6000},
     }
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(
                 "https://generativelanguage.googleapis.com/v1beta/"
                 f"models/gemini-2.5-flash:generateContent?key={api_key}",
@@ -252,7 +254,7 @@ async def extract_quotes(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 "https://generativelanguage.googleapis.com/v1beta/"
                 f"models/gemini-2.5-flash:generateContent?key={api_key}",
