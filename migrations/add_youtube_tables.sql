@@ -1,8 +1,10 @@
--- Phase youtube: yt_quotes (v1 레거시) + yt_transcripts (v2 현행)
--- 두 테이블 모두 모듈 내부 IF NOT EXISTS 로 자동 생성되며
--- 본 SQL 은 수동 적용용 참조.
+-- Phase youtube — 3 세대 테이블 (모든 버전 호환)
+--   v1 yt_quotes      : 발언 단위 (레거시 호환)
+--   v2 yt_transcripts : 영상 단위 전체 자막 (레거시 호환)
+--   v3 yt_analyses    : Gemini 직접 분석 결과 (현행)
+-- 모두 모듈 내부 IF NOT EXISTS 로 자동 생성. 본 SQL 은 수동 적용용 참조.
 
--- v1: yt_quotes (발언 단위 — 레거시 호환용)
+-- v1: yt_quotes (발언 단위)
 CREATE TABLE IF NOT EXISTS yt_quotes (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     quote_hash        TEXT UNIQUE,
@@ -29,7 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_yt_used
     ON yt_quotes(used, importance_score DESC);
 
 
--- v2: yt_transcripts (영상 단위 전체 자막 — 현행)
+-- v2: yt_transcripts (영상 단위 전체 자막)
 CREATE TABLE IF NOT EXISTS yt_transcripts (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     video_id       TEXT UNIQUE,
@@ -45,3 +47,23 @@ CREATE TABLE IF NOT EXISTS yt_transcripts (
 
 CREATE INDEX IF NOT EXISTS idx_yt_transcripts_video_id
     ON yt_transcripts(video_id);
+
+
+-- v3: yt_analyses (Gemini 직접 분석 결과 — 현행)
+CREATE TABLE IF NOT EXISTS yt_analyses (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id            TEXT UNIQUE,
+    url                 TEXT,
+    channel             TEXT,
+    speaker             TEXT,
+    video_summary       TEXT,
+    main_argument       TEXT,
+    full_analysis       TEXT,
+    downstream_summary  TEXT,
+    duration_min        INTEGER,
+    analyzed_at         REAL,
+    used                INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_yt_analyses_video
+    ON yt_analyses(video_id, analyzed_at DESC);

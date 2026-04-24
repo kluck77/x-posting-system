@@ -293,7 +293,7 @@ async def _run_analysis_and_show_card(
 
 
 # =============================================================================
-# 유튜브 전체 자막 카드 플로우 (v2)
+# 유튜브 Gemini 직접 분석 카드 플로우 (v3)
 # =============================================================================
 
 async def _handle_youtube_url(
@@ -301,78 +301,76 @@ async def _handle_youtube_url(
     context: ContextTypes.DEFAULT_TYPE,
     url: str,
 ):
-    """유튜브 URL 수신 → 전체 자막 + 요약 추출 → 분석 카드 1장 송출."""
+    """유튜브 URL 수신 → Gemini 직접 영상 분석 → 분석 카드 1장."""
     processing_msg = await update.message.reply_text(
-        "⏳ 자막 + 요약 추출 중... (영상 길이에 따라 1~5분 소요)\n"
-        "• 1차: youtube-transcript-api\n"
-        "• 2차: Gemini 영상 분석 (느림)"
+        "⏳ Gemini 영상 분석 중... (30초~2분 소요)"
     )
     try:
         from app.sources.youtube_pipeline import process_youtube_url
-        transcript = await process_youtube_url(url)
+        analysis = await process_youtube_url(url)
     except Exception as e:
-        logger.error(f"[YT handler] 추출 실패: {e}", exc_info=True)
+        logger.error(f"[YT handler] 분석 실패: {e}", exc_info=True)
         try:
             await processing_msg.edit_text(
-                f"❌ 유튜브 처리 실패: {_safe_error_msg(e)}"
+                f"❌ 유튜브 분석 실패: {_safe_error_msg(e)}"
             )
         except Exception:
             pass
         return
 
-    if not transcript:
+    if not analysis:
         try:
             await processing_msg.edit_text(
-                "⚠️ 자막을 추출하지 못했습니다.\n"
-                "자막이 없거나 접근이 차단되었을 수 있습니다."
+                "⚠️ 영상 분석 실패.\n"
+                "자막이 없거나 접근 불가한 영상입니다."
             )
         except Exception:
             pass
         return
 
     try:
-        await processing_msg.edit_text(
-            f"✅ 자막 추출 완료 — 요약 카드 전송"
-        )
+        await processing_msg.edit_text("✅ 분석 완료!")
     except Exception:
         pass
 
     try:
-        await _send_transcript_card(update, context, transcript)
+        await _send_analysis_card(update, context, analysis)
     except Exception as e:
-        logger.warning(f"[YT handler] transcript card 실패: {e}", exc_info=True)
+        logger.warning(f"[YT handler] analysis card 실패: {e}", exc_info=True)
 
 
-async def _send_transcript_card(
+async def _send_analysis_card(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    transcript,
+    analysis,
 ):
-    """유튜브 전체 자막 + 핵심 논지 요약 카드 전송."""
+    """YoutubeAnalysis 카드 — 핵심 주장 + 영상 논지 미리보기."""
     import html as _html
 
-    summary_preview = (transcript.summary or "").strip()
+    summary_preview = (analysis.video_summary or "").strip()
     if len(summary_preview) > 450:
         summary_preview = summary_preview[:447] + "..."
 
-    channel_esc  = _html.escape(transcript.channel or "")
+    channel_esc  = _html.escape(analysis.channel or "")
+    speaker_esc  = _html.escape(analysis.speaker or "")
+    main_esc     = _html.escape((analysis.main_argument or "").strip())
     summary_esc  = _html.escape(summary_preview or "(요약 없음)")
-    url_esc      = _html.escape(transcript.url or "")
-    duration     = int(transcript.duration_min or 0)
-    chars        = len(transcript.full_text or "")
+    url_esc      = _html.escape(analysis.url or "")
+    duration     = int(analysis.duration_min or 0)
 
     card_text = (
-        f"🎬 <b>유튜브 분석 완료</b>\n"
+        f"🎬 <b>영상 분석 완료</b>\n"
         f"{'─' * 20}\n"
         f"📺 {channel_esc}\n"
-        f"⏱ {duration}분 영상 · 📝 자막 {chars:,}자\n\n"
-        f"💡 <b>핵심 논지</b>\n"
-        f"<blockquote>{summary_esc}</blockquote>\n"
+        f"👤 {speaker_esc}\n"
+        f"⏱ {duration}분 영상\n\n"
+        f"💡 <b>핵심 주장</b>\n<blockquote>{main_esc}</blockquote>\n"
+        f"📖 <b>논지</b>\n<blockquote>{summary_esc}</blockquote>\n"
         f"🔗 {url_esc}"
     )
 
-    cb_draft = f"yt_draft:{transcript.video_id}"
-    cb_skip  = f"yt_skip:{transcript.video_id}"
+    cb_draft = f"yt_draft:{analysis.video_id}"
+    cb_skip  = f"yt_skip:{analysis.video_id}"
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(
             "✍️ 이 영상으로 초안 만들기", callback_data=cb_draft,
@@ -389,18 +387,20 @@ async def _send_transcript_card(
         )
     except Exception:
         plain = (
-            f"🎬 유튜브 분석 완료\n"
-            f"📺 {transcript.channel}\n"
-            f"⏱ {duration}분 · 자막 {chars:,}자\n\n"
-            f"💡 {summary_preview}\n\n"
-            f"🔗 {transcript.url}"
+            f"🎬 영상 분석 완료\n"
+            f"📺 {analysis.channel}\n"
+            f"👤 {analysis.speaker}\n"
+            f"⏱ {duration}분\n\n"
+            f"💡 {analysis.main_argument}\n\n"
+            f"📖 {summary_preview}\n\n"
+            f"🔗 {analysis.url}"
         )
         await update.message.reply_text(plain, reply_markup=keyboard)
 
 
 async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
     """
-    yt_draft:{video_id}  — DB 에서 transcript 복원 후 파이프라인 투입
+    yt_draft:{video_id}  — DB 에서 YoutubeAnalysis 복원 후 파이프라인 투입
     yt_skip:{video_id}   — 건너뛰기 (카드 버튼만 제거)
     """
     callback_data = query.data or ""
@@ -426,16 +426,16 @@ async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        from app.sources.youtube_pipeline import get_transcript_by_id
-        transcript = get_transcript_by_id(video_id)
+        from app.sources.youtube_pipeline import get_analysis_from_db
+        analysis = get_analysis_from_db(video_id)
     except Exception as e:
-        logger.warning(f"[YT cb] get_transcript 실패: {e}")
-        transcript = None
+        logger.warning(f"[YT cb] get_analysis 실패: {e}")
+        analysis = None
 
-    if not transcript:
+    if not analysis:
         try:
             await status_msg.edit_text(
-                "⚠️ 저장된 자막을 찾지 못했습니다. 다시 URL을 보내주세요."
+                "⚠️ 분석 데이터 없음 — URL 다시 입력해 주세요."
             )
         except Exception:
             pass
@@ -444,7 +444,7 @@ async def _handle_yt_callback(query, context: ContextTypes.DEFAULT_TYPE):
     orchestrator = Orchestrator()
     try:
         draft = await orchestrator.process_youtube_transcript(
-            transcript, chat_id=query.message.chat_id,
+            analysis, chat_id=query.message.chat_id,
         )
     except Exception as e:
         logger.error(f"[YT cb] 파이프라인 실패: {e}", exc_info=True)

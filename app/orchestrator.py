@@ -298,32 +298,34 @@ class Orchestrator:
         )
 
     async def process_youtube_transcript(
-        self, transcript, chat_id: int | str | None = None,
+        self, analysis, chat_id: int | str | None = None,
     ) -> Draft | None:
-        """YoutubeTranscript → SourceItemCreate 변환 후 5-AI 파이프라인 투입.
+        """YoutubeAnalysis → SourceItemCreate 변환 후 5-AI 파이프라인 투입.
 
-        역할 분담 (source_text 구조 + 자연 truncation 으로 달성):
-          - OpenAI DraftWriter: source_text 전체 ≈ [핵심 논지] + [전체 자막]
-          - Gemini researcher: source_text[:1000] 등 앞부분 → 논지 중심
-          - Perplexity / Grok:  source_text[:1000] ≈ [핵심 논지] 만
+        Gemini 직접 영상 분석 → 분석 결과를 body 에 인코딩해서 기존 파이프라인에 투입.
+        역할 분담 (body 구조 + 자연 truncation 으로 달성):
+          - OpenAI DraftWriter: body 전체 = [STORYTELLING] + [분석 결과]
+          - Gemini researcher:  body 앞부분 = 핵심 주장 + 발언
+          - Perplexity / Grok:  body[:1000] ≈ downstream_summary 만
           - Haiku Reviewer:     초안만 수신 (변동 없음)
 
         자동 포스팅 없음. 텔레그램 승인 카드 전송까지만 수행.
+        인자명 `analysis` — 과거 `transcript` 유지 목적이 아닌 새 모델 YoutubeAnalysis.
         """
         try:
             from app.sources.youtube_pipeline import (
-                YoutubeTranscript, mark_transcript_used,
+                YoutubeAnalysis, mark_analysis_used,
             )
         except Exception as e:
             logger.warning(f"[orchestrator YT] 모듈 로드 실패: {e}")
             return None
-        if not isinstance(transcript, YoutubeTranscript):
-            logger.warning("[orchestrator YT] transcript 인스턴스 아님")
+        if not isinstance(analysis, YoutubeAnalysis):
+            logger.warning("[orchestrator YT] YoutubeAnalysis 인스턴스 아님")
             return None
 
-        src = transcript.to_pipeline_input()
+        src = analysis.to_pipeline_input()
         try:
-            # source_type="youtube" — Lane early-return 의 _MANUAL_LIKE_SOURCES
+            # source_type="youtube" — Lane early-return _MANUAL_LIKE_SOURCES
             # 화이트리스트에 포함되어 자동수집 오인 없이 AI 파이프라인 진입.
             data = SourceItemCreate(
                 title=src["title"],
@@ -343,7 +345,7 @@ class Orchestrator:
             return None
 
         try:
-            mark_transcript_used(transcript.video_id)
+            mark_analysis_used(analysis.video_id)
         except Exception:
             pass
 
