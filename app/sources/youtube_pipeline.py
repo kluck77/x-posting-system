@@ -356,11 +356,23 @@ async def extract_quotes(
     video_id = video_meta.get("video_id", "")
     channel  = video_meta.get("channel", "알 수 없음")
 
+    raw_quotes = data.get("quotes", []) or []
+    logger.info(
+        f"[YT] Gemini 반환 quotes={len(raw_quotes)}개 "
+        f"(score: {[int(q.get('importance_score', 0) or 0) for q in raw_quotes]})"
+    )
+
     quotes: list[YoutubeQuote] = []
-    for q in data.get("quotes", []) or []:
-        if q.get("is_risky") or int(q.get("importance_score", 0) or 0) < 55:
+    drop_risky = drop_score = drop_riskkw = 0
+    for q in raw_quotes:
+        if q.get("is_risky"):
+            drop_risky += 1
+            continue
+        if int(q.get("importance_score", 0) or 0) < 50:
+            drop_score += 1
             continue
         if RISK_KW.search(q.get("text", "") or ""):
+            drop_riskkw += 1
             continue
         ts = int(q.get("timestamp_sec", 0) or 0)
         quotes.append(YoutubeQuote(
@@ -380,7 +392,10 @@ async def extract_quotes(
         ))
 
     quotes = _dedup_quotes(quotes)
-    logger.info(f"[YT] 발언 추출 완료: {len(quotes)}개")
+    logger.info(
+        f"[YT] 발언 추출 완료: {len(quotes)}개 "
+        f"(drop risky={drop_risky}, score<50={drop_score}, riskkw={drop_riskkw})"
+    )
     return quotes
 
 
