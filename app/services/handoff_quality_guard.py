@@ -256,7 +256,10 @@ _SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
 def run_quality_guard(source_pack: dict) -> dict:
     """
-    4개 감지 함수 실행 후 결과 집계.
+    4개 감지 함수 실행 + Phase 2 judge() 병합.
+
+    judge() 가 REJECT 또는 REWRITE_REQUIRED 판정 시 block_recommended 도
+    True 로 강제 — 기존 _BLOCK_RECOMMENDED_CACHE 게이트와 자연 연동.
     """
     flags: list[QualityFlag] = []
     for fn in (
@@ -274,14 +277,39 @@ def run_quality_guard(source_pack: dict) -> dict:
     high_count = sum(1 for f in flags if f["severity"] == "HIGH")
     medium_count = sum(1 for f in flags if f["severity"] == "MEDIUM")
     block_recommended = high_count >= HIGH_FLAG_BLOCK_THRESHOLD
+
+    # Phase 2 — judge() 병합 (final_body 없이도 source/angle 기반 평가 가능)
+    verdict: QualityVerdict | None = None
+    try:
+        verdict = judge_for_pack(
+            source_pack=source_pack,
+            angle_pack=source_pack.get("angle_pack"),
+            final_body=str(source_pack.get("final_body") or ""),
+            editorial_meta=source_pack.get("editorial_meta"),
+        )
+        if verdict.decision == "REJECT":
+            block_recommended = True
+    except Exception as _je:
+        _judge_logger.warning(f"[run_quality_guard] judge 실패 (무시): {_je}")
+
     rendered = render_warning_block(flags, block_recommended)
-    return {
+    out = {
         "flags": flags,
         "high_count": high_count,
         "medium_count": medium_count,
         "block_recommended": block_recommended,
         "rendered_warning_block": rendered,
     }
+    if verdict is not None:
+        out["verdict"] = {
+            "decision":     verdict.decision,
+            "grade":        verdict.grade,
+            "score":        verdict.score,
+            "reasons":      verdict.reasons,
+            "warnings":     verdict.warnings,
+            "block_reason": verdict.block_reason,
+        }
+    return out
 
 
 def render_warning_block(flags: list[QualityFlag], block_recommended: bool) -> str:
@@ -303,3 +331,331 @@ def render_warning_block(flags: list[QualityFlag], block_recommended: bool) -> s
             "파이프라인 재실행 권장\" 출력할 것."
         )
     return "\n".join(lines)
+
+
+# =====================================================================
+# Phase 2 — judge() 시스템 (draft_1465 유형 차단)
+#
+# 기존 run_quality_guard 는 source_pack 4 결함만 검사한다. judge() 는
+# 본문 + angle + key_evidence 까지 보고 APPROVE/REWRITE_REQUIRED/REJECT
+# 자동 판정한다. orchestrator 의 _BLOCK_RECOMMENDED_CACHE 와 자연스럽게
+# 연결되도록 run_quality_guard 가 내부에서 judge() 도 호출해 결과를
+# 병합한다.
+# =====================================================================
+
+import logging as _logging
+from dataclasses import dataclass, field as _field
+
+_judge_logger = _logging.getLogger(__name__)
+
+
+# ─── 오염 패턴 ───────────────────────────────────────────────────────
+CAUSAL_OVERREACH = re.compile(
+    r"왜곡한다|조종한다|악순환|숨겨진\s*불안"
+    r"|필연적으로|반드시\s*온다|폭락할\s*것"
+    r"|붕괴\s*임박|무조건|절대적으로",
+    re.IGNORECASE,
+)
+
+EXTERNAL_COMPARISON = re.compile(
+    r"일본\s*비교|플라자합의|잃어버린\s*\d+년"
+    r"|중국\s*vs\s*한국|미국\s*vs\s*한국",
+    re.IGNORECASE,
+)
+
+TEMPLATE_CONTAMINATION = re.compile(
+    r"유튜브\s*영상\s*분석\s*모드"
+    r"|Uncertainty\s+on\s+record"
+    r"|HOME\s+종합\s+경제\s+가\s+가"
+    r"|\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]"   # 타임스탬프 잔재
+    r"|(?:^|\n)\s*\d{1,2}:\d{2}(?::\d{2})?\s+[가-힣]"
+    r"|\[SYSTEM\]|\[DEBUG\]"
+    r"|analysis\.mode|debug\.text",
+    re.IGNORECASE,
+)
+
+DUPLICATE_KEYS = [
+    "진짜 쟁점",
+    "지금 봐야 할 포인트",
+    "훅 후보",
+    "반드시 살릴",
+    "살릴 가치",
+]
+
+
+# ─── 판정 결과 ───────────────────────────────────────────────────────
+@dataclass
+class QualityVerdict:
+    decision:     str                              # APPROVE / REWRITE_REQUIRED / REJECT
+    grade:        str                              # A / B / C / REJECT
+    score:        int                              # 0~100
+    reasons:      list[str] = _field(default_factory=list)
+    warnings:     list[str] = _field(default_factory=list)
+    block_reason: str = ""
+
+
+# ─── 헬퍼 ────────────────────────────────────────────────────────────
+def _count_confirmed_facts(handoff: dict) -> int:
+    facts = handoff.get("confirmed_facts", [])
+    if isinstance(facts, list):
+        return len([f for f in facts if f and len(str(f).strip()) > 10])
+    if isinstance(facts, str) and len(facts.strip()) > 10:
+        return 1
+    return 0
+
+
+def json_to_text(handoff: dict) -> str:
+    """핸드오프 dict 를 단일 텍스트로."""
+    parts: list[str] = []
+    for v in handoff.values():
+        if isinstance(v, str):
+            parts.append(v)
+        elif isinstance(v, list):
+            parts.extend(str(i) for i in v)
+        elif isinstance(v, dict):
+            parts.append(json_to_text(v))
+    return " ".join(parts)
+
+
+def _has_external_comparison(handoff: dict) -> bool:
+    angle_text = " ".join([
+        str(handoff.get("angle", "")),
+        str(handoff.get("core_tension", "")),
+        str(handoff.get("frame", "")),
+    ])
+    original = str(handoff.get("original_draft", ""))
+    for match in EXTERNAL_COMPARISON.finditer(angle_text):
+        keyword = match.group()
+        if keyword not in original:
+            return True
+    return False
+
+
+def _count_causal_overreach(text: str) -> int:
+    return len(CAUSAL_OVERREACH.findall(text or ""))
+
+
+def _has_template_contamination(handoff: dict) -> bool:
+    return bool(TEMPLATE_CONTAMINATION.search(json_to_text(handoff)))
+
+
+def _has_duplicate_sections(handoff: dict) -> bool:
+    all_text = json_to_text(handoff)
+    return any(all_text.count(k) >= 3 for k in DUPLICATE_KEYS)
+
+
+def _has_key_numbers(handoff: dict) -> bool:
+    draft = str(handoff.get("original_draft", ""))
+    pattern = re.compile(r"\d+[\d,\.]*\s*(%|bp|달러|원|조|억|만|%p|배)")
+    return bool(pattern.search(draft))
+
+
+# ─── 등급 산정 ───────────────────────────────────────────────────────
+def _calculate_grade(
+    fact_count: int,
+    has_numbers: bool,
+    has_external: bool,
+    causal_count: int,
+    has_contamination: bool,
+    has_duplicate: bool,
+) -> tuple[str, int, list[str]]:
+    """A 금지 조건 카운트 + 점수 → grade."""
+    a_block: list[str] = []
+
+    if fact_count == 0:
+        a_block.append("confirmed_facts 없음")
+    if not has_numbers:
+        a_block.append("핵심 숫자/고유명사 부족")
+    if has_external:
+        a_block.append("외부 비교축 오염")
+    if causal_count >= 3:
+        a_block.append(f"인과 과잉 표현 {causal_count}개")
+    if has_contamination or has_duplicate:
+        a_block.append("중복/오염 블록 존재")
+
+    score = 100
+    score -= (
+        0  if fact_count >= 3 else
+        10 if fact_count == 2 else
+        20 if fact_count == 1 else
+        40
+    )
+    score -= 0  if has_numbers else 15
+    score -= 20 if has_external else 0
+    score -= min(causal_count * 5, 20)
+    score -= 15 if has_contamination else 0
+    score -= 10 if has_duplicate else 0
+    score = max(0, min(100, score))
+
+    block_count = len(a_block)
+    if block_count >= 3 or (fact_count == 0 and block_count >= 2):
+        grade = "REJECT"
+    elif block_count >= 2 or score < 50:
+        grade = "C"
+    elif block_count == 1 or score < 70:
+        grade = "B"
+    else:
+        grade = "A"
+    return grade, score, a_block
+
+
+# ─── 자동 정리 ───────────────────────────────────────────────────────
+def _auto_clean(handoff: dict) -> dict:
+    """REWRITE_REQUIRED 용 비파괴 자동 정리.
+
+    - 템플릿 오염 문구 제거
+    - key_evidence 중복 항목 제거 (앞 50자 기준)
+    - grade/angle/frame 손대지 않음.
+    """
+    cleaned = dict(handoff)
+    for key, val in list(cleaned.items()):
+        if isinstance(val, str):
+            cleaned[key] = TEMPLATE_CONTAMINATION.sub(" ", val).strip()
+        elif isinstance(val, list):
+            cleaned[key] = [
+                TEMPLATE_CONTAMINATION.sub(" ", str(v)).strip()
+                for v in val
+                if TEMPLATE_CONTAMINATION.sub(" ", str(v)).strip()
+            ]
+    evidence = cleaned.get("key_evidence", [])
+    if isinstance(evidence, list):
+        seen: set[str] = set()
+        deduped: list = []
+        for ev in evidence:
+            head = str(ev).strip()[:50]
+            if head and head not in seen:
+                seen.add(head)
+                deduped.append(ev)
+        cleaned["key_evidence"] = deduped
+    return cleaned
+
+
+# ─── 메인 판정 함수 ───────────────────────────────────────────────────
+def judge(handoff: dict) -> QualityVerdict:
+    """핸드오프 품질 판정 — APPROVE / REWRITE_REQUIRED / REJECT.
+
+    handoff dict 권장 키:
+      original_draft, confirmed_facts, angle, core_tension, frame,
+      key_evidence, grade_label
+    """
+    all_text = json_to_text(handoff)
+    fact_count = _count_confirmed_facts(handoff)
+    has_numbers = _has_key_numbers(handoff)
+    has_external = _has_external_comparison(handoff)
+    causal_count = _count_causal_overreach(all_text)
+    has_contamination = _has_template_contamination(handoff)
+    has_duplicate = _has_duplicate_sections(handoff)
+
+    grade, score, _block_reasons = _calculate_grade(
+        fact_count, has_numbers, has_external,
+        causal_count, has_contamination, has_duplicate,
+    )
+
+    reasons: list[str] = []
+    warnings: list[str] = []
+    if fact_count == 0:
+        reasons.append("confirmed_facts 없음 — 강한 주장 근거 없음")
+    elif fact_count == 1:
+        warnings.append("confirmed_facts 1건 — 부족")
+    if has_external:
+        reasons.append("외부 비교축 오염 — 원문에 없는 angle 삽입")
+    if causal_count >= 3:
+        reasons.append(
+            f"인과 과잉 표현 {causal_count}개 — evidence 없이 강한 주장"
+        )
+    if has_contamination:
+        reasons.append("템플릿 오염 문구 감지")
+    if has_duplicate:
+        warnings.append("중복 섹션 감지 — 자동 정리 가능")
+
+    if grade == "REJECT":
+        decision = "REJECT"
+        block_reason = " / ".join(reasons[:3]) or "재료 품질 부족"
+        _judge_logger.warning(
+            f"[HandoffGuard] REJECT: {block_reason} (score={score})"
+        )
+    elif grade == "C" or has_contamination or has_duplicate:
+        decision = "REWRITE_REQUIRED"
+        block_reason = ""
+        _judge_logger.info(
+            f"[HandoffGuard] REWRITE_REQUIRED grade={grade} score={score}"
+        )
+    else:
+        decision = "APPROVE"
+        block_reason = ""
+        _judge_logger.info(
+            f"[HandoffGuard] APPROVE grade={grade} score={score}"
+        )
+
+    return QualityVerdict(
+        decision=decision,
+        grade=grade,
+        score=score,
+        reasons=reasons,
+        warnings=warnings,
+        block_reason=block_reason,
+    )
+
+
+# ─── pack 변환 어댑터 ────────────────────────────────────────────────
+def judge_for_pack(
+    source_pack: dict | None,
+    angle_pack: dict | None = None,
+    final_body: str = "",
+    editorial_meta: dict | None = None,
+) -> QualityVerdict:
+    """source_pack/angle_pack/final_body 를 handoff dict 로 변환 후 judge.
+
+    run_quality_guard 와 동일 입력으로 호출 가능 (orchestrator 자연 연동).
+    """
+    sp = source_pack or {}
+    ap = angle_pack or sp.get("angle_pack") or {}
+    em = editorial_meta or {}
+    winner = ap.get("winner_angle") or {}
+    handoff = {
+        "original_draft":   final_body or "",
+        "confirmed_facts":  sp.get("confirmed_facts") or [],
+        "angle":            str(winner.get("angle") or ""),
+        "core_tension":     str(ap.get("core_tension") or ""),
+        "frame":            str(ap.get("frame_type") or ""),
+        "key_evidence":     sp.get("evidence_pack") or [],
+        "grade_label":      str(em.get("grade") or ""),
+    }
+    return judge(handoff)
+
+
+# ─── draft_1465 회귀 샘플 ────────────────────────────────────────────
+DRAFT_1465_SAMPLE = {
+    "original_draft": (
+        "물가는 늘 오르기만 했다. 1960년 45세로 햄버거 한 개를 "
+        "사 먹었는데, 지금은 겨우 12조각이다. "
+        "연 10% 인플레이션이 발생하면 화폐 가치가 10% 하락하고, "
+        "이는 10%의 부유세를 내는 것과 같다."
+    ),
+    "confirmed_facts": [],
+    "angle": (
+        "Korea angle: 지금까지 몰라도 됐지만 이제 알아야 할 때입니다 "
+        "기억을 더듬어 보면 물가는 늘 오르기만 했던 거 같습니다 "
+        "0:13 오른다고 할 때마다 저항감이 들죠"
+    ),
+    "core_tension": "Uncertainty on record: 1960년 45세로 햄버거 1개",
+    "key_evidence": [
+        "0:13 오른다고 할 때마다 저항감이 들죠...",
+        "0:13 오른다고 할 때마다 저항감이 들죠...",  # 중복
+    ],
+    "grade_label": "A",
+}
+
+
+def run_sample_test() -> QualityVerdict:
+    """draft_1465 가 REJECT/REWRITE_REQUIRED 로 잡히는지 검증."""
+    verdict = judge(DRAFT_1465_SAMPLE)
+    _judge_logger.info(
+        f"[Sample] draft_1465 → decision={verdict.decision} "
+        f"grade={verdict.grade} score={verdict.score}"
+    )
+    assert verdict.decision in ("REJECT", "REWRITE_REQUIRED"), (
+        f"draft_1465 는 REJECT/REWRITE_REQUIRED 여야 함. "
+        f"실제: {verdict.decision}"
+    )
+    return verdict

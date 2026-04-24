@@ -645,13 +645,17 @@ def format_handoff(
         "```",
     ]
 
-    # Phase 1: 재료 품질 가드 — source_pack + angle_pack 병합해서 검사.
-    # 4종 결함 감지 시 맨 앞에 ## ⚠️ 재료 품질 경고 블록 prepend.
-    # 정상 draft (결함 0) 는 빈 문자열 → 기존 동작과 완전 동일.
+    # Phase 1+2: 재료 품질 가드 — source_pack + angle_pack + final_body +
+    # editorial_meta 병합해서 검사. 4종 결함 + Phase 2 judge() 동시 실행.
+    # judge 가 REJECT 면 block_recommended=True → 후단 send_for_approval 차단.
     try:
         _guard_input = dict(sp) if isinstance(sp, dict) else {}
         if isinstance(ap, dict):
             _guard_input["angle_pack"] = ap
+        # Phase 2: judge() 가 final_body / editorial_meta 까지 보도록 전달
+        _guard_input["final_body"] = final_body or ""
+        if isinstance(editorial_meta, dict):
+            _guard_input["editorial_meta"] = editorial_meta
         _quality = run_quality_guard(_guard_input)
         _warning_block_text = _quality.get("rendered_warning_block", "") or ""
     except Exception:
