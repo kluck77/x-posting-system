@@ -44,6 +44,48 @@ _KO_CHAR_RE = re.compile(r"[가-힣]")
 _EN_ALPHA_RE = re.compile(r"[A-Za-z]")
 
 
+# 뉴스 페이지 파싱 잔재 패턴 (네비게이션 / timestamps / 글꼴 조정 UI 등)
+_NAV_JUNK_PATTERNS = [
+    re.compile(r"HOME\s+종합\s+경제\s+가\s+가"),
+    re.compile(r"\s+가\s+가\s+"),          # 글꼴 키움/줄임 UI 잔재
+    re.compile(
+        r"[가-힣]{1,8}\s*기자\s+\d{4}[-./]\d{1,2}[-./]\d{1,2}"
+        r"(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"
+    ),
+    re.compile(
+        r"\b\d{4}[-./]\d{1,2}[-./]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?\b"
+    ),
+    re.compile(r"ⓒ\s*[^\n]{0,40}"),       # 저작권 표기
+    re.compile(r"무단\s*(?:전재|복제|배포)[\s·,.가-힣]*금지"),
+    re.compile(r"공유하기\s*트위터\s*페이스북"),
+]
+
+
+def _clean_text_field(text: str) -> str:
+    """핸드오프 텍스트 필드 클렌징 — HTML/URL/뉴스 파싱 잔재 제거.
+
+    반환: 클렌징된 문자열. 클렌징 후 10자 미만이면 빈 문자열.
+    """
+    if not text:
+        return text
+    s = str(text)
+    # HTML 태그
+    s = re.sub(r"<[^>]+>", "", s)
+    # HTML 엔티티 (`&nbsp;`, `&amp;`, `&#x27;` 등)
+    s = re.sub(r"&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);", "", s)
+    # URL
+    s = re.sub(r"https?://\S+", "", s)
+    # 뉴스 파싱 잔재
+    for pat in _NAV_JUNK_PATTERNS:
+        s = pat.sub(" ", s)
+    # 연속 공백 / 줄바꿈 정리
+    s = re.sub(r"\s+", " ", s).strip()
+    # 의미 없는 짧은 텍스트 drop
+    if len(s) < 10:
+        return ""
+    return s
+
+
 def _korean_dominant(text: str) -> bool:
     """한국어 지배적이면 True. 알파벳 글자만 비교 (숫자/기호 무시)."""
     if not text:
@@ -54,15 +96,24 @@ def _korean_dominant(text: str) -> bool:
 
 
 def _ensure_korean(text: str, *, max_chars: int = 200) -> str:
-    """영어 비율 50%+ 이면 Haiku 로 한국어 번역. 실패/키 없음 → 원문 유지.
+    """HTML/URL 잔재 제거 → 영어 비율 50%+ 이면 Haiku 번역.
 
-    handoff angle_pack 에 영어 fallback / Gemini 영어 응답 누출 방지.
+    실패/키 없음 → 클렌징된 원문 유지.
+    handoff angle_pack / editorial_meta 영어·파싱 잔재 누출 차단.
     """
-    if not text or _korean_dominant(text):
+    if not text:
         return text
+    # 1. HTML·URL·뉴스 잔재 클렌징 (항상 적용)
+    cleaned = _clean_text_field(text)
+    if not cleaned:
+        return ""
+    # 2. 한국어 지배적이면 그대로
+    if _korean_dominant(cleaned):
+        return cleaned
+    # 3. 영어 dominant → Haiku 번역 (실패 시 clean 원문)
     api_key = getattr(settings, "anthropic_api_key", "")
     if not api_key:
-        return text
+        return cleaned
     try:
         import anthropic  # type: ignore
         client = anthropic.Anthropic(api_key=api_key)
@@ -73,15 +124,15 @@ def _ensure_korean(text: str, *, max_chars: int = 200) -> str:
                 "role": "user",
                 "content": (
                     f"아래 영어 문장을 한국어로 자연스럽게 번역하세요. "
-                    f"번역문만 반환 (다른 설명 금지):\n\n{text[:max_chars * 4]}"
+                    f"번역문만 반환 (다른 설명 금지):\n\n{cleaned[:max_chars * 4]}"
                 ),
             }],
         )
         out = resp.content[0].text.strip()
-        return out[:max_chars] if out else text
+        return out[:max_chars] if out else cleaned
     except Exception as e:
-        logger.warning(f"[angle_pack] Haiku 번역 실패 (원문 유지): {e}")
-        return text
+        logger.warning(f"[angle_pack] Haiku 번역 실패 (클렌징 원문 유지): {e}")
+        return cleaned
 
 # Phase 3b — 상류 완화 정책 상수 (source_pack.py 와 동일값 유지).
 # 상류 느슨 / 하류 handoff_quality_guard(=0.3) 엄격의 2단 필터.
@@ -158,6 +209,19 @@ Rules:
 - readability_risk: "high" if the topic is dense / jargon-heavy / requires prior context; "low" if it is a clean one-beat story.
 - scan_pattern: imagine a phone screen — tell the writer what shape to give the post.
 - Do NOT include a safety verdict — Reviewer handles that downstream.
+
+[한국어 출력 강제 — 반드시 준수]
+아래 필드는 반드시 한국어 완전한 문장으로 생성하세요 (영어 출력 금지):
+- core_tension        : 이 뉴스의 핵심 긴장 (한국어 1문장)
+- share_trigger       : 독자가 공유하고 싶은 이유 (한국어 1문장)
+- scan_pattern        : 모바일 스캔 패턴 힌트 (한국어)
+- follow_reason       : 팔로업 근거 (한국어)
+- share_reason        : 공유 동기 (한국어)
+- angle_options[].angle / winner_angle.angle / winner_angle.reason : 한국어
+
+영어 fallback 문장 (예: "Fills a gap English-language coverage misses.")
+금지. heuristic 도피도 금지. 반드시 소스 팩의 내용을 근거로 한국어
+완전한 문장을 생성하세요.
 """
 
 

@@ -149,7 +149,17 @@ def _pick_concept_translation(research) -> str:
 
 
 def _build_evidence_pack(research, factcheck) -> list[str]:
-    """숫자/기관명/실명/quote 후보 최대 5개. 원문 문자열만 통과."""
+    """숫자/기관명/실명/quote 후보 최대 5개. 원문 문자열만 통과.
+
+    각 항목은 HTML/URL/뉴스 파싱 잔재 클렌징 후 담긴다. 클렌징 후 10자
+    미만이면 드랍 — 유효 근거만 유지.
+    """
+    # 내부 import (순환 의존 회피)
+    try:
+        from app.services.angle_pack import _clean_text_field
+    except Exception:
+        _clean_text_field = lambda t: t  # fail-open
+
     pool: list[str] = []
     if research:
         pool.extend(str(f) for f in (getattr(research, "key_facts", None) or []))
@@ -165,15 +175,19 @@ def _build_evidence_pack(research, factcheck) -> list[str]:
     out: list[str] = []
     for raw in pool:
         s = str(raw).strip()
-        if not s or s in seen:
+        if not s:
             continue
-        has_num = bool(_NUMBER_RE.search(s))
-        has_org = any(o in s for o in _ORG_HINTS)
-        has_quote = bool(_QUOTE_RE.search(s))
+        # HTML/URL/nav 잔재 제거 후 재검증
+        cleaned = _clean_text_field(s) or ""
+        if not cleaned or cleaned in seen:
+            continue
+        has_num = bool(_NUMBER_RE.search(cleaned))
+        has_org = any(o in cleaned for o in _ORG_HINTS)
+        has_quote = bool(_QUOTE_RE.search(cleaned))
         if not (has_num or has_org or has_quote):
             continue
-        seen.add(s)
-        out.append(s[:_EVIDENCE_ITEM_LEN])
+        seen.add(cleaned)
+        out.append(cleaned[:_EVIDENCE_ITEM_LEN])
         if len(out) >= _EVIDENCE_MAX:
             break
     return out
