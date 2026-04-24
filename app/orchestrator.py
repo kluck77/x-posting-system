@@ -251,6 +251,59 @@ class Orchestrator:
             risk_reasoning=f"Psych skip: {reason}",
         )
 
+    async def process_youtube_quote(self, quote) -> Draft | None:
+        """YoutubeQuote → SourceItemCreate 변환 후 기존 파이프라인 투입.
+
+        발언 원문·맥락·출처를 source_text 에 인코딩해서 DraftWriter 에
+        전달. 기존 Step 0.5~5.9 파이프라인 그대로 타서 텔레그램 승인
+        카드까지 생성. 자동 포스팅 없음.
+        """
+        try:
+            from app.sources.youtube_pipeline import YoutubeQuote, mark_used
+        except Exception as e:
+            logger.warning(f"[orchestrator YT] 모듈 로드 실패: {e}")
+            return None
+        if not isinstance(quote, YoutubeQuote):
+            logger.warning("[orchestrator YT] quote 인스턴스 아님")
+            return None
+
+        # 발언 중심 source_text 구성 (DraftWriter 가 인용 구조로 포스트 작성)
+        body = (
+            f'[유튜브 발언 소재]\n'
+            f'발언자: {quote.speaker}\n'
+            f'채널: {quote.channel}\n'
+            f'원문: "{quote.text}"\n'
+            f'타임스탬프: {quote.timestamp}\n'
+            f'앞 맥락: {quote.context_before}\n'
+            f'뒤 맥락: {quote.context_after}\n'
+            f'출처 URL: {quote.url}\n\n'
+            f'위 발언을 중심으로 포스트 작성. 발언 원문은 큰따옴표로 인용하고, '
+            f'출처(채널명·타임스탬프)를 포스트 끝에 명시할 것.'
+        )
+        try:
+            data = SourceItemCreate(
+                title=f"[유튜브 발언] {quote.speaker}: {quote.text[:60]}",
+                url=quote.url,
+                source_text=body,
+                source_type="youtube",
+                language="ko",
+            )
+        except Exception as e:
+            logger.warning(f"[orchestrator YT] SourceItemCreate 실패: {e}")
+            return None
+
+        try:
+            draft = await self.ingest_and_generate(data)
+            # used=1 마킹 (파이프라인 성공 시에만)
+            try:
+                mark_used(quote.video_id, quote.timestamp_sec)
+            except Exception:
+                pass
+            return draft
+        except Exception as e:
+            logger.warning(f"[orchestrator YT] 파이프라인 실패: {e}")
+            return None
+
     async def ingest_and_generate(self, data: SourceItemCreate) -> Draft:
         """
         소스를 입력받아 전체 AI 파이프라인을 실행합니다.
