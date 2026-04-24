@@ -35,6 +35,72 @@ def _sqlite_path() -> str:
     return m.group(1) if m else "./x_poster.db"
 
 
+def _loose_json_array(raw: str) -> list | None:
+    """Gemini 가 깨뜨린 JSON 에서 배열 복구. 실패 시 None."""
+    if not raw:
+        return None
+    try:
+        val = json.loads(raw)
+        return val if isinstance(val, list) else None
+    except Exception:
+        pass
+    # 배열 시작/끝 탐지
+    i = raw.find("[")
+    if i < 0:
+        return None
+    # 마지막 닫는 괄호까지 잘라내면서 점차 줄여 재시도
+    for j in range(len(raw) - 1, i, -1):
+        if raw[j] == "]":
+            try:
+                val = json.loads(raw[i : j + 1])
+                if isinstance(val, list):
+                    return val
+            except Exception:
+                continue
+    # 항목별 파싱 복구 — 각 {...} 블록만 개별 로드
+    items: list = []
+    depth = 0
+    start = -1
+    for k in range(i, len(raw)):
+        c = raw[k]
+        if c == "{":
+            if depth == 0:
+                start = k
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    items.append(json.loads(raw[start : k + 1]))
+                except Exception:
+                    pass
+                start = -1
+    return items or None
+
+
+def _loose_json_object(raw: str) -> dict | None:
+    """Gemini 가 깨뜨린 JSON 에서 객체 복구. 실패 시 None."""
+    if not raw:
+        return None
+    try:
+        val = json.loads(raw)
+        return val if isinstance(val, dict) else None
+    except Exception:
+        pass
+    i = raw.find("{")
+    if i < 0:
+        return None
+    for j in range(len(raw) - 1, i, -1):
+        if raw[j] == "}":
+            try:
+                val = json.loads(raw[i : j + 1])
+                if isinstance(val, dict):
+                    return val
+            except Exception:
+                continue
+    return None
+
+
 HIGH_VALUE_KW = re.compile(
     r"fed|연준|기준금리|한은|인플레이션|cpi|ppi|고용|실업률"
     r"|비트코인|btc|이더리움|eth|sec|etf|폴리마켓"
@@ -145,7 +211,11 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                 {"file_data": {"mime_type": "video/youtube", "file_uri": url}},
             ],
         }],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 6000},
+        "generationConfig": {
+            "temperature": 0.0,
+            "maxOutputTokens": 6000,
+            "responseMimeType": "application/json",
+        },
     }
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
@@ -170,7 +240,13 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                 )
                 return []
             text = text.strip().strip("```json").strip("```").strip()
-            data = json.loads(text)
+            data = _loose_json_array(text)
+            if data is None:
+                logger.warning(
+                    f"[YT] Gemini fallback JSON 파싱 실패 — 원문 앞 500자: "
+                    f"{text[:500]!r}"
+                )
+                return []
             logger.info(f"[YT] Gemini fallback 성공 ({len(data)} snippets)")
             return [
                 {
@@ -250,7 +326,11 @@ async def extract_quotes(
                 ),
             }],
         }],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 3000},
+        "generationConfig": {
+            "temperature": 0.0,
+            "maxOutputTokens": 3000,
+            "responseMimeType": "application/json",
+        },
     }
 
     try:
@@ -263,7 +343,12 @@ async def extract_quotes(
             resp.raise_for_status()
             raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
             raw = raw.strip().strip("```json").strip("```").strip()
-            data = json.loads(raw)
+            data = _loose_json_object(raw)
+            if data is None:
+                logger.warning(
+                    f"[YT] 발언 추출 JSON 파싱 실패 — 원문 앞 500자: {raw[:500]!r}"
+                )
+                return []
     except Exception as e:
         logger.warning(f"[YT] 발언 추출 실패 ({type(e).__name__}): {e!r}")
         return []
