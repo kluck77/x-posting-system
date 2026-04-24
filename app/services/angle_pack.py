@@ -38,6 +38,51 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# ─── Korean enforcement (handoff 영어 누출 방지) ──────────────────────
+_KO_CHAR_RE = re.compile(r"[가-힣]")
+_EN_ALPHA_RE = re.compile(r"[A-Za-z]")
+
+
+def _korean_dominant(text: str) -> bool:
+    """한국어 지배적이면 True. 알파벳 글자만 비교 (숫자/기호 무시)."""
+    if not text:
+        return True
+    ko = len(_KO_CHAR_RE.findall(text))
+    en = len(_EN_ALPHA_RE.findall(text))
+    return ko >= en  # 한국어 동률 이상이면 통과
+
+
+def _ensure_korean(text: str, *, max_chars: int = 200) -> str:
+    """영어 비율 50%+ 이면 Haiku 로 한국어 번역. 실패/키 없음 → 원문 유지.
+
+    handoff angle_pack 에 영어 fallback / Gemini 영어 응답 누출 방지.
+    """
+    if not text or _korean_dominant(text):
+        return text
+    api_key = getattr(settings, "anthropic_api_key", "")
+    if not api_key:
+        return text
+    try:
+        import anthropic  # type: ignore
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"아래 영어 문장을 한국어로 자연스럽게 번역하세요. "
+                    f"번역문만 반환 (다른 설명 금지):\n\n{text[:max_chars * 4]}"
+                ),
+            }],
+        )
+        out = resp.content[0].text.strip()
+        return out[:max_chars] if out else text
+    except Exception as e:
+        logger.warning(f"[angle_pack] Haiku 번역 실패 (원문 유지): {e}")
+        return text
+
 # Phase 3b — 상류 완화 정책 상수 (source_pack.py 와 동일값 유지).
 # 상류 느슨 / 하류 handoff_quality_guard(=0.3) 엄격의 2단 필터.
 ENGLISH_RATIO_THRESHOLD_SOURCE = 0.4
@@ -197,23 +242,23 @@ def _heuristic_angle_pack(source_pack: dict) -> dict:
             "score": 0,
             # Phase 1.5a detect_angle_pack_heuristic 의 winner_angle.reason
             # substring 매칭 ("heuristic" or "fallback") 조건을 만족해야 한다.
-            "reason": "heuristic fallback blocked (english source detected)",
+            "reason": "heuristic fallback 차단 (영어 소스 감지)",
         }
         method_value = "heuristic_en_blocked"
     else:
         winner = {
             "angle": options[0]["angle"],
             "score": 50,
-            "reason": "heuristic fallback (no Gemini call)",
+            "reason": "heuristic fallback (Gemini 미호출)",
         }
         method_value = "heuristic"
 
     follow_reason = (
-        str(watch[0])[:160] if watch else "Korea-origin signal with follow-up coming."
+        str(watch[0])[:160] if watch else "한국발 신호 — 후속 전개 예상."
     )
     share_reason = (
         str(global_[0])[:160] if global_
-        else "Fills a gap English-language coverage misses."
+        else "영문 매체에서 다루지 않는 한국 시각."
     )
 
     frame_type = _pick_frame_type_heuristic(source_pack)
@@ -223,16 +268,16 @@ def _heuristic_angle_pack(source_pack: dict) -> dict:
     if closing:
         share_trigger = str(closing)[:200]
     elif global_:
-        share_trigger = f"Most English readers don't see this: {str(global_[0])[:160]}"
+        share_trigger = f"영문 독자가 못 보는 한 줄: {str(global_[0])[:160]}"
     elif confirmed:
-        share_trigger = f"One line worth passing on: {str(confirmed[0])[:160]}"
+        share_trigger = f"한 줄로 옮길 가치: {str(confirmed[0])[:160]}"
     else:
         share_trigger = share_reason[:200]
 
     scan_pattern = (
-        "short lines, one number per line, contrast on a single line."
+        "짧은 줄 · 한 줄에 숫자 하나 · 대조는 한 줄로."
         if frame_type == "contrast"
-        else "short lines, lead with the concrete fact, close on the signal."
+        else "짧은 줄 · 사실 먼저 · 마지막에 신호."
     )
 
     return {
@@ -403,7 +448,7 @@ def _normalize_angle_pack(raw: Any, source_pack: dict) -> dict:
 
     if not winner["angle"] and options:
         winner["angle"] = options[0]["angle"]
-        winner["reason"] = winner["reason"] or "first option (auto-picked — missing winner)"
+        winner["reason"] = winner["reason"] or "첫 옵션 자동 선택 (winner 누락)"
 
     series_type = str(raw.get("series_type", "analysis")).strip().lower()[:20] or "analysis"
     follow_reason = str(raw.get("follow_reason", "")).strip()[:200]
@@ -423,13 +468,24 @@ def _normalize_angle_pack(raw: Any, source_pack: dict) -> dict:
     scan_pattern = str(raw.get("scan_pattern", "")).strip()[:200]
 
     if not share_trigger:
-        share_trigger = share_reason or "Fills a gap English-language coverage misses."
+        share_trigger = share_reason or "영문 매체에서 다루지 않는 한국 시각."
     if not scan_pattern:
-        scan_pattern = "short lines, lead with the concrete fact, close on the signal."
+        scan_pattern = "짧은 줄 · 사실 먼저 · 마지막에 신호."
 
     if not options or not winner["angle"] or not core_tension:
         # 치명적 누락 → heuristic 으로 우회
         return _heuristic_angle_pack(source_pack)
+
+    # 영어 누출 차단 — handoff 한국어 강제 (fail-open: 키 없으면 원문)
+    core_tension  = _ensure_korean(core_tension)
+    follow_reason = _ensure_korean(follow_reason)
+    share_reason  = _ensure_korean(share_reason)
+    share_trigger = _ensure_korean(share_trigger)
+    if isinstance(winner, dict):
+        if winner.get("angle"):
+            winner["angle"] = _ensure_korean(winner["angle"])
+        if winner.get("reason"):
+            winner["reason"] = _ensure_korean(winner["reason"])
 
     return {
         "core_tension":     core_tension,

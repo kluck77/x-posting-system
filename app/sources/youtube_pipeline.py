@@ -124,6 +124,32 @@ async def _gemini_post_with_retry(
 RISK_KW = re.compile(r"욕설|명예훼손|허위|개인정보|사생활")
 
 
+# ─── 스토리텔링 시스템 (OpenAI DraftWriter 가 source_text 안에서 읽음) ─
+YOUTUBE_OPENAI_SYSTEM = """[유튜브 영상 분석 모드]
+아래에 유튜브 영상의 전체 자막이 제공됩니다.
+
+처리 순서:
+1. 전체 자막을 처음부터 끝까지 읽고 영상 흐름 파악
+2. 발언자가 어떤 맥락에서 이 주장을 하게 됐는지 파악
+3. 아래 스토리텔링 7-step 구조로 포스트 작성
+
+[스토리텔링 구조 — 반드시 준수]
+① 배경     (독자가 이미 아는 현실 1~2줄)
+② 긴장     (이상한 점 발견 1~2줄)
+③ 반전     (아무도 말 안 하는 것 1~2줄)
+④ 내 해석  (1줄 단정)
+⑤ 스테이크 (독자 지갑·포지션 연결 1줄)
+⑥ 예측     (시간+레벨+반증조건)
+⑦ 리플 유도 질문
+
+[추가 규칙]
+- 발언자 주장은 큰따옴표로 인용 (자막 원문 그대로)
+- 출처: 채널명·타임스탬프 포스트 끝에 명시
+- 자막에 없는 사실 추가 금지
+- 모든 수치는 자막 원문 그대로 유지
+"""
+
+
 # ─── 데이터 모델 ─────────────────────────────────────────────────────
 @dataclass
 class YoutubeTranscript:
@@ -140,14 +166,15 @@ class YoutubeTranscript:
     def to_pipeline_input(self) -> dict:
         """기존 파이프라인 SourceItemCreate 형식으로 변환.
 
-        source_text 구조:
-          ① [유튜브 영상 분석] 헤더
-          ② [핵심 논지] summary — 자연 truncation 으로 Perplexity/Grok 에 도달
-          ③ [전체 자막] full_text — OpenAI DraftWriter 가 전부 읽음
+        source_text 구조 (자연 truncation 으로 역할 분담):
+          ① YOUTUBE_OPENAI_SYSTEM 헤더 — 스토리텔링 7-step 구조 지시
+          ② [핵심 논지] summary       — Perplexity/Grok 자연 truncation 도달
+          ③ [전체 자막] full_text     — OpenAI DraftWriter 가 전부 읽음
           ④ [지시사항] 인용/맥락/출처 규칙
         """
         body = (
-            f"[유튜브 영상 분석]\n"
+            f"{YOUTUBE_OPENAI_SYSTEM}\n\n"
+            f"[유튜브 영상 메타]\n"
             f"채널: {self.channel}\n"
             f"영상 URL: {self.url}\n"
             f"길이: {self.duration_min}분\n\n"
@@ -155,7 +182,7 @@ class YoutubeTranscript:
             f"[전체 자막]\n{self.full_text}\n\n"
             f"[지시사항]\n"
             f"- 영상 발언을 큰따옴표로 인용하고 타임스탬프 명시\n"
-            f"- 대립각 / 스테이크 / 예측 3종 세트 / 리플 유도 규칙 적용\n"
+            f"- 위 [스토리텔링 구조] 7단계 그대로 적용\n"
             f"- 임의 사실 추가 금지 — 자막에 있는 내용만 활용\n"
             f"- 출처: 채널명·영상 URL 포스트 끝에 명시"
         )

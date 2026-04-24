@@ -71,7 +71,7 @@ def test_korean_conflicts_keeps_heuristic_behavior():
     # placeholder 아님 — 실제 한국어 conflicts 기반 angle
     assert "[angle 재작성 필요" not in wa["angle"]
     assert wa["score"] == 50
-    assert "heuristic fallback (no Gemini call)" == wa["reason"]
+    assert "heuristic fallback (Gemini 미호출)" == wa["reason"]
     validate_angle_pack(pack)
 
 

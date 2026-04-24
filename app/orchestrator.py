@@ -277,15 +277,13 @@ class Orchestrator:
 
         src = transcript.to_pipeline_input()
         try:
-            # source_type="manual" — 사용자가 직접 URL 을 입력한 수동 트리거.
-            # "youtube" 로 지정하면 Lane early-return 이 자동수집으로 오인해
-            # AI 파이프라인을 건너뛰므로 "manual" 로 강제.
-            # (유튜브 출처 정보는 title prefix + body 헤더에 이미 포함됨)
+            # source_type="youtube" — Lane early-return 의 _MANUAL_LIKE_SOURCES
+            # 화이트리스트에 포함되어 자동수집 오인 없이 AI 파이프라인 진입.
             data = SourceItemCreate(
                 title=src["title"],
                 url=src["url"],
                 source_text=src["body"],
-                source_type="manual",
+                source_type="youtube",
                 language="ko",
             )
         except Exception as e:
@@ -492,9 +490,10 @@ class Orchestrator:
         # ── Lane A~C early return (자동수집만) ────────────────────────
         # 자동수집(naver_auto 등)에서 BREAKING_NOW / CANDIDATE 분류된 기사는
         # 알림·적재만 완료하고 AI 파이프라인(Step 2~6)에 진입하지 않는다.
-        # 수동 입력(manual)은 항상 AI 파이프라인을 탄다.
+        # 수동 입력(manual / youtube)은 항상 AI 파이프라인을 탄다.
         _br = getattr(source_item, "breaking_result", None)
-        _is_auto = data.source_type != "manual"
+        _MANUAL_LIKE_SOURCES = {"manual", "youtube"}
+        _is_auto = data.source_type not in _MANUAL_LIKE_SOURCES
         if (_is_auto
                 and _br is not None
                 and _br.classification in ("BREAKING_NOW", "CANDIDATE")):
