@@ -152,8 +152,21 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                 f"models/gemini-2.5-flash:generateContent?key={api_key}",
                 json=payload,
             )
-            resp.raise_for_status()
-            text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            if resp.status_code != 200:
+                logger.warning(
+                    f"[YT] Gemini fallback HTTP {resp.status_code}: "
+                    f"{resp.text[:500]}"
+                )
+                return []
+            body = resp.json()
+            try:
+                text = body["candidates"][0]["content"]["parts"][0]["text"]
+            except (KeyError, IndexError, TypeError) as ke:
+                logger.warning(
+                    f"[YT] Gemini fallback 응답 구조 이상 ({type(ke).__name__}): "
+                    f"{json.dumps(body)[:500]}"
+                )
+                return []
             text = text.strip().strip("```json").strip("```").strip()
             data = json.loads(text)
             logger.info(f"[YT] Gemini fallback 성공 ({len(data)} snippets)")
@@ -166,7 +179,9 @@ async def _gemini_transcript_fallback(video_id: str) -> list[dict]:
                 for d in (data or [])
             ]
     except Exception as e:
-        logger.warning(f"[YT] Gemini fallback 실패: {e}")
+        logger.warning(
+            f"[YT] Gemini fallback 실패 ({type(e).__name__}): {e!r}"
+        )
         return []
 
 
@@ -248,7 +263,7 @@ async def extract_quotes(
             raw = raw.strip().strip("```json").strip("```").strip()
             data = json.loads(raw)
     except Exception as e:
-        logger.warning(f"[YT] 발언 추출 실패: {e}")
+        logger.warning(f"[YT] 발언 추출 실패 ({type(e).__name__}): {e!r}")
         return []
 
     video_id = video_meta.get("video_id", "")
