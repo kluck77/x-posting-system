@@ -35,6 +35,46 @@ def _sqlite_path() -> str:
     return m.group(1) if m else "./x_poster.db"
 
 
+def _recover_truncated_json(text: str) -> dict | None:
+    """토큰 한도 등으로 잘린 Gemini JSON 응답 복구.
+
+    전략 (앞쪽이 valid 한 prefix 라고 가정):
+      1) 마지막 valid '}' 위치까지 잘라 재시도 (뒤쪽부터 한 글자씩 줄임)
+      2) 닫히지 않은 string + 객체/배열 자동 닫기 시도
+    실패 시 None.
+    """
+    if not text:
+        return None
+    # 1) 마지막 } 위치들 시도 (뒤에서 앞으로)
+    for j in range(len(text) - 1, 0, -1):
+        if text[j] == "}":
+            try:
+                val = json.loads(text[: j + 1])
+                if isinstance(val, dict):
+                    return val
+            except Exception:
+                continue
+    # 2) 닫히지 않은 구조 추정 닫기
+    s = text
+    # 짝 안 맞는 따옴표 닫기
+    if s.count('"') % 2 == 1:
+        s = s + '"'
+    # 객체 / 배열 닫기 (단순 균형)
+    open_brace  = s.count("{") - s.count("}")
+    open_bracket = s.count("[") - s.count("]")
+    if open_bracket > 0:
+        s = s + ("]" * open_bracket)
+    if open_brace > 0:
+        s = s + ("}" * open_brace)
+    try:
+        val = json.loads(s)
+        if isinstance(val, dict):
+            return val
+    except Exception:
+        pass
+    return None
+
+
 # ─── URL 파싱 ─────────────────────────────────────────────────────────
 def extract_video_id(url: str) -> str | None:
     patterns = [
@@ -208,7 +248,7 @@ async def analyze_video_with_gemini(
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 4000,
+            "maxOutputTokens": 8000,
             "responseMimeType": "application/json",
         },
     }
@@ -246,16 +286,24 @@ async def analyze_video_with_gemini(
                 )
                 return None
             text = text.strip().strip("```json").strip("```").strip()
+            data = None
             try:
                 data = json.loads(text)
             except json.JSONDecodeError as je:
-                logger.warning(
-                    f"[YT] JSON 파싱 실패 ({je}) — 원문 앞 500자: {text[:500]!r}"
-                )
-                if attempt < 2:
-                    await asyncio.sleep(2)
-                    continue
-                return None
+                # 토큰 한도로 잘린 JSON → 부분 복구
+                data = _recover_truncated_json(text)
+                if isinstance(data, dict):
+                    logger.info(
+                        f"[YT] JSON 부분 복구 성공 (원본: {je})"
+                    )
+                else:
+                    logger.warning(
+                        f"[YT] JSON 파싱 실패 ({je}) — 원문 앞 500자: {text[:500]!r}"
+                    )
+                    if attempt < 2:
+                        await asyncio.sleep(2)
+                        continue
+                    return None
 
             story = data.get("story_structure", {}) or {}
             quotes_text_parts = []
