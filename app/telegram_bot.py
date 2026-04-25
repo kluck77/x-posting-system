@@ -2633,6 +2633,167 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================================================
+# Context Package — /ctxpkg <draft_id>
+# 운영자가 초안 보고 나서 "Grok Heavy 에 붙일 자료 만들어달라" 요청 시 호출.
+# 자동 호출 안 함 (기존 5-AI 파이프라인 흐름 불변).
+# =============================================================================
+
+def _split_for_telegram(text: str, max_len: int = 4000) -> list[str]:
+    """텔레그램 메시지 4096자 제한 분할."""
+    if not text:
+        return []
+    if len(text) <= max_len:
+        return [text]
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for line in text.split("\n"):
+        ln = len(line) + 1
+        if current_len + ln > max_len and current:
+            chunks.append("\n".join(current))
+            current = [line]
+            current_len = ln
+        else:
+            current.append(line)
+            current_len += ln
+    if current:
+        chunks.append("\n".join(current))
+    return chunks
+
+
+async def ctxpkg_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ctxpkg <draft_id> — Context Package 자동 생성.
+
+    인자 없으면 가장 최근 draft 사용. 5-AI 호출하므로 15~30초 소요.
+    BLOCK_RECOMMENDED 시 차단 안내. 결과는 4096자 제한으로 분할 송출.
+    """
+    args = context.args or []
+    target_id: int | None = None
+    if args:
+        try:
+            target_id = int(args[0])
+        except ValueError:
+            await update.message.reply_text(
+                "사용법: /ctxpkg <draft_id>\n예: /ctxpkg 1473"
+            )
+            return
+
+    # draft 조회
+    draft = None
+    try:
+        from app.db import get_db
+        from app.services.draft_service import DraftService
+        db = get_db()
+        try:
+            svc = DraftService(db)
+            if target_id is not None:
+                draft = svc.get_by_id(target_id)
+            else:
+                # 가장 최근 draft 1건
+                from app.models.content import Draft as _Draft
+                draft = (
+                    db.query(_Draft)
+                    .order_by(_Draft.id.desc())
+                    .first()
+                )
+        finally:
+            db.close()
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ draft 조회 실패: {_safe_error_msg(e)}"
+        )
+        return
+
+    if not draft:
+        await update.message.reply_text(
+            "⚠️ draft 를 찾지 못했습니다. /ctxpkg <draft_id> 로 명시해주세요."
+        )
+        return
+
+    # 소스 텍스트 — source_item.source_text 우선, 없으면 draft.body
+    src_text = ""
+    try:
+        if getattr(draft, "source_item", None):
+            src_text = (
+                draft.source_item.source_text
+                or draft.source_item.title
+                or ""
+            )
+        if not src_text:
+            src_text = (
+                f"{getattr(draft, 'hook', '') or ''}\n\n"
+                f"{getattr(draft, 'body', '') or ''}"
+            ).strip()
+    except Exception:
+        src_text = (
+            f"{getattr(draft, 'hook', '') or ''}\n\n"
+            f"{getattr(draft, 'body', '') or ''}"
+        ).strip()
+
+    if not src_text:
+        await update.message.reply_text(
+            "⚠️ draft 에 본문/소스 텍스트가 비어있습니다."
+        )
+        return
+
+    processing = await update.message.reply_text(
+        f"⏳ Context Package 생성 중... (15~30초 소요, draft #{draft.id})"
+    )
+
+    try:
+        from app.services.context_package import (
+            build_context_package, format_for_grok_heavy,
+        )
+        pkg = await build_context_package(
+            news_text=src_text,
+            source_meta={"draft_id": draft.id},
+        )
+    except Exception as e:
+        try:
+            await processing.edit_text(
+                f"❌ Context Package 생성 실패: {_safe_error_msg(e)}"
+            )
+        except Exception:
+            pass
+        return
+
+    if not pkg:
+        try:
+            await processing.edit_text(
+                "⚠️ Context Package 생성 실패\n"
+                "(BLOCK_RECOMMENDED 또는 LLM 오류 — 로그 확인)"
+            )
+        except Exception:
+            pass
+        return
+
+    grok_input = format_for_grok_heavy(pkg)
+
+    meta = pkg.get("meta", {})
+    try:
+        await processing.edit_text(
+            f"✅ Context Package 생성 완료 (draft #{draft.id})\n"
+            f"⏱ {meta.get('build_seconds')}초 · "
+            f"📊 카테고리: {meta.get('category')} · "
+            f"🛡 검증: {meta.get('guard_verdict')}\n\n"
+            f"아래 텍스트 복사 → Grok Heavy 4-agent 에 붙여넣기"
+        )
+    except Exception:
+        pass
+
+    chunks = _split_for_telegram(grok_input, max_len=3800)
+    for chunk in chunks:
+        try:
+            await update.message.reply_text(
+                f"<pre>{chunk}</pre>",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            await update.message.reply_text(chunk, disable_web_page_preview=True)
+
+
+# =============================================================================
 # Ops 자동화 — 4 버튼 핸들러 (오늘 성과 / 품질 트렌드 / 시스템 상태 / 비용 현황)
 # =============================================================================
 
@@ -4894,6 +5055,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("report", report_command))
     app.add_handler(CommandHandler("digest", digest_command))
     app.add_handler(CommandHandler("yt", yt_command))
+    app.add_handler(CommandHandler("ctxpkg", ctxpkg_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("hint", hint_command))
     app.add_handler(CommandHandler("hints", hints_command))
