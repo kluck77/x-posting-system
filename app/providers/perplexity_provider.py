@@ -98,6 +98,15 @@ class PerplexityFactChecker(BaseFactChecker):
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:
+                # 시점 인식 prefix — 검색 결과를 현재 시점에서 해석하도록 강제
+                from datetime import datetime as _dt
+                _today = _dt.now().strftime("%Y년 %m월 %d일")
+                _date_prefix = (
+                    f"[현재 날짜: {_today}]\n"
+                    f"이미 지난 사건은 과거형으로 서술하라. "
+                    f"'예정되어 있다' 같은 미래 표현은 미래 사건에만 사용. "
+                    f"검증 시 해당 사건이 이미 발생했는지 먼저 확인하라.\n\n"
+                )
                 resp = await client.post(
                     PERPLEXITY_API_URL,
                     headers={
@@ -107,7 +116,7 @@ class PerplexityFactChecker(BaseFactChecker):
                     json={
                         "model": PERPLEXITY_MODEL,
                         "messages": [
-                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "system", "content": _date_prefix + SYSTEM_PROMPT},
                             {"role": "user", "content": user_msg},
                         ],
                         "temperature": 0.1,

@@ -100,6 +100,15 @@ class GeminiResearcher(BaseResearcher):
 
         try:
             url = GEMINI_API_URL.format(model=GEMINI_MODEL)
+            # 시점 인식 prefix — 훈련 데이터 시점(2024 등)으로 답하지 않도록 강제
+            from datetime import datetime as _dt
+            _today = _dt.now().strftime("%Y년 %m월 %d일")
+            _date_prefix = (
+                f"[현재 날짜: {_today}]\n"
+                f"이 시점에서 이미 지난 사건은 과거형으로 서술하라.\n"
+                f"예: '2024년 11월 미국 대선' → 이미 끝난 사건. "
+                f"'예정되어 있다' 등 미래 표현 금지.\n\n"
+            )
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(
                     url,
@@ -107,7 +116,7 @@ class GeminiResearcher(BaseResearcher):
                     headers={"Content-Type": "application/json"},
                     json={
                         "system_instruction": {
-                            "parts": [{"text": SYSTEM_INSTRUCTION}],
+                            "parts": [{"text": _date_prefix + SYSTEM_INSTRUCTION}],
                         },
                         "contents": [
                             {
