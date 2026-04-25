@@ -2618,6 +2618,139 @@ async def digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(f"❌ 다이제스트 생성 실패: {_safe_error_msg(e)}")
 
 
+async def log_post_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/log_post <tweet_id> [draft_id] [slot] — 운영자 발행 후 수동 등록.
+
+    사용 예:
+      /log_post 1234567890 1473 A
+      /log_post 1234567890
+
+    DB 저장:
+      - posting_patterns (text 채점 + rule_score)
+      - posted_tweets (post_performance 측정용)
+      - er_collector.schedule_er_collection 백그라운드 시작
+        (T+30분 / T+24시간 / T+7일 자동 수집)
+    """
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "사용법: /log_post <tweet_id> [draft_id] [slot]\n"
+            "예: /log_post 1234567890 1473 A\n\n"
+            "draft_id 명시하면 해당 draft 의 hook+body 를 텍스트로 등록.\n"
+            "없으면 가장 최근 draft 사용."
+        )
+        return
+
+    tweet_id = str(args[0]).strip()
+    draft_id = None
+    slot = ""
+    if len(args) >= 2:
+        try:
+            draft_id = int(args[1])
+        except ValueError:
+            slot = args[1]
+    if len(args) >= 3 and not slot:
+        slot = args[2]
+
+    # draft 조회 (텍스트 추출용)
+    text = ""
+    actual_draft_id = None
+    try:
+        from app.db import get_db
+        from app.services.draft_service import DraftService
+        from app.models.content import Draft as _Draft
+        db = get_db()
+        try:
+            svc = DraftService(db)
+            if draft_id is not None:
+                d = svc.get_by_id(draft_id)
+            else:
+                d = (
+                    db.query(_Draft).order_by(_Draft.id.desc()).first()
+                )
+            if d:
+                actual_draft_id = d.id
+                hook = (getattr(d, "hook", "") or "").strip()
+                body = (getattr(d, "body", "") or "").strip()
+                text = f"{hook}\n\n{body}".strip()
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"[log_post] draft 조회 실패: {e}")
+
+    if not text:
+        await update.message.reply_text(
+            "⚠️ draft 텍스트를 찾지 못했습니다. "
+            "최근 draft 가 없으면 /draft 부터 만들어주세요."
+        )
+        return
+
+    # 1. posting_patterns 저장 + rule_score 채점
+    rule_score = -1
+    try:
+        from app.services.pattern_db import save_post, score_text
+        save_post(post_id=tweet_id, text=text, slot=slot)
+        rule_score = score_text(text).get("rule_score", -1)
+    except Exception as e:
+        await update.message.reply_text(
+            f"⚠️ pattern_db 저장 실패: {_safe_error_msg(e)}"
+        )
+        return
+
+    # 2. posted_tweets 저장 (post_performance 측정용)
+    try:
+        import sqlite3 as _sql
+        import re as _re
+        import time as _time
+        from app.config import settings as _s
+        url = _s.database_url or ""
+        m = _re.match(r"sqlite:///(.+)", url)
+        path = m.group(1) if m else "./x_poster.db"
+        conn = _sql.connect(path)
+        # post_performance 모듈 테이블 보장
+        try:
+            from app.services.post_performance import _ensure_tables as _et
+            _et(conn)
+        except Exception:
+            pass
+        conn.execute(
+            "INSERT OR IGNORE INTO posted_tweets "
+            "(tweet_id, draft_id, posted_at) VALUES (?, ?, ?)",
+            (tweet_id, actual_draft_id, _time.time()),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"[log_post] posted_tweets 등록 실패 (무시): {e}")
+
+    # 3. ER 자동 수집 예약 (T+30분 / T+24시간 / T+7일)
+    try:
+        import asyncio as _a
+        from datetime import datetime as _dt
+        try:
+            from zoneinfo import ZoneInfo as _Z
+            _now = _dt.now(_Z("Asia/Seoul"))
+        except Exception:
+            _now = _dt.now()
+        from app.services.er_collector import schedule_er_collection
+        _a.create_task(
+            schedule_er_collection(post_id=tweet_id, posted_at=_now),
+            name=f"er_collect_{tweet_id}",
+        )
+    except Exception as e:
+        logger.warning(f"[log_post] ER 수집 예약 실패 (무시): {e}")
+
+    await update.message.reply_text(
+        f"✅ 등록 완료\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"tweet_id: {tweet_id}\n"
+        f"draft_id: {actual_draft_id or '미연결'}\n"
+        f"slot: {slot or '(미지정)'}\n"
+        f"룰 점수: {rule_score}/14\n\n"
+        f"📊 ER 자동 측정 예약: T+30분 / T+24시간 / T+7일"
+    )
+
+
 async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/yt — 유튜브 URL 입력 안내 (실제 처리는 url_message_handler 에서 분기)."""
     await update.message.reply_text(
@@ -5078,6 +5211,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("digest", digest_command))
     app.add_handler(CommandHandler("yt", yt_command))
     app.add_handler(CommandHandler("ctxpkg", ctxpkg_command))
+    app.add_handler(CommandHandler("log_post", log_post_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("hint", hint_command))
     app.add_handler(CommandHandler("hints", hints_command))

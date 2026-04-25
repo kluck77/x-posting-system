@@ -257,6 +257,16 @@ class OpenAIDraftWriter(BaseDraftWriter):
 
         if language == "ko":
             system_prompt = SYSTEM_PROMPT_KO
+            # 패턴 룰 동적 주입 (호출 시점 활성 룰 — 정적 SYSTEM_PROMPT_KO 불변)
+            try:
+                from app.services.pattern_injector import (
+                    get_openai_system_addition,
+                )
+                _rules = get_openai_system_addition()
+                if _rules:
+                    system_prompt = system_prompt + _rules
+            except Exception as _re:
+                logger.debug(f"[OpenAI DraftWriter] 룰 주입 skip: {_re}")
             context_block = ""
             if criteria_context:
                 context_block = f"\n\n## Gemini 리서치 결과 (필수 활용)\n{criteria_context}\n"

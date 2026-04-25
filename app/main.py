@@ -164,6 +164,80 @@ async def _kor_community_trending_loop() -> None:
         await asyncio.sleep(15 * 60)
 
 
+async def _feedback_loop() -> None:
+    """매주 일요일 23:00 KST 룰 가중치 재계산."""
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import datetime, timedelta
+        KST = ZoneInfo("Asia/Seoul")
+    except Exception as e:
+        logger.warning(f"[feedback-loop] 시간대 모듈 실패: {e}")
+        return
+    while True:
+        try:
+            now = datetime.now(KST)
+            days_until_sun = (6 - now.weekday()) % 7
+            if days_until_sun == 0 and now.hour >= 23:
+                days_until_sun = 7
+            target = (
+                now.replace(hour=23, minute=0, second=0, microsecond=0)
+                + timedelta(days=days_until_sun)
+            )
+            wait = (target - now).total_seconds()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            try:
+                from app.services.feedback_loop import reweight_rules
+                reweight_rules()
+            except Exception as e:
+                logger.warning(f"[feedback-loop] reweight 실패: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"[feedback-loop] 루프 오류: {e}")
+            await asyncio.sleep(3600)
+
+
+# Quality 95 — 경쟁계정 핸들 (X API 가용 핸들만)
+COMPETITOR_HANDLES = [
+    "coinness_kr",
+    "CoinKor",
+    "coinboy717",
+]
+
+
+async def _competitor_benchmark_loop() -> None:
+    """매일 03:00 KST 경쟁계정 30일 평균 ER 갱신."""
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import datetime, timedelta
+        KST = ZoneInfo("Asia/Seoul")
+    except Exception as e:
+        logger.warning(f"[competitor-benchmark] 시간대 모듈 실패: {e}")
+        return
+    while True:
+        try:
+            now = datetime.now(KST)
+            target = now.replace(hour=3, minute=0, second=0, microsecond=0)
+            if now >= target:
+                target += timedelta(days=1)
+            wait = (target - now).total_seconds()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            try:
+                from app.services.er_collector import benchmark_competitor
+                for handle in COMPETITOR_HANDLES:
+                    await benchmark_competitor(handle)
+                    await asyncio.sleep(2)  # rate limit 방지
+            except Exception as e:
+                logger.warning(f"[competitor-benchmark] 실행 실패: {e}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"[competitor-benchmark] 루프 오류: {e}")
+            await asyncio.sleep(3600)
+
+
 async def _morning_digest_loop() -> None:
     """매일 05:01 KST 에 run_morning_digest() 를 실행하는 백그라운드 루프.
 
@@ -332,6 +406,22 @@ async def run_all():
         logger.info("[pipeline-health] 매일 06:00 KST 헬스 리포트 등록")
     except Exception as e:
         logger.warning(f"[pipeline-health] 등록 실패 (무시): {e}")
+
+    # Quality 95 — 매주 일요일 23:00 KST 룰 가중치 재계산
+    try:
+        asyncio.create_task(_feedback_loop(), name="feedback_loop_weekly")
+        logger.info("[feedback-loop] 매주 일요일 23:00 KST 룰 재가중치 등록")
+    except Exception as e:
+        logger.warning(f"[feedback-loop] 등록 실패 (무시): {e}")
+
+    # Quality 95 — 매일 03:00 KST 경쟁계정 벤치마크
+    try:
+        asyncio.create_task(
+            _competitor_benchmark_loop(), name="competitor_benchmark_daily",
+        )
+        logger.info("[competitor-benchmark] 매일 03:00 KST 등록")
+    except Exception as e:
+        logger.warning(f"[competitor-benchmark] 등록 실패 (무시): {e}")
 
     # Ring A — 최적 시각 텔레그램 카드 전송 (07:30/12:00/18:30/22:30 KST)
     asyncio.create_task(
