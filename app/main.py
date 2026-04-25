@@ -317,6 +317,22 @@ async def run_all():
     asyncio.create_task(_polymarket_fetch_loop(), name="polymarket_fetch")
     logger.info("[polymarket-fetch] 30분 주기 Gamma API 수집 등록")
 
+    # Ops 자동화 — post_performance 측정 루프 (5분 주기 1h/6h/24h ER 측정)
+    try:
+        from app.services.post_performance import measure_loop as _perf_loop
+        asyncio.create_task(_perf_loop(), name="post_performance_measure")
+        logger.info("[post-performance] 5분 주기 ER 측정 루프 등록")
+    except Exception as e:
+        logger.warning(f"[post-performance] 등록 실패 (무시): {e}")
+
+    # Ops 자동화 — 매일 06:00 KST 5-AI 헬스 리포트
+    try:
+        from app.services.pipeline_health import daily_report_loop as _health_loop
+        asyncio.create_task(_health_loop(), name="pipeline_health_daily")
+        logger.info("[pipeline-health] 매일 06:00 KST 헬스 리포트 등록")
+    except Exception as e:
+        logger.warning(f"[pipeline-health] 등록 실패 (무시): {e}")
+
     # Ring A — 최적 시각 텔레그램 카드 전송 (07:30/12:00/18:30/22:30 KST)
     asyncio.create_task(
         ring_a_loop(_ring_a_send_next_card, _ring_a_pending_count),

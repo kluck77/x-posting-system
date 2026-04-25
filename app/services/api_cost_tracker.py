@@ -71,6 +71,12 @@ def record_usage(
         f"[CostTracker] {provider}/{model} caller={caller} "
         f"+{input_tokens}in +{output_tokens}out"
     )
+    # ops cost_monitor 영속 기록 — fail-open (모듈 없거나 DB 실패 시 무시)
+    try:
+        from app.services.cost_monitor import log_api_call as _log
+        _log(provider, model, input_tokens, output_tokens)
+    except Exception:
+        pass
 
 
 def get_usage_summary() -> str:

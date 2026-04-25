@@ -84,6 +84,8 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ["📝 초안", "📦 콘텐츠 팩", "📈 트렌드"],
         ["📊 현황", "📋 대기 큐", "🧵 스레드"],
         ["📰 다이제스트", "🎬 유튜브", "📊 주간"],
+        ["📊 오늘 성과", "📈 품질 트렌드"],
+        ["⚡ 시스템 상태", "💰 비용 현황"],
         ["💡 도움말", "💰 API 비용", "🔄 한도 초기화"],
     ],
     resize_keyboard=True,
@@ -101,6 +103,10 @@ _KEYBOARD_DISPATCH: dict[str, str] = {
     "📰 다이제스트": "digest",
     "🎬 유튜브":     "yt",
     "📊 주간":       "report",
+    "📊 오늘 성과":  "today_perf",
+    "📈 품질 트렌드": "quality_trend",
+    "⚡ 시스템 상태": "system_status",
+    "💰 비용 현황":   "cost_status",
     "💡 도움말":     "start",
     "💰 API 비용":    "cost",
     "🔄 한도 초기화": "reset_limit",
@@ -594,6 +600,10 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "start": start_command,
             "cost": cost_command,
             "reset_limit": reset_limit_command,
+            "today_perf":    handle_today_performance,
+            "quality_trend": handle_quality_trend,
+            "system_status": handle_system_status,
+            "cost_status":   handle_cost_status,
         }
         handler = handler_map.get(cmd_name)
         if handler:
@@ -2620,6 +2630,120 @@ async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "예: https://youtu.be/VIDEO_ID",
         parse_mode="HTML",
     )
+
+
+# =============================================================================
+# Ops 자동화 — 4 버튼 핸들러 (오늘 성과 / 품질 트렌드 / 시스템 상태 / 비용 현황)
+# =============================================================================
+
+async def handle_today_performance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[📊 오늘 성과] — 오늘 발행한 포스트의 ER 1h 요약."""
+    try:
+        from app.services.post_performance import get_today_performance
+        data = get_today_performance()
+    except Exception as e:
+        await update.message.reply_text(f"❌ 성과 조회 실패: {_safe_error_msg(e)}")
+        return
+
+    if data["total_posts"] == 0:
+        await update.message.reply_text(
+            "📊 오늘 발행 포스트 없음\n"
+            "(posted_tweets 테이블에 등록된 발행 건이 없거나 ER 측정 전)"
+        )
+        return
+
+    lines = [
+        "📊 오늘 성과",
+        "━━━━━━━━━━━━━━━",
+        f"발행: {data['total_posts']}건",
+        f"평균 ER: {data['avg_engagement_rate']}%",
+        "",
+        "개별 포스트:",
+    ]
+    for p in data["posts"][:10]:
+        lines.append(
+            f"  · ER {p['er']}% · 노출 {p['impressions']:,} · "
+            f"♥{p['likes']} 💬{p['replies']} 🔖{p['bookmarks']}"
+        )
+    await update.message.reply_text("\n".join(lines))
+
+
+async def handle_quality_trend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[📈 품질 트렌드] — 주간 일별 평균 viral_score (drafts 기반)."""
+    import sqlite3 as _sql
+    from datetime import datetime as _dt, timedelta as _td
+
+    try:
+        from app.config import settings as _s
+        import re as _re
+        url = _s.database_url or ""
+        m = _re.match(r"sqlite:///(.+)", url)
+        db_path = m.group(1) if m else "./x_poster.db"
+
+        week_start = (_dt.now() - _td(days=7)).timestamp()
+        conn = _sql.connect(db_path)
+        # drafts 테이블 사용 (telegram_queue 는 프로젝트에 없음). created_at 은 ISO 일 가능성 → strftime 동시 시도.
+        try:
+            cur = conn.execute("""
+                SELECT DATE(created_at) as day,
+                       AVG(viral_score) as avg_score,
+                       COUNT(*) as cnt
+                FROM drafts
+                WHERE created_at >= datetime(?, 'unixepoch')
+                GROUP BY day
+                ORDER BY day
+            """, (week_start,))
+            rows = cur.fetchall()
+        except Exception:
+            rows = []
+        conn.close()
+    except Exception as e:
+        await update.message.reply_text(f"❌ 품질 트렌드 조회 실패: {_safe_error_msg(e)}")
+        return
+
+    if not rows:
+        await update.message.reply_text("📈 주간 품질 데이터 없음")
+        return
+
+    lines = ["📈 주간 품질 트렌드 (drafts.viral_score 일별 평균)", ""]
+    for day, avg_score, cnt in rows:
+        avg_val = float(avg_score or 0)
+        bar_len = max(0, min(10, int(avg_val / 10)))
+        bar = "█" * bar_len + "░" * (10 - bar_len)
+        lines.append(f"{day}: {avg_val:5.1f}점 {bar} ({cnt}건)")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def handle_system_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[⚡ 시스템 상태] — 5-AI 헬스 체크."""
+    msg = await update.message.reply_text("⏳ 헬스 체크 중... (10~20초)")
+    try:
+        from app.services.pipeline_health import (
+            run_full_check, format_health_report,
+        )
+        checks = await run_full_check()
+        report = format_health_report(checks)
+        await msg.edit_text(report)
+    except Exception as e:
+        try:
+            await msg.edit_text(f"❌ 헬스 체크 실패: {_safe_error_msg(e)}")
+        except Exception:
+            pass
+
+
+async def handle_cost_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[💰 비용 현황] — 월간 한도 대비 사용량 + 80% 도달 경고."""
+    try:
+        from app.services.cost_monitor import (
+            format_cost_report, check_limits,
+        )
+        report = format_cost_report()
+        warnings = check_limits()
+        if warnings:
+            report += "\n\n⚠️ 경고:\n" + "\n".join(warnings)
+        await update.message.reply_text(report)
+    except Exception as e:
+        await update.message.reply_text(f"❌ 비용 조회 실패: {_safe_error_msg(e)}")
 
 
 async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
