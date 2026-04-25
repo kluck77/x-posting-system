@@ -82,11 +82,10 @@ def _normalize_to_korean(text: str) -> str:
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["📝 초안", "📦 콘텐츠 팩", "📈 트렌드"],
-        ["📊 현황", "📋 대기 큐", "🧵 스레드"],
-        ["📰 다이제스트", "🎬 유튜브", "📊 주간"],
-        ["📊 오늘 성과", "📈 품질 트렌드"],
-        ["⚡ 시스템 상태", "💰 비용 현황"],
-        ["💡 도움말", "💰 API 비용", "🔄 한도 초기화"],
+        ["🗒️ 현황", "📋 대기 큐", "🧵 스레드"],
+        ["📰 다이제스트", "🎬 유튜브", "🗓️ 주간"],
+        ["🔥 오늘 성과", "🎯 품질 트렌드", "⚡ 시스템 상태"],
+        ["💰 비용", "💡 도움말", "🔄 한도 초기화"],
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -94,22 +93,21 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
 
 # 버튼 텍스트 → 명령 매핑 (text_message_handler에서 디스패치)
 _KEYBOARD_DISPATCH: dict[str, str] = {
-    "📝 초안":       "draft",
-    "📦 콘텐츠 팩":  "pack",
-    "📈 트렌드":     "trends",
-    "📊 현황":       "status",
-    "📋 대기 큐":    "queue",
-    "🧵 스레드":     "thread",
-    "📰 다이제스트": "digest",
-    "🎬 유튜브":     "yt",
-    "📊 주간":       "report",
-    "📊 오늘 성과":  "today_perf",
-    "📈 품질 트렌드": "quality_trend",
-    "⚡ 시스템 상태": "system_status",
-    "💰 비용 현황":   "cost_status",
-    "💡 도움말":     "start",
-    "💰 API 비용":    "cost",
-    "🔄 한도 초기화": "reset_limit",
+    "📝 초안":         "draft",
+    "📦 콘텐츠 팩":    "pack",
+    "📈 트렌드":       "trends",
+    "🗒️ 현황":        "status",
+    "📋 대기 큐":      "queue",
+    "🧵 스레드":       "thread",
+    "📰 다이제스트":   "digest",
+    "🎬 유튜브":       "yt",
+    "🗓️ 주간":        "report",
+    "🔥 오늘 성과":    "today_perf",
+    "🎯 품질 트렌드":  "quality_trend",
+    "⚡ 시스템 상태":  "system_status",
+    "💰 비용":         "cost_unified",
+    "💡 도움말":       "start",
+    "🔄 한도 초기화":  "reset_limit",
 }
 
 # 사용자 상태 키
@@ -598,12 +596,11 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "yt": yt_command,
             "report": report_command,
             "start": start_command,
-            "cost": cost_command,
             "reset_limit": reset_limit_command,
             "today_perf":    handle_today_performance,
             "quality_trend": handle_quality_trend,
             "system_status": handle_system_status,
-            "cost_status":   handle_cost_status,
+            "cost_unified":  handle_cost_unified,
         }
         handler = handler_map.get(cmd_name)
         if handler:
@@ -2892,19 +2889,44 @@ async def handle_system_status(update: Update, context: ContextTypes.DEFAULT_TYP
             pass
 
 
-async def handle_cost_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """[💰 비용 현황] — 월간 한도 대비 사용량 + 80% 도달 경고."""
+async def handle_cost_unified(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[💰 비용] — 일간 + 월간 사용량 + 80% 한도 경고 통합 표시."""
+    parts: list[str] = []
+
+    # 1. 일간 — 기존 in-memory tracker (api_cost_tracker)
     try:
-        from app.services.cost_monitor import (
-            format_cost_report, check_limits,
-        )
-        report = format_cost_report()
-        warnings = check_limits()
-        if warnings:
-            report += "\n\n⚠️ 경고:\n" + "\n".join(warnings)
-        await update.message.reply_text(report)
+        from app.services.api_cost_tracker import get_usage_summary
+        daily = get_usage_summary() or ""
+        if daily:
+            parts.append(daily)
     except Exception as e:
-        await update.message.reply_text(f"❌ 비용 조회 실패: {_safe_error_msg(e)}")
+        parts.append(f"⚠️ 일간 조회 실패: {_safe_error_msg(e)}")
+
+    # 2. 월간 — cost_monitor (영속 DB 기반)
+    try:
+        from app.services.cost_monitor import format_cost_report, check_limits
+        monthly = format_cost_report()
+        warnings = check_limits()
+        if monthly:
+            parts.append("\n" + ("─" * 28))
+            parts.append(monthly)
+        if warnings:
+            parts.append("\n⚠️ <b>한도 경고</b>")
+            parts.append("\n".join(warnings))
+    except Exception as e:
+        parts.append(f"⚠️ 월간 조회 실패: {_safe_error_msg(e)}")
+
+    text = "\n".join(parts).strip() or "비용 데이터 없음"
+    try:
+        await update.message.reply_text(text, parse_mode="HTML")
+    except Exception:
+        # HTML 파싱 실패 시 평문 fallback
+        plain = text.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
+        await update.message.reply_text(plain)
+
+
+# 하위호환 — 기존 cost_status / cost 매핑 호출 시에도 통합 핸들러로 동작
+handle_cost_status = handle_cost_unified
 
 
 async def perf_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
