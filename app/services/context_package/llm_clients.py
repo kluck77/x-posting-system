@@ -217,8 +217,20 @@ async def call_gemini_korea_data(summary: dict) -> dict:
     api_key = getattr(settings, "gemini_api_key", "") or ""
     if not api_key or not summary:
         return {}
+    # Phase 4 — Editorial Constitution + 자연어 recency 강제 (W4)
+    from app.editorial_constitution import (
+        get_constitution_prompt as _const,
+    )
+    _recency_directive = (
+        "오늘 한국 시각 기준 지난 7일 이내 자료만 사용하라. "
+        "7일 이전 자료는 사용 금지. "
+        "URL/메타에 발행일 명시 자료만 인용.\n\n"
+    )
     prompt = (
-        SYSTEM_GEMINI_KOREA_DATA
+        _const()
+        + "\n\n"
+        + _recency_directive
+        + SYSTEM_GEMINI_KOREA_DATA
         + "\n\n사건 요약:\n"
         + json.dumps(summary, ensure_ascii=False)
     )
@@ -255,6 +267,14 @@ async def call_pplx_factcheck(summary: dict, claims: list[str]) -> dict:
     }, ensure_ascii=False)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
+            # Phase 4 — Editorial Constitution + recency 강제
+            from datetime import datetime as _dt, timedelta as _td
+            from app.editorial_constitution import (
+                get_constitution_prompt as _const,
+            )
+            _system = _const() + "\n\n" + SYSTEM_PPLX_FACT
+            _after_date = (_dt.now() - _td(days=30)).strftime("%m/%d/%Y")
+
             resp = await client.post(
                 "https://api.perplexity.ai/chat/completions",
                 headers={
@@ -264,14 +284,18 @@ async def call_pplx_factcheck(summary: dict, claims: list[str]) -> dict:
                 json={
                     "model": "sonar-pro",
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PPLX_FACT},
+                        {"role": "system", "content": _system},
                         {"role": "user", "content": user_content},
                     ],
+                    # Phase 4: 최근 30일 자료만 (W4 신선도 정책)
+                    "search_recency_filter": "month",
+                    "search_after_date_filter": _after_date,
                     "search_domain_filter": [
                         "coindeskkorea.com", "tokenpost.kr",
                         "reuters.com", "bloomberg.com",
                         "theblock.co", "coindesk.com",
                         "koreatimes.co.kr", "bok.or.kr",
+                        "fsc.go.kr", "federalreserve.gov",
                     ],
                     "max_tokens": 2000,
                 },

@@ -582,21 +582,36 @@ def judge(handoff: dict) -> QualityVerdict:
     except Exception as _he:
         _judge_logger.debug(f"[HandoffGuard] hook/field 확장 검증 skip: {_he}")
 
+    # 결정 산출 (Phase 4 writing_score 통합 전 임시값)
     if grade == "REJECT":
         decision = "REJECT"
         block_reason = " / ".join(reasons[:3]) or "재료 품질 부족"
-        _judge_logger.warning(
-            f"[HandoffGuard] REJECT: {block_reason} (score={score})"
-        )
     elif grade == "C" or has_contamination or has_duplicate:
         decision = "REWRITE_REQUIRED"
         block_reason = ""
+    else:
+        decision = "APPROVE"
+        block_reason = ""
+
+    # Phase 4 — Writing OS v1 통합 (7원칙 채점 + 안전 게이트)
+    try:
+        reasons, warnings, grade, decision = _apply_writing_score(
+            handoff, reasons, warnings, grade, decision,
+        )
+        if grade == "REJECT":
+            block_reason = " / ".join(reasons[:3]) or block_reason or "writing_score 안전 게이트 실패"
+    except Exception as _we:
+        _judge_logger.debug(f"[HandoffGuard] writing_score skip: {_we}")
+
+    if decision == "REJECT":
+        _judge_logger.warning(
+            f"[HandoffGuard] REJECT: {block_reason} (score={score})"
+        )
+    elif decision == "REWRITE_REQUIRED":
         _judge_logger.info(
             f"[HandoffGuard] REWRITE_REQUIRED grade={grade} score={score}"
         )
     else:
-        decision = "APPROVE"
-        block_reason = ""
         _judge_logger.info(
             f"[HandoffGuard] APPROVE grade={grade} score={score}"
         )
@@ -609,6 +624,63 @@ def judge(handoff: dict) -> QualityVerdict:
         warnings=warnings,
         block_reason=block_reason,
     )
+
+
+# ─── Phase 4 — Writing OS v1 통합 (7원칙 채점 게이트) ────────────────
+def _apply_writing_score(
+    handoff: dict,
+    reasons: list,
+    warnings: list,
+    grade: str,
+    decision: str,
+) -> tuple[list, list, str, str]:
+    """기존 judge 결과에 7원칙 writing_score 통합.
+
+    안전 룰 (W2/W4/금지어) 실패 시 자동 REJECT.
+    overall_score < 80 + 현재 REJECT 아니면 REWRITE_REQUIRED 로 강등.
+    """
+    draft_text = (
+        handoff.get("original_draft")
+        or handoff.get("draft")
+        or handoff.get("content")
+        or ""
+    )
+    if not draft_text:
+        return reasons, warnings, grade, decision
+
+    try:
+        from app.services.writing_scorer import score_text as _ws_score
+        ws = _ws_score(draft_text)
+    except Exception as e:
+        _judge_logger.debug(f"[Phase4] writing_scorer 호출 실패 (skip): {e}")
+        return reasons, warnings, grade, decision
+
+    # 안전 게이트 — REJECT 강제
+    if not ws.w2_no_invention:
+        reasons.append("W2 실패: 익명 소식통/발명 신호")
+        grade = "REJECT"; decision = "REJECT"
+    if not ws.w4_date_policy:
+        reasons.append("W4 실패: 날짜 정책 위반")
+        grade = "REJECT"; decision = "REJECT"
+    if ws.forbidden_hits > 0:
+        reasons.append(f"금지어 {ws.forbidden_hits}건")
+        grade = "REJECT"; decision = "REJECT"
+
+    # 권고 (warning)
+    if not ws.w1_hook_pattern:
+        warnings.append("W1: 첫 문장 패턴 개선 권장")
+    if not ws.w6_nut_graf:
+        warnings.append("W6: nut graf 없음")
+    if not ws.w7_follow_reason:
+        warnings.append("W7: 팔로우 이유 부족")
+
+    # 점수 강등 — REJECT 아닐 때만
+    if ws.overall_score < 80 and decision != "REJECT":
+        if grade not in ("C", "REJECT"):
+            grade = "C"
+        decision = "REWRITE_REQUIRED"
+
+    return reasons, warnings, grade, decision
 
 
 # ─── Phase 3 훅·필드 검증 ─────────────────────────────────────────────

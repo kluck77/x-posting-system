@@ -2,14 +2,27 @@
 
 호출 시점에 활성 룰을 읽어 system prompt 끝에 append 하는 방식 — 정적
 SYSTEM_PROMPT_KO 자체는 수정하지 않음 (기존 5-AI 흐름 불변).
+
+Phase 4 (writing-os-v1):
+- get_openai_system_addition 에 Editorial Constitution 7원칙 prepend
+- GROK_AGENT_ADDITIONS 각 슬롯 앞에 SCENE_RULE_PREFIX prepend
 """
 from __future__ import annotations
 
 import logging
 
+from app.editorial_constitution import get_constitution_prompt
 from app.services.pattern_db import get_active_rules
 
 logger = logging.getLogger(__name__)
+
+
+SCENE_RULE_PREFIX = """
+[장면화 원칙 — 모든 문장에 적용]
+새 사실 추가 금지. 원문 팩트를 재배열할 것.
+설명문 → 시간/장소 좌표 + 능동 동사로 변환.
+비유는 "이해 보조" 라벨로 본문과 분리.
+"""
 
 
 def build_rules_block() -> str:
@@ -44,11 +57,22 @@ _OPENAI_RULES_TEMPLATE = """
 
 
 def get_openai_system_addition() -> str:
-    """OpenAI system prompt 끝에 추가할 룰 블록 — 호출 시점에 동적 생성."""
+    """OpenAI system prompt 끝에 추가할 통합 블록 — 호출 시점 동적 생성.
+
+    구성 (Phase 4):
+      ① Editorial Constitution v1 (7원칙 + 7패턴 + 3공식)
+      ② 활성 룰 블록 (가중치 절댓값 큰 순)
+      ③ 채점 기준 (14/14 = 95점, 12/14 미만 재생성)
+    """
+    constitution = get_constitution_prompt()
     block = build_rules_block()
     if not block:
-        return ""
-    return _OPENAI_RULES_TEMPLATE.format(rules_block=block)
+        return constitution + "\n\n"
+    return (
+        constitution
+        + "\n\n"
+        + _OPENAI_RULES_TEMPLATE.format(rules_block=block)
+    )
 
 
 # Grok 4-agent 별 추가 지시 템플릿
@@ -92,6 +116,11 @@ Polymarket 에서 이 주제 관련 시장을 검색하라.
 
 
 def get_grok_agent_addition(agent_type: str, keywords: str = "") -> str:
-    """Grok 4-agent 별 추가 지시 — keywords 치환."""
+    """Grok 4-agent 별 추가 지시 — 장면화 prefix + keywords 치환."""
     template = GROK_AGENT_ADDITIONS.get(agent_type, "")
-    return template.replace("{keywords}", keywords or "")
+    if not template:
+        return ""
+    return (
+        SCENE_RULE_PREFIX
+        + template.replace("{keywords}", keywords or "")
+    )

@@ -2751,6 +2751,72 @@ async def log_post_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def score_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/score [draft_id] — Writing OS v1 7원칙 채점.
+
+    인자 없으면 가장 최근 draft.
+    안전 룰 (W2/W4/금지어) 자동 차단은 judge 가 이미 적용하므로,
+    이 명령은 운영자가 자세한 점수표를 보기 위한 보조 도구.
+    """
+    args = context.args or []
+    target_id: int | None = None
+    if args:
+        try:
+            target_id = int(args[0])
+        except ValueError:
+            await update.message.reply_text(
+                "사용법: /score <draft_id>\n예: /score 1473"
+            )
+            return
+
+    draft = None
+    try:
+        from app.db import get_db
+        from app.services.draft_service import DraftService
+        from app.models.content import Draft as _Draft
+        db = get_db()
+        try:
+            svc = DraftService(db)
+            if target_id is not None:
+                draft = svc.get_by_id(target_id)
+            else:
+                draft = db.query(_Draft).order_by(_Draft.id.desc()).first()
+        finally:
+            db.close()
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ draft 조회 실패: {_safe_error_msg(e)}"
+        )
+        return
+
+    if not draft:
+        await update.message.reply_text(
+            "⚠️ draft 를 찾지 못했습니다. /score <draft_id> 로 명시해주세요."
+        )
+        return
+
+    text = (
+        f"{getattr(draft, 'hook', '') or ''}\n\n"
+        f"{getattr(draft, 'body', '') or ''}"
+    ).strip()
+    if not text:
+        await update.message.reply_text("⚠️ draft 본문이 비어있습니다.")
+        return
+
+    try:
+        from app.services.writing_scorer import (
+            score_text, format_score_for_telegram,
+        )
+        ws = score_text(text)
+        card = format_score_for_telegram(ws)
+        header = f"📐 Writing Score (draft #{draft.id})\n{'─' * 28}\n"
+        await update.message.reply_text(header + card)
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ 채점 실패: {_safe_error_msg(e)}"
+        )
+
+
 async def yt_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/yt — 유튜브 URL 입력 안내 (실제 처리는 url_message_handler 에서 분기)."""
     await update.message.reply_text(
@@ -5212,6 +5278,7 @@ def create_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("yt", yt_command))
     app.add_handler(CommandHandler("ctxpkg", ctxpkg_command))
     app.add_handler(CommandHandler("log_post", log_post_command))
+    app.add_handler(CommandHandler("score", score_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("hint", hint_command))
     app.add_handler(CommandHandler("hints", hints_command))
