@@ -149,24 +149,10 @@ async def build_context_package(
         f"verdict={guard.get('verdict')}"
     )
 
-    # Step 5.5 — Writing Score 기반 자동 보강 (W1/W3/W5/W6)
-    try:
-        enrich_result = await _auto_enrich(
-            pkg=pkg,
-            news_text=news_text,
-            summary=summary,
-            category=category,
-        )
-        if enrich_result:
-            pkg["enrichment"] = enrich_result
-            pkg["enriched"] = True
-            logger.info(f"[CtxPkg] 보강 완료: {list(enrich_result.keys())}")
-        else:
-            pkg["enriched"] = False
-    except Exception as _ee:
-        logger.warning(f"[CtxPkg] 보강 실패 (정상 흐름 진행): {_ee}")
-        pkg["enriched"] = False
-
+    # Step 5.5 — Writing Score 기반 자동 보강
+    # v2 (rule-simplification): 자동 호출 비활성화. 운영자가 필요시 별도
+    # 명령으로만 호출 가능 (보강 함수 자체는 유지).
+    pkg["enriched"] = False
     return pkg
 
 

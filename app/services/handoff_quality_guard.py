@@ -398,7 +398,7 @@ class QualityVerdict:
     verdict:      str = ""                         # PASS / WARN / BLOCK_RECOMMENDED / REJECT
 
 
-# ─── verdict 분류 — 안전 위반만 REJECT, 그 외 등급별 경고 ─────────────
+# ─── verdict 분류 — 안전 룰 위반만 REJECT, 나머지 전부 WARN (전송) ──
 _SAFETY_VIOLATION_KEYWORDS = (
     "음모론",
     "발명",
@@ -406,31 +406,25 @@ _SAFETY_VIOLATION_KEYWORDS = (
     "금지어",
     "매수 권유",
     "자동매매",
-    "W2 실패",          # writing_scorer W2 (발명 신호)
-    "W4 실패",          # writing_scorer W4 (날짜 정책 — 1년 초과 차단 케이스)
+    "S1",            # writing_scorer v2 안전 게이트
+    "S2",
+    "S3",
+    "W2 실패",       # v1 호환 (W2 = 발명)
+    "W4 실패",       # v1 호환 (W4 = 날짜 1년 초과)
 )
 
 
 def _classify_verdict(grade: str, reasons: list[str]) -> str:
-    """grade + reasons 기반 verdict 분류.
+    """안전 룰 위반만 REJECT, 그 외는 WARN (전송 허용).
 
-    - 안전 룰 위반 (음모론/발명/금지어/익명소식통/매수권유/자동매매/W2/W4 차단)
-      → REJECT (전송 차단)
-    - grade=='REJECT' 인데 안전 위반 없음 → BLOCK_RECOMMENDED (경고 + 전송)
-    - grade=='C' → BLOCK_RECOMMENDED (경고 + 전송)
-    - grade=='B' → WARN (경고 + 전송)
-    - 그 외 (A/B 통과)  → PASS
+    v2 단순화: 품질 문제 (외부 비교 / 인과 과잉 / 필드 추상 / 훅 자수 초과
+    등) 는 모두 WARN 으로 하향 — 운영자가 카드 보고 판단.
     """
     reason_text = " ".join(reasons or [])
     if any(kw in reason_text for kw in _SAFETY_VIOLATION_KEYWORDS):
         return "REJECT"
-    if grade == "REJECT":
-        return "BLOCK_RECOMMENDED"
-    if grade == "C":
-        return "BLOCK_RECOMMENDED"
-    if grade == "B":
-        return "WARN"
-    return "PASS"
+    # 품질 문제는 전부 WARN (전송)
+    return "WARN" if reasons else "PASS"
 
 
 # ─── 헬퍼 ────────────────────────────────────────────────────────────
@@ -695,24 +689,27 @@ def _apply_writing_score(
         _judge_logger.debug(f"[Phase4] writing_scorer 호출 실패 (skip): {e}")
         return reasons, warnings, grade, decision
 
-    # 안전 게이트 — REJECT 강제
-    if not ws.w2_no_invention:
-        reasons.append("W2 실패: 익명 소식통/발명 신호")
+    # 안전 게이트 — REJECT 강제 (v2: S1/S2/S3)
+    if not getattr(ws, "safe_no_invention", True):
+        reasons.append("S1 실패: 발명 신호 / 익명 소식통")
         grade = "REJECT"; decision = "REJECT"
-    if not ws.w4_date_policy:
-        reasons.append("W4 실패: 날짜 정책 위반")
+    if not getattr(ws, "safe_no_solicitation", True):
+        reasons.append("S2 실패: 매수·매도 권유 / 금지어")
         grade = "REJECT"; decision = "REJECT"
-    if ws.forbidden_hits > 0:
+    if not getattr(ws, "safe_no_conspiracy", True):
+        reasons.append("S3 실패: 음모론 신호 감지")
+        grade = "REJECT"; decision = "REJECT"
+    if getattr(ws, "forbidden_hits", 0) > 0:
         reasons.append(f"금지어 {ws.forbidden_hits}건")
         grade = "REJECT"; decision = "REJECT"
 
-    # 권고 (warning)
-    if not ws.w1_hook_pattern:
-        warnings.append("W1: 첫 문장 패턴 개선 권장")
-    if not ws.w6_nut_graf:
-        warnings.append("W6: nut graf 없음")
-    if not ws.w7_follow_reason:
-        warnings.append("W7: 팔로우 이유 부족")
+    # 권고 (warning) — v2: 글쓰기 룰은 참고용
+    if not getattr(ws, "has_strong_opener", True):
+        warnings.append("W1: 첫 줄 멈추는 힘 부족 (참고용)")
+    if not getattr(ws, "has_nut_graf", True):
+        warnings.append("W3: 마지막 줄 의미 없음 (참고용)")
+    if not getattr(ws, "has_scene", True):
+        warnings.append("W2: 장면화 부족 (참고용)")
 
     # 점수 강등 — REJECT 아닐 때만
     if ws.overall_score < 80 and decision != "REJECT":
@@ -734,7 +731,10 @@ EMOJI_PATTERN = re.compile(
 
 
 def _check_hook_candidates(handoff: dict) -> tuple[list, list]:
-    """훅 후보 검증. 반환: (warnings, blocks)."""
+    """훅 후보 검증 — v2: 모두 warning (BLOCK 없음, 운영자 판단).
+
+    안전 룰 (이모지 헤드라인 등) 만 BLOCK 으로 유지하고 자수/대시 등은 WARN.
+    """
     warnings: list = []
     blocks: list = []
 
@@ -745,14 +745,13 @@ def _check_hook_candidates(handoff: dict) -> tuple[list, list]:
             hook_section = str(v) if not isinstance(v, list) else "\n".join(map(str, v))
             break
     if not hook_section:
-        return warnings, blocks  # 섹션 없으면 검증 skip (warning 도 안 함)
+        return warnings, blocks
 
     lines = [l.strip() for l in hook_section.split("\n") if l.strip()]
     banned_words = (
         "주목해야 할", "흥미로운", "충격적인", "폭발적", "급격히",
     )
     for line in lines[:5]:
-        # 번호/패턴/자수 prefix 제거
         hook_text = re.sub(r"^\s*\d+\.\s*", "", line)
         hook_text = re.sub(r"\[패턴.\]\s*", "", hook_text)
         hook_text = re.sub(r"\(\d+자\)\s*", "", hook_text).strip()
@@ -760,18 +759,17 @@ def _check_hook_candidates(handoff: dict) -> tuple[list, list]:
             continue
         char_count = len(hook_text)
 
+        # v2: BLOCK 제거 — 모두 WARN
         if char_count > 25:
-            blocks.append(f"훅 25자 초과 ({char_count}자): {hook_text[:30]}")
+            warnings.append(f"훅 25자 초과 ({char_count}자): {hook_text[:30]}")
         elif char_count < 14:
             warnings.append(f"훅 14자 미만 ({char_count}자)")
-
         if hook_text.endswith("."):
-            blocks.append(f"훅 마침표 포함: {hook_text[:30]}")
+            warnings.append(f"훅 마침표 포함: {hook_text[:30]}")
         if "—" in hook_text or " - " in hook_text:
-            blocks.append(f"훅 대시 포함 (설명형): {hook_text[:30]}")
+            warnings.append(f"훅 대시 포함 (설명형): {hook_text[:30]}")
         if EMOJI_PATTERN.search(hook_text):
-            blocks.append(f"훅 이모지 포함: {hook_text[:30]}")
-
+            warnings.append(f"훅 이모지 포함: {hook_text[:30]}")
         for word in banned_words:
             if word in hook_text:
                 warnings.append(f"훅 약한 표현 '{word}': {hook_text[:30]}")
@@ -779,11 +777,10 @@ def _check_hook_candidates(handoff: dict) -> tuple[list, list]:
 
 
 def _check_handoff_fields(handoff: dict) -> tuple[list, list]:
-    """핸드오프 필드 품질 검증."""
+    """핸드오프 필드 검증 — v2: 모두 warning (BLOCK 없음)."""
     warnings: list = []
     blocks: list = []
 
-    # 이모지 헤더 과다 (헤드라인 뉴스 형식)
     emoji_headers = ("⚠️", "📌", "💎", "🔥", "🎯")
     try:
         full_text = json.dumps(handoff, ensure_ascii=False)
@@ -791,7 +788,7 @@ def _check_handoff_fields(handoff: dict) -> tuple[list, list]:
         full_text = json_to_text(handoff)
     emoji_count = sum(full_text.count(e) for e in emoji_headers)
     if emoji_count >= 3:
-        blocks.append(
+        warnings.append(
             f"핸드오프 이모지 헤더 {emoji_count}개 (헤드라인 뉴스 형식)"
         )
 

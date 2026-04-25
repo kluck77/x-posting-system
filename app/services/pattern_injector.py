@@ -75,42 +75,30 @@ def get_openai_system_addition() -> str:
     )
 
 
-# Grok 4-agent 별 추가 지시 템플릿
+# Grok 4-agent 별 추가 지시 템플릿 (v2: 단순화 — 강제 아님)
 GROK_AGENT_ADDITIONS = {
     "hook": """
-[Hook 에이전트 추가 지시]
-X firehose 에서 같은 주제 최근 24시간 글을 검색하라.
-이미 쓰인 hook 유형을 확인하고 다른 각도를 선택하라.
-검색 방법: x_search(query="{keywords}", hours=24)
-안 쓰인 훅 유형 우선순위:
-1. 충격 수치 → 2. 시점 못박기 → 3. 반전 → 4. 모순 노출
+[Hook]
+소스에서 가장 강한 한 줄을 찾아라. 없으면 가장 중요한 사실을 짧게.
+억지로 만들지 마라.
+x_search(query="{keywords}", hours=24) 로 같은 주제 24시간 X 글 검색
+→ 안 쓰인 각도 선택.
 """,
     "context": """
-[Context 에이전트 추가 지시]
-웹 검색으로 다음을 보강하라:
-1. 처음 보는 사람을 위한 비유 1개 (일상 연결)
-2. 역사적 유사 사례 1개 (24개월 이내)
-3. 한국 시장 추가 수치 1개
-검색 방법: web_search(query="...")
-검색 결과를 그대로 쓰지 말고 내 말로 소화해서 1줄로 압축.
+[Context]
+소스 사실을 재배열해서 보여줘라. 새 사실 추가 금지.
+원문에 비유·사례 없을 때만 web_search(query="...") 로 보강.
 """,
     "stakes": """
-[Stakes 에이전트 추가 지시]
-웹 검색으로 한국 시장 최신 수치를 확인하라.
-- 원/달러 환율 (한국은행 기준)
-- 코스피/코스닥 종가
-- 비트코인 김치프리미엄
-위 수치 중 이 글과 관련된 것 1개 이상 실시간 확인 후 인용.
-검색 방법: web_search(query="원달러 환율 오늘")
+[Stakes]
+"그래서 이게 나한테 왜 중요한가" — 소스에 있는 사실로만.
+소스가 한국 관련일 때만 web_search(query="원달러 환율 오늘") 로
+한국 시장 수치 확인.
 """,
     "prediction": """
-[Prediction 에이전트 추가 지시]
-Polymarket 에서 이 주제 관련 시장을 검색하라.
-- 관련 odds 실시간 확인
-- 24시간 변화량 확인
-- 없으면 가장 가까운 매크로 시장(FOMC/금리/선거)
-검색 방법: web_search(query="polymarket {keywords} odds")
-예측 구조: "[시한] [조건]이면 [결과]. 반증: [반대 조건]."
+[Prediction]
+예측 1개 + 반증조건 1개. 소스에 있는 사실 기반.
+web_search(query="polymarket {keywords} odds") 로 관련 일정·odds 확인.
 """,
 }
 
