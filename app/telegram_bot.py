@@ -84,8 +84,9 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ["📝 초안", "📦 콘텐츠 팩", "📈 트렌드"],
         ["🗒️ 현황", "📋 대기 큐", "🧵 스레드"],
         ["📰 다이제스트", "🎬 유튜브", "🗓️ 주간"],
-        ["🔥 오늘 성과", "🎯 품질 트렌드", "⚡ 시스템 상태"],
-        ["💰 비용", "💡 도움말", "🔄 한도 초기화"],
+        ["🔥 오늘 성과", "🎯 품질 트렌드", "📐 점수"],
+        ["⚡ 시스템 상태", "💰 비용", "💡 도움말"],
+        ["🔄 한도 초기화"],
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -104,6 +105,7 @@ _KEYBOARD_DISPATCH: dict[str, str] = {
     "🗓️ 주간":        "report",
     "🔥 오늘 성과":    "today_perf",
     "🎯 품질 트렌드":  "quality_trend",
+    "📐 점수":         "score",
     "⚡ 시스템 상태":  "system_status",
     "💰 비용":         "cost_unified",
     "💡 도움말":       "start",
@@ -601,6 +603,7 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "quality_trend": handle_quality_trend,
             "system_status": handle_system_status,
             "cost_unified":  handle_cost_unified,
+            "score":         score_command,
         }
         handler = handler_map.get(cmd_name)
         if handler:
