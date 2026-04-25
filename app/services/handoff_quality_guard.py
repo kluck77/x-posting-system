@@ -287,7 +287,9 @@ def run_quality_guard(source_pack: dict) -> dict:
             final_body=str(source_pack.get("final_body") or ""),
             editorial_meta=source_pack.get("editorial_meta"),
         )
-        if verdict.decision == "REJECT":
+        # 좁힌 정의: '안전 위반' verdict (REJECT) 일 때만 block.
+        # 기존 grade=='REJECT' 라도 안전 위반 아니면 카드 송출 (운영자 판단).
+        if verdict.verdict == "REJECT":
             block_recommended = True
     except Exception as _je:
         _judge_logger.warning(f"[run_quality_guard] judge 실패 (무시): {_je}")
@@ -308,6 +310,7 @@ def run_quality_guard(source_pack: dict) -> dict:
             "reasons":      verdict.reasons,
             "warnings":     verdict.warnings,
             "block_reason": verdict.block_reason,
+            "verdict":      verdict.verdict,
         }
     return out
 
@@ -392,6 +395,42 @@ class QualityVerdict:
     reasons:      list[str] = _field(default_factory=list)
     warnings:     list[str] = _field(default_factory=list)
     block_reason: str = ""
+    verdict:      str = ""                         # PASS / WARN / BLOCK_RECOMMENDED / REJECT
+
+
+# ─── verdict 분류 — 안전 위반만 REJECT, 그 외 등급별 경고 ─────────────
+_SAFETY_VIOLATION_KEYWORDS = (
+    "음모론",
+    "발명",
+    "익명 소식통",
+    "금지어",
+    "매수 권유",
+    "자동매매",
+    "W2 실패",          # writing_scorer W2 (발명 신호)
+    "W4 실패",          # writing_scorer W4 (날짜 정책 — 1년 초과 차단 케이스)
+)
+
+
+def _classify_verdict(grade: str, reasons: list[str]) -> str:
+    """grade + reasons 기반 verdict 분류.
+
+    - 안전 룰 위반 (음모론/발명/금지어/익명소식통/매수권유/자동매매/W2/W4 차단)
+      → REJECT (전송 차단)
+    - grade=='REJECT' 인데 안전 위반 없음 → BLOCK_RECOMMENDED (경고 + 전송)
+    - grade=='C' → BLOCK_RECOMMENDED (경고 + 전송)
+    - grade=='B' → WARN (경고 + 전송)
+    - 그 외 (A/B 통과)  → PASS
+    """
+    reason_text = " ".join(reasons or [])
+    if any(kw in reason_text for kw in _SAFETY_VIOLATION_KEYWORDS):
+        return "REJECT"
+    if grade == "REJECT":
+        return "BLOCK_RECOMMENDED"
+    if grade == "C":
+        return "BLOCK_RECOMMENDED"
+    if grade == "B":
+        return "WARN"
+    return "PASS"
 
 
 # ─── 헬퍼 ────────────────────────────────────────────────────────────
@@ -623,6 +662,7 @@ def judge(handoff: dict) -> QualityVerdict:
         reasons=reasons,
         warnings=warnings,
         block_reason=block_reason,
+        verdict=_classify_verdict(grade, reasons),
     )
 
 

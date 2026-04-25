@@ -1429,15 +1429,27 @@ class Orchestrator:
             resonance_fallback_used=_resonance_fallback_used,
         )
 
-        # BLOCK_RECOMMENDED 감지 시 draft_id 기반 캐시 기록 (send_for_approval 차단용)
+        # quality 결과 캐시 — verdict 별 처리:
+        #   REJECT             → send_for_approval 차단 (안전 위반)
+        #   BLOCK_RECOMMENDED  → 카드 전송 + 경고 메시지
+        #   WARN               → 카드 전송 + 가벼운 경고
+        #   PASS               → 캐시 안 함
         try:
             _q = pack_chain_data.get("quality_guard") if pack_chain_data else None
-            if _q and _q.get("block_recommended"):
-                _mark_block_recommended(draft.id, _q)
-                logger.warning(
-                    f"[block-guard] draft_id={draft.id} BLOCK_RECOMMENDED — "
-                    f"HIGH={_q.get('high_count', 0)}개 (승인 카드 차단 예정)"
-                )
+            if _q:
+                _v = _q.get("verdict") or ""
+                if _v in ("REJECT", "BLOCK_RECOMMENDED", "WARN"):
+                    _mark_block_recommended(draft.id, _q)
+                    if _v == "REJECT":
+                        logger.warning(
+                            f"[block-guard] draft_id={draft.id} REJECT — "
+                            f"안전 위반 (승인 카드 차단 예정)"
+                        )
+                    else:
+                        logger.info(
+                            f"[block-guard] draft_id={draft.id} {_v} — "
+                            f"카드 전송 + 경고 배지"
+                        )
         except Exception as _bg_e:
             logger.debug(f"[block-guard] mark 실패 (무시): {_bg_e}")
 
@@ -1660,21 +1672,29 @@ class Orchestrator:
             )
             return False
 
-        # 재료 품질 BLOCK_RECOMMENDED 감지 시 전송 차단 + 운영자 경고
+        # 재료 품질 게이트 — verdict 기반 분기:
+        #   REJECT             → 카드 차단 + 운영자 경고 (안전 위반)
+        #   BLOCK_RECOMMENDED  → 카드 전송 + 경고 메시지 추가 (운영자 판단)
+        #   WARN               → 카드 전송 + 가벼운 경고
+        #   PASS / 캐시 없음   → 정상 전송
         _quality = _get_block_recommended(draft_id)
-        if _quality and _quality.get("block_recommended"):
-            high_count = _quality.get("high_count", 0)
-            logger.warning(
-                f"[send-guard] BLOCK_RECOMMENDED — draft_id={draft_id} "
-                f"HIGH={high_count}개 → 승인 카드 차단"
+        _verdict_str = (_quality or {}).get("verdict") or ""
+        if _quality and _verdict_str == "REJECT":
+            block_reason = (
+                _quality.get("block_reason")
+                or " / ".join((_quality.get("reasons") or [])[:3])
+                or "안전 룰 위반"
             )
-            # 운영자에게 간이 경고 메시지 (승인 카드는 안 보냄)
+            logger.warning(
+                f"[send-guard] REJECT — draft_id={draft_id} → 승인 카드 차단: "
+                f"{block_reason}"
+            )
             await _send_admin_warning(
                 chat_id,
                 (
-                    f"⚠️ <b>재료 품질 부족</b> (draft #{draft_id})\n"
-                    f"HIGH 경고 {high_count}개 감지 — 파이프라인 재실행 필요.\n"
-                    f"승인 카드는 전송되지 않았습니다."
+                    f"⛔ <b>draft #{draft_id} 전송 차단</b>\n"
+                    f"사유: {block_reason}\n\n"
+                    f"강제 진행: <code>/force_{draft_id}</code>"
                 ),
             )
             return False
@@ -1684,6 +1704,23 @@ class Orchestrator:
 
         if message_id:
             self.draft_service.set_telegram_message_id(draft_id, message_id)
+            # 카드 전송 후 BLOCK_RECOMMENDED / WARN 인 경우 경고 배지 추가 송출
+            if _verdict_str in ("BLOCK_RECOMMENDED", "WARN"):
+                try:
+                    icon = "⚠️" if _verdict_str == "BLOCK_RECOMMENDED" else "💡"
+                    score = (_quality or {}).get("score", 0)
+                    issues = (_quality or {}).get("reasons", []) + (_quality or {}).get("warnings", [])
+                    issue_text = "\n".join(f"  · {i}" for i in issues[:5]) or "  · 세부 사항 없음"
+                    await _send_admin_warning(
+                        chat_id,
+                        (
+                            f"{icon} <b>품질 경고</b> (draft #{draft_id} | {score}점)\n"
+                            f"운영자 판단으로 발행 결정.\n\n"
+                            f"문제:\n{issue_text}"
+                        ),
+                    )
+                except Exception as _we:
+                    logger.debug(f"[send-guard] warn 메시지 실패 (무시): {_we}")
             return True
         elif not settings.has_telegram_config:
             logger.info(f"[Mock 텔레그램] 카드 전송됨 (Mock): draft_id={draft_id}")
