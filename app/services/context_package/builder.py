@@ -148,7 +148,123 @@ async def build_context_package(
         f"[CtxPkg] 완료: {round(time.time() - t0, 2)}초 "
         f"verdict={guard.get('verdict')}"
     )
+
+    # Step 5.5 — Writing Score 기반 자동 보강 (W1/W3/W5/W6)
+    try:
+        enrich_result = await _auto_enrich(
+            pkg=pkg,
+            news_text=news_text,
+            summary=summary,
+            category=category,
+        )
+        if enrich_result:
+            pkg["enrichment"] = enrich_result
+            pkg["enriched"] = True
+            logger.info(f"[CtxPkg] 보강 완료: {list(enrich_result.keys())}")
+        else:
+            pkg["enriched"] = False
+    except Exception as _ee:
+        logger.warning(f"[CtxPkg] 보강 실패 (정상 흐름 진행): {_ee}")
+        pkg["enriched"] = False
+
     return pkg
+
+
+async def _auto_enrich(
+    pkg: dict,
+    news_text: str,
+    summary: dict,
+    category: str,
+) -> dict | None:
+    """Writing Score 기반 자동 보강 (W1/W3/W5/W6 부족 시 병렬 호출).
+
+    실패 시 None 반환 — 정상 흐름은 항상 진행 (fail-open).
+    """
+    try:
+        from app.services.writing_scorer import score_text as _ws_score
+    except Exception as e:
+        logger.debug(f"[Enrich] writing_scorer 로드 실패: {e}")
+        return None
+
+    draft_text = pkg.get("draft") or news_text or ""
+    if not draft_text:
+        return None
+    ws = _ws_score(draft_text)
+    if not ws.enrich_needed:
+        logger.info("[Enrich] 보강 불필요 — Writing Score 통과 항목")
+        return None
+    logger.info(f"[Enrich] 보강 필요: {ws.enrich_needed}")
+
+    from app.services.context_package.llm_clients import (
+        enrich_w1_stats, enrich_w5_sources, enrich_w6_nut_graf,
+    )
+
+    tasks = []
+    task_names: list[str] = []
+    if "W1" in ws.enrich_needed or "W3" in ws.enrich_needed:
+        tasks.append(enrich_w1_stats(summary, category))
+        task_names.append("w1_stats")
+    if "W5" in ws.enrich_needed:
+        tasks.append(enrich_w5_sources(summary))
+        task_names.append("w5_sources")
+    if "W6" in ws.enrich_needed:
+        tasks.append(enrich_w6_nut_graf(summary, category))
+        task_names.append("w6_nut_graf")
+    if not tasks:
+        return None
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    enrich: dict = {}
+    for name, res in zip(task_names, results):
+        if isinstance(res, Exception):
+            logger.warning(f"[Enrich] {name} 실패: {res}")
+            enrich[name] = {}
+        else:
+            enrich[name] = res or {}
+
+    _inject_enrichment_to_pkg(pkg, enrich)
+    return enrich
+
+
+def _inject_enrichment_to_pkg(pkg: dict, enrich: dict) -> None:
+    """보강 데이터를 Context Package 에 비파괴 주입."""
+    # W1 — 수치 + 시간 좌표
+    w1 = enrich.get("w1_stats") or {}
+    stats = w1.get("stats") or []
+    if stats:
+        pkg.setdefault("enriched_stats", [])
+        pkg["enriched_stats"].extend(stats[:3])
+    coords = w1.get("time_coordinates") or []
+    if coords:
+        pkg.setdefault("enriched_coordinates", [])
+        pkg["enriched_coordinates"].extend(coords[:2])
+
+    # W5 — 1차 출처
+    w5 = enrich.get("w5_sources") or {}
+    sources = w5.get("sources") or []
+    if sources:
+        pkg.setdefault("enriched_sources", [])
+        pkg["enriched_sources"].extend(sources[:3])
+
+    # W6 — 다음 관전 + X 여론 + Polymarket
+    w6 = enrich.get("w6_nut_graf") or {}
+    next_events = w6.get("next_events") or []
+    if next_events:
+        pkg.setdefault("upcoming_calendar", [])
+        existing = {
+            e.get("event") for e in pkg["upcoming_calendar"] if isinstance(e, dict)
+        }
+        for ev in next_events:
+            if isinstance(ev, dict) and ev.get("event") not in existing:
+                pkg["upcoming_calendar"].append(ev)
+    if w6.get("x_pulse"):
+        pkg["x_pulse"] = w6["x_pulse"]
+    if w6.get("polymarket"):
+        pkg.setdefault("polymarket", {})
+        try:
+            pkg["polymarket"].update(w6["polymarket"])
+        except Exception:
+            pass
 
 
 def format_for_grok_heavy(pkg: dict) -> str:
@@ -190,11 +306,34 @@ def format_for_grok_heavy(pkg: dict) -> str:
         "",
         "향후 일정:",
         _format_calendar(upcoming),
-        "",
-        "[/CONTEXT_PACKAGE]",
-        "",
-        CALL_COMMAND,
     ]
+
+    # 보강 데이터 섹션 (Phase 5 enrichment)
+    enriched_stats   = pkg.get("enriched_stats") or []
+    enriched_coords  = pkg.get("enriched_coordinates") or []
+    enriched_sources = pkg.get("enriched_sources") or []
+    if enriched_stats or enriched_coords or enriched_sources:
+        sections.append("")
+        sections.append("보강 데이터 (자동 수집, 출처 있음):")
+        for stat in enriched_stats[:3]:
+            sections.append(
+                f"- {stat.get('value', '')} — {stat.get('context', '')} "
+                f"({stat.get('published_date', '')})"
+            )
+        for coord in enriched_coords[:2]:
+            sections.append(
+                f"- {coord.get('datetime_kst', '')} KST: {coord.get('event', '')}"
+            )
+        for src in enriched_sources[:3]:
+            sections.append(
+                f"- [{src.get('publisher', '')}] {src.get('title', '')} "
+                f"({src.get('published_date', '')})"
+            )
+
+    sections.append("")
+    sections.append("[/CONTEXT_PACKAGE]")
+    sections.append("")
+    sections.append(CALL_COMMAND)
     return "\n".join(sections)
 
 

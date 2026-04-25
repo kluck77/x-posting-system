@@ -102,6 +102,7 @@ class WritingScore:
     overall_score:       int
     pass_gate:           bool
     issues:              list[str]
+    enrich_needed:       list[str]     # ["W1", "W3", "W5", "W6"] — 보강 필요 항목
 
 
 def score_text(
@@ -203,6 +204,17 @@ def score_text(
         and overall >= 80
     )
 
+    # 보강 필요 항목 — Perplexity/Grok 으로 자동 보강 가능한 W 항목만
+    enrich_needed: list[str] = []
+    if not w1:
+        enrich_needed.append("W1")    # 수치/좌표 부족 → Perplexity 검색
+    if not w3:
+        enrich_needed.append("W3")    # 장면화 재료 → W1 과 동일 경로 보강
+    if not w5:
+        enrich_needed.append("W5")    # 출처 → Perplexity 1차 출처 수집
+    if not w6:
+        enrich_needed.append("W6")    # nut graf → Grok 다음 관전 + X 여론
+
     return WritingScore(
         w1_hook_pattern=w1,
         w2_no_invention=w2,
@@ -217,6 +229,7 @@ def score_text(
         overall_score=overall,
         pass_gate=pass_gate,
         issues=issues,
+        enrich_needed=enrich_needed,
     )
 
 

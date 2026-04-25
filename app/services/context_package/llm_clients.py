@@ -469,3 +469,225 @@ def extract_claims(summary_text: str) -> list[str]:
     if not summary_text:
         return []
     return [m.strip() for m in _NUM_CLAIM_RE.findall(summary_text)][:5]
+
+
+# ─── Phase 5 — 자동 보강 (W1/W3/W5/W6) ────────────────────────────────
+from datetime import datetime as _dt2, timedelta as _td2
+
+
+PPLX_W1_PROMPT = """[IDENTITY]
+당신은 한국어 X 포스팅용 수치·시간 좌표 수집 모듈이다.
+
+[RULES]
+1. 반드시 최근 30일 이내 자료만 사용
+2. 수치는 반드시 단위 포함 (억원·달러·%·bp·명·배 등)
+3. 시간 좌표는 KST 기준
+4. 출처 URL 반드시 포함
+5. 추측·추정 금지. 사실만.
+
+[FORMAT JSON]
+{
+  "stats": [
+    {
+      "value": "4,000억 원",
+      "context": "스타벅스코리아 2024년 앱 충전금",
+      "source_url": "https://...",
+      "published_date": "YYYY-MM-DD",
+      "age_days": 0
+    }
+  ],
+  "time_coordinates": [
+    {
+      "datetime_kst": "2026-04-25 03:17",
+      "event": "USDT 출금 큐 정지",
+      "source_url": "https://..."
+    }
+  ]
+}"""
+
+
+PPLX_W5_PROMPT = """[IDENTITY]
+당신은 한국어 X 포스팅용 출처 수집 모듈이다.
+
+[RULES]
+1. 최근 30일 이내 1차 출처만
+2. 티어1 출처 우선:
+   Reuters / Bloomberg / CoinDesk / 한국은행 / 금융위 / 연합뉴스
+3. 각 출처에 발행 날짜 포함
+4. 출처 없는 수치는 [미확인] 표시
+
+[FORMAT JSON]
+{
+  "sources": [
+    {
+      "title": "제목",
+      "url": "https://...",
+      "publisher": "Reuters",
+      "published_date": "YYYY-MM-DD",
+      "key_fact": "이 출처에서 가져올 핵심 사실"
+    }
+  ]
+}"""
+
+
+GROK_W6_PROMPT = """[IDENTITY]
+당신은 한국어 X 포스팅용 다음 관전 포인트 수집 모듈이다.
+
+[RULES]
+1. X firehose 에서 이 주제 최신 반응 검색 (한·영 동시)
+2. 다음 관전 포인트 = 이 사건 이후 어떤 데이터·발표·이벤트가 중요한가
+3. Polymarket 관련 시장 있으면 포함
+4. 추측 금지. 확인된 일정만.
+
+[FORMAT JSON]
+{
+  "next_events": [
+    {"event": "FOMC", "date_kst": "2026-05-06 03:00", "relevance": "high"}
+  ],
+  "x_pulse": {
+    "korean_sentiment": "neutral",
+    "top_angle": "한국 X 에서 가장 많이 다뤄지는 각도"
+  },
+  "polymarket": {
+    "market": "관련 시장명 또는 없음",
+    "yes_pct": 0
+  }
+}"""
+
+
+def _pplx_after_date_str() -> str:
+    return (_dt2.now() - _td2(days=30)).strftime("%m/%d/%Y")
+
+
+async def enrich_w1_stats(summary: dict, category: str = "") -> dict:
+    """W1 보강 — 최신 수치·시간 좌표 (Perplexity 30일 강제)."""
+    api_key = getattr(settings, "perplexity_api_key", "") or ""
+    if not api_key or not summary:
+        return {}
+    headline = summary.get("headline_kr", "") or ""
+    keywords = " ".join((summary.get("primary_entities") or [])[:3])
+    query = (
+        f"다음 주제의 최신 수치와 시간 좌표를 수집하라:\n"
+        f"주제: {headline}\n"
+        f"키워드: {keywords}\n\n"
+        f"요구사항:\n"
+        f"- 최근 30일 이내 자료만\n"
+        f"- 한국 시장 관련 수치 우선\n"
+        f"- 시간은 KST 기준\n"
+        f"- 출처 URL 필수"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=25) as client:
+            resp = await client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "sonar-pro",
+                    "messages": [
+                        {"role": "system", "content": PPLX_W1_PROMPT},
+                        {"role": "user", "content": query},
+                    ],
+                    "search_recency_filter": "month",
+                    "search_after_date_filter": _pplx_after_date_str(),
+                    "search_domain_filter": [
+                        "bok.or.kr", "fsc.go.kr",
+                        "koreaexim.go.kr",
+                        "coindeskkorea.com", "tokenpost.kr",
+                        "reuters.com", "bloomberg.com",
+                        "theblock.co", "coindesk.com",
+                        "koreatimes.co.kr", "yonhapnews.co.kr",
+                    ],
+                    "max_tokens": 1500,
+                },
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+            return _parse_json_from_text(content) or {}
+    except Exception as e:
+        logger.warning(f"[Enrich W1] 실패: {e}")
+        return {}
+
+
+async def enrich_w5_sources(summary: dict) -> dict:
+    """W5 보강 — 1차 출처 URL (Perplexity 30일 강제)."""
+    api_key = getattr(settings, "perplexity_api_key", "") or ""
+    if not api_key or not summary:
+        return {}
+    headline = summary.get("headline_kr", "") or ""
+    entities = (summary.get("primary_entities") or [])[:5]
+    query = (
+        f"다음 주제의 1차 출처를 수집하라:\n"
+        f"주제: {headline}\n"
+        f"관련 기관/인물: {', '.join(entities)}\n\n"
+        f"최근 30일 이내 보도자료·공시·공식 발표만.\n"
+        f"각 출처에 발행일과 핵심 사실 포함."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=25) as client:
+            resp = await client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "sonar-pro",
+                    "messages": [
+                        {"role": "system", "content": PPLX_W5_PROMPT},
+                        {"role": "user", "content": query},
+                    ],
+                    "search_recency_filter": "month",
+                    "search_after_date_filter": _pplx_after_date_str(),
+                    "max_tokens": 1500,
+                },
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+            return _parse_json_from_text(content) or {}
+    except Exception as e:
+        logger.warning(f"[Enrich W5] 실패: {e}")
+        return {}
+
+
+async def enrich_w6_nut_graf(summary: dict, category: str = "") -> dict:
+    """W6 보강 — 다음 관전 포인트 + X 여론 (Grok firehose)."""
+    api_key = (
+        getattr(settings, "grok_api_key", "")
+        or getattr(settings, "xai_api_key", "")
+        or ""
+    )
+    if not api_key or not summary:
+        return {}
+    user_content = json.dumps({
+        "headline":      summary.get("headline_kr", ""),
+        "category":      category,
+        "entities":      (summary.get("primary_entities") or [])[:5],
+        "search_window": "최근 24시간",
+    }, ensure_ascii=False)
+    try:
+        async with httpx.AsyncClient(timeout=25) as client:
+            resp = await client.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "grok-3-mini-fast",
+                    "messages": [
+                        {"role": "system", "content": GROK_W6_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "max_tokens": 1000,
+                    "temperature": 0.0,
+                },
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+            return _parse_json_from_text(content) or {}
+    except Exception as e:
+        logger.warning(f"[Enrich W6] 실패: {e}")
+        return {}
