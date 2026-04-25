@@ -161,56 +161,67 @@ class YoutubeAnalysis:
         }
 
 
-# ─── Gemini 분석 프롬프트 ────────────────────────────────────────────
-GEMINI_VIDEO_ANALYSIS_PROMPT = """당신은 한국 매크로·크립토·경제 전문 콘텐츠 편집자입니다.
-이 유튜브 영상을 처음부터 끝까지 전부 분석하세요.
+# ─── Gemini 분석 프롬프트 (v3 — 원문 추출 모드, 요약 금지) ───────────
+GEMINI_VIDEO_ANALYSIS_PROMPT = """[IDENTITY]
+너는 영상 내용을 원문 그대로 추출하는 전사 모듈이다.
 
-## 분석 순서
+[절대 금지]
+- 요약 금지
+- 압축 금지
+- 해석 금지
+- 개수 제한 금지
+- 버리기 금지
+- 재구성 금지
+- 한국 현실·맥락 추가 금지
+- 영상에 없는 내용 추가 금지
 
-### Step 1: 영상 전체 파악
-- 발언자가 이 영상에서 말하려는 핵심 주제
-- 영상 흐름 (도입 → 전개 → 결론)
-- 발언자 이름 (자막·화면에서 파악, 모르면 "발언자 미확인")
+[TASK]
+이 영상에서 발언자가 말한 모든 핵심 주장을 추출하라.
 
-### Step 2: 핵심 발언 추출
-영상 전체에서 포스트 소재가 될 발언 3~5개.
-각 발언:
-- 타임스탬프 명시 (MM:SS)
-- 앞뒤 맥락 3~5문장 포함
-- 단정형·예측형·대립형 발언 우선
-- 인트로·아웃트로·광고 제외
+핵심 주장이란:
+- 발언자가 강조한 것
+- 수치가 포함된 것
+- 결론으로 제시한 것
+- 독자가 행동하도록 유도한 것
+- 반복해서 말한 것
 
-### Step 3: 스토리텔링 뼈대
-① 배경: 독자가 이미 아는 현실 1~2줄
-② 긴장: 발언자가 지적한 이상한 점
-③ 반전: 아무도 말 안 하는 모순
-④ 결론: 발언자 핵심 주장 1문장
+추출 방법:
+1. 영상 자막 전체를 읽어라
+2. 발언자의 말을 원문에 가깝게 추출
+3. 개수 제한 없이 전부 가져와라
+4. 각 주장에 영상 타임스탬프 포함
 
-## JSON만 반환 (다른 텍스트 절대 금지)
+[FORMAT JSON 만 반환 — 다른 텍스트 절대 금지]
 {
   "speaker": "발언자 이름 또는 발언자 미확인",
   "channel": "채널명",
-  "duration_min": 숫자,
-  "main_argument": "발언자 핵심 주장 1문장 한국어",
-  "video_summary": "영상 전체 핵심 논지 2~3문장 한국어",
-  "story_structure": {
-    "background": "배경 1~2줄",
-    "tension": "긴장 1~2줄",
-    "reversal": "반전 1~2줄",
-    "conclusion": "결론 1줄"
-  },
-  "key_quotes": [
+  "video_title": "영상 제목",
+  "duration_min": 0,
+  "total_claims": 0,
+  "claims": [
     {
-      "text": "발언 원문 80자 이내",
-      "timestamp": "MM:SS",
-      "context_before": "앞 맥락 3~5문장",
-      "context_after": "뒤 맥락 3~5문장",
-      "topic_tag": "macro|crypto|policy|semi|geo|real_estate|equity",
-      "importance": 0-100
+      "timestamp": "00:11",
+      "claim": "발언자의 핵심 주장 원문",
+      "type": "수치|조언|경고|결론|사례",
+      "strength": "high|medium|low"
     }
   ],
-  "downstream_summary": "핵심 주장 요약 300자 이내"
-}"""
+  "key_numbers": [
+    {
+      "value": "200달러",
+      "context": "월 투자금",
+      "timestamp": "01:23"
+    }
+  ],
+  "core_message": "영상 전체의 핵심 메시지 1줄 (요약 아님, 발언자 말 그대로)"
+}
+
+[SELF-CHECK]
+□ 모든 핵심 주장 추출했는가
+□ 개수 제한 없이 전부 가져왔는가
+□ 영상에 없는 내용 추가 안 했는가
+□ 한국 맥락 추가 안 했는가
+□ 원문에 가깝게 추출했는가"""
 
 
 # ─── Gemini 직접 분석 ────────────────────────────────────────────────
@@ -305,51 +316,70 @@ async def analyze_video_with_gemini(
                         continue
                     return None
 
-            story = data.get("story_structure", {}) or {}
-            quotes_text_parts = []
-            for q in (data.get("key_quotes", []) or []):
-                quotes_text_parts.append(
-                    f"[{q.get('timestamp', '??:??')}] "
-                    f"\"{q.get('text', '')}\"\n"
-                    f"앞 맥락: {q.get('context_before', '')}\n"
-                    f"뒤 맥락: {q.get('context_after', '')}"
+            # v3 — claims 원문 추출 모드 (개수 제한 없음, 요약 금지)
+            claims = data.get("claims", []) or []
+            key_numbers = data.get("key_numbers", []) or []
+            core_message = str(data.get("core_message", "") or "")
+
+            claim_lines = []
+            for c in claims:
+                ts = str(c.get("timestamp", "??:??") or "??:??")
+                text = str(c.get("claim", "") or "")
+                ctype = str(c.get("type", "") or "")
+                strength = str(c.get("strength", "") or "")
+                if not text:
+                    continue
+                tag = f"[{ts}]"
+                if ctype:
+                    tag += f"[{ctype}]"
+                if strength:
+                    tag += f"[{strength}]"
+                claim_lines.append(f"{tag} {text}")
+            claims_text = "\n".join(claim_lines)
+
+            num_lines = []
+            for n in key_numbers:
+                ts = str(n.get("timestamp", "") or "")
+                val = str(n.get("value", "") or "")
+                ctx = str(n.get("context", "") or "")
+                if not val:
+                    continue
+                num_lines.append(
+                    f"- {val}{(' ' + ts) if ts else ''}{(' — ' + ctx) if ctx else ''}"
                 )
-            quotes_text = "\n\n".join(quotes_text_parts)
+            numbers_text = "\n".join(num_lines)
+
+            speaker_v = str(data.get("speaker", "발언자 미확인") or "발언자 미확인")
+            channel_v = str(data.get("channel", channel_name or "알 수 없음") or (channel_name or "알 수 없음"))
+            video_title_v = str(data.get("video_title", "") or "")
+            total_claims = int(data.get("total_claims", 0) or len(claims))
 
             full_analysis = (
-                f"[영상 분석]\n"
-                f"발언자: {data.get('speaker', '발언자 미확인')}\n"
-                f"채널: {data.get('channel', channel_name or '알 수 없음')}\n"
-                f"핵심 주장: {data.get('main_argument', '')}\n\n"
-                f"[스토리 구조]\n"
-                f"배경: {story.get('background', '')}\n"
-                f"긴장: {story.get('tension', '')}\n"
-                f"반전: {story.get('reversal', '')}\n"
-                f"결론: {story.get('conclusion', '')}\n\n"
-                f"[주요 발언]\n{quotes_text}\n\n"
+                f"[영상 원문 추출]\n"
+                f"발언자: {speaker_v}\n"
+                f"채널: {channel_v}\n"
+                f"제목: {video_title_v}\n"
+                f"총 주장 수: {total_claims}\n\n"
+                f"[핵심 메시지 (영상 원문)]\n{core_message}\n\n"
+                f"[모든 핵심 주장]\n{claims_text}\n\n"
+                f"[수치 모음]\n{numbers_text}\n\n"
                 f"[출처]\n{normalized}"
             )
 
             analysis = YoutubeAnalysis(
                 video_id=video_id,
                 url=normalized,
-                channel=str(
-                    data.get("channel", channel_name or "알 수 없음")
-                    or (channel_name or "알 수 없음")
-                ),
-                speaker=str(data.get("speaker", "발언자 미확인") or "발언자 미확인"),
-                video_summary=str(data.get("video_summary", "") or ""),
-                main_argument=str(data.get("main_argument", "") or ""),
+                channel=channel_v,
+                speaker=speaker_v,
+                video_summary=core_message,
+                main_argument=core_message,
                 full_analysis=full_analysis,
-                downstream_summary=str(
-                    data.get("downstream_summary", "") or ""
-                ),
+                downstream_summary=core_message,
                 duration_min=int(data.get("duration_min", 0) or 0),
             )
             logger.info(
-                f"[YT] 분석 완료: {video_id} "
-                f"speaker={analysis.speaker} "
-                f"quotes={len(data.get('key_quotes', []) or [])}개"
+                f"[YT] 분석 완료: {video_id} speaker={analysis.speaker} "
+                f"claims={total_claims}개 numbers={len(key_numbers)}개"
             )
             return analysis
 
