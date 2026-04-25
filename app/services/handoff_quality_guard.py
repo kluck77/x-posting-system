@@ -536,7 +536,7 @@ def judge(handoff: dict) -> QualityVerdict:
 
     handoff dict 권장 키:
       original_draft, confirmed_facts, angle, core_tension, frame,
-      key_evidence, grade_label
+      key_evidence, grade_label, 훅 후보 / hook_candidates
     """
     all_text = json_to_text(handoff)
     fact_count = _count_confirmed_facts(handoff)
@@ -568,6 +568,20 @@ def judge(handoff: dict) -> QualityVerdict:
     if has_duplicate:
         warnings.append("중복 섹션 감지 — 자동 정리 가능")
 
+    # 훅 후보 + 핸드오프 필드 추가 검증 (Phase 3)
+    try:
+        hook_w, hook_b = _check_hook_candidates(handoff)
+        field_w, field_b = _check_handoff_fields(handoff)
+        reasons.extend(hook_b)
+        reasons.extend(field_b)
+        warnings.extend(hook_w)
+        warnings.extend(field_w)
+        # block 사유가 추가되면 grade 강등
+        if (hook_b or field_b) and grade not in ("REJECT",):
+            grade = "C"
+    except Exception as _he:
+        _judge_logger.debug(f"[HandoffGuard] hook/field 확장 검증 skip: {_he}")
+
     if grade == "REJECT":
         decision = "REJECT"
         block_reason = " / ".join(reasons[:3]) or "재료 품질 부족"
@@ -595,6 +609,107 @@ def judge(handoff: dict) -> QualityVerdict:
         warnings=warnings,
         block_reason=block_reason,
     )
+
+
+# ─── Phase 3 훅·필드 검증 ─────────────────────────────────────────────
+EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001F300-\U0001F9FF"
+    "\U00002600-\U000027BF"
+    "\U0001FA00-\U0001FAFF"
+    "]"
+)
+
+
+def _check_hook_candidates(handoff: dict) -> tuple[list, list]:
+    """훅 후보 검증. 반환: (warnings, blocks)."""
+    warnings: list = []
+    blocks: list = []
+
+    hook_section = ""
+    for key in ("훅 후보", "hook_candidates", "반드시 살릴 포인트"):
+        v = handoff.get(key)
+        if v:
+            hook_section = str(v) if not isinstance(v, list) else "\n".join(map(str, v))
+            break
+    if not hook_section:
+        return warnings, blocks  # 섹션 없으면 검증 skip (warning 도 안 함)
+
+    lines = [l.strip() for l in hook_section.split("\n") if l.strip()]
+    banned_words = (
+        "주목해야 할", "흥미로운", "충격적인", "폭발적", "급격히",
+    )
+    for line in lines[:5]:
+        # 번호/패턴/자수 prefix 제거
+        hook_text = re.sub(r"^\s*\d+\.\s*", "", line)
+        hook_text = re.sub(r"\[패턴.\]\s*", "", hook_text)
+        hook_text = re.sub(r"\(\d+자\)\s*", "", hook_text).strip()
+        if not hook_text:
+            continue
+        char_count = len(hook_text)
+
+        if char_count > 25:
+            blocks.append(f"훅 25자 초과 ({char_count}자): {hook_text[:30]}")
+        elif char_count < 14:
+            warnings.append(f"훅 14자 미만 ({char_count}자)")
+
+        if hook_text.endswith("."):
+            blocks.append(f"훅 마침표 포함: {hook_text[:30]}")
+        if "—" in hook_text or " - " in hook_text:
+            blocks.append(f"훅 대시 포함 (설명형): {hook_text[:30]}")
+        if EMOJI_PATTERN.search(hook_text):
+            blocks.append(f"훅 이모지 포함: {hook_text[:30]}")
+
+        for word in banned_words:
+            if word in hook_text:
+                warnings.append(f"훅 약한 표현 '{word}': {hook_text[:30]}")
+    return warnings, blocks
+
+
+def _check_handoff_fields(handoff: dict) -> tuple[list, list]:
+    """핸드오프 필드 품질 검증."""
+    warnings: list = []
+    blocks: list = []
+
+    # 이모지 헤더 과다 (헤드라인 뉴스 형식)
+    emoji_headers = ("⚠️", "📌", "💎", "🔥", "🎯")
+    try:
+        full_text = json.dumps(handoff, ensure_ascii=False)
+    except Exception:
+        full_text = json_to_text(handoff)
+    emoji_count = sum(full_text.count(e) for e in emoji_headers)
+    if emoji_count >= 3:
+        blocks.append(
+            f"핸드오프 이모지 헤더 {emoji_count}개 (헤드라인 뉴스 형식)"
+        )
+
+    grade_reason = (
+        handoff.get("살릴_가치_사유")
+        or handoff.get("grade_reason")
+        or handoff.get("살릴 가치")
+        or ""
+    )
+    if grade_reason:
+        abstract_phrases = (
+            "회사/기관 맥락 부족",
+            "보완 시 상위권",
+            "추가 정보 시",
+        )
+        if any(p in str(grade_reason) for p in abstract_phrases):
+            warnings.append(
+                "살릴 가치 사유 추상적 (구체적 결함 명시 필요)"
+            )
+
+    edit_goal = (
+        handoff.get("편집_목표")
+        or handoff.get("edit_goal")
+        or handoff.get("editorial_goal")
+        or ""
+    )
+    if edit_goal and len(str(edit_goal)) > 100:
+        warnings.append(f"편집 목표 너무 김 ({len(edit_goal)}자)")
+
+    return warnings, blocks
 
 
 # ─── pack 변환 어댑터 ────────────────────────────────────────────────

@@ -203,6 +203,42 @@ STORYTELLING_ADDITION = """
 SYSTEM_PROMPT_KO = SYSTEM_PROMPT_KO + STORYTELLING_ADDITION
 
 
+# ─── Phase 3 — 훅 선정 + 핸드오프 필드 룰 (write 호출 시점 append) ─────
+OPENAI_HOOK_AND_HANDOFF_RULES = """
+
+[훅 선정 기준 — 절대 준수]
+
+R1. 15~25자 (25자 초과 자동 실패 / 14자 이하 자동 실패)
+R2. 마침표·설명문·대시(—) 없음
+R3. 이모지 0개
+R4. 6종 패턴 중 1개:
+    ① 반전:    "OO는 OO가 아니다"          예: USDT는 탈중앙이 아니었다
+    ② 수치:    "[숫자]가 [동사]"            예: 5,000억이 22분 만에 잠겼다
+    ③ 시점:    "[시각], [사건]"             예: 새벽 3시 47분, 파월이 말했다
+    ④ 모순:    "OO는 올랐는데 OO는 내렸다"   예: 원화는 안 움직였는데 BTC만 빠졌다
+    ⑤ 선언:    "OO 강세장은 끝났다"         예: 비트코인 강세장은 끝났다
+    ⑥ 사실 폭로: 짧은 단정문                예: 스타벅스는 은행이다
+R5. 절대 금지:
+    - 비유형 긴 훅 ("스마트폰 한 대로 카지노가 열린다")
+    - 설명형 훅 ("전 세계 온라인 도박 시장이 폭발적 확장")
+    - 형용사 강조 ("주목해야 할 / 흥미로운 / 충격적인 / 폭발적")
+R6. 훅 후보 출력 형식 — 3개 생성, 각 후보에 패턴 번호 + 자수 명시:
+    훅 후보:
+    1. [패턴③] (22자) 새벽 3시 47분, 파월이 침묵을 깼다
+    2. [패턴②] (19자) 5,000억이 22분 만에 잠겼다
+    3. [패턴①] (18자) USDT는 탈중앙이 아니었다
+
+[핸드오프 필드 룰]
+
+R7. "💎 반드시 살릴 포인트": 25자 초과 / 이모지 / 설명형 훅 자동 폐기
+R8. "🎯 살릴 가치" 사유: 추상 표현 금지 ("회사/기관 맥락 부족 보완 시 상위권")
+    필수: 구체 점수 + 결함 (예: "훅 25자 초과 / 스테이크 1층위 / 예측 없음 = 65점")
+R9. "🔥 왜 세게 써야 하는가": 1줄. "이 글의 차별점: ___" 또는 "다른 곳 안 쓴 각도: ___"
+    100자 초과 / 설명문 / 추상 표현 금지
+R10. "📌 지금 봐야 할 포인트": 이모지 헤더 제거. 평문 "지금 주목할 것: ___"
+"""
+
+
 SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X (Twitter) account.
 The account explains Korean financial, economic, and policy issues to international audiences.
 This is NOT a news summary account — the focus is interpreting "what the money means."
@@ -267,6 +303,8 @@ class OpenAIDraftWriter(BaseDraftWriter):
                     system_prompt = system_prompt + _rules
             except Exception as _re:
                 logger.debug(f"[OpenAI DraftWriter] 룰 주입 skip: {_re}")
+            # 훅 + 핸드오프 필드 룰 (Phase 3)
+            system_prompt = system_prompt + "\n" + OPENAI_HOOK_AND_HANDOFF_RULES
             context_block = ""
             if criteria_context:
                 context_block = f"\n\n## Gemini 리서치 결과 (필수 활용)\n{criteria_context}\n"
