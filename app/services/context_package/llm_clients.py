@@ -306,7 +306,7 @@ async def call_grok_x_pulse(summary: dict) -> dict:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-2-latest",
+                    "model": "grok-3-mini-fast",
                     "messages": [
                         {"role": "system", "content": SYSTEM_GROK_X_PULSE},
                         {"role": "user", "content": user_content},

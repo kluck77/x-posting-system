@@ -143,7 +143,7 @@ async def _check_grok() -> HealthCheck:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "grok-2-latest",
+                    "model": "grok-3-mini-fast",
                     "messages": [{"role": "user", "content": "ok"}],
                     "max_tokens": 5,
                 },
