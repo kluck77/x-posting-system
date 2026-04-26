@@ -5,10 +5,10 @@
 
 5-역할 AI 아키텍처:
   - ChatGPT (OpenAI): 드래프트 작성 (빠른 초안, 톤 조정)
-  - Claude (Anthropic): 아키텍트 & 리뷰어 (리스크 판단, 최종 다듬기)
-  - Gemini (Google): 리서치 & 분석 [미래]
-  - Grok (xAI): 트렌드 탐지 [미래]
-  - Perplexity: 팩트체크 & 출처 [미래]
+  - Claude (Anthropic): 리뷰어 (리스크 판단, 최종 다듬기)
+  - Gemini (Google): 리서치 & 분석
+  - Grok (xAI): 트렌드 탐지
+  - Perplexity: 팩트체크 & 출처
 """
 
 from pathlib import Path
@@ -24,38 +24,153 @@ load_dotenv(ENV_FILE)
 class Settings(BaseSettings):
     """앱의 모든 설정값."""
 
-    # --- AI 프로바이더 키 (5개) ---
+    # --- AI 프로바이더 키 ---
     openai_api_key: str = Field(default="", description="OpenAI API 키 (Draft Writer)")
-    anthropic_api_key: str = Field(default="", description="Anthropic API 키 (Reviewer)")
-    gemini_api_key: str = Field(default="", description="Gemini API 키 (Research) [미래]")
-    grok_api_key: str = Field(default="", description="Grok API 키 (Trend) [미래]")
-    perplexity_api_key: str = Field(default="", description="Perplexity API 키 (Factcheck) [미래]")
+    anthropic_api_key: str = Field(default="", description="Anthropic Claude (Reviewer + Draft)")
+    gemini_api_key: str = Field(default="", description="Google Gemini (Researcher)")
+    grok_api_key: str = Field(default="", description="xAI Grok (TrendHunter) — x.ai 에서 발급")
+    perplexity_api_key: str = Field(default="", description="Perplexity (FactChecker)")
+
+    # --- Naver Open API (뉴스 검색, 무료) ---
+    naver_client_id: str = Field(default="", description="Naver API Client ID (뉴스 검색)")
+    naver_client_secret: str = Field(default="", description="Naver API Client Secret")
+
+    # --- Crypto Intel Sources (수집 단계 AI 미사용, 키 없으면 adapter 비활성) ---
+    open_dart_api_key: str = Field(default="", description="Open DART (한국 전자공시)")
+    finnhub_api_key: str = Field(default="", description="Finnhub (마켓/기업 뉴스)")
 
     # --- 활성 프로바이더 선택 ---
     active_draft_provider: str = Field(default="mock", description="초안 작성 프로바이더")
     active_research_provider: str = Field(default="mock", description="리서치 프로바이더")
+    active_trend_provider: str = Field(default="mock", description="트렌드 탐지 프로바이더")
     active_factcheck_provider: str = Field(default="mock", description="팩트체크 프로바이더")
 
     # --- 텔레그램 ---
     telegram_bot_token: str = Field(default="", description="텔레그램 봇 토큰")
     telegram_chat_id: str = Field(default="", description="텔레그램 채팅 ID")
 
-    # --- X (트위터) API ---
-    x_bearer_token: str = Field(default="", description="X Bearer Token")
-    x_api_key: str = Field(default="", description="X API Key")
-    x_api_secret: str = Field(default="", description="X API Secret")
-    x_access_token: str = Field(default="", description="X Access Token")
-    x_access_token_secret: str = Field(default="", description="X Access Token Secret")
+    # --- X (트위터) --- 자동 게시 제거됨, 수동 게시 전용
+    x_username: str = Field(default="sskorea02", description="X 계정 사용자명 (@ 없이, 답글 모니터에서 사용)")
 
     # --- 데이터베이스 ---
     database_url: str = Field(default="sqlite:///./x_poster.db")
 
     # --- 앱 설정 ---
-    default_language: str = Field(default="en")
+    default_language: str = Field(default="ko")
     log_level: str = Field(default="INFO")
+
+    # --- 속보 모니터 설정 ---
+    monitor_enabled: bool = Field(default=True, description="뉴스 모니터 활성화")
+    monitor_interval_minutes: int = Field(default=1, description="모니터 폴링 간격 (분)")
+    monitor_max_alerts_per_run: int = Field(default=3, description="사이클당 최대 알림 수")
+    cross_verify_min_sources: int = Field(default=4, description="속보 전송 최소 교차 출처 수")
+    alert_score_threshold: int = Field(default=40, description="후보알림 전송 최소 점수 (0~100, 24h 로그로 튜닝)")
+    alert_near_miss_window: int = Field(default=10, description="near-miss 로그 창 (threshold 바로 아래 N점)")
+
+    # --- 모닝 다이제스트 설정 ---
+    digest_enabled: bool = Field(default=True, description="오전 5시 KST 모닝 다이제스트 활성화")
+    digest_hour_kst: int = Field(default=5, description="다이제스트 전송 시각 (KST, 0~23)")
+    digest_top_n: int = Field(default=5, description="다이제스트에 포함할 기사 수")
+
+    # --- 콘텐츠 전략 ---
+    daily_post_target: int = Field(default=30, description="하루 목표 게시 수")
+
+    # --- 일일 사용량 제한 ---
+    max_drafts_per_day: int = Field(default=5, description="하루 최대 AI 초안 생성 수")
+    max_telegram_per_day: int = Field(default=5, description="하루 최대 텔레그램 승인 카드 수")
+    max_posts_per_day: int = Field(default=10, description="하루 최대 X 게시 수")
+    # 4 필러 비중 (비율은 float, 합계 = 1.0)
+    pillar_economy_ratio: float = Field(default=0.35, description="경제/금융 필러 비중")
+    pillar_crypto_ratio: float = Field(default=0.30, description="크립토/디파이 필러 비중")
+    pillar_geopolitics_ratio: float = Field(default=0.20, description="지정학/정치 필러 비중")
+    pillar_community_ratio: float = Field(default=0.15, description="커뮤니티 반응 필러 비중")
 
     # --- 안전 설정 ---
     enable_auto_post_low_risk: bool = Field(default=False)
+
+    # --- Pack Chain (Grok Handoff) --- Phase 1: off by default
+    pack_chain_enabled: bool = Field(
+        default=False,
+        description="Pack chain 경로 활성화 (source_pack + angle_pack + sidecar). "
+                    "실패 시 legacy 경로로 fallback.",
+    )
+
+    # --- Stibee 뉴스레터 (email_sender/stibee_sender.py 가 사용) ---
+    stibee_api_key: str = Field(default="", description="Stibee AccessToken")
+    stibee_list_id: str = Field(default="", description="Stibee 리스트 ID")
+    stibee_sender_email: str = Field(default="", description="발신자 이메일")
+
+    # --- UTM (email_sender/url_builder.py 가 사용) ---
+    utm_source_default: str = Field(default="sskorea02")
+    utm_medium_newsletter: str = Field(default="email")
+    utm_campaign_default: str = Field(default="brief")
+
+    # --- Affiliate (affiliate_registry.py 가 사용) ---
+    affiliate_enabled: bool = Field(default=False, description="Affiliate 링크 삽입 킬스위치")
+    affiliate_links_path: str = Field(default="data/affiliate_links.json")
+
+    # --- Growth / CommentHunter 킬스위치 (팔로워 확보 전까지 off) ---
+    comment_hunter_enabled: bool = Field(
+        default=False,
+        description="Grok live search 기반 대형 계정 리플 사이클. "
+                    "활성화하면 30분마다 Grok API 호출 (월 $2~3 예상).",
+    )
+
+    # --- Phase A critic skip (Haiku Judge 로 대체) ---
+    skip_phase_a: bool = Field(
+        default=True,
+        description="True 시 Step 5.9 Haiku Judge 만 사용. "
+                    "False 로 되돌리면 기존 voice/hook/ending/fact 4 critic 복원.",
+    )
+
+    # --- Psych Upgrade Phase 1 (sources + emotion tone) ---
+    psych_enabled: bool = Field(
+        default=True,
+        description="freshness_filter / news_importance_classifier / dedup / "
+                    "timing_router / emotion_tone_analyzer 통합 활성화. "
+                    "False 시 Step 0.x + Step 5.85 전부 skip.",
+    )
+    curiosity_gap_enabled: bool = Field(
+        default=False,
+        description="Phase 2 curiosity gap analyzer (미구현, 추후 활성화).",
+    )
+
+    # --- Psych Phase 3 (경쟁자 모니터링 / AB / 타이밍) ---
+    competitor_accounts: list[str] = Field(
+        default_factory=lambda: [
+            "ki_young_ju",
+            "Semicon_player",
+            "fdd3001",
+            "ogunyo_macro",
+            "Jaemyung_Lee",
+            "unusual_whales",
+        ],
+        description="competitor_monitor 가 Nitter RSS 로 수집할 X 계정 목록.",
+    )
+    optimal_timing_enabled: bool = Field(
+        default=False,
+        description="True 시 90일 승인 데이터 기반 시간대 추천. "
+                    "기본 False — 데이터 축적 후 수동 활성화.",
+    )
+    ab_test_enabled: bool = Field(
+        default=False,
+        description="True 시 Step 5.92 에서 A/B 훅 2개 생성. "
+                    "기본 False — Phase 3 완료 후 수동 활성화.",
+    )
+
+    # --- OpenDart 공시 필터 전용 ---
+    dart_score_threshold: int = Field(
+        default=55,
+        description="OpenDart 공시 포스팅 임계점 (55점 이상만 중요 공시로 간주).",
+    )
+    dart_show_routine: bool = Field(
+        default=False,
+        description="True 시 routine(40~54점) 공시도 대시보드 shortlist 에 포함.",
+    )
+    dart_key_companies_only: bool = Field(
+        default=False,
+        description="True 시 KEY/CRYPTO_COMPANIES 리스트에 있는 기업 공시만 수집.",
+    )
 
     class Config:
         env_file = ".env"
@@ -87,6 +202,23 @@ class Settings(BaseSettings):
     def has_perplexity(self) -> bool:
         return self._has(self.perplexity_api_key)
 
+    # ── Crypto Intel Sources ────────────────────────────────────────────────
+
+    @property
+    def has_open_dart(self) -> bool:
+        return self._has(self.open_dart_api_key)
+
+    @property
+    def has_finnhub(self) -> bool:
+        return self._has(self.finnhub_api_key)
+
+    def intel_sources_status(self) -> dict[str, bool]:
+        """Crypto Intel adapter 별 키 보유 여부 (True=enabled 가능)."""
+        return {
+            "open_dart": self.has_open_dart,
+            "finnhub":   self.has_finnhub,
+        }
+
     @property
     def has_any_ai(self) -> bool:
         return any([
@@ -100,26 +232,44 @@ class Settings(BaseSettings):
 
     @property
     def has_x_credentials(self) -> bool:
-        return all([
-            self._has(self.x_api_key), self._has(self.x_api_secret),
-            self._has(self.x_access_token), self._has(self.x_access_token_secret),
-        ])
+        """자동 게시 제거됨 — 항상 False."""
+        return False
 
     @property
     def is_full_mock_mode(self) -> bool:
         return not self.has_any_ai
 
     def get_effective_draft_provider(self) -> str:
-        """실제로 사용할 드래프트 프로바이더를 결정합니다."""
+        """
+        실제로 사용할 드래프트 프로바이더를 결정합니다.
+
+        - "mock"으로 명시적 설정 시 → mock 반환 (테스트/개발 모드)
+        - 특정 프로바이더 설정 시 → 해당 키 보유 여부 확인 후 반환
+        - 비어 있거나 알 수 없는 값 → 키 있는 첫 번째 프로바이더 자동 선택
+        """
         requested = self.active_draft_provider.lower().strip()
-        if requested == "openai" and self.has_openai:
-            return "openai"
-        if requested == "anthropic" and self.has_anthropic:
+        _draft_map = {
+            "openai":    self.has_openai,
+            "anthropic": self.has_anthropic,
+        }
+        # 명시적 mock 요청
+        if requested == "mock":
+            return "mock"
+        # 특정 프로바이더 명시
+        if requested in _draft_map and _draft_map[requested]:
+            return requested
+        if requested in _draft_map and not _draft_map[requested]:
+            return "mock"  # 명시했지만 키 없음
+        # 비어 있거나 알 수 없음 → 키 있는 첫 번째 자동 선택
+        for name, has_key in _draft_map.items():
+            if has_key:
+                return name
+        return "mock"
+
+    def get_effective_review_provider(self) -> str:
+        """실제로 사용할 리뷰어 프로바이더를 결정합니다."""
+        if self.has_anthropic:
             return "anthropic"
-        if requested in ("openai", "anthropic") and not self._has(
-            self.openai_api_key if requested == "openai" else self.anthropic_api_key
-        ):
-            return "mock"  # 키가 없으면 자동 fallback
         return "mock"
 
     def get_effective_research_provider(self) -> str:
@@ -129,35 +279,44 @@ class Settings(BaseSettings):
             return "gemini"
         if requested == "perplexity" and self.has_perplexity:
             return "perplexity"
+        if self.has_gemini:
+            return "gemini"
+        if self.has_perplexity:
+            return "perplexity"
+        return "mock"
+
+    def get_effective_trend_provider(self) -> str:
+        """실제로 사용할 트렌드 탐지 프로바이더를 결정합니다."""
+        if self.has_grok:
+            return "grok"
         return "mock"
 
     def get_effective_factcheck_provider(self) -> str:
         """실제로 사용할 팩트체크 프로바이더를 결정합니다."""
-        requested = self.active_factcheck_provider.lower().strip()
-        if requested == "perplexity" and self.has_perplexity:
+        if self.has_perplexity:
             return "perplexity"
         return "mock"
 
     def ai_status_summary(self) -> dict[str, str]:
         """각 역할별 프로바이더 상태 요약."""
         return {
-            "draft_writer": self.get_effective_draft_provider(),
-            "reviewer": "anthropic" if self.has_anthropic else "mock",
-            "research": self.get_effective_research_provider(),
-            "trend": "grok" if self.has_grok else "mock",
-            "factcheck": self.get_effective_factcheck_provider(),
-            "telegram": "LIVE" if self.has_telegram_config else "MOCK",
-            "x_api": "LIVE" if self.has_x_credentials else "MOCK",
+            "draft_writer":  self.get_effective_draft_provider(),
+            "reviewer":      self.get_effective_review_provider(),
+            "research":      self.get_effective_research_provider(),
+            "trend":         self.get_effective_trend_provider(),
+            "factcheck":     self.get_effective_factcheck_provider(),
+            "telegram":      "LIVE" if self.has_telegram_config else "MOCK",
+            "x_api":         "MANUAL (자동 게시 제거됨)",
         }
 
     def provider_keys_status(self) -> dict[str, bool]:
         """각 프로바이더 키 존재 여부."""
         return {
-            "openai": self.has_openai,
-            "anthropic": self.has_anthropic,
-            "gemini": self.has_gemini,
-            "grok": self.has_grok,
-            "perplexity": self.has_perplexity,
+            "openai":      self.has_openai,
+            "anthropic":   self.has_anthropic,
+            "gemini":      self.has_gemini,
+            "grok":        self.has_grok,
+            "perplexity":  self.has_perplexity,
         }
 
 
@@ -188,10 +347,12 @@ def validate_settings(s: Settings) -> list[str]:
             ".env에 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 설정 필요."
         )
 
-    if not s.has_x_credentials:
+    # X 자동 게시 제거됨 — 수동 게시 전용
+
+    if not any(s.intel_sources_status().values()):
         warnings.append(
-            "[X API] 인증정보 불완전. Mock 포스팅 모드. "
-            ".env에 X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET 설정 필요."
+            "[Crypto Intel] 모든 수집 키 비어있음 (open_dart/finnhub). "
+            "대시보드 탭은 렌더되지만 수집 결과는 0 건."
         )
 
     return warnings

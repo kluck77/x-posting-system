@@ -27,7 +27,7 @@ def setup_logging():
         format=log_format,
         datefmt=date_format,
         handlers=[
-            logging.StreamHandler(sys.stdout),
+            logging.StreamHandler(sys.stderr),
         ],
     )
 

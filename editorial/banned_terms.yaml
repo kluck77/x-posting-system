@@ -1,0 +1,178 @@
+version: 1
+patterns:
+
+  # === GPT 조롱어 (20개) ===
+  - {id: gpt_핵심찔렀어, match_mode: surface, regex: '핵심을\s*찔렀', severity: block, category: gpt_tell}
+  - {id: gpt_정당해, match_mode: surface, regex: '(은|는)\s*정당해', severity: block, category: gpt_tell}
+  - {id: gpt_깊다, match_mode: surface, regex: '깊다[,\s]*깊어', severity: block, category: gpt_tell}
+  - {id: gpt_좋은질문, match_mode: surface, regex: '좋은\s*질문', severity: block, category: gpt_tell}
+  - {id: gpt_타당합니다, match_mode: regex, regex: '상당히\s*타당합니다', severity: block, category: gpt_tell}
+  - {id: gpt_심층, match_mode: surface, regex: '심층적으로\s*들여다보면', severity: block, category: gpt_tell}
+  - {id: gpt_살펴봅시다, match_mode: surface, regex: '살펴봅시다', severity: block, category: gpt_tell}
+  - {id: gpt_결론적으로, match_mode: surface, regex: '결론적으로', severity: block, category: gpt_tell}
+  - {id: gpt_요약하자면, match_mode: surface, regex: '요약하자면', severity: block, category: gpt_tell}
+  - {id: gpt_소중한존재, match_mode: surface, regex: '소중한\s*존재', severity: block, category: gpt_tell}
+  - {id: gpt_응원해, match_mode: surface, regex: '모든\s*것을\s*응원', severity: block, category: gpt_tell}
+  - {id: gpt_혁명적, match_mode: morpheme, lemma: '혁명적', severity: block, category: gpt_tell}
+  - {id: gpt_획기적, match_mode: morpheme, lemma: '획기적', severity: block, category: gpt_tell}
+  - {id: gpt_마법같은, match_mode: surface, regex: '마법\s*같은', severity: block, category: gpt_tell}
+  - {id: gpt_쎄게말하면, match_mode: surface, regex: '쎄게\s*말하(자면|면)', severity: block, category: gpt_tell}
+  - {id: gpt_상위01, match_mode: surface, regex: '상위\s*0\.1%', severity: warn, category: gpt_tell}
+  - {id: gpt_울어도돼, match_mode: surface, regex: '울어도\s*돼', severity: block, category: gpt_tell}
+  - {id: gpt_소명, match_mode: surface, regex: '진정한\s*소명', severity: block, category: gpt_tell}
+  - {id: gpt_내면, match_mode: surface, regex: '당신의\s*내면', severity: block, category: gpt_tell}
+  - {id: gpt_단순한, match_mode: surface, regex: '단순한\s*[가-힣]+이\s*아니', severity: warn, category: gpt_tell}
+
+  # === AI 구문 (10개) ===
+  - {id: ai_볼드별표, match_mode: regex, regex: '\*\*[^\*]+\*\*', severity: block, category: ai_syntax}
+  - {id: ai_구분선, match_mode: regex, regex: '━{3,}', severity: block, category: ai_syntax}
+  - {id: ai_데코이모지, match_mode: regex, regex: '🔹|✨', severity: block, category: ai_syntax}
+  - {id: ai_로켓중복, match_mode: regex, regex: '🚀{2,}', severity: block, category: ai_syntax}
+  - {id: ai_5개넘버링, match_mode: regex, regex: '[1-9][)\.]\s.+\n.+[2-9][)\.]\s.+\n.+[3-9][)\.]\s.+\n.+[4-9][)\.]\s.+\n.+5[)\.]\s', severity: warn, category: ai_syntax}
+  - {id: ai_delve, match_mode: surface, regex: 'delve\s*into', severity: block, category: ai_syntax}
+  - {id: ai_unpack, match_mode: surface, regex: 'unpack\s*together', severity: block, category: ai_syntax}
+  - {id: ai_lets_explore, match_mode: regex, regex: 'Let''?s\s*explore', severity: block, category: ai_syntax}
+  - {id: ai_notjust, match_mode: surface, regex: 'Not just', severity: warn, category: ai_syntax}
+  - {id: ai_이모지4개이상, match_mode: regex, regex: '[\U0001F300-\U0001FAD6].*[\U0001F300-\U0001FAD6].*[\U0001F300-\U0001FAD6].*[\U0001F300-\U0001FAD6]', severity: block, category: ai_syntax}
+
+  # === 금지 어미 (10개) ===
+  - {id: verb_할수있습니다, match_mode: regex, regex: '할\s*수\s*있습니다', severity: block, category: ai_verb}
+  - {id: verb_중요합니다, match_mode: regex, regex: '하는\s*것이\s*중요합니다', severity: block, category: ai_verb}
+  - {id: verb_필요가있습니다, match_mode: regex, regex: '살펴볼\s*필요가\s*있습니다', severity: block, category: ai_verb}
+  - {id: verb_주목할만합니다, match_mode: surface, regex: '주목할\s*만합니다', severity: warn, category: ai_verb}
+  - {id: verb_기대됩니다, match_mode: surface, regex: '기대됩니다', severity: warn, category: ai_verb}
+  - {id: verb_바람직합니다, match_mode: surface, regex: '바람직합니다', severity: block, category: ai_verb}
+  - {id: verb_필수적입니다, match_mode: surface, regex: '필수적입니다', severity: block, category: ai_verb}
+  - {id: verb_관건이라고, match_mode: regex, regex: '관건이라고\s*할\s*수\s*있', severity: block, category: ai_verb}
+  - {id: verb_도출할수있습니다, match_mode: regex, regex: '결론을\s*도출할\s*수\s*있', severity: block, category: ai_verb}
+  - {id: verb_이루어졌습니다, match_mode: surface, regex: '이루어졌습니다', severity: warn, category: ai_verb}
+
+  # === 헷지 표현 (8개) ===
+  - {id: hedge_수도있을것같습니다, match_mode: regex, regex: '수도\s*있을\s*것\s*같습니다', severity: block, category: hedging}
+  - {id: hedge_것으로보입니다, match_mode: regex, regex: '것으로\s*보입니다', severity: warn, category: hedging}
+  - {id: hedge_인것같아요, match_mode: regex, regex: '인\s*것\s*같아요', severity: warn, category: hedging}
+  - {id: hedge_가능성이있어보입니다, match_mode: regex, regex: '가능성이\s*있어\s*보입니다', severity: block, category: hedging}
+  - {id: hedge_개인적인견해, match_mode: surface, regex: '개인적인\s*견해로는', severity: warn, category: hedging}
+  - {id: hedge_다양한의견, match_mode: surface, regex: '다양한\s*의견이\s*있을\s*수\s*있', severity: block, category: hedging}
+  - {id: hedge_라고할수있을것, match_mode: regex, regex: '라고\s*할\s*수\s*있을\s*것', severity: block, category: hedging}
+  - {id: hedge_할것으로보입니다, match_mode: regex, regex: '할\s*것으로\s*보입니다', severity: warn, category: hedging}
+
+  # === 2024~25 올드 밈 (14개) ===
+  - {id: meme_럭키비키, match_mode: surface, regex: '럭키비키', severity: block, category: old_meme}
+  - {id: meme_원영적사고, match_mode: surface, regex: '원영적\s*사고', severity: block, category: old_meme}
+  - {id: meme_삐끼삐끼, match_mode: surface, regex: '삐끼삐끼', severity: block, category: old_meme}
+  - {id: meme_chillguy, match_mode: regex, regex: 'chill\s*guy|칠가이', severity: block, category: old_meme}
+  - {id: meme_맞다이, match_mode: surface, regex: '맞다이로\s*들어와', severity: block, category: old_meme}
+  - {id: meme_도파민과다, match_mode: surface, regex: '도파민\s*과다', severity: block, category: old_meme}
+  - {id: meme_ㅇㅈ, match_mode: surface, regex: 'ㅇㅈ\?\s*ㅇㅇㅈ', severity: block, category: old_meme}
+  - {id: meme_가보자고, match_mode: surface, regex: '가보자고', severity: warn, category: old_meme}
+  - {id: meme_킹받네, match_mode: surface, regex: '킹받네', severity: warn, category: old_meme}
+  - {id: meme_칭찬해, match_mode: regex, regex: '하는\s*나\s*칭찬해', severity: block, category: old_meme}
+  - {id: meme_중꺾마, match_mode: surface, regex: '중꺾마', severity: block, category: old_meme}
+  - {id: meme_갓생, match_mode: surface, regex: '갓생', severity: warn, category: old_meme}
+  - {id: meme_이러면안되는데, match_mode: surface, regex: '아\s*이러면\s*안\s*되는데', severity: block, category: old_meme}
+  - {id: meme_아이러니, match_mode: surface, regex: '아\s*이\s*러\s*니', severity: warn, category: old_meme}
+
+  # === 번역체·과장체 (10개) ===
+  - {id: cringe_유의미, match_mode: surface, regex: '유의미한\s*성장', severity: warn, category: cringe}
+  - {id: cringe_괄목, match_mode: surface, regex: '괄목할\s*만한', severity: warn, category: cringe}
+  - {id: cringe_귀추, match_mode: surface, regex: '귀추가\s*주목', severity: warn, category: cringe}
+  - {id: cringe_행보기대, match_mode: surface, regex: '향후\s*행보가\s*기대', severity: warn, category: cringe}
+  - {id: cringe_이목, match_mode: surface, regex: '이목이\s*쏠리고\s*있습니다', severity: warn, category: cringe}
+  - {id: cringe_심층분석, match_mode: surface, regex: '심층\s*분석', severity: warn, category: cringe}
+  - {id: cringe_총망라, match_mode: surface, regex: '총망라', severity: block, category: cringe}
+  - {id: cringe_일대변혁, match_mode: surface, regex: '일대\s*변혁', severity: block, category: cringe}
+  - {id: cringe_파격적, match_mode: surface, regex: '파격적인\s*행보', severity: warn, category: cringe}
+  - {id: cringe_업계뒤흔들, match_mode: surface, regex: '업계를\s*뒤흔들', severity: warn, category: cringe}
+
+preferred_ko_markers:
+
+  hooks_2026:
+    - "핵심은 N개."
+    - "숫자만 보면 A, 구조를 보면 B."
+    - "판이 N개로 갈라짐."
+    - "[사건]. [주어]가 [동사]."
+    - "지난주 A. 이번 주 B."
+    - "2017, 2022 때는 ~. 이번엔 아직."
+
+  sentence_endings_pro:
+    reporter_speedo: ["~음", "~임", "~됨", "~확정", "~완료"]
+    analyst_research: ["~이다", "~본다", "~추정", "~가능성 높음"]
+    policy_official: ["~입니다", "~이죠", "~합시다", "~해야 합니다"]
+    builder_insider: ["~할 듯", "~재편 불가피", "~이유가 이거"]
+    macro_thinker: ["~쪼개자", "~두 개로 준비", "~방향이 아니라 파동"]
+
+  number_formats:
+    - "4억1,057만달러"
+    - "12만6,210.5달러"
+    - "1,475원"
+    - "91조"
+    - "-9%"
+    - "189일 동안"
+    - "2Q 2026"
+
+  time_markers:
+    - "2026년 4월"
+    - "이번 주"
+    - "지난주"
+    - "N일 만에"
+    - "연초 대비"
+
+  ko_terms_keep_english:
+    - dovish
+    - hawkish
+    - risk-on
+    - risk-off
+    - DXY
+    - dominance
+    - TVL
+    - perp
+    - L2
+    - RWA
+    - DePIN
+    - HBM
+    - HBM4
+    - x402
+    - GENIUS Act
+    - CLARITY Act
+
+  ko_terms_translate:
+    whale: "고래"
+    halving: "반감기"
+    capitulation: "항복매도"
+    cycle_top: "사이클 정점"
+    stablecoin: "스테이블코인"
+    spot_etf: "현물 ETF"
+
+  crypto_korean_slang_2026_alive:
+    - "떡상/떡락"
+    - "존버/가즈아/한강각"
+    - "물림/탈출/익절/손절"
+    - "롱/숏/청산"
+    - "추매/풀매수"
+
+  context_anchors_2026:
+    market:
+      - "BTC 6.5만~7만 달러"
+      - "원/달러 1,475원"
+      - "BTC 현물 ETF 150만 개+"
+    policy:
+      - "DABA 국회 발의 (2026 1월)"
+      - "AI기본법 2026-01-22 시행"
+      - "계도기간 1년 → 과태료는 2027 이후"
+    geopolitics:
+      - "이란 전쟁 2026-02 개전"
+      - "호르무즈 봉쇄/재봉쇄"
+    stablecoin_consortia:
+      - "신한+하나+삼성"
+      - "네이버+두나무"
+      - "토스+빗썸"
+      - "카카오 단독"
+    macro:
+      - "HBM4 SK 54% / 삼성 17% / 마이크론 18%"
+
+  ai_detection_evasion_2026:
+    - "한 게시글에 문장 길이를 섞어라 (5자/20자/40자)"
+    - "완벽한 문법 금지, 1개는 조사 생략 또는 자기 정정"
+    - "정보 밀도 높은 문장 1개 + 일상어 1개 섞기"
+    - "단정 끝에 ~임 또는 ~이다 한 번, 다른 곳에선 ~이죠 한 번"

@@ -6,13 +6,88 @@ AI가 생성한 포스트 초안을 데이터베이스에 저장하고 관리합
 """
 
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from app.models.content import (
     Draft, SourceItem, ApprovalStatus, ContentCategory, RiskLevel
 )
 
 logger = logging.getLogger(__name__)
+
+_BROKEN_MARKERS = [
+    "[AI 실패]", "[Gemini실패]", "[Mock]", "[재생성 후 미통과]",
+    # 자동수집 레인에서 AI 파이프라인을 건너뛴 placeholder draft
+    # (orchestrator.py Lane early-return 경로, body="[CANDIDATE] 알림/적재 완료 — AI 미호출")
+    "알림/적재 완료 — AI 미호출",
+]
+_REPLACEMENT_CHAR = "\ufffd"
+
+# Resonance fallback placeholder (text_cleaner.ensure_resonance_structure 가
+# ⚠️/📌 두 마커 모두 없을 때만 삽입하는 문구). 삽입 자체는 의도된 설계이지만
+# 승인/전송 경로에서는 반드시 재생성 후 다시 승인해야 한다.
+_FALLBACK_PLACEHOLDER_MARKERS = [
+    "(구조 누락 — 재생성 권장)",
+    "(structure missing — regenerate recommended)",
+]
+
+
+def is_broken_draft(body: str | None) -> bool:
+    if not body or len(body.strip()) < 20:
+        return True
+    for marker in _BROKEN_MARKERS:
+        if marker in body:
+            return True
+    rc = body.count(_REPLACEMENT_CHAR)
+    if rc > 3 or (len(body) > 0 and rc / len(body) > 0.05):
+        return True
+    return False
+
+
+def broken_reason(body: str | None) -> str:
+    if not body or len(body.strip()) < 20:
+        return "본문이 비어있거나 너무 짧습니다"
+    for marker in _BROKEN_MARKERS:
+        if marker in body:
+            return f"AI 생성 실패 마커 포함: {marker}"
+    rc = body.count(_REPLACEMENT_CHAR)
+    if rc > 3:
+        return f"깨진 문자 {rc}개 감지"
+    return ""
+
+
+def is_resonance_fallback_draft(body: str | None) -> bool:
+    """
+    Resonance fallback placeholder 가 본문에 남아 있는지 검사한다(문자열 매칭).
+    approve/send 경로에서 이 함수가 True 를 반환하면 반드시 차단해야 한다.
+
+    is_broken_draft 와 분리한 이유:
+      - 운영자에게 "재생성 후 승인" 이라는 구체적 안내 문구를 전달하기 위해
+      - is_broken_draft 의 일반 에러 메시지와 구별되는 상태
+
+    주의: 이 함수는 문구 변형(스페이싱/번역어 변경) 에 취약하다. 운영 경로에서는
+    가급적 is_resonance_fallback_signal(draft) 를 사용해 metadata flag 도 함께 확인하라.
+    """
+    if not body:
+        return False
+    return any(m in body for m in _FALLBACK_PLACEHOLDER_MARKERS)
+
+
+def is_resonance_fallback_signal(draft) -> bool:
+    """
+    Draft 객체에 대해 fallback 신호를 OR 로 판정한다.
+      1) draft.resonance_fallback_used (metadata flag, 정확)
+      2) is_resonance_fallback_draft(draft.body) (문자열 매칭, 병행 방어선)
+
+    둘 중 하나라도 True 면 승인/전송을 차단한다. metadata 가 누락된 기존 draft
+    (마이그레이션 이전 생성분) 도 문자열 매칭으로 구제된다.
+    """
+    if draft is None:
+        return False
+    if bool(getattr(draft, "resonance_fallback_used", False)):
+        return True
+    return is_resonance_fallback_draft(getattr(draft, "body", None))
 
 
 class DraftService:
@@ -31,6 +106,7 @@ class DraftService:
         risk_reasoning: str = "",
         ai_rationale: str = "",
         thread_continuation: str | None = None,
+        resonance_fallback_used: bool = False,
     ) -> Draft:
         """
         새 초안을 생성합니다.
@@ -57,6 +133,7 @@ class DraftService:
         )
         new_version = (latest.version + 1) if latest else 1
 
+        from app.config import settings
         draft = Draft(
             source_item_id=source_item.id,
             hook=hook.strip(),
@@ -70,6 +147,8 @@ class DraftService:
             version=new_version,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
+            generated_in_mock=settings.is_full_mock_mode,
+            resonance_fallback_used=resonance_fallback_used,
         )
 
         self.db.add(draft)
@@ -169,6 +248,67 @@ class DraftService:
             draft.telegram_message_id = telegram_message_id
             self.db.commit()
 
+    def get_recent_operator_hints(self, limit: int = 3) -> list[str]:
+        """최근 Draft의 manual_notes에서 operator hints를 가져옵니다."""
+        drafts = (
+            self.db.query(Draft)
+            .filter(
+                and_(
+                    Draft.manual_notes.isnot(None),
+                    Draft.manual_notes != "",
+                )
+            )
+            .order_by(Draft.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [d.manual_notes.strip() for d in drafts if d.manual_notes and d.manual_notes.strip()]
+
+    def cleanup_stale_drafts(
+        self,
+        pending_days: int = 7,
+        rejected_days: int = 30,
+        failed_days: int = 30,
+    ) -> dict[str, int]:
+        """
+        오래된 Draft를 자동 삭제합니다.
+
+        정책:
+        - PENDING: pending_days일 경과 시 삭제
+        - REJECTED: rejected_days일 경과 시 삭제
+        - FAILED: failed_days일 경과 시 삭제
+        - APPROVED / PUBLISHED: 삭제하지 않음
+
+        Returns:
+            {"pending": 삭제 수, "rejected": 삭제 수, "failed": 삭제 수}
+        """
+        now = datetime.now(timezone.utc)
+        counts: dict[str, int] = {}
+
+        for status, days, label in [
+            (ApprovalStatus.PENDING, pending_days, "pending"),
+            (ApprovalStatus.REJECTED, rejected_days, "rejected"),
+            (ApprovalStatus.FAILED, failed_days, "failed"),
+        ]:
+            cutoff = now - timedelta(days=days)
+            deleted = (
+                self.db.query(Draft)
+                .filter(
+                    Draft.approval_status == status,
+                    Draft.created_at < cutoff,
+                )
+                .delete(synchronize_session="fetch")
+            )
+            counts[label] = deleted
+
+        self.db.commit()
+        total = sum(counts.values())
+        if total > 0:
+            logger.info(
+                f"[draft-cleanup] 정리 완료: {counts} (합계 {total}건 삭제)"
+            )
+        return counts
+
     def is_duplicate_text(self, text: str) -> bool:
         """
         동일한 텍스트가 이미 게시되었거나 승인 대기 중인지 확인합니다.
@@ -177,7 +317,7 @@ class DraftService:
         existing = (
             self.db.query(Draft)
             .filter(
-                Draft.body == text.strip(),
+                Draft.body == (text or "").strip(),
                 Draft.approval_status.in_([
                     ApprovalStatus.PENDING,
                     ApprovalStatus.APPROVED,

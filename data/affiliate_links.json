@@ -1,0 +1,21 @@
+{
+  "crypto": [
+    {
+      "name": "Bybit",
+      "url": "https://www.bybit.com/invite?ref=SSKOREA",
+      "desc": "글로벌 크립토 거래소. 수수료 20% 할인"
+    },
+    {
+      "name": "Binance",
+      "url": "https://www.binance.com/ref/SSKOREA",
+      "desc": "세계 최대 거래소. 수수료 10% 리베이트"
+    }
+  ],
+  "default": [
+    {
+      "name": "Bybit",
+      "url": "https://www.bybit.com/invite?ref=SSKOREA",
+      "desc": "글로벌 크립토 거래소"
+    }
+  ]
+}

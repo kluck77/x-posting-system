@@ -65,6 +65,9 @@ htmlcov/
 # --- Claude Code 로컬 설정 ---
 .claude/
 
+# --- Pack Chain sidecar (repo 밖 경로 쓰되 local dev 안전장치) ---
+runtime_x/
+
 # --- 기타 ---
 *.bak
 *.tmp

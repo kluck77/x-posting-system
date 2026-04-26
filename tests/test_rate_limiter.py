@@ -124,12 +124,152 @@ class TestRateLimiter:
         source = _create_source(db_session)
         limiter = RateLimiter(db_session, max_drafts=1)
 
-        # 어제 만든 초안
-        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+        # 25 시간 전 = 하루 이상 전이므로 어제 (KST/UTC 모두)
+        yesterday = datetime.now(timezone.utc) - timedelta(hours=25)
         _create_draft(db_session, source.id, created_at=yesterday)
 
         allowed, msg = limiter.can_create_draft()
         assert allowed is True
+
+
+class TestRateLimiterKSTAndKoOnlyFilter:
+    """
+    _today_start() KST 정상화 + KO_ONLY_BODY_PREFIX 필터 정상화 검증.
+
+    과거 버그:
+    - _today_start() 가 UTC 자정 + aware datetime 을 반환해 naive DB 컬럼과
+      혼합 비교됨. KST 오늘 새벽~오전 생성 드래프트가 '어제' 로 빠지거나 반대로.
+    - KO_ONLY_BODY_PREFIX 가 '한국어 전용 라인 처리' 였는데 orchestrator 가 실제로
+      쓰는 body 는 'KO-only pipeline (English draft skipped). domain=...' 이라
+      필터가 완전히 어긋나, KO-only 드래프트가 전부 AI 파이프라인 카운트로 잡혀
+      매일 20 한도를 빠르게 소진했다.
+    """
+
+    def test_today_start_returns_naive_utc(self, db_session):
+        """_today_start() 는 naive UTC datetime 을 반환해야 한다."""
+        from app.services.rate_limiter import KST
+
+        limiter = RateLimiter(db_session)
+        start = limiter._today_start()
+
+        # naive (tzinfo 없음) 이어야 DB 비교 시 혼합 경고가 안 난다
+        assert start.tzinfo is None
+
+        # KST 오늘 00:00 의 UTC 환산값과 일치해야 한다
+        now_kst = datetime.now(KST)
+        expected_kst_midnight = now_kst.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        expected_naive_utc = (
+            expected_kst_midnight.astimezone(timezone.utc).replace(tzinfo=None)
+        )
+        # 초 단위 스큐 허용
+        assert abs((start - expected_naive_utc).total_seconds()) < 2
+
+    def test_ko_only_draft_excluded_from_ai_count(self, db_session):
+        """
+        orchestrator 가 쓰는 실제 KO-only body 를 가진 드래프트는
+        AI 파이프라인 카운트에서 제외되어야 한다.
+        """
+        source = _create_source(db_session)
+        limiter = RateLimiter(db_session, max_ai_drafts=5)
+
+        # orchestrator.py line 255 에서 쓰는 포맷 그대로
+        _create_draft(
+            db_session, source.id,
+            body="KO-only pipeline (English draft skipped). domain=금융",
+        )
+        _create_draft(
+            db_session, source.id,
+            body="KO-only pipeline (English draft skipped). domain=크립토",
+        )
+
+        # KO-only 만 있으므로 AI 카운트는 0
+        assert limiter.get_today_ai_draft_count() == 0
+
+        allowed, msg = limiter.can_run_ai_pipeline(source_type="manual")
+        assert allowed is True
+
+    def test_real_ai_draft_counted(self, db_session):
+        """실제 AI 파이프라인을 거친 드래프트는 카운트에 포함된다."""
+        source = _create_source(db_session)
+        limiter = RateLimiter(db_session, max_ai_drafts=5)
+
+        _create_draft(
+            db_session, source.id,
+            body="한국은행이 기준금리를 동결했다. 시장은 안정적.",
+        )
+
+        assert limiter.get_today_ai_draft_count() == 1
+
+    def test_mixed_drafts_only_ai_counted(self, db_session):
+        """KO-only 와 AI 드래프트가 섞여 있을 때 AI 만 카운트."""
+        source = _create_source(db_session)
+        limiter = RateLimiter(db_session, max_ai_drafts=5)
+
+        # 5 개의 KO-only
+        for i in range(5):
+            _create_draft(
+                db_session, source.id,
+                body=f"KO-only pipeline (English draft skipped). domain=금융",
+                hook=f"ko-only-{i}",
+            )
+        # 2 개의 AI 파이프라인 드래프트
+        for i in range(2):
+            _create_draft(
+                db_session, source.id,
+                body=f"실제 AI 리뷰 결과 본문 {i}",
+                hook=f"ai-{i}",
+            )
+
+        # AI 카운트는 2 여야 한다 (KO-only 5 개는 제외)
+        assert limiter.get_today_ai_draft_count() == 2
+
+        # max_ai_drafts=5 이므로 여전히 여유 있음
+        allowed, _ = limiter.can_run_ai_pipeline(source_type="manual")
+        assert allowed is True
+
+    def test_yesterday_ai_draft_not_counted(self, db_session):
+        """25시간 전 AI 드래프트는 오늘 카운트에 들어가지 않는다."""
+        source = _create_source(db_session)
+        limiter = RateLimiter(db_session, max_ai_drafts=1)
+
+        yesterday = datetime.now(timezone.utc) - timedelta(hours=25)
+        _create_draft(
+            db_session, source.id,
+            body="어제 생성된 AI 드래프트 본문",
+            created_at=yesterday,
+        )
+
+        assert limiter.get_today_ai_draft_count() == 0
+
+        allowed, _ = limiter.can_run_ai_pipeline(source_type="manual")
+        assert allowed is True
+
+    def test_rate_limit_not_blocked_by_old_ko_only_drafts(self, db_session):
+        """
+        회귀 테스트: 과거 대량의 KO-only 드래프트가 DB 에 있어도
+        오늘의 rate limit 를 소진하지 않아야 한다.
+
+        이전 버그의 정확한 재현:
+        - KO_ONLY_BODY_PREFIX 필터가 어긋나 KO-only 가 카운트됨
+        - _today_start() 가 UTC 기준이라 KST 오늘 새벽 드래프트가 누락됨
+        """
+        source = _create_source(db_session)
+        limiter = RateLimiter(db_session, max_ai_drafts=20)
+
+        # 오늘 KO-only 드래프트 50개 (KO-only 는 AI 카운트 제외되어야 함)
+        for i in range(50):
+            _create_draft(
+                db_session, source.id,
+                body="KO-only pipeline (English draft skipped). domain=금융",
+                hook=f"ko-{i}",
+            )
+
+        # 여전히 AI 파이프라인 사용 가능해야 함
+        allowed, msg = limiter.can_run_ai_pipeline(source_type="manual")
+        assert allowed is True, f"KO-only drafts blocked AI pipeline: {msg}"
+        assert limiter.get_today_ai_draft_count() == 0
 
 
 class TestSourceDuplicateURL:
@@ -162,3 +302,57 @@ class TestSourceDuplicateURL:
         service = SourceService(db_session)
         assert service.is_duplicate_url("") is False
         assert service.is_duplicate_url(None) is False
+
+    def test_ingest_manual_reuses_existing_url(self, db_session):
+        """
+        주간 알림 재생성 회귀 방지:
+        동일 URL 이 이미 등록돼 있으면 ingest_manual 은 예외 대신
+        기존 SourceItem 을 반환한다 (idempotent).
+        """
+        from app.services.source_service import SourceService
+        from app.models.content import SourceItemCreate
+
+        service = SourceService(db_session)
+        url = "https://decrypt.co/364725/bitcoin-stocks-surge"
+
+        existing = SourceItem(
+            title="기존 기사",
+            url=url,
+            source_text="기존 본문",
+            source_type="news",
+            language="en",
+            created_at=datetime.now(timezone.utc),
+        )
+        db_session.add(existing)
+        db_session.commit()
+        db_session.refresh(existing)
+
+        # 같은 URL 로 다시 ingest 시 기존 id 반환, 예외 없음
+        reused = service.ingest_manual(
+            SourceItemCreate(
+                title="같은 URL 재요청",
+                url=url,
+                source_text="다른 본문",
+                source_type="manual",
+                language="ko",
+            )
+        )
+        assert reused.id == existing.id
+
+    def test_ingest_manual_new_url_creates_new_source(self, db_session):
+        """새로운 URL 은 기존처럼 신규 SourceItem 을 생성한다."""
+        from app.services.source_service import SourceService
+        from app.models.content import SourceItemCreate
+
+        service = SourceService(db_session)
+        created = service.ingest_manual(
+            SourceItemCreate(
+                title="신규 기사",
+                url="https://example.com/brand-new",
+                source_text="본문",
+                source_type="manual",
+                language="ko",
+            )
+        )
+        assert created.id is not None
+        assert created.url == "https://example.com/brand-new"
