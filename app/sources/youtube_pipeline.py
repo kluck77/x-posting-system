@@ -462,7 +462,7 @@ async def analyze_video_with_gemini(
     last_err: Exception | None = None
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(api_url, json=payload)
                 if resp.status_code in (429, 500, 502, 503, 504):
                     wait = 2 ** attempt

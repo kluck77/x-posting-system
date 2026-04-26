@@ -309,7 +309,7 @@ async def _handle_youtube_url(
 ):
     """유튜브 URL 수신 → Gemini 직접 영상 분석 → 분석 카드 1장."""
     processing_msg = await update.message.reply_text(
-        "⏳ Gemini 영상 분석 중... (30초~2분 소요)"
+        "⏳ Gemini 영상 분석 중... (30초~5분 소요)"
     )
     try:
         from app.sources.youtube_pipeline import process_youtube_url
