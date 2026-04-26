@@ -455,6 +455,20 @@ class TestFormatHandoffYouTubeSlim:
         # 슬림 전체도 합리적 사이즈 (헤더 + 13 룰 + body + 5 금지)
         assert len(out) < 5000
 
+    def test_orchestrator_skips_resonance_check_for_youtube(self):
+        # orchestrator.py 의 ensure_resonance_structure 호출이 source_type
+        # == "youtube" 분기로 우회되는지 정적 검증.
+        # 우회 안 하면 ⚠️/📌 누락 → placeholder 삽입 → send-guard 가 승인
+        # 카드 + Grok 편집 버튼 자체를 차단함.
+        import inspect
+        from app.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator.ingest_and_generate)
+        # ensure_resonance_structure 호출이 youtube 분기 안에 있어야 함
+        assert 'data.source_type != "youtube"' in src, (
+            "orchestrator 가 YouTube lane 에서 ensure_resonance_structure "
+            "를 우회하지 않으면 승인 카드가 Resonance fallback 으로 차단됨"
+        )
+
     def test_non_youtube_unchanged_full_meta_render(self):
         # 슬림 분기는 youtube 만. news_link 는 기존 full handoff 유지.
         from app.services.grok_handoff import format_handoff

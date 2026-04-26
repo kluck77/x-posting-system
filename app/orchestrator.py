@@ -1399,28 +1399,33 @@ class Orchestrator:
         if self.draft_service.is_duplicate_text(review.body):
             logger.warning("중복 텍스트 감지!")
 
-        # Resonance 구조(⚠️/📌) 최후 방어선 — 프롬프트 실패 시에만 동작
+        # Resonance 구조(⚠️/📌) 최후 방어선 — 프롬프트 실패 시에만 동작.
+        # YouTube 95% 보존형 장문 lane 은 ⚠️/📌 emoji header 가 부적합
+        # (영상 결론 명제로 자연 종결 목표) → 검사 자체를 우회.
+        # 우회 안 하면 placeholder 가 삽입되고 send-guard 가 카드 차단해서
+        # 사용자가 승인 카드 / Grok 편집 버튼을 못 받게 됨.
         _resonance_fallback_used = False
-        try:
-            from app.services.text_cleaner import ensure_resonance_structure
-            _lang = (data.language or settings.default_language or "ko")
-            review.body, _res_status = ensure_resonance_structure(
-                review.body, language=_lang,
-            )
-            if _res_status == "injected":
-                _resonance_fallback_used = True
-                logger.warning(
-                    f"[Resonance-fallback] ⚠️/📌 구조 누락 — placeholder 삽입. "
-                    f"프롬프트 확인 필요. title='{data.title[:40]}' "
-                    f"status={_res_status} fallback_used=True"
+        if data.source_type != "youtube":
+            try:
+                from app.services.text_cleaner import ensure_resonance_structure
+                _lang = (data.language or settings.default_language or "ko")
+                review.body, _res_status = ensure_resonance_structure(
+                    review.body, language=_lang,
                 )
-            elif _res_status == "partial":
-                logger.warning(
-                    f"[Resonance-fallback] ⚠️/📌 중 한 개만 존재 — 원본 유지. "
-                    f"title='{data.title[:40]}' status={_res_status}"
-                )
-        except Exception as e:
-            logger.warning(f"[Resonance-fallback] 체크 실패 (무시): {e}")
+                if _res_status == "injected":
+                    _resonance_fallback_used = True
+                    logger.warning(
+                        f"[Resonance-fallback] ⚠️/📌 구조 누락 — placeholder 삽입. "
+                        f"프롬프트 확인 필요. title='{data.title[:40]}' "
+                        f"status={_res_status} fallback_used=True"
+                    )
+                elif _res_status == "partial":
+                    logger.warning(
+                        f"[Resonance-fallback] ⚠️/📌 중 한 개만 존재 — 원본 유지. "
+                        f"title='{data.title[:40]}' status={_res_status}"
+                    )
+            except Exception as e:
+                logger.warning(f"[Resonance-fallback] 체크 실패 (무시): {e}")
 
         # 초안 저장
         draft = self.draft_service.create_draft(
