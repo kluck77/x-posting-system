@@ -564,3 +564,137 @@ class TestYouTubePromptRenderModeOS:
         assert "## 절대 바꾸지 말 것" in out
         assert "## 최종 출력 규칙" in out
         assert "[YouTube 95% 보존형 장문 — Grok 편집용]" not in out
+
+
+# ─── 10) Claim-Locked Renderer v1 — YouTube prompt + slim handoff ────
+class TestClaimLockedRenderer:
+    """[A] YouTube prompt 에 Claim-Locked Renderer 블록이 포함됐는지 검증.
+    [B] 일반 KO prompt 는 변경 안 됐는지.
+    [C] YouTube slim handoff 에 Claim Strength 가드가 추가됐는지.
+    [D] non-YouTube handoff 는 legacy 구조 유지하고 Claim-Locked 문구
+        들어가지 않았는지."""
+
+    # ── A. OpenAI YouTube prompt ────────────────────────────────────
+    def test_youtube_prompt_has_claim_locked_block(self):
+        from app.providers.openai_provider import (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT,
+            YOUTUBE_CLAIM_LOCKED_RENDERER_V1,
+        )
+        # 별도 상수도 노출되어 있어야 함 (테스트 가능성 / swap 용이)
+        assert "Claim-Locked Renderer v1" in YOUTUBE_CLAIM_LOCKED_RENDERER_V1
+        # 합쳐진 최종 prompt 에 핵심 키워드 모두 포함
+        for kw in (
+            "Claim-Locked Renderer",
+            "LOCKED CLAIM",
+            "Claim Strength",
+            "인과 비약",
+            "A 와 B 가 모두",
+            "HIGH RISK",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"YouTube prompt 에 '{kw}' 누락"
+            )
+
+    def test_youtube_prompt_has_5_render_modes(self):
+        # 직전 PR 의 5 모드는 Claim-Locked 적용 후에도 유지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for mode in (
+            "news_policy",
+            "lecture_summary",
+            "analysis_market",
+            "community_x",
+            "writerly",
+        ):
+            assert mode in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_youtube_prompt_has_strength_examples(self):
+        # 약한 표현 → 강한 표현 변환 금지 예시
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "가능성이 있다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "확정적이다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "무너뜨린다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_youtube_prompt_has_claim_type_taxonomy(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for t in ("FACT", "NUMBER", "CAUSE", "FORECAST", "OPINION",
+                  "UNCERTAIN", "UNSAFE"):
+            assert t in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"Claim Type '{t}' 누락"
+            )
+
+    def test_youtube_prompt_has_high_risk_domains(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for d in ("의료", "감염병", "금융", "법률", "정책", "전쟁"):
+            assert d in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_youtube_prompt_body_meta_label_block(self):
+        # body 에 LOCKED CLAIM / FACT 같은 메타 라벨 출력 금지 룰
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "LOCKED CLAIM" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "메타 설명" in YOUTUBE_DIGEST_SYSTEM_PROMPT or "메타 라벨" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── B. 일반 lane 격리 ───────────────────────────────────────────
+    def test_general_ko_prompt_no_claim_locked(self):
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for kw in (
+            "Claim-Locked Renderer",
+            "LOCKED CLAIM",
+            "Claim Strength",
+            "FACT",
+            "FORECAST",
+            "UNSAFE",
+        ):
+            assert kw not in SYSTEM_PROMPT_KO, (
+                f"일반 KO prompt 에 YouTube 전용 '{kw}' 가 새어들어가면 안 됨"
+            )
+
+    def test_openai_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    # ── C. YouTube slim handoff 에 Claim Strength 가드 ──────────────
+    def _slim_out(self) -> str:
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
+              "frame_type": "x", "story_spine": []}
+        return format_handoff(sp, ap, "본문", source_type="youtube")
+
+    def test_youtube_slim_has_strength_guard(self):
+        out = self._slim_out()
+        for line in (
+            "원문 주장 강도를 높이지 말 것",
+            "\"가능성\"을 \"확정\"으로 바꾸지 말 것",
+            "문장은 다듬되 주장은 확장하지 말 것",
+        ):
+            assert line in out, f"YouTube slim handoff 에 '{line}' 누락"
+
+    def test_youtube_slim_has_causal_leap_guard(self):
+        out = self._slim_out()
+        assert "A 와 B 가 모두" in out
+        assert "A 때문에 B" in out
+
+    def test_youtube_slim_has_high_risk_domain_rule(self):
+        out = self._slim_out()
+        assert "의료·정책·금융·법률·전쟁" in out
+        assert "공포·확정·붕괴 표현" in out
+
+    # ── D. non-YouTube handoff legacy 구조 유지 ─────────────────────
+    def test_non_youtube_handoff_no_claim_locked_lines(self):
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
+              "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문", source_type="news_link")
+        # YouTube slim 만 있는 강도 가드 문구가 일반 lane 에 새지 않아야 함
+        for line in (
+            "원문 주장 강도를 높이지 말 것",
+            "\"가능성\"을 \"확정\"으로 바꾸지 말 것",
+            "공포·확정·붕괴 표현",
+            "[YouTube 95% 보존형 장문 — Grok 편집용]",
+        ):
+            assert line not in out, f"일반 lane 에 YouTube 전용 '{line}' 가 새면 안 됨"
+        # 일반 lane 의 legacy 메타 블록은 그대로 유지
+        assert "## 이 글의 핵심 각도" in out
+        assert "## 최종 출력 규칙" in out
