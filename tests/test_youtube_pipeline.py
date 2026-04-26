@@ -838,22 +838,35 @@ class TestSalienceLockedEconomicSpine:
     [D] schema/interface/모델 보존."""
 
     # ── A. Gemini extractor (youtube_pipeline.py) ───────────────────
-    def test_gemini_prompt_has_economic_spine_block(self):
+    def test_gemini_prompt_has_dynamic_salience_map(self):
+        # Dynamic Salience Map v1 으로 교체됨 — 도메인-agnostic 7 카테고리.
+        # 옛 Salience-Locked Economic Spine 헤더 / Polymarket·Kalshi 명시는
+        # Gemini extractor 에서 제거 (도메인 강제 회피).
         from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
         for kw in (
-            "Salience-Locked Economic Spine",
-            "Key Entities",
-            "Growth Metrics",
-            "Money Flow",
-            "Retail Outcome",
-            "Winner / Loser Map",
-            "Polymarket",
-            "Kalshi",
+            "Dynamic Salience Map",
+            "Core Entities",
+            "Core Numbers",
+            "Core Events",
+            "Core Tension",
+            "Core Mechanism",
+            "Core Outcome",
+            "Must-Keep Items",
             "preservation_targets",
         ):
             assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT, (
-                f"Gemini prompt 에 Spine 키워드 '{kw}' 누락"
+                f"Gemini prompt 에 Dynamic Salience 키워드 '{kw}' 누락"
             )
+
+    def test_gemini_prompt_no_domain_overfitting(self):
+        # Polymarket/Kalshi 같은 특정 도메인 예시는 Gemini extractor 에
+        # 박혀있으면 안 됨 (모든 영상에 강제될 위험). OpenAI prompt 의
+        # Economic Spine 안에서만 선택 패턴으로 사용.
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        assert "Polymarket" not in GEMINI_VIDEO_ANALYSIS_PROMPT
+        assert "Kalshi" not in GEMINI_VIDEO_ANALYSIS_PROMPT
+        # 옛 헤더도 사라졌어야 함
+        assert "Salience-Locked Economic Spine" not in GEMINI_VIDEO_ANALYSIS_PROMPT
 
     def test_gemini_prompt_keeps_existing_extraction(self):
         # Spine 추가가 기존 atomic_claims / claim graph 추출 룰을 약화하지
@@ -964,3 +977,97 @@ class TestSalienceLockedEconomicSpine:
             assert hasattr(ana, field), (
                 f"YoutubeAnalysis 에서 '{field}' 누락 — DB schema 변경 의심"
             )
+
+
+# ─── 13) Dynamic Salience-First Drafting v1 (renderer + clamp 완화) ──
+class TestDynamicSalienceFirstDrafting:
+    """[B] OpenAI YouTube prompt 에 Salience-First Drafting 블록.
+    [C] Economic Spine / 도메인 패턴이 Salience 아래 선택적으로 작동.
+    [D] 일반 KO prompt 격리.
+    [E] 모델/schema/interface 보존."""
+
+    # ── B. Salience-First Drafting ──────────────────────────────────
+    def test_youtube_prompt_has_salience_first_drafting(self):
+        from app.providers.openai_provider import (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT,
+            YOUTUBE_DYNAMIC_SALIENCE_DRAFTING_V1,
+        )
+        assert "Salience-First Drafting" in YOUTUBE_DYNAMIC_SALIENCE_DRAFTING_V1
+        for kw in (
+            "Salience-First Drafting",
+            "핵심 재료 보존",
+            "고정 템플릿으로 글을 쓰지 않는다",
+            "추상어로 지우기",
+            "500자 이하 요약문으로 끝내지 마라",
+            "Tone-Safety Clamp 완화",
+            "truth integrity",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"YouTube prompt 에 Salience-First 키워드 '{kw}' 누락"
+            )
+
+    def test_youtube_prompt_has_priority_order(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # 작성 우선순위 5 단계: 1 핵심 재료 / 2 결론 / 3 몰입 / 4 리듬 / 5 압축
+        assert "작성 우선순위" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "1. 핵심 재료 보존" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "5. 압축" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── C. 고정 도메인 구조 전역화 금지 ─────────────────────────────
+    def test_economic_spine_is_optional_under_salience(self):
+        # Economic Spine 은 Salience-First Drafting 보다 *위* 위치에 있고,
+        # Drafting 블록이 "위의 Economic Spine ... 도 강제 템플릿이 아니다"
+        # 라고 명시 → Spine 은 선택 패턴으로 격하됨.
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # Drafting 블록에 Economic Spine 강제 금지 명시
+        assert "Economic Spine" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "강제 템플릿이 아니다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "특정 도메인 고정 구조를 모든 글에 강제하기" in (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT
+        )
+
+    def test_clamps_softened_not_removed(self):
+        # truth integrity 룰 (Claim-Lock) 은 살아있고, 위험 도메인 자동
+        # 낮춰쓰기 clamp 만 완화됐는지.
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # 유지: truth integrity 5 룰
+        for keep in (
+            "원문에 없는 사실은 만들지 않는다",
+            "원문에 없는 숫자는 만들지 않는다",
+            "원문에 없는 인과는 만들지 않는다",
+            "주장 강도를 높이지 않는다",
+            "결론 명제를 변경하지 않는다",
+        ):
+            assert keep in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"truth integrity 룰 '{keep}' 가 사라지면 안 됨"
+            )
+        # 완화: 모든 위험 표현 일괄 낮춤 패턴 차단
+        assert "원문 강도를 정확히 유지" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "무조건 낮춰 쓰지 마라" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── D. 일반 lane 격리 ───────────────────────────────────────────
+    def test_general_ko_prompt_no_salience_first(self):
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for kw in (
+            "Salience-First Drafting",
+            "Dynamic Salience Map",
+            "Tone-Safety Clamp",
+            "truth integrity",
+            "Core Entities",
+            "Core Mechanism",
+        ):
+            assert kw not in SYSTEM_PROMPT_KO, (
+                f"일반 KO prompt 에 YouTube 전용 '{kw}' 가 새어들어가면 안 됨"
+            )
+
+    # ── E. 모델/schema/interface 보존 ───────────────────────────────
+    def test_openai_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    def test_response_format_schema_unchanged(self):
+        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
+        schema = _RESPONSE_FORMAT_KO["json_schema"]["schema"]
+        assert set(schema["required"]) == {
+            "hook", "body", "stake", "point", "archetype",
+        }
