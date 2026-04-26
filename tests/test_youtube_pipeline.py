@@ -828,3 +828,139 @@ class TestKoreanWriterRenderingLayer:
         # 일반 lane legacy 구조 유지
         assert "## 이 글의 핵심 각도" in out
         assert "## 최종 출력 규칙" in out
+
+
+# ─── 12) Salience-Locked Economic Spine v1 ──────────────────────────
+class TestSalienceLockedEconomicSpine:
+    """[A] Gemini extractor prompt 에 Economic Spine 추출 룰.
+    [B] OpenAI YouTube renderer prompt 에 Economic Spine 보존 룰.
+    [C] 일반 KO prompt 격리.
+    [D] schema/interface/모델 보존."""
+
+    # ── A. Gemini extractor (youtube_pipeline.py) ───────────────────
+    def test_gemini_prompt_has_economic_spine_block(self):
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for kw in (
+            "Salience-Locked Economic Spine",
+            "Key Entities",
+            "Growth Metrics",
+            "Money Flow",
+            "Retail Outcome",
+            "Winner / Loser Map",
+            "Polymarket",
+            "Kalshi",
+            "preservation_targets",
+        ):
+            assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT, (
+                f"Gemini prompt 에 Spine 키워드 '{kw}' 누락"
+            )
+
+    def test_gemini_prompt_keeps_existing_extraction(self):
+        # Spine 추가가 기존 atomic_claims / claim graph 추출 룰을 약화하지
+        # 않았는지
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for kw in (
+            "atomic_claims",
+            "examples",
+            "counter_arguments",
+            "conclusion_claim",
+            "claims",
+            "key_numbers",
+        ):
+            assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT
+
+    # ── B. OpenAI YouTube renderer (openai_provider.py) ─────────────
+    def test_openai_youtube_prompt_has_economic_spine_rule(self):
+        from app.providers.openai_provider import (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT,
+            YOUTUBE_ECONOMIC_SPINE_PRESERVATION_V1,
+        )
+        # 별도 상수도 노출 (개별 검증 가능)
+        assert "Economic Spine Preservation Rule" in (
+            YOUTUBE_ECONOMIC_SPINE_PRESERVATION_V1
+        )
+        for kw in (
+            "Economic Spine Preservation Rule",
+            "핵심 기업/플랫폼",
+            "성장 수치",
+            "돈이 흐르는 구조",
+            "누가 버는지",
+            "누가 잃는지",
+            "Polymarket",
+            "Kalshi",
+            "윤리 논란은 중요하지만",
+            "preservation_targets",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"YouTube renderer 에 Spine 키워드 '{kw}' 누락"
+            )
+
+    def test_openai_youtube_prompt_has_predmarket_structure(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "예측시장 주제 전용 구조" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # "정보 비대칭을 돈으로" 와 "바꾸는 시장" 이 prompt 안 (줄바꿈 사이)
+        # 모두 등장하는지 검증
+        assert "정보 비대칭을 돈으로" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "바꾸는 시장" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_openai_youtube_prompt_keeps_prior_layers(self):
+        # 95% 보존 / Claim-Locked / Writer Layer 가 그대로 살아있는지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for kw in (
+            "95% 이상 보존",
+            "스레드 분할 금지",
+            "결론 명제 변경 금지",
+            "Claim-Locked Renderer",
+            "LOCKED CLAIM",
+            "Korean Writer/Lecturer/Journalist Rendering Layer",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── C. 일반 lane 격리 ───────────────────────────────────────────
+    def test_general_ko_prompt_no_economic_spine(self):
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for kw in (
+            "Economic Spine Preservation Rule",
+            "Salience-Locked Economic Spine",
+            "Polymarket",
+            "Kalshi",
+            "Money Flow",
+            "Retail Outcome",
+            "Winner / Loser Map",
+        ):
+            assert kw not in SYSTEM_PROMPT_KO, (
+                f"일반 KO prompt 에 YouTube 전용 Spine '{kw}' 가 새어들어가면 안 됨"
+            )
+
+    # ── D. schema / interface / model 보존 ──────────────────────────
+    def test_openai_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    def test_response_format_schema_unchanged(self):
+        # _RESPONSE_FORMAT_KO 의 strict schema 5 필드 그대로
+        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
+        schema = _RESPONSE_FORMAT_KO["json_schema"]["schema"]
+        required = set(schema["required"])
+        assert required == {"hook", "body", "stake", "point", "archetype"}, (
+            "response_format strict schema 가 변경되면 provider interface "
+            "변경에 해당 — Spine 추가는 prompt-level 만 허용"
+        )
+
+    def test_youtube_analysis_dataclass_unchanged(self):
+        # YoutubeAnalysis dataclass 의 v4 확장 필드 (atomic_claims /
+        # examples / counter_arguments / segments / conclusion_claim /
+        # preservation_targets) 가 그대로 존재
+        from app.sources.youtube_pipeline import YoutubeAnalysis
+        ana = YoutubeAnalysis(
+            video_id="v", url="u", channel="c", speaker="s",
+            video_summary="vs", main_argument="ma",
+            full_analysis="fa", downstream_summary="ds",
+        )
+        for field in (
+            "atomic_claims", "examples", "counter_arguments",
+            "segments", "conclusion_claim", "preservation_targets",
+        ):
+            assert hasattr(ana, field), (
+                f"YoutubeAnalysis 에서 '{field}' 누락 — DB schema 변경 의심"
+            )
