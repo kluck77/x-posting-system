@@ -193,7 +193,12 @@ def normalize_url(url: str) -> str:
 # ─── 데이터 클래스 ────────────────────────────────────────────────────
 @dataclass
 class YoutubeAnalysis:
-    """Gemini 영상 분석 결과 — 단일 모델."""
+    """Gemini 영상 분석 결과 — 단일 모델.
+
+    선택 필드 (atomic_claims, counter_arguments, conclusion_claim, segments,
+    examples, preservation_targets) 는 95% 보존형 장문 모드용. 비어 있어도
+    기존 동작은 깨지지 않는다 (기존 claims/key_numbers/core_message 유지).
+    """
     video_id:           str
     url:                str
     channel:            str
@@ -204,37 +209,99 @@ class YoutubeAnalysis:
     downstream_summary: str        # Perplexity/Grok 용 요약
     duration_min:       int = 0
     analyzed_at:        float = field(default_factory=time.time)
+    # 95% 보존형 확장 필드 (모두 선택)
+    atomic_claims:        list = field(default_factory=list)
+    counter_arguments:    list = field(default_factory=list)
+    examples:             list = field(default_factory=list)
+    segments:             list = field(default_factory=list)
+    conclusion_claim:     str = ""
+    preservation_targets: list = field(default_factory=list)
 
     def to_pipeline_input(self) -> dict:
         """뉴스 파이프라인 SourceItemCreate 형식.
 
-        source_text body 구조 (자연 truncation 으로 역할 분담):
-          ① [STORYTELLING 지시]      — OpenAI 가 맨 위에서 system 처럼 읽음
-          ② [핵심 주장]              — 짧은 요약 (Perplexity/Grok 자연 도달)
-          ③ [영상 분석 상세]         — full_analysis 원문 (OpenAI 전체 읽음)
+        body 구조:
+          ① [95% 보존형 장문 작성 모드 헤더] — OpenAI 가 system 지시로 읽음
+          ② [핵심 주장 / 결론 명제]          — Perplexity/Grok 자연 도달
+          ③ [영상 분석 상세 + 확장 필드]     — full_analysis + atomic_claims 등
         """
-        storytelling_header = (
-            "[유튜브 영상 분석 모드 — 스토리텔링 구조 필수]\n"
-            "아래 영상 분석 결과를 바탕으로 포스트를 작성합니다.\n"
-            "\n"
-            "포스트 구조 (반드시 준수):\n"
-            "① 배경: 독자가 이미 아는 현실 1~2줄\n"
-            "② 긴장: 발언자가 지적한 이상한 점 1~2줄\n"
-            "③ 반전: 아무도 말 안 하는 모순 1~2줄\n"
-            "④ 내 해석: 해석 동사 1회 + '나는' 1회\n"
-            "⑤ 스테이크: 독자 지갑·포지션 연결\n"
-            "⑥ 예측: 시간+레벨+반증조건\n"
-            "\n"
-            "추가 규칙:\n"
-            "- 발언자 주장은 큰따옴표로 인용\n"
-            "- 출처(채널명·타임스탬프) 포스트 끝에 명시\n"
-            "- 분석 결과에 없는 사실 추가 금지\n"
+        preservation_header = (
+            "[YouTube 95% 보존형 장문 작성 모드]\n"
+            "- 목표: 영상의 atomic claim 95% 이상 보존\n"
+            "- 표면 문장 보존이 아니라 명제/논리/사례/반론/결론 보존\n"
+            "- 발명 0건 — 영상에 없는 사실/숫자/장면/감정/인과 추가 금지\n"
+            "- 결론 명제 동일 — 영상 결론과 같은 명제로 닫기\n"
+            "- 첫 문장은 영상 안의 가장 강한 숫자/모순/고유명사/질문/위험 중에서 선택\n"
+            "- 기본 구조 (hourglass):\n"
+            "  1) 첫 화면: 핵심 stake\n"
+            "  2) nut graf: 왜 지금 읽어야 하는지\n"
+            "  3) 본문: claim graph 흐름 보존 (영상 순서 유지)\n"
+            "  4) 사례/반론/결론 보존\n"
+            "  5) 마지막: 영상 결론 명제와 동일하게 닫기\n"
+            "- 스레드 분할 금지 (단일 X Premium 장문 포스트)\n"
+            "- 글자수 제한 강제 금지\n"
+            "- 작가/강사/저널리스트 기법은 배열/전환/이해/몰입에만 사용 — 새 사실 추가 금지\n"
+            "- 발언자 인용은 큰따옴표 그대로\n"
+            "- 출처(채널명·URL) 포스트 끝에 명시\n"
         )
+
+        # 확장 필드 텍스트 블록 (있을 때만 추가, backward-compatible)
+        extended_blocks: list[str] = []
+        if self.conclusion_claim:
+            extended_blocks.append(
+                f"[결론 명제 (영상)]\n{self.conclusion_claim}"
+            )
+        if self.atomic_claims:
+            lines = []
+            for c in self.atomic_claims:
+                if isinstance(c, dict):
+                    ts = str(c.get("timestamp", "") or "")
+                    text = str(c.get("claim", "") or "")
+                    if not text:
+                        continue
+                    lines.append(f"- [{ts}] {text}" if ts else f"- {text}")
+                elif isinstance(c, str) and c:
+                    lines.append(f"- {c}")
+            if lines:
+                extended_blocks.append("[Atomic Claims]\n" + "\n".join(lines))
+        if self.examples:
+            lines = []
+            for e in self.examples:
+                if isinstance(e, dict):
+                    text = str(e.get("example", "") or e.get("text", "") or "")
+                    if text:
+                        lines.append(f"- {text}")
+                elif isinstance(e, str) and e:
+                    lines.append(f"- {e}")
+            if lines:
+                extended_blocks.append("[사례]\n" + "\n".join(lines))
+        if self.counter_arguments:
+            lines = []
+            for ca in self.counter_arguments:
+                if isinstance(ca, dict):
+                    text = str(ca.get("counter", "") or ca.get("text", "") or "")
+                    if text:
+                        lines.append(f"- {text}")
+                elif isinstance(ca, str) and ca:
+                    lines.append(f"- {ca}")
+            if lines:
+                extended_blocks.append("[반론]\n" + "\n".join(lines))
+        if self.preservation_targets:
+            lines = [
+                f"- {t}" for t in self.preservation_targets
+                if isinstance(t, str) and t
+            ]
+            if lines:
+                extended_blocks.append("[보존 필수 항목]\n" + "\n".join(lines))
+
+        extended_text = ("\n\n" + "\n\n".join(extended_blocks)) if extended_blocks else ""
+
         body = (
-            f"{storytelling_header}\n"
+            f"{preservation_header}\n"
             f"[핵심 주장]\n{self.main_argument}\n\n"
             f"[요약]\n{self.downstream_summary or self.video_summary}\n\n"
             f"{self.full_analysis}"
+            f"{extended_text}"
         )
         title_hint = (self.main_argument or self.video_summary or "영상 분석")[:50]
         return {
@@ -252,9 +319,10 @@ class YoutubeAnalysis:
         }
 
 
-# ─── Gemini 분석 프롬프트 (v3 — 원문 추출 모드, 요약 금지) ───────────
+# ─── Gemini 분석 프롬프트 (v4 — 95% 보존형 claim graph 추출 모드) ─────
 GEMINI_VIDEO_ANALYSIS_PROMPT = """[IDENTITY]
-너는 영상 내용을 원문 그대로 추출하는 전사 모듈이다.
+너는 영상 내용을 95% 이상 보존하기 위한 claim graph 추출 모듈이다.
+요약가가 아니다. atomic claim, 사례, 반론, 결론 명제를 분리 추출한다.
 
 [절대 금지]
 - 요약 금지
@@ -263,24 +331,24 @@ GEMINI_VIDEO_ANALYSIS_PROMPT = """[IDENTITY]
 - 개수 제한 금지
 - 버리기 금지
 - 재구성 금지
-- 한국 현실·맥락 추가 금지
-- 영상에 없는 내용 추가 금지
+- 한국 현실·맥락 임의 추가 금지 (영상에서 발언자가 한국을 언급한 경우만 허용)
+- 영상에 없는 사실/숫자/장면/감정/인과 추가 금지
 
 [TASK]
-이 영상에서 발언자가 말한 모든 핵심 주장을 추출하라.
+이 영상에서 발언자가 실제로 한 말을 atomic claim 단위로 추출하고,
+사례/반론/결론을 분리하며, 영상 순서와 결론 명제를 보존하라.
 
-핵심 주장이란:
-- 발언자가 강조한 것
-- 수치가 포함된 것
-- 결론으로 제시한 것
-- 독자가 행동하도록 유도한 것
-- 반복해서 말한 것
+atomic claim = 더 쪼갤 수 없는 단일 명제 (한 문장 = 한 주장).
+복합 문장은 여러 atomic claim 으로 분해한다.
 
 추출 방법:
 1. 영상 자막 전체를 읽어라
-2. 발언자의 말을 원문에 가깝게 추출
-3. 개수 제한 없이 전부 가져와라
-4. 각 주장에 영상 타임스탬프 포함
+2. 발언자의 말을 원문에 가깝게 atomic claim 단위로 분해
+3. 사례(example) 와 반론(counter_argument) 을 별도 분리
+4. 결론 명제(conclusion_claim) 1줄로 추출 (영상 결론 그대로)
+5. 영상 흐름을 segments 로 시간 순 분할 (선택)
+6. 개수 제한 없이 전부 가져와라
+7. 각 항목에 타임스탬프 포함
 
 [FORMAT JSON 만 반환 — 다른 텍스트 절대 금지]
 {
@@ -297,6 +365,32 @@ GEMINI_VIDEO_ANALYSIS_PROMPT = """[IDENTITY]
       "strength": "high|medium|low"
     }
   ],
+  "atomic_claims": [
+    {
+      "timestamp": "00:11",
+      "claim": "단일 명제 1개 (쪼갤 수 없는 단위)",
+      "depends_on": []
+    }
+  ],
+  "examples": [
+    {
+      "timestamp": "03:42",
+      "example": "발언자가 든 사례 원문"
+    }
+  ],
+  "counter_arguments": [
+    {
+      "timestamp": "07:10",
+      "counter": "발언자가 언급한 반론/예외/조건"
+    }
+  ],
+  "segments": [
+    {
+      "timestamp": "00:00",
+      "title": "도입",
+      "summary_of_section": "섹션 요지 1줄 (발언자 말 그대로)"
+    }
+  ],
   "key_numbers": [
     {
       "value": "200달러",
@@ -304,15 +398,21 @@ GEMINI_VIDEO_ANALYSIS_PROMPT = """[IDENTITY]
       "timestamp": "01:23"
     }
   ],
-  "core_message": "영상 전체의 핵심 메시지 1줄 (요약 아님, 발언자 말 그대로)"
+  "core_message": "영상 전체의 핵심 메시지 1줄 (요약 아님, 발언자 말 그대로)",
+  "conclusion_claim": "영상이 마지막에 닫는 결론 명제 1줄 (그대로)",
+  "preservation_targets": [
+    "반드시 본문에 보존해야 할 핵심 명제/숫자/사례 항목 리스트"
+  ]
 }
 
 [SELF-CHECK]
-□ 모든 핵심 주장 추출했는가
+□ atomic claim 단위로 분해했는가 (복합문 = 여러 claim)
+□ 사례/반론/결론을 분리했는가
+□ 결론 명제(conclusion_claim) 가 영상 마지막 결론과 동일한가
+□ 영상 순서 보존했는가
 □ 개수 제한 없이 전부 가져왔는가
 □ 영상에 없는 내용 추가 안 했는가
-□ 한국 맥락 추가 안 했는가
-□ 원문에 가깝게 추출했는가"""
+□ 한국 맥락 임의 추가 안 했는가"""
 
 
 # ─── Gemini 직접 분석 ────────────────────────────────────────────────
@@ -407,10 +507,28 @@ async def analyze_video_with_gemini(
                         continue
                     return None
 
-            # v3 — claims 원문 추출 모드 (개수 제한 없음, 요약 금지)
+            # v4 — claim graph 추출 (atomic_claims/사례/반론/결론 분리)
             claims = data.get("claims", []) or []
             key_numbers = data.get("key_numbers", []) or []
             core_message = str(data.get("core_message", "") or "")
+            # v4 확장 필드 (없으면 빈 값 — backward-compatible)
+            atomic_claims = data.get("atomic_claims", []) or []
+            examples = data.get("examples", []) or []
+            counter_arguments = data.get("counter_arguments", []) or []
+            segments = data.get("segments", []) or []
+            conclusion_claim = str(data.get("conclusion_claim", "") or "")
+            preservation_targets = data.get("preservation_targets", []) or []
+            # 리스트 타입 강제 (Gemini 가 dict 로 반환할 가능성 차단)
+            if not isinstance(atomic_claims, list):
+                atomic_claims = []
+            if not isinstance(examples, list):
+                examples = []
+            if not isinstance(counter_arguments, list):
+                counter_arguments = []
+            if not isinstance(segments, list):
+                segments = []
+            if not isinstance(preservation_targets, list):
+                preservation_targets = []
 
             claim_lines = []
             for c in claims:
@@ -467,6 +585,12 @@ async def analyze_video_with_gemini(
                 full_analysis=full_analysis,
                 downstream_summary=core_message,
                 duration_min=int(data.get("duration_min", 0) or 0),
+                atomic_claims=atomic_claims,
+                examples=examples,
+                counter_arguments=counter_arguments,
+                segments=segments,
+                conclusion_claim=conclusion_claim,
+                preservation_targets=preservation_targets,
             )
             logger.info(
                 f"[YT] 분석 완료: {video_id} speaker={analysis.speaker} "
