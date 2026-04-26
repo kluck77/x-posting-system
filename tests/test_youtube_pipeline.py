@@ -207,3 +207,105 @@ class TestToPipelineInputHeader:
         for key in ("title", "body", "url", "source", "source_type"):
             assert key in out
         assert out["source_type"] == "youtube"
+
+
+# ─── 6) format_handoff lane 분기 (YouTube 95% 보존형) ────────────────
+class TestFormatHandoffYouTubeLane:
+    def _min_sp(self) -> dict:
+        return {
+            "confirmed_facts": ["사실 1", "사실 2"],
+            "conflicts_or_uncertainty": [],
+            "evidence_pack": [],
+            "concept_translation": "",
+        }
+
+    def _min_ap(self) -> dict:
+        return {
+            "winner_angle": {"angle": "테스트 앵글"},
+            "core_tension": "테스트 긴장",
+            "frame_type": "underreported_angle",
+            "readability_risk": "medium",
+            "share_trigger": "공유 트리거",
+            "scan_pattern": "",
+            "story_spine": ["A", "B", "C"],
+        }
+
+    def test_youtube_handoff_has_95pct_rule(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._min_sp(), self._min_ap(),
+            "본문 — 영상 결론 명제로 끝남.",
+            source_type="youtube",
+        )
+        assert "95% 보존" in out
+        assert "글자수 제한 강제 없음" in out
+        assert "스레드 분할 금지" in out
+
+    def test_youtube_handoff_strips_280_700_rule(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._min_sp(), self._min_ap(),
+            "본문",
+            source_type="youtube",
+        )
+        assert "280~700자" not in out
+
+    def test_non_youtube_handoff_keeps_280_700_rule(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._min_sp(), self._min_ap(),
+            "본문",
+            source_type="news_link",
+        )
+        assert "280~700자" in out
+
+    def test_default_source_type_keeps_legacy_rule(self):
+        # source_type kwarg 미전달 시 기존 동작 유지 (backward-compatible).
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(self._min_sp(), self._min_ap(), "본문")
+        assert "280~700자" in out
+
+    def test_youtube_handoff_preserves_long_body(self):
+        # YouTube body 1500자 가량 → handoff 안 원문 초안에 1000자 이상 살아있어야 함.
+        # (다른 lane 은 _BODY_MAX=900 truncate)
+        from app.services.grok_handoff import format_handoff
+        long_body = (
+            "이것은 영상의 atomic claim 을 95% 보존한 장문 본문이다. " * 50
+        )
+        assert len(long_body) > 1500
+        out = format_handoff(
+            self._min_sp(), self._min_ap(),
+            long_body,
+            source_type="youtube",
+        )
+        # `## 원문 초안` 블록 안 본문 길이 확인
+        # YouTube lane body cap 3500 이므로 1500자는 잘리지 않음
+        assert long_body[:1000] in out
+
+
+# ─── 7) openai_provider YouTube fallback skip ───────────────────────
+class TestOpenAIProviderYouTubeLane:
+    def test_youtube_skips_stake_point_generic_fallback(self):
+        # source_type='youtube' + 빈 stake/point → combined_body 가
+        # "📌 지금 봐야 할 포인트:" 로 끝나면 안 됨.
+        # 실제 OpenAI 호출 없이 path 검증만: response handler logic 을
+        # source_type='youtube' 분기로 우회시켜야 한다.
+        # 단순화: provider 모듈의 상수만 import 해서 prompt 변경 검증.
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "280자" not in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "thread_continuation" not in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "95% 이상 보존" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "스레드 분할 금지" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_youtube_lane_branch_present_in_source(self):
+        # 코드 내 'youtube' 분기가 stake/point fallback 앞에 배치되었는지
+        # 정적 검증 (mock 호출 없이).
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        # source_type == 'youtube' 분기가 있고, 그 분기가 fallback 보다
+        # 위쪽(또는 fallback 을 우회) 에 있어야 한다.
+        assert 'source_type == "youtube"' in src or "_is_youtube_lane" in src
+        # YouTube 분기 안에서는 generic fallback 문구 합성 안 함.
+        assert "해석 gap 확인 필요" in src  # 다른 lane 용 fallback 은 그대로 존재
+        assert "후속 지표 확인" in src

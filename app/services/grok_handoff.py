@@ -27,6 +27,10 @@ from app.services.handoff_quality_guard import run_quality_guard
 _HANDOFF_MAX = 1800         # 본문(초안) 버짓 계산 기준 — 고정 5블록 + 선택 2블록 가정
 _HANDOFF_HARD_MAX = 2800    # 최종 하드 상한 (새 compact 편집 신호 3블록 포함)
 _BODY_MAX = 900
+# YouTube 95% 보존형 장문 lane 전용 상한 (다른 lane 영향 없음)
+_YOUTUBE_HANDOFF_MAX = 5000
+_YOUTUBE_HANDOFF_HARD_MAX = 6500
+_YOUTUBE_BODY_MAX = 3500
 _BLOCK_LINE_MAX = 160
 _URL_RE = re.compile(r"https?://\S+")
 
@@ -492,6 +496,7 @@ def format_handoff(
     strategy_os: dict | None = None,
     linter_labels: dict | None = None,
     editorial_meta: dict | None = None,
+    source_type: str = "",
 ) -> str:
     """
     Grok (x.ai) 편집용 handoff. 복사-붙여넣기로 바로 쓰는 **편집 카드**.
@@ -525,8 +530,13 @@ def format_handoff(
     ap = angle_pack if isinstance(angle_pack, dict) else {}
     wa = ap.get("winner_angle") if isinstance(ap.get("winner_angle"), dict) else {}
 
+    # YouTube 95% 보존형 장문 lane 만 별도 상한/규칙 적용. 다른 lane 영향 없음.
+    is_youtube = (str(source_type or "").strip().lower() == "youtube")
+    handoff_max = _YOUTUBE_HANDOFF_MAX if is_youtube else _HANDOFF_MAX
+    body_max = _YOUTUBE_BODY_MAX if is_youtube else _BODY_MAX
+
     body_raw = _strip_urls((final_body or "").strip())
-    body = _truncate_to(body_raw, _BODY_MAX)
+    body = _truncate_to(body_raw, body_max)
 
     winner = _strip_urls(_safe(wa.get("angle"), 200)) or "(not set)"
     core_tension = _strip_urls(_safe(ap.get("core_tension"), 240))
@@ -599,13 +609,25 @@ def format_handoff(
                 section_free.append(f"- 미확정 항목은 헤지 동사로 (예: {c0})")
 
     # ── ## 최종 출력 규칙 ──────────────────────────────────
-    section_rules = [
-        "## 최종 출력 규칙",
-        "- 한국어 한 편, 280~700자 범위",
-        "- 새로운 사실/숫자/인용 추가 금지",
-        "- 미확정 항목은 단정하지 말고 '~로 보임 / ~할 가능성 / ~로 추정' 톤",
-        "- 마지막 줄은 독자가 공유하고 싶어질 한 문장",
-    ]
+    # YouTube 95% 보존형 lane 은 글자수 제한 없음 / 단일 포스트.
+    # 다른 lane 은 기존 280~700자 규칙 유지.
+    if is_youtube:
+        section_rules = [
+            "## 최종 출력 규칙",
+            "- 한국어 한 편. 영상 atomic claim 95% 보존. "
+            "글자수 제한 강제 없음. 단일 포스트. 스레드 분할 금지.",
+            "- 새로운 사실/숫자/인용 추가 금지 (영상에 없는 한국 맥락도 금지)",
+            "- 결론 명제는 영상 결론 그대로 닫기",
+            "- 미확정 항목은 단정하지 말고 '~로 보임 / ~할 가능성 / ~로 추정' 톤",
+        ]
+    else:
+        section_rules = [
+            "## 최종 출력 규칙",
+            "- 한국어 한 편, 280~700자 범위",
+            "- 새로운 사실/숫자/인용 추가 금지",
+            "- 미확정 항목은 단정하지 말고 '~로 보임 / ~할 가능성 / ~로 추정' 톤",
+            "- 마지막 줄은 독자가 공유하고 싶어질 한 문장",
+        ]
 
     # 선택 블록 (최대 2개)
     optional_sections: list[list[str]] = []
@@ -634,9 +656,11 @@ def format_handoff(
     tail_text = "\n\n".join(fixed_tail)
     # 여유: "## 원문 초안\n```\n...\n```\n\n" 의 스캐폴드 (~20자) 감안
     scaffold_len = len("## 원문 초안\n```\n\n```\n\n")
-    body_budget = _HANDOFF_MAX - len(tail_text) - scaffold_len
-    if body_budget < 120:
-        body_budget = 120  # 최소한 짧은 요약은 남김
+    body_budget = handoff_max - len(tail_text) - scaffold_len
+    # YouTube lane 은 최소 _YOUTUBE_BODY_MAX 보장 (95% 보존 목적).
+    min_budget = _YOUTUBE_BODY_MAX if is_youtube else 120
+    if body_budget < min_budget:
+        body_budget = min_budget
     body = _truncate_to(body, body_budget)
     section_draft = [
         "## 원문 초안",
@@ -687,11 +711,12 @@ def format_handoff(
 
     # 길이 제한 — 뒤(선택 블록 + 편집장 지시서 블록)부터 잘라낸다.
     # 고정 5 블록 + (경고 블록 있으면 1) 은 유지.
+    hard_max = _YOUTUBE_HANDOFF_HARD_MAX if is_youtube else _HANDOFF_HARD_MAX
     _min_keep = 5 + (1 if _warning_block_text else 0)
-    while len(out) > _HANDOFF_HARD_MAX and len(chunks) > _min_keep:
+    while len(out) > hard_max and len(chunks) > _min_keep:
         chunks.pop()
         out = "\n\n".join(chunks)
 
-    if len(out) > _HANDOFF_HARD_MAX:
-        out = _truncate_to(out, _HANDOFF_HARD_MAX)
+    if len(out) > hard_max:
+        out = _truncate_to(out, hard_max)
     return out

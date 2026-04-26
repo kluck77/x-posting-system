@@ -445,6 +445,20 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 _stake = str(data.get("stake", "") or "").strip()
                 _point = str(data.get("point", "") or "").strip()
                 _archetype = str(data.get("archetype", "") or "")
+                # YouTube 95% 보존형 lane: stake/point generic fallback 금지 +
+                # combined_body 에 stake/point 강제 append 금지.
+                # body 가 영상 결론 명제로 자연스럽게 끝날 수 있게 한다.
+                _is_youtube_lane = (source_type == "youtube")
+                if _is_youtube_lane:
+                    return DraftResult(
+                        hook=_hook,
+                        body=_body,
+                        thread_continuation=None,
+                        category_suggestion=_ARCHETYPE_TO_CATEGORY.get(
+                            _archetype, "evergreen"
+                        ),
+                        tone_notes=_archetype,
+                    )
                 # 빈 stake/point 방어선: 모델이 strict schema 지키면서 ""
                 # 반환하는 경우. body 에 인라인 ⚠️가 있으면 그 문구 재활용,
                 # 없으면 generic fallback.

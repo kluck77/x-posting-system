@@ -275,9 +275,25 @@ def build_approval_card(
         f"{'─' * 30}\n\n"
         f"🎯 <b>훅:</b>\n{_hook}\n\n"
     )
+    # YouTube 95% 보존형 장문 lane 은 본문 cap 3500 (다른 lane 2000 유지).
+    # 전체 카드는 Telegram 4096자 한도 안에 들어가도록 헤더/푸터 길이 여유분 확보.
+    _src_type_for_card = ""
+    try:
+        _si_for_type = getattr(draft, "source_item", None)
+        if _si_for_type is not None:
+            _src_type_for_card = (
+                str(getattr(_si_for_type, "source_type", "") or "").strip().lower()
+            )
+    except Exception:
+        _src_type_for_card = ""
+    _is_youtube_card = (_src_type_for_card == "youtube")
+    # YouTube 장문 cap 3200 (다른 lane 2000). Telegram 4096 한도 안에서
+    # 헤더/푸터/Psych/Biz/Voice 배지 여유분 확보.
+    _body_cap = 3200 if _is_youtube_card else 2000
+
     if _body:
         # 본문이 너무 길면 4096자 제한 초과 → 잘라내기
-        _body_display = _body[:2000] + "…" if len(_body) > 2000 else _body
+        _body_display = _body[:_body_cap] + "…" if len(_body) > _body_cap else _body
         card += f"📝 <b>본문:</b>\n{_body_display}\n\n"
     else:
         card += "📝 <b>본문:</b>\n⚠️ 본문 없음 — 재생성 필요\n\n"
@@ -396,9 +412,14 @@ def build_approval_card(
     except Exception:
         pass
 
-    char_info = f"글자 수: {draft.text_length}"
-    if draft.text_length > 280:
-        char_info += " ⚠️ X 한도 초과 — 편집 필요"
+    # YouTube 95% 보존형 lane 은 X 글자수 한도 무시 (장문 모드 배지로 대체).
+    # 다른 lane 은 기존 280자 경고 유지.
+    if _is_youtube_card:
+        char_info = f"글자 수: {draft.text_length} | 🎬 YouTube 장문 모드 (글자수 제한 없음)"
+    else:
+        char_info = f"글자 수: {draft.text_length}"
+        if draft.text_length > 280:
+            char_info += " ⚠️ X 한도 초과 — 편집 필요"
 
     card += (
         f"\n💡 <b>추천:</b> "

@@ -790,9 +790,11 @@ class Orchestrator:
                     f"{_frame_block}\n\n{draft_criteria_ctx}".strip()
                     if draft_criteria_ctx else _frame_block
                 )
+            # YouTube 95% 보존형 lane 만 source_text cap 8000 (다른 lane 3000 유지)
+            _src_cap = 8000 if data.source_type == "youtube" else 3000
             draft_result = await self.ai.draft_writer.generate_draft(
                 title=data.title,
-                source_text=enriched_source[:3000],
+                source_text=enriched_source[:_src_cap],
                 language=data.language or settings.default_language,
                 source_type=data.source_type,
                 criteria_context=draft_criteria_ctx,
@@ -923,9 +925,11 @@ class Orchestrator:
                     data.source_text
                     + f"\n\n[REGENERATION GUIDANCE #{regen_attempts}]: {hint}"
                 )
+                # YouTube 95% 보존형 lane 만 source_text cap 8000 (다른 lane 3000 유지)
+                _regen_src_cap = 8000 if data.source_type == "youtube" else 3000
                 draft_result = await self.ai.draft_writer.generate_draft(
                     title=data.title,
-                    source_text=regen_source[:3000],
+                    source_text=regen_source[:_regen_src_cap],
                     language=data.language or settings.default_language,
                     source_type=data.source_type,
                     criteria_context=review_criteria_ctx,
@@ -1296,9 +1300,11 @@ class Orchestrator:
                 # draft_writer 재호출 (review 는 update 하지 않음 → 후단 review 가
                 # 새 draft 로 덮일 때까지 유지. 본 구현은 draft_result 만 갱신)
                 try:
+                    # YouTube 95% 보존형 lane 만 source_text cap 8000 (다른 lane 3000 유지)
+                    _judge_src_cap = 8000 if data.source_type == "youtube" else 3000
                     draft_result = await self.ai.draft_writer.generate_draft(
                         title=data.title,
-                        source_text=enriched_source[:3000],
+                        source_text=enriched_source[:_judge_src_cap],
                         language=data.language or settings.default_language,
                         source_type=data.source_type,
                         criteria_context=draft_criteria_ctx,
@@ -1626,6 +1632,7 @@ class Orchestrator:
                     strategy_os=_so_for_handoff,
                     linter_labels=_labels,
                     editorial_meta=_meta,
+                    source_type=data.source_type,
                 )
                 save_pack(draft.id, {
                     "source":         pack_chain_data["source_pack"],
