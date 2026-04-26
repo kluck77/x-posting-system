@@ -698,3 +698,133 @@ class TestClaimLockedRenderer:
         # 일반 lane 의 legacy 메타 블록은 그대로 유지
         assert "## 이 글의 핵심 각도" in out
         assert "## 최종 출력 규칙" in out
+
+
+# ─── 11) Korean Writer/Lecturer/Journalist Rendering Layer v1 ────────
+class TestKoreanWriterRenderingLayer:
+    """[A] YouTube prompt 에 Writer Layer 7 표현 기술 + 강도 유지.
+    [B] 5 모드별 비율 명시.
+    [C] 일반 KO prompt 격리.
+    [D] YouTube slim handoff 에 Writer Boundary 7 줄.
+    [E] non-YouTube handoff 에 Writer Boundary 미노출."""
+
+    # ── A. YouTube prompt 에 Writer Layer ───────────────────────────
+    def test_prompt_has_writer_layer_block(self):
+        from app.providers.openai_provider import (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT,
+            YOUTUBE_KOREAN_WRITER_RENDERING_LAYER_V1,
+        )
+        assert "Korean Writer/Lecturer/Journalist Rendering Layer v1" in (
+            YOUTUBE_KOREAN_WRITER_RENDERING_LAYER_V1
+        )
+        for kw in (
+            "Korean Writer/Lecturer/Journalist Rendering Layer",
+            "첫 문장 강화",
+            "긴장 배치",
+            "강사식 설명",
+            "저널리스트식 정리",
+            "작가식 몰입",
+            "애널리스트식 결론",
+            "원문에 없는 장면",
+            "주장 강도",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"YouTube prompt 에 Writer Layer 키워드 '{kw}' 누락"
+            )
+
+    def test_prompt_keeps_claim_lock_priority(self):
+        # Writer Layer 가 Claim-Lock 위에 추가됐어도 Claim-Lock 키워드는
+        # 여전히 prompt 안에 살아있어야 함
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for kw in (
+            "Claim-Locked Renderer",
+            "LOCKED CLAIM",
+            "95% 이상 보존",
+            "스레드 분할 금지",
+            "결론 명제 변경 금지",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── B. mode 별 비율 명시 ────────────────────────────────────────
+    def test_prompt_has_per_mode_ratios(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # 5 mode 모두 비율/역할 차이 명시 (간접 검증: 모드명 + % 또는 역할)
+        for mode in (
+            "news_policy",
+            "lecture_summary",
+            "analysis_market",
+            "community_x",
+            "writerly",
+        ):
+            assert mode in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # 비율 명시 — 70% / 60% / 사람 말투 등 키워드로 간접 검증
+        assert "저널리스트 70%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "강사 70%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "애널리스트 60%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "사람 말투 60%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "작가 60%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── C. 일반 KO prompt 격리 ──────────────────────────────────────
+    def test_general_ko_prompt_no_writer_layer(self):
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for kw in (
+            "Korean Writer/Lecturer/Journalist Rendering Layer",
+            "첫 문장 강화",
+            "긴장 배치",
+            "강사식 설명",
+            "저널리스트식 정리",
+            "작가식 몰입",
+            "애널리스트식 결론",
+        ):
+            assert kw not in SYSTEM_PROMPT_KO, (
+                f"일반 KO prompt 에 Writer Layer '{kw}' 가 새어들어가면 안 됨"
+            )
+
+    def test_openai_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    # ── D. YouTube slim handoff 에 Writer Boundary ──────────────────
+    def _slim_out(self) -> str:
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
+              "frame_type": "x", "story_spine": []}
+        return format_handoff(sp, ap, "본문", source_type="youtube")
+
+    def test_youtube_slim_has_writer_boundary(self):
+        out = self._slim_out()
+        for line in (
+            "문장 리듬은 다듬되, 주장은 확장하지 말 것",
+            "작가처럼 보이려고 원문에 없는 장면/감정/대사를 만들지 말 것",
+            "강사처럼 쉽게 풀되, 원문에 없는 예시를 만들지 말 것",
+            "저널리스트처럼 사실과 해석을 분리할 것",
+        ):
+            assert line in out, f"YouTube slim handoff 에 '{line}' 누락"
+
+    def test_youtube_slim_has_first_last_sentence_rules(self):
+        out = self._slim_out()
+        assert "첫 문장은 강화하되, 원문에 없는 사실을 넣지 말 것" in out
+        assert "마지막 문장은 선명하게 만들되, 결론 명제를 바꾸지 말 것" in out
+        assert "불확실한 주장은 낮춰 쓸 것" in out
+
+    # ── E. non-YouTube handoff 에 Writer Boundary 미노출 ────────────
+    def test_non_youtube_handoff_no_writer_boundary(self):
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
+              "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문", source_type="news_link")
+        for line in (
+            "작가처럼 보이려고 원문에 없는 장면/감정/대사를 만들지 말 것",
+            "강사처럼 쉽게 풀되, 원문에 없는 예시를 만들지 말 것",
+            "저널리스트처럼 사실과 해석을 분리할 것",
+            "마지막 문장은 선명하게 만들되, 결론 명제를 바꾸지 말 것",
+        ):
+            assert line not in out, (
+                f"일반 lane 에 YouTube 전용 Writer Boundary '{line}' 가 새면 안 됨"
+            )
+        # 일반 lane legacy 구조 유지
+        assert "## 이 글의 핵심 각도" in out
+        assert "## 최종 출력 규칙" in out
