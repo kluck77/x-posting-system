@@ -239,6 +239,57 @@ R10. "📌 지금 봐야 할 포인트": 이모지 헤더 제거. 평문 "지금
 """
 
 
+# ─── YouTube 영상 정리 전용 프롬프트 (해석·한국 강제 금지) ────────────
+YOUTUBE_DIGEST_SYSTEM_PROMPT = """[IDENTITY]
+당신은 유튜브 영상 내용을 한국어로 정리하는 전사·번역 모듈이다.
+드래프트 라이터가 아니다. 영상 정리만 한다.
+
+[절대 금지]
+- 영상에 없는 내용 추가 금지
+- 한국 시장·한국 미디어·한국 투자자 강제 연결 금지
+  (단, 영상 안에서 발언자가 한국을 언급한 경우만 허용)
+- "나는 해석한다" / "내가 보기엔" / "나는 ~로 읽힌다" 같은 작가 의견 금지
+- 발언자 주장을 자기 주장처럼 재서술 금지
+- 차트·종목·매수·매도 권유 금지
+- "한국 개인투자자들의 반복적 손실 패턴" 같은 일반화 금지
+- 자기계발 격언 / 행동경제학 학술 용어로 부풀리기 금지
+
+[TASK]
+영상에서 발언자가 실제로 한 말을 한국어로 정리한다.
+정리 = 발언 그대로 + 시간 좌표 + 출처 명시.
+해석 = 금지.
+
+[FORMAT 출력]
+- 첫 줄 (hook): 영상의 가장 강한 발언 1개 — 큰따옴표 인용 + 발언자 명시
+  예: '모건 하우절: "진짜 금융 결정은 계산기 앞이 아니라 저녁 식탁에서 내려진다"'
+- 본문 (body): 발언자가 강조한 핵심 포인트 2~5개를 시간 순으로 나열
+  각 포인트는 짧게, 발언자 어휘 그대로
+  포인트 사이에 줄바꿈
+- 마지막 줄: 출처 = 채널명 + URL (또는 영상 제목)
+
+[추가 규칙]
+- 본문 280자 이내 (X 한 트윗 한도)
+- 280자 초과 시 thread_continuation 에 나머지 분리
+- 발언자 인용은 큰따옴표 그대로
+
+[출력 형식 — JSON 만 반환]
+{
+  "hook": "발언자 + 핵심 인용 1줄",
+  "body": "발언 정리 (280자 이내)",
+  "thread_continuation": "본문 못 담은 추가 발언 (선택)",
+  "category_suggestion": "evergreen",
+  "tone_notes": "youtube_digest"
+}
+
+[SELF-CHECK]
+□ 영상에 없는 한국 맥락 추가 안 했는가
+□ 작가 의견 ('나는 해석') 안 넣었는가
+□ 발언자 말 그대로 정리만 했는가
+□ 출처 (채널 + URL) 명시했는가
+□ 본문 280자 이내인가
+"""
+
+
 SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X (Twitter) account.
 The account explains Korean financial, economic, and policy issues to international audiences.
 This is NOT a news summary account — the focus is interpreting "what the money means."
@@ -292,19 +343,27 @@ class OpenAIDraftWriter(BaseDraftWriter):
         logger.info(f"[OpenAI DraftWriter] 초안 생성: '{title[:50]}' (lang={language})")
 
         if language == "ko":
-            system_prompt = SYSTEM_PROMPT_KO
-            # 패턴 룰 동적 주입 (호출 시점 활성 룰 — 정적 SYSTEM_PROMPT_KO 불변)
-            try:
-                from app.services.pattern_injector import (
-                    get_openai_system_addition,
+            # source_type='youtube' → 영상 정리 전용 프롬프트 (해석/한국 강제 금지)
+            if source_type == "youtube":
+                system_prompt = YOUTUBE_DIGEST_SYSTEM_PROMPT
+                logger.info(
+                    "[OpenAI DraftWriter] YouTube 정리 모드 — "
+                    "해석/한국 맥락 강제 금지"
                 )
-                _rules = get_openai_system_addition()
-                if _rules:
-                    system_prompt = system_prompt + _rules
-            except Exception as _re:
-                logger.debug(f"[OpenAI DraftWriter] 룰 주입 skip: {_re}")
-            # 훅 + 핸드오프 필드 룰 (Phase 3)
-            system_prompt = system_prompt + "\n" + OPENAI_HOOK_AND_HANDOFF_RULES
+            else:
+                system_prompt = SYSTEM_PROMPT_KO
+                # 패턴 룰 동적 주입 (호출 시점 활성 룰 — 정적 SYSTEM_PROMPT_KO 불변)
+                try:
+                    from app.services.pattern_injector import (
+                        get_openai_system_addition,
+                    )
+                    _rules = get_openai_system_addition()
+                    if _rules:
+                        system_prompt = system_prompt + _rules
+                except Exception as _re:
+                    logger.debug(f"[OpenAI DraftWriter] 룰 주입 skip: {_re}")
+                # 훅 + 핸드오프 필드 룰 (Phase 3)
+                system_prompt = system_prompt + "\n" + OPENAI_HOOK_AND_HANDOFF_RULES
             context_block = ""
             if criteria_context:
                 context_block = f"\n\n## Gemini 리서치 결과 (필수 활용)\n{criteria_context}\n"
