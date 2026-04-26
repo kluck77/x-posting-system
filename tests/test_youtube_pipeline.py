@@ -293,7 +293,8 @@ class TestOpenAIProviderYouTubeLane:
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
         assert "280자" not in YOUTUBE_DIGEST_SYSTEM_PROMPT
         assert "thread_continuation" not in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "95% 이상 보존" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # cleanup-first 후: 명시 수치 ("95% 이상 보존") 대신 의미 동등 phrasing
+        assert "핵심 재료는 빼지 않는다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
         assert "스레드 분할 금지" in YOUTUBE_DIGEST_SYSTEM_PROMPT
 
     def test_youtube_lane_branch_present_in_source(self):
@@ -416,16 +417,18 @@ class TestFormatHandoffYouTubeSlim:
             assert rule in out, f"편집 지시 규칙 '{rule}' 누락"
 
     def test_slim_prohibitions_section_present(self):
+        # 슬림 handoff 6 핵심 금지사항 (cleanup-first 단일 통합 후).
         from app.services.grok_handoff import format_handoff
         out = format_handoff(
             self._sp_with_meta(), self._ap_with_meta(),
             "본문", source_type="youtube",
         )
-        assert "원문에 없는 모든 것" in out
-        assert "결론 명제 변경 금지" in out
-        assert "95% 미만 보존 금지" in out
-        assert "메타 표현" in out
-        assert "편집 결과 외 다른 텍스트 출력 금지" in out
+        assert "새 사실/숫자/인용/인물/장면/감정/인과 추가 금지" in out
+        assert "원문 결론 명제 변경 금지" in out
+        assert "핵심 재료" in out
+        assert "주장은 확장하지 말 것" in out
+        assert "원문 밖으로 나가지 말 것" in out
+        assert "사람 말투로 정리할 것" in out
 
     def test_slim_body_in_text_codefence(self):
         from app.services.grok_handoff import format_handoff
@@ -497,21 +500,24 @@ class TestYouTubePromptRenderModeOS:
 
     def test_youtube_prompt_has_causal_leap_block(self):
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # "A 때문에 B" 인과 비약 방지 룰
+        # "A 때문에 B" 인과 비약 방지 룰 (cleanup-first 후 phrasing 갱신)
         assert "A 때문에 B" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "원문이 직접 연결하지 않았다면" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "직접 연결 안 했으면" in YOUTUBE_DIGEST_SYSTEM_PROMPT
 
     def test_youtube_prompt_keeps_95pct_rules(self):
-        # render_mode OS 추가가 기존 95% 보존 룰을 약화하지 않았는지
+        # cleanup-first 후 핵심 truth integrity 룰 유지 검증.
+        # "95% 이상 보존" / "발명 0 건" 같은 명시 수치 phrasing 은 의미
+        # 동등 표현 ("핵심 재료는 빼지 않는다" / "영상에 없는 사실 추가
+        # 금지") 으로 대체됨.
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
         for must_have in (
-            "95% 이상 보존",
             "스레드 분할 금지",
             "결론 명제 변경 금지",
-            "발명 0 건",
+            "핵심 재료는 빼지 않는다",
+            "영상에 없는 사실/숫자/인용/인물/장소/장면/감정/인과 추가 금지",
         ):
             assert must_have in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"기존 95% 보존 룰 '{must_have}' 누락"
+                f"truth integrity 룰 '{must_have}' 누락"
             )
 
     def test_youtube_prompt_archetype_holds_render_mode(self):
@@ -566,282 +572,17 @@ class TestYouTubePromptRenderModeOS:
         assert "[YouTube 95% 보존형 장문 — Grok 편집용]" not in out
 
 
-# ─── 10) Claim-Locked Renderer v1 — YouTube prompt + slim handoff ────
-class TestClaimLockedRenderer:
-    """[A] YouTube prompt 에 Claim-Locked Renderer 블록이 포함됐는지 검증.
-    [B] 일반 KO prompt 는 변경 안 됐는지.
-    [C] YouTube slim handoff 에 Claim Strength 가드가 추가됐는지.
-    [D] non-YouTube handoff 는 legacy 구조 유지하고 Claim-Locked 문구
-        들어가지 않았는지."""
 
-    # ── A. OpenAI YouTube prompt ────────────────────────────────────
-    def test_youtube_prompt_has_claim_locked_block(self):
-        from app.providers.openai_provider import (
-            YOUTUBE_DIGEST_SYSTEM_PROMPT,
-            YOUTUBE_CLAIM_LOCKED_RENDERER_V1,
-        )
-        # 별도 상수도 노출되어 있어야 함 (테스트 가능성 / swap 용이)
-        assert "Claim-Locked Renderer v1" in YOUTUBE_CLAIM_LOCKED_RENDERER_V1
-        # 합쳐진 최종 prompt 에 핵심 키워드 모두 포함
-        for kw in (
-            "Claim-Locked Renderer",
-            "LOCKED CLAIM",
-            "Claim Strength",
-            "인과 비약",
-            "A 와 B 가 모두",
-            "HIGH RISK",
-        ):
-            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"YouTube prompt 에 '{kw}' 누락"
-            )
+# ─── Cleanup v1 — Salience-First Draft Planner 단일 통합 검증 ────────
+class TestYouTubeCleanupSalienceFirstPlanner:
+    """[A] Gemini extractor 의 Dynamic Salience Map.
+    [B] OpenAI YouTube prompt 의 Salience-First Draft Planner.
+    [C] overfitting 차단 (Polymarket/Kalshi/도메인 spine 전역 강제 없음).
+    [D] Grok handoff 6 핵심 금지사항.
+    [E] 일반 lane 격리 + 모델/schema 보존."""
 
-    def test_youtube_prompt_has_5_render_modes(self):
-        # 직전 PR 의 5 모드는 Claim-Locked 적용 후에도 유지
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        for mode in (
-            "news_policy",
-            "lecture_summary",
-            "analysis_market",
-            "community_x",
-            "writerly",
-        ):
-            assert mode in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    def test_youtube_prompt_has_strength_examples(self):
-        # 약한 표현 → 강한 표현 변환 금지 예시
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "가능성이 있다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "확정적이다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "무너뜨린다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    def test_youtube_prompt_has_claim_type_taxonomy(self):
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        for t in ("FACT", "NUMBER", "CAUSE", "FORECAST", "OPINION",
-                  "UNCERTAIN", "UNSAFE"):
-            assert t in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"Claim Type '{t}' 누락"
-            )
-
-    def test_youtube_prompt_has_high_risk_domains(self):
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        for d in ("의료", "감염병", "금융", "법률", "정책", "전쟁"):
-            assert d in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    def test_youtube_prompt_body_meta_label_block(self):
-        # body 에 LOCKED CLAIM / FACT 같은 메타 라벨 출력 금지 룰
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "LOCKED CLAIM" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "메타 설명" in YOUTUBE_DIGEST_SYSTEM_PROMPT or "메타 라벨" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    # ── B. 일반 lane 격리 ───────────────────────────────────────────
-    def test_general_ko_prompt_no_claim_locked(self):
-        from app.providers.openai_provider import SYSTEM_PROMPT_KO
-        for kw in (
-            "Claim-Locked Renderer",
-            "LOCKED CLAIM",
-            "Claim Strength",
-            "FACT",
-            "FORECAST",
-            "UNSAFE",
-        ):
-            assert kw not in SYSTEM_PROMPT_KO, (
-                f"일반 KO prompt 에 YouTube 전용 '{kw}' 가 새어들어가면 안 됨"
-            )
-
-    def test_openai_model_unchanged(self):
-        from app.providers import openai_provider
-        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
-
-    # ── C. YouTube slim handoff 에 Claim Strength 가드 ──────────────
-    def _slim_out(self) -> str:
-        from app.services.grok_handoff import format_handoff
-        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
-        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
-              "frame_type": "x", "story_spine": []}
-        return format_handoff(sp, ap, "본문", source_type="youtube")
-
-    def test_youtube_slim_has_strength_guard(self):
-        out = self._slim_out()
-        for line in (
-            "원문 주장 강도를 높이지 말 것",
-            "\"가능성\"을 \"확정\"으로 바꾸지 말 것",
-            "문장은 다듬되 주장은 확장하지 말 것",
-        ):
-            assert line in out, f"YouTube slim handoff 에 '{line}' 누락"
-
-    def test_youtube_slim_has_causal_leap_guard(self):
-        out = self._slim_out()
-        assert "A 와 B 가 모두" in out
-        assert "A 때문에 B" in out
-
-    def test_youtube_slim_has_high_risk_domain_rule(self):
-        out = self._slim_out()
-        assert "의료·정책·금융·법률·전쟁" in out
-        assert "공포·확정·붕괴 표현" in out
-
-    # ── D. non-YouTube handoff legacy 구조 유지 ─────────────────────
-    def test_non_youtube_handoff_no_claim_locked_lines(self):
-        from app.services.grok_handoff import format_handoff
-        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
-              "concept_translation": ""}
-        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
-              "frame_type": "x", "story_spine": []}
-        out = format_handoff(sp, ap, "본문", source_type="news_link")
-        # YouTube slim 만 있는 강도 가드 문구가 일반 lane 에 새지 않아야 함
-        for line in (
-            "원문 주장 강도를 높이지 말 것",
-            "\"가능성\"을 \"확정\"으로 바꾸지 말 것",
-            "공포·확정·붕괴 표현",
-            "[YouTube 95% 보존형 장문 — Grok 편집용]",
-        ):
-            assert line not in out, f"일반 lane 에 YouTube 전용 '{line}' 가 새면 안 됨"
-        # 일반 lane 의 legacy 메타 블록은 그대로 유지
-        assert "## 이 글의 핵심 각도" in out
-        assert "## 최종 출력 규칙" in out
-
-
-# ─── 11) Korean Writer/Lecturer/Journalist Rendering Layer v1 ────────
-class TestKoreanWriterRenderingLayer:
-    """[A] YouTube prompt 에 Writer Layer 7 표현 기술 + 강도 유지.
-    [B] 5 모드별 비율 명시.
-    [C] 일반 KO prompt 격리.
-    [D] YouTube slim handoff 에 Writer Boundary 7 줄.
-    [E] non-YouTube handoff 에 Writer Boundary 미노출."""
-
-    # ── A. YouTube prompt 에 Writer Layer ───────────────────────────
-    def test_prompt_has_writer_layer_block(self):
-        from app.providers.openai_provider import (
-            YOUTUBE_DIGEST_SYSTEM_PROMPT,
-            YOUTUBE_KOREAN_WRITER_RENDERING_LAYER_V1,
-        )
-        assert "Korean Writer/Lecturer/Journalist Rendering Layer v1" in (
-            YOUTUBE_KOREAN_WRITER_RENDERING_LAYER_V1
-        )
-        for kw in (
-            "Korean Writer/Lecturer/Journalist Rendering Layer",
-            "첫 문장 강화",
-            "긴장 배치",
-            "강사식 설명",
-            "저널리스트식 정리",
-            "작가식 몰입",
-            "애널리스트식 결론",
-            "원문에 없는 장면",
-            "주장 강도",
-        ):
-            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"YouTube prompt 에 Writer Layer 키워드 '{kw}' 누락"
-            )
-
-    def test_prompt_keeps_claim_lock_priority(self):
-        # Writer Layer 가 Claim-Lock 위에 추가됐어도 Claim-Lock 키워드는
-        # 여전히 prompt 안에 살아있어야 함
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        for kw in (
-            "Claim-Locked Renderer",
-            "LOCKED CLAIM",
-            "95% 이상 보존",
-            "스레드 분할 금지",
-            "결론 명제 변경 금지",
-        ):
-            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    # ── B. mode 별 비율 명시 ────────────────────────────────────────
-    def test_prompt_has_per_mode_ratios(self):
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # 5 mode 모두 비율/역할 차이 명시 (간접 검증: 모드명 + % 또는 역할)
-        for mode in (
-            "news_policy",
-            "lecture_summary",
-            "analysis_market",
-            "community_x",
-            "writerly",
-        ):
-            assert mode in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # 비율 명시 — 70% / 60% / 사람 말투 등 키워드로 간접 검증
-        assert "저널리스트 70%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "강사 70%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "애널리스트 60%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "사람 말투 60%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "작가 60%" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    # ── C. 일반 KO prompt 격리 ──────────────────────────────────────
-    def test_general_ko_prompt_no_writer_layer(self):
-        from app.providers.openai_provider import SYSTEM_PROMPT_KO
-        for kw in (
-            "Korean Writer/Lecturer/Journalist Rendering Layer",
-            "첫 문장 강화",
-            "긴장 배치",
-            "강사식 설명",
-            "저널리스트식 정리",
-            "작가식 몰입",
-            "애널리스트식 결론",
-        ):
-            assert kw not in SYSTEM_PROMPT_KO, (
-                f"일반 KO prompt 에 Writer Layer '{kw}' 가 새어들어가면 안 됨"
-            )
-
-    def test_openai_model_unchanged(self):
-        from app.providers import openai_provider
-        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
-
-    # ── D. YouTube slim handoff 에 Writer Boundary ──────────────────
-    def _slim_out(self) -> str:
-        from app.services.grok_handoff import format_handoff
-        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
-        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
-              "frame_type": "x", "story_spine": []}
-        return format_handoff(sp, ap, "본문", source_type="youtube")
-
-    def test_youtube_slim_has_writer_boundary(self):
-        out = self._slim_out()
-        for line in (
-            "문장 리듬은 다듬되, 주장은 확장하지 말 것",
-            "작가처럼 보이려고 원문에 없는 장면/감정/대사를 만들지 말 것",
-            "강사처럼 쉽게 풀되, 원문에 없는 예시를 만들지 말 것",
-            "저널리스트처럼 사실과 해석을 분리할 것",
-        ):
-            assert line in out, f"YouTube slim handoff 에 '{line}' 누락"
-
-    def test_youtube_slim_has_first_last_sentence_rules(self):
-        out = self._slim_out()
-        assert "첫 문장은 강화하되, 원문에 없는 사실을 넣지 말 것" in out
-        assert "마지막 문장은 선명하게 만들되, 결론 명제를 바꾸지 말 것" in out
-        assert "불확실한 주장은 낮춰 쓸 것" in out
-
-    # ── E. non-YouTube handoff 에 Writer Boundary 미노출 ────────────
-    def test_non_youtube_handoff_no_writer_boundary(self):
-        from app.services.grok_handoff import format_handoff
-        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
-              "concept_translation": ""}
-        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
-              "frame_type": "x", "story_spine": []}
-        out = format_handoff(sp, ap, "본문", source_type="news_link")
-        for line in (
-            "작가처럼 보이려고 원문에 없는 장면/감정/대사를 만들지 말 것",
-            "강사처럼 쉽게 풀되, 원문에 없는 예시를 만들지 말 것",
-            "저널리스트처럼 사실과 해석을 분리할 것",
-            "마지막 문장은 선명하게 만들되, 결론 명제를 바꾸지 말 것",
-        ):
-            assert line not in out, (
-                f"일반 lane 에 YouTube 전용 Writer Boundary '{line}' 가 새면 안 됨"
-            )
-        # 일반 lane legacy 구조 유지
-        assert "## 이 글의 핵심 각도" in out
-        assert "## 최종 출력 규칙" in out
-
-
-# ─── 12) Salience-Locked Economic Spine v1 ──────────────────────────
-class TestSalienceLockedEconomicSpine:
-    """[A] Gemini extractor prompt 에 Economic Spine 추출 룰.
-    [B] OpenAI YouTube renderer prompt 에 Economic Spine 보존 룰.
-    [C] 일반 KO prompt 격리.
-    [D] schema/interface/모델 보존."""
-
-    # ── A. Gemini extractor (youtube_pipeline.py) ───────────────────
-    def test_gemini_prompt_has_dynamic_salience_map(self):
-        # Dynamic Salience Map v1 으로 교체됨 — 도메인-agnostic 7 카테고리.
-        # 옛 Salience-Locked Economic Spine 헤더 / Polymarket·Kalshi 명시는
-        # Gemini extractor 에서 제거 (도메인 강제 회피).
+    # ── A. Gemini Dynamic Salience Map ──────────────────────────────
+    def test_gemini_has_dynamic_salience_map(self):
         from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
         for kw in (
             "Dynamic Salience Map",
@@ -852,222 +593,125 @@ class TestSalienceLockedEconomicSpine:
             "Core Mechanism",
             "Core Outcome",
             "Must-Keep Items",
-            "preservation_targets",
         ):
             assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT, (
-                f"Gemini prompt 에 Dynamic Salience 키워드 '{kw}' 누락"
+                f"Gemini prompt 에 '{kw}' 누락"
             )
 
-    def test_gemini_prompt_no_domain_overfitting(self):
-        # Polymarket/Kalshi 같은 특정 도메인 예시는 Gemini extractor 에
-        # 박혀있으면 안 됨 (모든 영상에 강제될 위험). OpenAI prompt 의
-        # Economic Spine 안에서만 선택 패턴으로 사용.
-        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
-        assert "Polymarket" not in GEMINI_VIDEO_ANALYSIS_PROMPT
-        assert "Kalshi" not in GEMINI_VIDEO_ANALYSIS_PROMPT
-        # 옛 헤더도 사라졌어야 함
-        assert "Salience-Locked Economic Spine" not in GEMINI_VIDEO_ANALYSIS_PROMPT
-
-    def test_gemini_prompt_keeps_existing_extraction(self):
-        # Spine 추가가 기존 atomic_claims / claim graph 추출 룰을 약화하지
-        # 않았는지
-        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
-        for kw in (
-            "atomic_claims",
-            "examples",
-            "counter_arguments",
-            "conclusion_claim",
-            "claims",
-            "key_numbers",
-        ):
-            assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT
-
-    # ── B. OpenAI YouTube renderer (openai_provider.py) ─────────────
-    def test_openai_youtube_prompt_has_economic_spine_rule(self):
+    # ── B. OpenAI Salience-First Draft Planner ──────────────────────
+    def test_openai_has_salience_first_draft_planner(self):
         from app.providers.openai_provider import (
             YOUTUBE_DIGEST_SYSTEM_PROMPT,
-            YOUTUBE_ECONOMIC_SPINE_PRESERVATION_V1,
+            YOUTUBE_SALIENCE_FIRST_DRAFT_PLANNER_V1,
         )
-        # 별도 상수도 노출 (개별 검증 가능)
-        assert "Economic Spine Preservation Rule" in (
-            YOUTUBE_ECONOMIC_SPINE_PRESERVATION_V1
+        assert "Salience-First Draft Planner" in (
+            YOUTUBE_SALIENCE_FIRST_DRAFT_PLANNER_V1
         )
         for kw in (
-            "Economic Spine Preservation Rule",
-            "핵심 기업/플랫폼",
-            "성장 수치",
-            "돈이 흐르는 구조",
-            "누가 버는지",
-            "누가 잃는지",
-            "Polymarket",
-            "Kalshi",
-            "윤리 논란은 중요하지만",
-            "preservation_targets",
+            "Salience-First Draft Planner",
+            "바로 글을 쓰지 않는다",
+            "핵심 재료의 중요도 순서",
+            "영상마다 구조를 다르게 설계",
+            "특정 도메인 고정 구조로 모든 영상을 처리하기",
+            "추상어로 지우기",
+            "짧은 요약문으로 끝내기",
         ):
             assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"YouTube renderer 에 Spine 키워드 '{kw}' 누락"
+                f"YouTube prompt 에 '{kw}' 누락"
             )
 
-    def test_openai_youtube_prompt_has_predmarket_structure(self):
+    def test_openai_has_audience_context_and_truth_integrity(self):
+        # 새 base 의 [IDENTITY] / [Truth Integrity] / 타겟 독자 유지
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "예측시장 주제 전용 구조" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # "정보 비대칭을 돈으로" 와 "바꾸는 시장" 이 prompt 안 (줄바꿈 사이)
-        # 모두 등장하는지 검증
-        assert "정보 비대칭을 돈으로" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "바꾸는 시장" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "Truth Integrity" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "타겟 독자" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "여성 타겟 전환" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "남초 코인판" in YOUTUBE_DIGEST_SYSTEM_PROMPT
 
-    def test_openai_youtube_prompt_keeps_prior_layers(self):
-        # 95% 보존 / Claim-Locked / Writer Layer 가 그대로 살아있는지
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        for kw in (
-            "95% 이상 보존",
-            "스레드 분할 금지",
-            "결론 명제 변경 금지",
-            "Claim-Locked Renderer",
-            "LOCKED CLAIM",
-            "Korean Writer/Lecturer/Journalist Rendering Layer",
+    # ── C. Overfitting prevention ───────────────────────────────────
+    def test_no_domain_spine_globally_forced(self):
+        # 옛 layered 상수가 모두 제거됐고 도메인 spine 헤더 0 hit
+        import app.providers.openai_provider as op
+        for old_const in (
+            "YOUTUBE_CLAIM_LOCKED_RENDERER_V1",
+            "YOUTUBE_KOREAN_WRITER_RENDERING_LAYER_V1",
+            "YOUTUBE_ECONOMIC_SPINE_PRESERVATION_V1",
+            "YOUTUBE_DYNAMIC_SALIENCE_DRAFTING_V1",
         ):
-            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
+            assert not hasattr(op, old_const), (
+                f"옛 layered 상수 '{old_const}' 가 모듈에 남아있으면 안 됨"
+            )
+        for spine in (
+            "Economic Spine",
+            "Policy Spine",
+            "Medical Spine",
+            "AI Tech Spine",
+        ):
+            assert spine not in op.YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"도메인 spine '{spine}' 이 prompt 에 박혀있으면 안 됨"
+            )
 
-    # ── C. 일반 lane 격리 ───────────────────────────────────────────
-    def test_general_ko_prompt_no_economic_spine(self):
+    def test_no_polymarket_kalshi_globally(self):
+        # Polymarket / Kalshi 가 전역 필수 규칙으로 prompt 안에 남아있지
+        # 않는지 (둘 다 OpenAI prompt + Gemini prompt 모두 0 hit)
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for kw in ("Polymarket", "Kalshi"):
+            assert kw not in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"'{kw}' 가 OpenAI YouTube prompt 에 전역 강제로 남으면 안 됨"
+            )
+            assert kw not in GEMINI_VIDEO_ANALYSIS_PROMPT, (
+                f"'{kw}' 가 Gemini extractor 에 전역 강제로 남으면 안 됨"
+            )
+
+    # ── D. Grok slim handoff 6 핵심 금지사항 ────────────────────────
+    def test_slim_handoff_has_6_essentials(self):
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문", source_type="youtube")
+        for line in (
+            "새 사실/숫자/인용/인물/장면/감정/인과 추가 금지",
+            "원문 결론 명제 변경 금지",
+            "핵심 재료 (기업/숫자/작동 구조) 삭제 금지",
+            "문장은 다듬되 주장은 확장하지 말 것",
+            "첫 문장과 마지막 문장은 강화하되 원문 밖으로 나가지 말 것",
+            "보고서 말투를 줄이고 사람 말투로 정리할 것",
+        ):
+            assert line in out, f"slim handoff 에 핵심 금지 '{line}' 누락"
+
+    # ── E. 격리 + 모델/schema 보존 ──────────────────────────────────
+    def test_general_ko_prompt_isolation(self):
         from app.providers.openai_provider import SYSTEM_PROMPT_KO
         for kw in (
-            "Economic Spine Preservation Rule",
-            "Salience-Locked Economic Spine",
-            "Polymarket",
-            "Kalshi",
-            "Money Flow",
-            "Retail Outcome",
-            "Winner / Loser Map",
+            "Salience-First Draft Planner",
+            "Dynamic Salience Map",
+            "Core Entities",
+            "Truth Integrity",
+            "타겟 독자",
         ):
             assert kw not in SYSTEM_PROMPT_KO, (
-                f"일반 KO prompt 에 YouTube 전용 Spine '{kw}' 가 새어들어가면 안 됨"
+                f"일반 KO prompt 에 YouTube 전용 '{kw}' 새어들어가면 안 됨"
             )
 
-    # ── D. schema / interface / model 보존 ──────────────────────────
-    def test_openai_model_unchanged(self):
+    def test_model_unchanged(self):
         from app.providers import openai_provider
         assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
 
-    def test_response_format_schema_unchanged(self):
-        # _RESPONSE_FORMAT_KO 의 strict schema 5 필드 그대로
+    def test_schema_unchanged(self):
         from app.providers.openai_provider import _RESPONSE_FORMAT_KO
-        schema = _RESPONSE_FORMAT_KO["json_schema"]["schema"]
-        required = set(schema["required"])
-        assert required == {"hook", "body", "stake", "point", "archetype"}, (
-            "response_format strict schema 가 변경되면 provider interface "
-            "변경에 해당 — Spine 추가는 prompt-level 만 허용"
-        )
+        assert set(_RESPONSE_FORMAT_KO["json_schema"]["schema"]["required"]) == {
+            "hook", "body", "stake", "point", "archetype",
+        }
 
     def test_youtube_analysis_dataclass_unchanged(self):
-        # YoutubeAnalysis dataclass 의 v4 확장 필드 (atomic_claims /
-        # examples / counter_arguments / segments / conclusion_claim /
-        # preservation_targets) 가 그대로 존재
         from app.sources.youtube_pipeline import YoutubeAnalysis
         ana = YoutubeAnalysis(
             video_id="v", url="u", channel="c", speaker="s",
             video_summary="vs", main_argument="ma",
             full_analysis="fa", downstream_summary="ds",
         )
-        for field in (
-            "atomic_claims", "examples", "counter_arguments",
-            "segments", "conclusion_claim", "preservation_targets",
-        ):
-            assert hasattr(ana, field), (
-                f"YoutubeAnalysis 에서 '{field}' 누락 — DB schema 변경 의심"
-            )
-
-
-# ─── 13) Dynamic Salience-First Drafting v1 (renderer + clamp 완화) ──
-class TestDynamicSalienceFirstDrafting:
-    """[B] OpenAI YouTube prompt 에 Salience-First Drafting 블록.
-    [C] Economic Spine / 도메인 패턴이 Salience 아래 선택적으로 작동.
-    [D] 일반 KO prompt 격리.
-    [E] 모델/schema/interface 보존."""
-
-    # ── B. Salience-First Drafting ──────────────────────────────────
-    def test_youtube_prompt_has_salience_first_drafting(self):
-        from app.providers.openai_provider import (
-            YOUTUBE_DIGEST_SYSTEM_PROMPT,
-            YOUTUBE_DYNAMIC_SALIENCE_DRAFTING_V1,
-        )
-        assert "Salience-First Drafting" in YOUTUBE_DYNAMIC_SALIENCE_DRAFTING_V1
-        for kw in (
-            "Salience-First Drafting",
-            "핵심 재료 보존",
-            "고정 템플릿으로 글을 쓰지 않는다",
-            "추상어로 지우기",
-            "500자 이하 요약문으로 끝내지 마라",
-            "Tone-Safety Clamp 완화",
-            "truth integrity",
-        ):
-            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"YouTube prompt 에 Salience-First 키워드 '{kw}' 누락"
-            )
-
-    def test_youtube_prompt_has_priority_order(self):
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # 작성 우선순위 5 단계: 1 핵심 재료 / 2 결론 / 3 몰입 / 4 리듬 / 5 압축
-        assert "작성 우선순위" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "1. 핵심 재료 보존" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "5. 압축" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    # ── C. 고정 도메인 구조 전역화 금지 ─────────────────────────────
-    def test_economic_spine_is_optional_under_salience(self):
-        # Economic Spine 은 Salience-First Drafting 보다 *위* 위치에 있고,
-        # Drafting 블록이 "위의 Economic Spine ... 도 강제 템플릿이 아니다"
-        # 라고 명시 → Spine 은 선택 패턴으로 격하됨.
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # Drafting 블록에 Economic Spine 강제 금지 명시
-        assert "Economic Spine" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "강제 템플릿이 아니다" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "특정 도메인 고정 구조를 모든 글에 강제하기" in (
-            YOUTUBE_DIGEST_SYSTEM_PROMPT
-        )
-
-    def test_clamps_softened_not_removed(self):
-        # truth integrity 룰 (Claim-Lock) 은 살아있고, 위험 도메인 자동
-        # 낮춰쓰기 clamp 만 완화됐는지.
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # 유지: truth integrity 5 룰
-        for keep in (
-            "원문에 없는 사실은 만들지 않는다",
-            "원문에 없는 숫자는 만들지 않는다",
-            "원문에 없는 인과는 만들지 않는다",
-            "주장 강도를 높이지 않는다",
-            "결론 명제를 변경하지 않는다",
-        ):
-            assert keep in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"truth integrity 룰 '{keep}' 가 사라지면 안 됨"
-            )
-        # 완화: 모든 위험 표현 일괄 낮춤 패턴 차단
-        assert "원문 강도를 정확히 유지" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-        assert "무조건 낮춰 쓰지 마라" in YOUTUBE_DIGEST_SYSTEM_PROMPT
-
-    # ── D. 일반 lane 격리 ───────────────────────────────────────────
-    def test_general_ko_prompt_no_salience_first(self):
-        from app.providers.openai_provider import SYSTEM_PROMPT_KO
-        for kw in (
-            "Salience-First Drafting",
-            "Dynamic Salience Map",
-            "Tone-Safety Clamp",
-            "truth integrity",
-            "Core Entities",
-            "Core Mechanism",
-        ):
-            assert kw not in SYSTEM_PROMPT_KO, (
-                f"일반 KO prompt 에 YouTube 전용 '{kw}' 가 새어들어가면 안 됨"
-            )
-
-    # ── E. 모델/schema/interface 보존 ───────────────────────────────
-    def test_openai_model_unchanged(self):
-        from app.providers import openai_provider
-        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
-
-    def test_response_format_schema_unchanged(self):
-        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
-        schema = _RESPONSE_FORMAT_KO["json_schema"]["schema"]
-        assert set(schema["required"]) == {
-            "hook", "body", "stake", "point", "archetype",
-        }
+        for f in ("atomic_claims", "examples", "counter_arguments",
+                  "segments", "conclusion_claim", "preservation_targets"):
+            assert hasattr(ana, f), f"YoutubeAnalysis 에 '{f}' 누락"
