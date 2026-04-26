@@ -38,15 +38,30 @@ def _sqlite_path() -> str:
 def _recover_truncated_json(text: str) -> dict | None:
     """토큰 한도 등으로 잘린 Gemini JSON 응답 복구.
 
-    전략 (앞쪽이 valid 한 prefix 라고 가정):
-      1) 마지막 valid '}' 위치까지 잘라 재시도 (뒤쪽부터 한 글자씩 줄임)
-      2) 닫히지 않은 string + 객체/배열 자동 닫기 시도
+    전략:
+      1) 자동 closure (string/배열/객체 닫기) 시도
+      2) 마지막 valid '}' 위치까지 자르며 재시도
+      3) claims/snippets 같은 배열 안의 부분 객체들 살리기 (top-level 키 보존)
     실패 시 None.
     """
     if not text:
         return None
-    # 1) 마지막 } 위치들 시도 (뒤에서 앞으로)
-    for j in range(len(text) - 1, 0, -1):
+
+    # 1) 자동 closure 우선 시도 (가장 흔한 케이스)
+    closed = _auto_close(text)
+    if closed:
+        try:
+            val = json.loads(closed)
+            if isinstance(val, dict):
+                return val
+        except Exception:
+            pass
+
+    # 2) 마지막 } 위치 시도 (sample size 제한 — 너무 큰 텍스트는 sparse 스캔)
+    n = len(text)
+    step = max(1, n // 5000)
+    candidates = list(range(n - 1, 0, -step))
+    for j in candidates:
         if text[j] == "}":
             try:
                 val = json.loads(text[: j + 1])
@@ -54,25 +69,101 @@ def _recover_truncated_json(text: str) -> dict | None:
                     return val
             except Exception:
                 continue
-    # 2) 닫히지 않은 구조 추정 닫기
-    s = text
-    # 짝 안 맞는 따옴표 닫기
-    if s.count('"') % 2 == 1:
+
+    # 3) Top-level scalar 키 + 배열 안 partial 복구
+    rebuilt = _rebuild_from_partial(text)
+    if rebuilt:
+        return rebuilt
+
+    return None
+
+
+def _auto_close(text: str) -> str:
+    """잘린 string/배열/객체 closure 시도. 마지막 잘린 부분 정리 후 닫기."""
+    s = text.rstrip()
+    # 잘린 마지막 부분이 콤마/콜론으로 끝나면 제거
+    while s and s[-1] in ",: \t\n":
+        s = s[:-1]
+    # 짝 안 맞는 따옴표 닫기 (이스케이프 고려)
+    quote_count = 0
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            i += 2
+            continue
+        if s[i] == '"':
+            quote_count += 1
+        i += 1
+    if quote_count % 2 == 1:
         s = s + '"'
-    # 객체 / 배열 닫기 (단순 균형)
-    open_brace  = s.count("{") - s.count("}")
+    # 배열/객체 닫기
     open_bracket = s.count("[") - s.count("]")
+    open_brace = s.count("{") - s.count("}")
     if open_bracket > 0:
         s = s + ("]" * open_bracket)
     if open_brace > 0:
         s = s + ("}" * open_brace)
-    try:
-        val = json.loads(s)
-        if isinstance(val, dict):
-            return val
-    except Exception:
-        pass
-    return None
+    return s
+
+
+def _rebuild_from_partial(text: str) -> dict | None:
+    """top-level scalar 키 + 배열 안 partial 객체들로 dict 재조립.
+
+    예: claims 배열이 70개 객체 중 30개에서 잘렸으면 30개만 살려서 반환.
+    """
+    out: dict = {}
+    # top-level 'key': "value" 또는 'key': number 추출 (배열 시작 전까지)
+    head = text.split("[", 1)[0]
+    for m in re.finditer(r'"(\w+)"\s*:\s*("([^"]*)"|(-?\d+))', head):
+        key = m.group(1)
+        if m.group(3) is not None:
+            out[key] = m.group(3)
+        elif m.group(4) is not None:
+            try:
+                out[key] = int(m.group(4))
+            except Exception:
+                pass
+
+    # 배열 안 partial 객체들 ({...} 단위) 복구
+    arrays_found: dict[str, list] = {}
+    for arr_match in re.finditer(r'"(\w+)"\s*:\s*\[', text):
+        key = arr_match.group(1)
+        start = arr_match.end()
+        items: list = []
+        depth = 0
+        obj_start = -1
+        i = start
+        in_str = False
+        esc = False
+        while i < len(text):
+            c = text[i]
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = not in_str
+            elif not in_str:
+                if c == "{":
+                    if depth == 0:
+                        obj_start = i
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0 and obj_start >= 0:
+                        try:
+                            items.append(json.loads(text[obj_start : i + 1]))
+                        except Exception:
+                            pass
+                        obj_start = -1
+                elif c == "]" and depth == 0:
+                    break
+            i += 1
+        if items:
+            arrays_found[key] = items
+
+    out.update(arrays_found)
+    return out if out else None
 
 
 # ─── URL 파싱 ─────────────────────────────────────────────────────────
@@ -259,7 +350,7 @@ async def analyze_video_with_gemini(
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 8000,
+            "maxOutputTokens": 32000,
             "responseMimeType": "application/json",
         },
     }
