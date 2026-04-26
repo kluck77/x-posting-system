@@ -469,16 +469,98 @@ class TestFormatHandoffYouTubeSlim:
             "를 우회하지 않으면 승인 카드가 Resonance fallback 으로 차단됨"
         )
 
-    def test_non_youtube_unchanged_full_meta_render(self):
+
+# ─── 9) YouTube prompt 한국어 5모드 렌더링 OS v1 ─────────────────────
+class TestYouTubePromptRenderModeOS:
+    """YouTube 전용 prompt 에 5 개 render_mode 와 한국어 작성 룰이
+    포함되었는지 + 일반 KO prompt 는 변경되지 않았는지 검증."""
+
+    def test_youtube_prompt_has_all_5_render_modes(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for mode in (
+            "news_policy",
+            "lecture_summary",
+            "analysis_market",
+            "community_x",
+            "writerly",
+        ):
+            assert mode in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"YouTube prompt 에 render_mode '{mode}' 누락"
+            )
+
+    def test_youtube_prompt_has_source_vs_render_distinction(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # source_type 은 재료 출처 / render_mode 는 글쓰기 방식 구분
+        assert "재료 출처" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "글쓰기 방식" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "섞지 마라" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_youtube_prompt_has_causal_leap_block(self):
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # "A 때문에 B" 인과 비약 방지 룰
+        assert "A 때문에 B" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "원문이 직접 연결하지 않았다면" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_youtube_prompt_keeps_95pct_rules(self):
+        # render_mode OS 추가가 기존 95% 보존 룰을 약화하지 않았는지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for must_have in (
+            "95% 이상 보존",
+            "스레드 분할 금지",
+            "결론 명제 변경 금지",
+            "발명 0 건",
+        ):
+            assert must_have in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"기존 95% 보존 룰 '{must_have}' 누락"
+            )
+
+    def test_youtube_prompt_archetype_holds_render_mode(self):
+        # archetype schema 자체는 그대로 두되 YouTube 만 거기 render_mode
+        # 값을 박으라고 prompt-level 로 지시.
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "archetype" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "render_mode" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_general_ko_prompt_unchanged(self):
+        # 일반 KO prompt (뉴스/manual/news_link 등) 에는 render_mode 5종이
+        # 새어들어가면 안 됨.
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for mode in (
+            "news_policy",
+            "lecture_summary",
+            "analysis_market",
+            "community_x",
+            "writerly",
+        ):
+            assert mode not in SYSTEM_PROMPT_KO, (
+                f"일반 KO prompt 에 YouTube 전용 mode '{mode}' 가 들어가면 안 됨"
+            )
+        # render_mode 키워드 자체도 일반 prompt 에 없어야 함
+        assert "render_mode" not in SYSTEM_PROMPT_KO
+
+    def test_openai_model_unchanged(self):
+        # 모델 업그레이드 / 변경 금지
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    def test_non_youtube_handoff_unchanged_full_meta(self):
         # 슬림 분기는 youtube 만. news_link 는 기존 full handoff 유지.
+        # (이전 TestFormatHandoffYouTubeSlim 안 동명 테스트가 클래스 경계
+        # 위로 흘러와 helper 부재로 깨졌던 케이스 — fixture 인라인으로 복구.)
         from app.services.grok_handoff import format_handoff
-        out = format_handoff(
-            self._sp_with_meta(), self._ap_with_meta(),
-            "본문", source_type="news_link",
-        )
-        # 일반 lane 은 기존 메타 블록 렌더
+        sp = {
+            "confirmed_facts": ["사실 1", "사실 2"],
+            "evidence_pack": ["근거 1"],
+            "concept_translation": "",
+        }
+        ap = {
+            "winner_angle": {"angle": "앵글"},
+            "core_tension": "긴장",
+            "frame_type": "x",
+            "story_spine": ["A", "B"],
+        }
+        out = format_handoff(sp, ap, "본문", source_type="news_link")
         assert "## 이 글의 핵심 각도" in out
         assert "## 절대 바꾸지 말 것" in out
         assert "## 최종 출력 규칙" in out
-        # 슬림 헤더는 없음
         assert "[YouTube 95% 보존형 장문 — Grok 편집용]" not in out
