@@ -231,6 +231,7 @@ class TestFormatHandoffYouTubeLane:
         }
 
     def test_youtube_handoff_has_95pct_rule(self):
+        # 슬림 handoff 도 "95% 보존" 문구는 편집 지시 + 금지사항 양쪽에 있음.
         from app.services.grok_handoff import format_handoff
         out = format_handoff(
             self._min_sp(), self._min_ap(),
@@ -238,8 +239,6 @@ class TestFormatHandoffYouTubeLane:
             source_type="youtube",
         )
         assert "95% 보존" in out
-        assert "글자수 제한 강제 없음" in out
-        assert "스레드 분할 금지" in out
 
     def test_youtube_handoff_strips_280_700_rule(self):
         from app.services.grok_handoff import format_handoff
@@ -309,3 +308,163 @@ class TestOpenAIProviderYouTubeLane:
         # YouTube 분기 안에서는 generic fallback 문구 합성 안 함.
         assert "해석 gap 확인 필요" in src  # 다른 lane 용 fallback 은 그대로 존재
         assert "후속 지표 확인" in src
+
+
+# ─── 8) format_handoff(youtube) 슬림 3 섹션 — Grok 메타 오해 차단 ────
+class TestFormatHandoffYouTubeSlim:
+    """YouTube lane handoff 가 3 섹션만 (Grok 편집 지시 / 원문 초안 / 금지사항)
+    이고 일반 lane 의 메타 블록 (각도/lock/free/근거/why_push/...) 이 모두
+    제거됐는지 검증."""
+
+    def _sp_with_meta(self) -> dict:
+        # 의도적으로 풍부한 source_pack — 일반 lane 이면 ## 절대 바꾸지 말 것 /
+        # ## 핵심 근거 등이 자동 렌더된다. 슬림에선 모두 미렌더 검증.
+        return {
+            "confirmed_facts": ["사실 1", "사실 2", "사실 3"],
+            "conflicts_or_uncertainty": ["미확정 1"],
+            "evidence_pack": ["근거 1", "근거 2"],
+            "concept_translation": "어려운 개념 한국어 번역",
+        }
+
+    def _ap_with_meta(self) -> dict:
+        return {
+            "winner_angle": {"angle": "중요 앵글"},
+            "core_tension": "핵심 긴장",
+            "frame_type": "underreported_angle",
+            "readability_risk": "medium",
+            "share_trigger": "공유 트리거",
+            "scan_pattern": "스캔 패턴",
+            "story_spine": ["A", "B", "C"],
+        }
+
+    def _rich_meta(self) -> dict:
+        return {
+            "rt_motivation": "RT 동기",
+            "weak_signals": ["weakness 1"],
+            "must_keep": ["반드시 살릴 1"],
+            "salvageability_grade": "A",
+            "salvageability_reason": "이유",
+        }
+
+    def test_slim_has_3_required_sections(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            "본문 한 줄.", source_type="youtube",
+            editorial_meta=self._rich_meta(),
+        )
+        assert "## Grok 편집 지시" in out
+        assert "## 원문 초안" in out
+        assert "## 금지사항" in out
+
+    def test_slim_has_header_banner(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            "본문", source_type="youtube",
+        )
+        assert "[YouTube 95% 보존형 장문 — Grok 편집용]" in out
+        assert "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" in out
+
+    def test_slim_strips_all_legacy_meta_blocks(self):
+        # 일반 lane 의 메타 블록은 슬림에서 0/0 노출되어야 함.
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            "본문", source_type="youtube",
+            editorial_meta=self._rich_meta(),
+        )
+        forbidden_blocks = [
+            "## 이 글의 핵심 각도",
+            "## 절대 바꾸지 말 것",
+            "## 바꿔도 되는 것",
+            "## 어려운 개념 한 줄 번역",
+            "## 핵심 근거 2~3개",
+            "## 최종 출력 규칙",
+            "## 🔥 왜 이 글을 세게 써야 하는가",
+            "## 🏴 지금 초안이 평평한 이유",
+            "## 💎 반드시 살릴 포인트",
+            "## 🎯 살릴 가치",
+            "## 계정 톤",
+            "## ⚠️ 재료 품질 경고",
+        ]
+        for block in forbidden_blocks:
+            assert block not in out, f"슬림 handoff 에 '{block}' 가 남으면 안 됨"
+
+    def test_slim_instruction_has_all_13_rules(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            "본문", source_type="youtube",
+        )
+        rules = [
+            "새 사실 추가 금지",
+            "새 숫자 추가 금지",
+            "새 인용 추가 금지",
+            "새 인물/장소/장면 추가 금지",
+            "새 인과관계 추가 금지",
+            "원문 결론 명제 변경 금지",
+            "원문 내용 95% 보존",
+            "중복 제거",
+            "문장 리듬 개선",
+            "첫 문장 강화",
+            "마지막 문장 강화",
+            "⚠️ / 📌 형식 제거",
+            "편집 결과만 출력",
+        ]
+        for rule in rules:
+            assert rule in out, f"편집 지시 규칙 '{rule}' 누락"
+
+    def test_slim_prohibitions_section_present(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            "본문", source_type="youtube",
+        )
+        assert "원문에 없는 모든 것" in out
+        assert "결론 명제 변경 금지" in out
+        assert "95% 미만 보존 금지" in out
+        assert "메타 표현" in out
+        assert "편집 결과 외 다른 텍스트 출력 금지" in out
+
+    def test_slim_body_in_text_codefence(self):
+        from app.services.grok_handoff import format_handoff
+        body_text = "원문 초안 본문이 여기에 들어간다 — 영상 결론 명제로 끝남."
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            body_text, source_type="youtube",
+        )
+        assert "```text\n" in out
+        assert body_text in out
+        # 코드펜스 정상 종결
+        assert out.count("```") == 2
+
+    def test_slim_long_body_truncated_to_3500(self):
+        from app.services.grok_handoff import format_handoff
+        long_body = "긴 본문 " * 1000  # ~5000+ chars
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            long_body, source_type="youtube",
+        )
+        # 코드펜스 사이 본문 추출
+        import re
+        m = re.search(r'```text\n(.*?)\n```', out, re.DOTALL)
+        assert m is not None
+        extracted = m.group(1)
+        assert len(extracted) <= 3500
+        # 슬림 전체도 합리적 사이즈 (헤더 + 13 룰 + body + 5 금지)
+        assert len(out) < 5000
+
+    def test_non_youtube_unchanged_full_meta_render(self):
+        # 슬림 분기는 youtube 만. news_link 는 기존 full handoff 유지.
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            self._sp_with_meta(), self._ap_with_meta(),
+            "본문", source_type="news_link",
+        )
+        # 일반 lane 은 기존 메타 블록 렌더
+        assert "## 이 글의 핵심 각도" in out
+        assert "## 절대 바꾸지 말 것" in out
+        assert "## 최종 출력 규칙" in out
+        # 슬림 헤더는 없음
+        assert "[YouTube 95% 보존형 장문 — Grok 편집용]" not in out

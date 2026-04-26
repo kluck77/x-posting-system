@@ -487,6 +487,64 @@ def _build_salvageability_block(editorial_meta: dict | None) -> list[str]:
     return ["## 🎯 살릴 가치", *lines]
 
 
+def _format_handoff_youtube_slim(final_body: str, *, body_max: int = 3500) -> str:
+    """YouTube 95% 보존형 장문 — Grok 편집용 슬림 handoff (3 섹션만).
+
+    일반 lane 의 5+ 메타 블록 (각도/lock/free/근거/why_push/...) 을 모두 제거.
+    Grok 이 메타 지시를 본문으로 오해하거나 원문에 없는 사실을 보강하려는
+    위험을 차단한다.
+
+    구조:
+      1) ## Grok 편집 지시   — 행동 지침 + 금지 항목 (full)
+      2) ## 원문 초안        — text 코드펜스
+      3) ## 금지사항         — 가장 위험한 5 줄 강조 (Grok 마지막에 읽음)
+    """
+    body = _strip_urls((final_body or "").strip())
+    body = _truncate_to(body, body_max) if body else "(empty)"
+
+    instruction = (
+        "## Grok 편집 지시\n"
+        "다음 한국어 초안을 X 단일 포스트용 장문으로 편집한다.\n\n"
+        "규칙:\n"
+        "- 새 사실 추가 금지\n"
+        "- 새 숫자 추가 금지\n"
+        "- 새 인용 추가 금지\n"
+        "- 새 인물/장소/장면 추가 금지\n"
+        "- 새 인과관계 추가 금지\n"
+        "- 원문 결론 명제 변경 금지\n"
+        "- 원문 내용 95% 보존\n"
+        "- 중복 제거\n"
+        "- 문장 리듬 개선\n"
+        "- 첫 문장 강화\n"
+        "- 마지막 문장 강화\n"
+        "- ⚠️ / 📌 형식 제거\n"
+        "- 편집 결과만 출력"
+    )
+
+    draft = (
+        "## 원문 초안\n"
+        "```text\n"
+        f"{body}\n"
+        "```"
+    )
+
+    prohibitions = (
+        "## 금지사항\n"
+        "- 원문에 없는 모든 것 (사실/숫자/인용/인물/장소/장면/인과) 추가 금지\n"
+        "- 원문 결론 명제 변경 금지\n"
+        "- 원문 내용 95% 미만 보존 금지\n"
+        "- 메타 표현 (\"결론적으로\", \"요약하자면\", \"심층적으로\" 등) 금지\n"
+        "- 편집 결과 외 다른 텍스트 출력 금지"
+    )
+
+    header = (
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "[YouTube 95% 보존형 장문 — Grok 편집용]\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    return "\n\n".join([header, instruction, draft, prohibitions])
+
+
 def format_handoff(
     source_pack: dict,
     angle_pack: dict,
@@ -530,10 +588,16 @@ def format_handoff(
     ap = angle_pack if isinstance(angle_pack, dict) else {}
     wa = ap.get("winner_angle") if isinstance(ap.get("winner_angle"), dict) else {}
 
-    # YouTube 95% 보존형 장문 lane 만 별도 상한/규칙 적용. 다른 lane 영향 없음.
+    # YouTube 95% 보존형 장문 lane: 슬림 3 섹션만 (Grok 메타 지시 오해 차단).
+    # 기존 5+ 메타 블록 (각도/lock/free/근거/why_push/...) 모두 미렌더.
     is_youtube = (str(source_type or "").strip().lower() == "youtube")
-    handoff_max = _YOUTUBE_HANDOFF_MAX if is_youtube else _HANDOFF_MAX
-    body_max = _YOUTUBE_BODY_MAX if is_youtube else _BODY_MAX
+    if is_youtube:
+        return _format_handoff_youtube_slim(
+            final_body, body_max=_YOUTUBE_BODY_MAX,
+        )
+
+    handoff_max = _HANDOFF_MAX
+    body_max = _BODY_MAX
 
     body_raw = _strip_urls((final_body or "").strip())
     body = _truncate_to(body_raw, body_max)
