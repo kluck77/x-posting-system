@@ -231,6 +231,36 @@ async def call_gemini_korea_data(summary: dict) -> dict:
     api_key = getattr(settings, "gemini_api_key", "") or ""
     if not api_key or not summary:
         return {}
+
+    # Phase 5 — 글로벌 콘텐츠 감지 → 한국 데이터 추가 skip (API 호출 절감)
+    _skip_keywords = (
+        "personal_finance", "self_development",
+        "global_investing", "evergreen",
+        "psychology_of_money",
+        "부자학", "자기계발", "재정 교육",
+        "라이프스타일", "동기부여", "심리학",
+    )
+    _category    = str(summary.get("category", "") or "").lower()
+    _subcategory = str(summary.get("subcategory", "") or "").lower()
+    _headline    = str(summary.get("headline_kr", "") or "")
+    is_global_content = (
+        _category in {"personal_finance", "self_development", "evergreen"}
+        or any(
+            (k in _subcategory) or (k in _headline)
+            for k in _skip_keywords
+        )
+    )
+    if is_global_content:
+        logger.info(
+            "[Gemini Korea] 글로벌 콘텐츠 감지 — 한국 데이터 추가 skip "
+            f"(category={_category}, subcategory={_subcategory})"
+        )
+        return {
+            "needs_korean_data": False,
+            "reason": "글로벌 콘텐츠 — 한국 맥락 추가 불필요",
+            "korean_data": None,
+        }
+
     # Phase 4 — Editorial Constitution + 자연어 recency 강제 (W4)
     from app.editorial_constitution import (
         get_constitution_prompt as _const,
