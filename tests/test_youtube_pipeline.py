@@ -715,3 +715,70 @@ class TestYouTubeCleanupSalienceFirstPlanner:
         for f in ("atomic_claims", "examples", "counter_arguments",
                   "segments", "conclusion_claim", "preservation_targets"):
             assert hasattr(ana, f), f"YoutubeAnalysis 에 '{f}' 누락"
+
+
+# ─── 4-Editor Board trigger (YouTube slim handoff only) ─────────────
+class TestYouTubeFourEditorBoardTrigger:
+    """Grok 맞춤 에이전트 안의 4-Editor Board 합의 편집을 트리거하는
+    한 줄이 YouTube slim handoff 의 ## Grok 편집 지시 섹션 안에만 들어
+    가는지 검증. non-YouTube handoff 에는 절대 들어가면 안 됨."""
+
+    TRIGGER = (
+        "위 handoff 초안을 4-Editor Board 기준으로 합의 편집하고, "
+        "최종 편집본 1개만 출력해줘."
+    )
+
+    def _slim(self) -> str:
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
+              "frame_type": "x", "story_spine": []}
+        return format_handoff(sp, ap, "본문 한 줄.", source_type="youtube")
+
+    def test_trigger_present_in_youtube_handoff(self):
+        out = self._slim()
+        assert self.TRIGGER in out
+
+    def test_trigger_inside_grok_instruction_section(self):
+        # `## Grok 편집 지시` 와 다음 섹션 (`## 원문 초안`) 사이에 있어야 함
+        out = self._slim()
+        instr_idx = out.find("## Grok 편집 지시")
+        draft_idx = out.find("## 원문 초안")
+        trigger_idx = out.find(self.TRIGGER)
+        assert instr_idx != -1 and draft_idx != -1 and trigger_idx != -1
+        assert instr_idx < trigger_idx < draft_idx, (
+            "trigger 가 ## Grok 편집 지시 섹션 안 (## 원문 초안 위) 에 "
+            "있어야 함"
+        )
+
+    def test_trigger_not_inside_draft_codefence(self):
+        # `## 원문 초안` 의 ```text ... ``` 코드블록 안에 들어가면 안 됨
+        out = self._slim()
+        import re
+        m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
+        assert m is not None
+        assert self.TRIGGER not in m.group(1), (
+            "trigger 가 원문 초안 코드블록 안에 들어가면 Grok 이 본문으로 "
+            "오해함"
+        )
+
+    def test_trigger_absent_from_non_youtube_handoff(self):
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
+              "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문", source_type="news_link")
+        assert self.TRIGGER not in out
+        # non-YouTube 는 4-Editor Board 표현 자체도 새지 말 것
+        assert "4-Editor Board" not in out
+
+    def test_trigger_absent_when_default_source_type(self):
+        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 trigger 없음
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
+              "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문")
+        assert "4-Editor Board" not in out
