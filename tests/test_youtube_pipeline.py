@@ -795,3 +795,77 @@ class TestYouTubeFourEditorBoardTrigger:
         out = format_handoff(sp, ap, "본문")
         assert "4-Editor Board" not in out
         assert "과감하게 재구성" not in out
+
+
+# ─── Fix 1+2 — 영상 원문 밖 한국 macro 섞임 차단 ─────────────────────
+class TestYouTubeKoreanContextLeakBlock:
+    """draft #1497 류 (영상 밖 BTC 6.5만 / 원/달러 1475 / 가계부채 1900조 /
+    부동산 조언 / 금리 인하 신호 등) 의 자체 발명 차단:
+    [Fix 1] openai_provider user_msg lane 분기 (YouTube 한정 잠금 지시)
+    [Fix 2] orchestrator _kr_brief YouTube 경로 우회"""
+
+    # ── Fix 1: openai_provider user_msg 분기 ────────────────────────
+    def test_openai_user_msg_youtube_branch_present_in_source(self):
+        # generate_draft 안에 source_type 분기 + youtube 전용 잠금 지시 존재
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        # YouTube 전용 directive — 영상 원문 잠금
+        assert "영상 원문 안에서만 드래프트를 작성하라" in src
+        assert "한국 macro/시장/환율/투자/부동산" in src
+        # non-YouTube 기존 directive 유지
+        assert "한국 맥락이 강제 주입된 드래프트를" in src
+        # source_type 분기 사용
+        assert 'source_type == "youtube"' in src
+
+    def test_openai_user_msg_youtube_directive_replaces_default(self):
+        # YouTube 분기 안에서 _final_directive 가 정확히 잠금형으로 셋되고,
+        # 다른 lane 기본 directive 가 같은 분기 안 else 에 있어야 함
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        # if/else 두 directive 모두 정의됨
+        assert src.count("_final_directive") >= 3, (
+            "_final_directive 변수로 if/else 분기 + user_msg 합성 = 최소 3 hit"
+        )
+
+    # ── Fix 2: orchestrator _kr_brief 우회 ──────────────────────────
+    def test_orchestrator_skips_kr_brief_for_youtube(self):
+        # ingest_and_generate 안에 youtube lane 우회 분기 정적 검증
+        import inspect
+        from app.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator.ingest_and_generate)
+        # _kr_brief 호출이 source_type != "youtube" 분기 안에 있어야 함
+        assert 'data.source_type != "youtube"' in src, (
+            "orchestrator 가 YouTube lane 에서 _kr_brief prepend 를 우회 "
+            "하지 않으면 외부 KR DB 맥락이 GPT 입력에 섞임"
+        )
+        # build_korean_entity_brief 호출은 여전히 존재 (다른 lane 용)
+        assert "build_korean_entity_brief" in src
+
+    def test_general_lane_kr_brief_still_called(self):
+        # 일반 lane (data.source_type != "youtube") 에서는 _kr_brief 가 기존
+        # 그대로 호출되는지 — 정적 검증.
+        import inspect
+        from app.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator.ingest_and_generate)
+        # `if data.source_type != "youtube":` 블록 안에 build 호출
+        # (구조 검증 — 라인 별 enclosed 검사)
+        kr_idx = src.find("build_korean_entity_brief(")
+        guard_idx = src.find('data.source_type != "youtube"')
+        assert kr_idx != -1 and guard_idx != -1
+        assert guard_idx < kr_idx, (
+            "build_korean_entity_brief 호출이 youtube 우회 가드 안쪽에 "
+            "있어야 함 (일반 lane 만 호출)"
+        )
+
+    # ── 격리 + 모델/schema 보존 ─────────────────────────────────────
+    def test_openai_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    def test_response_format_schema_unchanged(self):
+        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
+        assert set(_RESPONSE_FORMAT_KO["json_schema"]["schema"]["required"]) == {
+            "hook", "body", "stake", "point", "archetype",
+        }

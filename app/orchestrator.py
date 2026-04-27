@@ -592,11 +592,18 @@ class Orchestrator:
             logger.info("[2/6] 수동 입력 — AI rate limit 우회")
 
         # 한국 맥락 엔티티 프리페치 (Gemini·DraftWriter 공통 주입)
+        # YouTube 95% 보존형 lane 은 영상 원문에 없는 외부 KR DB 맥락 자동
+        # 주입을 차단 — 영상 자막에 네이버/카카오/스테이블코인 같은 키워드
+        # 하나만 있어도 외부 정책/회사 데이터가 GPT 입력에 섞이는 문제
+        # 방지. 영상 자체 안의 한국 내용은 source_text 에 그대로 남음.
         _kr_brief = ""
-        try:
-            _kr_brief = build_korean_entity_brief(data.title, data.source_text)
-        except Exception as _kc_e:
-            logger.warning(f"[korean_context] 프리페치 실패 (무시): {_kc_e}")
+        if data.source_type != "youtube":
+            try:
+                _kr_brief = build_korean_entity_brief(
+                    data.title, data.source_text,
+                )
+            except Exception as _kc_e:
+                logger.warning(f"[korean_context] 프리페치 실패 (무시): {_kc_e}")
 
         _gemini_ctx = data.source_text[:1000]
         if _kr_brief:
