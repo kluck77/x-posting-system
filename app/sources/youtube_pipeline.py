@@ -550,7 +550,7 @@ async def analyze_video_with_gemini(
         }],
         "generationConfig": {
             "temperature": 0.0,
-            "maxOutputTokens": 32000,
+            "maxOutputTokens": 16000,
             "responseMimeType": "application/json",
         },
     }
@@ -560,7 +560,8 @@ async def analyze_video_with_gemini(
     )
 
     last_err: Exception | None = None
-    for attempt in range(3):
+    # retry 3 → 2 (timeout 누적 차단). backoff (2^attempt) 구조 유지.
+    for attempt in range(2):
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(api_url, json=payload)
@@ -568,7 +569,7 @@ async def analyze_video_with_gemini(
                     wait = 2 ** attempt
                     logger.info(
                         f"[YT] Gemini {resp.status_code} retry "
-                        f"{attempt + 1}/3 after {wait}s"
+                        f"{attempt + 1}/2 after {wait}s"
                     )
                     await asyncio.sleep(wait)
                     continue
@@ -602,7 +603,7 @@ async def analyze_video_with_gemini(
                     logger.warning(
                         f"[YT] JSON 파싱 실패 ({je}) — 원문 앞 500자: {text[:500]!r}"
                     )
-                    if attempt < 2:
+                    if attempt < 1:
                         await asyncio.sleep(2)
                         continue
                     return None
@@ -701,10 +702,10 @@ async def analyze_video_with_gemini(
         except Exception as e:
             last_err = e
             logger.warning(
-                f"[YT] 분석 실패 (attempt {attempt + 1}/3) "
+                f"[YT] 분석 실패 (attempt {attempt + 1}/2) "
                 f"({type(e).__name__}): {e!r}"
             )
-            if attempt < 2:
+            if attempt < 1:
                 await asyncio.sleep(2 ** attempt)
                 continue
     if last_err:

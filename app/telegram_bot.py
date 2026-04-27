@@ -309,11 +309,25 @@ async def _handle_youtube_url(
 ):
     """유튜브 URL 수신 → Gemini 직접 영상 분석 → 분석 카드 1장."""
     processing_msg = await update.message.reply_text(
-        "⏳ Gemini 영상 분석 중... (30초~5분 소요)"
+        "⏳ Gemini 영상 분석 중... (30초~8분 소요)"
     )
     try:
         from app.sources.youtube_pipeline import process_youtube_url
-        analysis = await process_youtube_url(url)
+        # 8 분 hard timeout — Gemini 가 응답 안 오면 운영자 무한 대기 차단
+        analysis = await asyncio.wait_for(
+            process_youtube_url(url), timeout=480.0,
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"[YT handler] 분석 timeout 8분 초과: {url}")
+        try:
+            await processing_msg.edit_text(
+                "⏱️ Gemini 영상 분석이 8분을 초과해 중단되었습니다. "
+                "영상이 길거나 Gemini 응답이 지연된 상태입니다. "
+                "더 짧은 영상으로 다시 시도하거나 잠시 후 재시도해 주세요."
+            )
+        except Exception:
+            pass
+        return
     except Exception as e:
         logger.error(f"[YT handler] 분석 실패: {e}", exc_info=True)
         try:

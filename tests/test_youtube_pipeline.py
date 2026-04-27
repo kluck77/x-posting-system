@@ -1059,3 +1059,89 @@ class TestDedupSkipForManualLanes:
         sig = inspect.signature(check_and_register)
         params = list(sig.parameters.keys())
         assert params == ["title"]
+
+
+# ─── Option D — Gemini 응답 부담 + retry + Telegram hard timeout ────
+class TestYouTubeGeminiTimingOptionD:
+    """A: maxOutputTokens 32000 → 16000
+    B: retry 3 → 2
+    C: Telegram process_youtube_url 을 asyncio.wait_for(timeout=480) 으로 감쌈
+    D: 안내 문구 30초~5분 → 30초~8분
+    모델명 / DB schema / provider interface 변경 없음."""
+
+    def test_gemini_max_output_tokens_reduced_to_16000(self):
+        import inspect
+        from app.sources import youtube_pipeline
+        src = inspect.getsource(youtube_pipeline.analyze_video_with_gemini)
+        assert '"maxOutputTokens": 16000' in src, (
+            "maxOutputTokens 가 16000 이 아님 — Option A 미적용"
+        )
+        assert '"maxOutputTokens": 32000' not in src
+
+    def test_gemini_retry_reduced_to_2(self):
+        import inspect
+        from app.sources import youtube_pipeline
+        src = inspect.getsource(youtube_pipeline.analyze_video_with_gemini)
+        # retry 루프가 range(2) 로 변경
+        assert "for attempt in range(2)" in src
+        assert "for attempt in range(3)" not in src
+        # log 문구도 동기화
+        assert "/2 after" in src
+        assert "/2)" in src  # "(attempt N/2)"
+
+    def test_telegram_youtube_handler_has_hard_timeout(self):
+        # telegram_bot 직접 import 불가 (cryptography sandbox 이슈) →
+        # 파일 read 로 정적 검증
+        import os
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "app", "telegram_bot.py",
+        )
+        with open(path, "r", encoding="utf-8") as f:
+            src = f.read()
+        # _handle_youtube_url 함수 주변 슬라이스 검증
+        idx = src.find("async def _handle_youtube_url(")
+        end_idx = src.find("async def ", idx + 10)
+        handler_src = src[idx:end_idx]
+        assert "asyncio.wait_for(" in handler_src, (
+            "_handle_youtube_url 에 asyncio.wait_for hard timeout 누락"
+        )
+        assert "timeout=480" in handler_src or "timeout=480.0" in handler_src
+        assert "asyncio.TimeoutError" in handler_src
+        assert "8분을 초과" in handler_src or "8분 초과" in handler_src
+
+    def test_telegram_youtube_processing_message_updated(self):
+        import os
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "app", "telegram_bot.py",
+        )
+        with open(path, "r", encoding="utf-8") as f:
+            src = f.read()
+        idx = src.find("async def _handle_youtube_url(")
+        end_idx = src.find("async def ", idx + 10)
+        handler_src = src[idx:end_idx]
+        assert "30초~8분 소요" in handler_src
+        assert "30초~5분 소요" not in handler_src
+
+    def test_model_name_unchanged(self):
+        # gemini-2.5-flash 그대로 (모델 변경 금지)
+        import inspect
+        from app.sources import youtube_pipeline
+        src = inspect.getsource(youtube_pipeline)
+        assert '_GEMINI_MODEL = "gemini-2.5-flash"' in src
+
+    def test_provider_interface_unchanged(self):
+        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
+        assert set(_RESPONSE_FORMAT_KO["json_schema"]["schema"]["required"]) == {
+            "hook", "body", "stake", "point", "archetype",
+        }
+
+    def test_youtube_analysis_dataclass_unchanged(self):
+        from app.sources.youtube_pipeline import YoutubeAnalysis
+        ana = YoutubeAnalysis(
+            video_id="v", url="u", channel="c", speaker="s",
+            video_summary="vs", main_argument="ma",
+            full_analysis="fa", downstream_summary="ds",
+        )
+        for f in ("atomic_claims", "preservation_targets",
+                  "conclusion_claim", "examples", "counter_arguments"):
+            assert hasattr(ana, f)
