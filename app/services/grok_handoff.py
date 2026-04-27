@@ -505,7 +505,9 @@ def _format_handoff_youtube_slim(final_body: str, *, body_max: int = 3500) -> st
     instruction = (
         "## Grok 편집 지시\n"
         "위 handoff 초안을 4-Editor Board 기준으로 합의 편집하고, "
-        "최종 편집본 1개만 출력해줘.\n\n"
+        "최종 편집본 1개만 출력해줘.\n"
+        "원문 사실은 유지하되, 문단 순서·첫 문장·마지막 문장·표현 방식은 "
+        "과감하게 재구성해라. 단, 새 사실은 추가하지 마라.\n\n"
         "다음 한국어 초안을 X 단일 포스트용 장문으로 편집한다.\n\n"
         "규칙:\n"
         "- 새 사실 추가 금지\n"

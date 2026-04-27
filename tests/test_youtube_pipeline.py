@@ -717,15 +717,20 @@ class TestYouTubeCleanupSalienceFirstPlanner:
             assert hasattr(ana, f), f"YoutubeAnalysis 에 '{f}' 누락"
 
 
-# ─── 4-Editor Board trigger (YouTube slim handoff only) ─────────────
+# ─── 4-Editor Board trigger + 과감한 재구성 (YouTube slim handoff) ──
 class TestYouTubeFourEditorBoardTrigger:
     """Grok 맞춤 에이전트 안의 4-Editor Board 합의 편집을 트리거하는
-    한 줄이 YouTube slim handoff 의 ## Grok 편집 지시 섹션 안에만 들어
-    가는지 검증. non-YouTube handoff 에는 절대 들어가면 안 됨."""
+    1줄 + Grok 이 단순 교정자가 아니라 구조 편집자로 움직이게 하는
+    1줄 = 총 2 줄이 YouTube slim handoff 의 ## Grok 편집 지시 섹션 안에만
+    들어가는지 검증. non-YouTube handoff 에는 절대 들어가면 안 됨."""
 
     TRIGGER = (
         "위 handoff 초안을 4-Editor Board 기준으로 합의 편집하고, "
         "최종 편집본 1개만 출력해줘."
+    )
+    RESTRUCTURE = (
+        "원문 사실은 유지하되, 문단 순서·첫 문장·마지막 문장·표현 방식은 "
+        "과감하게 재구성해라. 단, 새 사실은 추가하지 마라."
     )
 
     def _slim(self) -> str:
@@ -738,28 +743,33 @@ class TestYouTubeFourEditorBoardTrigger:
     def test_trigger_present_in_youtube_handoff(self):
         out = self._slim()
         assert self.TRIGGER in out
+        assert self.RESTRUCTURE in out
 
     def test_trigger_inside_grok_instruction_section(self):
-        # `## Grok 편집 지시` 와 다음 섹션 (`## 원문 초안`) 사이에 있어야 함
+        # 두 줄 모두 `## Grok 편집 지시` 와 `## 원문 초안` 사이에 있어야 함
+        # 그리고 TRIGGER 가 RESTRUCTURE 보다 먼저 나와야 함 (사용자 명시 순서).
         out = self._slim()
         instr_idx = out.find("## Grok 편집 지시")
         draft_idx = out.find("## 원문 초안")
         trigger_idx = out.find(self.TRIGGER)
-        assert instr_idx != -1 and draft_idx != -1 and trigger_idx != -1
-        assert instr_idx < trigger_idx < draft_idx, (
-            "trigger 가 ## Grok 편집 지시 섹션 안 (## 원문 초안 위) 에 "
-            "있어야 함"
+        restruct_idx = out.find(self.RESTRUCTURE)
+        assert instr_idx != -1 and draft_idx != -1
+        assert trigger_idx != -1 and restruct_idx != -1
+        assert instr_idx < trigger_idx < restruct_idx < draft_idx, (
+            "trigger 와 restructure 가 ## Grok 편집 지시 섹션 안 "
+            "(## 원문 초안 위) + 올바른 순서로 있어야 함"
         )
 
     def test_trigger_not_inside_draft_codefence(self):
-        # `## 원문 초안` 의 ```text ... ``` 코드블록 안에 들어가면 안 됨
+        # 두 줄 모두 ```text ... ``` 원문 초안 코드블록 안에 들어가면 안 됨
         out = self._slim()
         import re
         m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
         assert m is not None
-        assert self.TRIGGER not in m.group(1), (
-            "trigger 가 원문 초안 코드블록 안에 들어가면 Grok 이 본문으로 "
-            "오해함"
+        assert self.TRIGGER not in m.group(1)
+        assert self.RESTRUCTURE not in m.group(1), (
+            "재구성 지시가 원문 초안 코드블록 안에 들어가면 Grok 이 "
+            "본문으로 오해함"
         )
 
     def test_trigger_absent_from_non_youtube_handoff(self):
@@ -770,11 +780,13 @@ class TestYouTubeFourEditorBoardTrigger:
               "frame_type": "x", "story_spine": []}
         out = format_handoff(sp, ap, "본문", source_type="news_link")
         assert self.TRIGGER not in out
-        # non-YouTube 는 4-Editor Board 표현 자체도 새지 말 것
+        assert self.RESTRUCTURE not in out
+        # non-YouTube 는 관련 키워드 자체도 새지 말 것
         assert "4-Editor Board" not in out
+        assert "과감하게 재구성" not in out
 
     def test_trigger_absent_when_default_source_type(self):
-        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 trigger 없음
+        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 두 줄 미포함
         from app.services.grok_handoff import format_handoff
         sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
               "concept_translation": ""}
@@ -782,3 +794,4 @@ class TestYouTubeFourEditorBoardTrigger:
               "frame_type": "x", "story_spine": []}
         out = format_handoff(sp, ap, "본문")
         assert "4-Editor Board" not in out
+        assert "과감하게 재구성" not in out
