@@ -393,15 +393,26 @@ class Orchestrator:
         _psych_meta: dict = {}
         if settings.psych_enabled:
             # Step 0.5: dedup
-            try:
-                if check_and_register(data.title or ""):
-                    logger.info(f"[Step 0.5 Dedup] 중복 스킵: {data.title[:40]}")
-                    _psych_meta["psych_skip_reason"] = "duplicate"
-                    return self._psych_skip_stub(
-                        source_item, "duplicate", "[DEDUP] 중복 뉴스 — AI 미호출"
-                    )
-            except Exception as _de:
-                logger.warning(f"[Step 0.5 Dedup] 실패 (계속): {_de}")
+            # 운영자 수동 입력 lane (manual / youtube / community_input) 은
+            # dedup 우회 — simhash + split fallback 의 영어 제목 false
+            # positive 차단 + 운영자 의도 우선. 자동 수집 lane (news_link /
+            # rss / breaking_news 등) 만 기존 dedup 적용.
+            _DEDUP_SKIP_SOURCES = {"manual", "youtube", "community_input"}
+            if data.source_type in _DEDUP_SKIP_SOURCES:
+                logger.info(
+                    f"[Step 0.5 Dedup] 운영자 수동 입력 lane "
+                    f"({data.source_type}) — dedup 우회"
+                )
+            else:
+                try:
+                    if check_and_register(data.title or ""):
+                        logger.info(f"[Step 0.5 Dedup] 중복 스킵: {data.title[:40]}")
+                        _psych_meta["psych_skip_reason"] = "duplicate"
+                        return self._psych_skip_stub(
+                            source_item, "duplicate", "[DEDUP] 중복 뉴스 — AI 미호출"
+                        )
+                except Exception as _de:
+                    logger.warning(f"[Step 0.5 Dedup] 실패 (계속): {_de}")
 
             # Step 0.6: classify
             _classification = {}

@@ -1012,3 +1012,50 @@ class TestEnumeratedFrameworkLock:
         )
         for f in ("preservation_targets", "atomic_claims"):
             assert hasattr(ana, f)
+
+
+# ─── Dedup lane isolation — 운영자 수동 입력 lane 우회 ──────────────
+class TestDedupSkipForManualLanes:
+    """orchestrator 의 Step 0.5 dedup 이 운영자 수동 입력 lane (manual /
+    youtube / community_input) 에서 우회되는지 정적 검증.
+    영어 제목 + split fallback false positive 차단 + 운영자 의도 우선."""
+
+    def test_orchestrator_has_dedup_skip_set(self):
+        import inspect
+        from app.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator.ingest_and_generate)
+        assert "_DEDUP_SKIP_SOURCES" in src
+        # 3 lane 모두 skip set 안 명시
+        for lane in ('"manual"', '"youtube"', '"community_input"'):
+            assert lane in src, f"dedup skip lane '{lane}' 누락"
+
+    def test_orchestrator_dedup_skip_branches_check_and_register(self):
+        import inspect
+        from app.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator.ingest_and_generate)
+        # check_and_register 호출이 _DEDUP_SKIP_SOURCES 가드 안 else 에 있어야 함
+        skip_idx = src.find("_DEDUP_SKIP_SOURCES")
+        check_idx = src.find("check_and_register(")
+        assert skip_idx != -1 and check_idx != -1
+        assert skip_idx < check_idx, (
+            "check_and_register 호출이 _DEDUP_SKIP_SOURCES 가드 뒤쪽 "
+            "(else 블록) 에 있어야 함 — 자동 수집 lane 만 호출"
+        )
+
+    def test_orchestrator_dedup_skip_logs_lane_name(self):
+        # 우회 시 운영자가 로그에서 확인 가능하도록 lane 이름 명시
+        import inspect
+        from app.orchestrator import Orchestrator
+        src = inspect.getsource(Orchestrator.ingest_and_generate)
+        assert "운영자 수동 입력 lane" in src
+        assert "dedup 우회" in src
+
+    def test_breaking_news_dedup_module_unchanged(self):
+        # check_and_register 함수 자체는 무손 (자동 수집 lane 에서 정상 작동)
+        from app.sources.breaking_news_dedup import check_and_register
+        assert callable(check_and_register)
+        # 함수 인터페이스 (title:str → bool) 그대로
+        import inspect
+        sig = inspect.signature(check_and_register)
+        params = list(sig.parameters.keys())
+        assert params == ["title"]
