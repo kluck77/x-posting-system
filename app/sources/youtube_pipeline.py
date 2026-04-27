@@ -478,6 +478,40 @@ preservation_targets 작성 기준:
 - 영상에 없는 기업명을 추가하지 마라.
 - 영상의 주장 강도를 높이지 마라.
 - 불확실한 수치는 UNCERTAIN 으로 표시하라.
+
+[Enumerated Framework Lock v1]
+
+영상이 번호형 구조 ("N가지 / N단계 / N유형 / N법칙 / N원칙 / N이유 /
+N방법 / N비밀 / N교훈 / first·second / step 1·step 2 / type 1·type 2 /
+rule 1·rule 2") 를 제시하면 반드시 별도로 추출해 보존한다.
+
+이건 도메인-specific 룰이 아니다 (경제/정책/심리/AI 등 모든 영상 공통).
+번호형 구조는 일반 주장보다 우선순위가 높다 — 독자가 "전체 N개" 를 가장
+먼저 기대하기 때문에 일부만 다루면 글 신뢰도 즉시 무너진다.
+
+추출 항목:
+1. framework_title — 번호형 구조의 제목 (예: "백만장자가 되는 7단계")
+2. expected_count — 화자가 말한 전체 개수 (예: 7, 2, 3, 5)
+3. framework_items — 각 항목의 이름/핵심 주장 (영상 순서 유지). 항목명이
+   불명확하면 그 항목의 핵심 내용을 짧게 정리.
+4. missing_or_unclear_items — 자막에서 일부 항목이 불명확하면 표시.
+   절대 임의로 항목을 만들지 마라.
+
+저장 방식 (DB schema 변경 금지 — 기존 필드 활용):
+- preservation_targets 안에 다음 형식으로 박는다:
+  "FRAMEWORK_LOCK: title=백만장자가 되는 7단계 | expected_count=7"
+  "ITEM_1: ..."
+  "ITEM_2: ..."
+  ...
+  "ITEM_7: ..."
+- 또는 atomic_claims 안에 각 항목을 별도 claim 으로 넣고,
+  preservation_targets 에 "N개 framework items 모두 보존" 명시.
+
+규칙:
+- expected_count 가 7 이면 7 개 모두 추출. 7 → 3 으로 요약 금지.
+- 일부만 확인되면 "확인된 항목 N 개 / 전체 expected_count = 7" 처럼 표시.
+- 일부 항목만 골라 대표로 쓰지 마라.
+- 영상에 없는 항목 발명 금지.
 """
 
 

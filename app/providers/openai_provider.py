@@ -385,6 +385,47 @@ YOUTUBE_DIGEST_SYSTEM_PROMPT = (
 )
 
 
+# ─── Framework Preservation Rule (YouTube renderer 전용) ─────────────
+# 번호형 구조 (N가지 / N단계 / N유형 / N법칙 / N원칙 / N이유) 가 영상에서
+# 제시되면 본문에서 expected_count 만큼 모두 보존. 도메인-agnostic (경제/
+# 정책/심리/AI 등 모든 영상 공통). 일부만 다루면 글 신뢰도 무너짐.
+YOUTUBE_FRAMEWORK_PRESERVATION_V1 = """
+[Framework Preservation Rule]
+
+입력의 preservation_targets 또는 atomic_claims 에 FRAMEWORK_LOCK / N가지
+/ N단계 / N유형 / N법칙 / N원칙 / N이유 / N방법 / N비밀 / N교훈 같은
+번호형 구조가 있으면 본문에서 그 구조를 반드시 보존한다.
+
+작성 규칙:
+1. 영상이 "7가지" 라고 말했으면 본문도 7가지를 모두 다룬다.
+2. 영상이 "2가지 유형" 이라고 말했으면 2가지를 모두 다룬다.
+3. 일부 항목을 하나로 합치거나 삭제하지 마라.
+4. 번호형 구조는 글의 중심 뼈대로 취급한다.
+5. 각 항목은 긴 설명이 아니어도 최소 1~2 문장으로 살아 있어야 한다.
+6. 핵심 항목이 많으면 글이 길어져도 된다.
+7. 원문에 없는 항목은 만들지 마라.
+8. 일부 항목이 자막에서 불명확하면 "확인된 항목 기준으로" 식 처리 금지 —
+   입력에 있는 항목만 쓴다.
+
+금지:
+- "7가지" 를 말해놓고 3개만 설명하기
+- 항목명을 제거하고 일반 요약문으로 바꾸기
+- 번호형 구조를 결론 한 문장으로 압축하기
+- 독자가 기대한 리스트를 숨기기
+- 핵심 framework items 를 윤리/감상/한국 맥락으로 덮기
+
+출력 스타일:
+- 꼭 "1, 2, 3..." 숫자 목록으로 쓸 필요는 없다.
+- 하지만 독자가 전체 항목을 따라갈 수 있어야 한다.
+- X 장문에서는 짧은 소제목 또는 자연스러운 단락으로 나눠도 된다.
+- 단, expected_count 와 실제 반영 항목 수가 맞아야 한다.
+"""
+
+YOUTUBE_DIGEST_SYSTEM_PROMPT = (
+    YOUTUBE_DIGEST_SYSTEM_PROMPT + YOUTUBE_FRAMEWORK_PRESERVATION_V1
+)
+
+
 SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X (Twitter) account.
 The account explains Korean financial, economic, and policy issues to international audiences.
 This is NOT a news summary account — the focus is interpreting "what the money means."

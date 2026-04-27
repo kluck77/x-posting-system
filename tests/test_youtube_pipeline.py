@@ -881,3 +881,134 @@ class TestYouTubeKoreanContextLeakBlock:
         assert set(_RESPONSE_FORMAT_KO["json_schema"]["schema"]["required"]) == {
             "hook", "body", "stake", "point", "archetype",
         }
+
+
+# ─── Enumerated Framework Lock v1 — 번호형 구조 보존 ────────────────
+class TestEnumeratedFrameworkLock:
+    """[A] Gemini extractor 의 Enumerated Framework Lock.
+    [B] OpenAI YouTube renderer 의 Framework Preservation Rule.
+    [C] overfitting 차단 (도메인 spine 추가 없음, 모든 영상 공통).
+    [D] schema/interface/모델 보존."""
+
+    # ── A. Gemini Enumerated Framework Lock ─────────────────────────
+    def test_gemini_has_enumerated_framework_lock(self):
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for kw in (
+            "Enumerated Framework Lock",
+            "expected_count",
+            "framework_items",
+            "missing_or_unclear_items",
+            "FRAMEWORK_LOCK",
+            "N가지",
+            "N단계",
+            "N유형",
+        ):
+            assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT, (
+                f"Gemini prompt 에 framework 키워드 '{kw}' 누락"
+            )
+
+    def test_gemini_framework_lock_preserves_dynamic_salience_map(self):
+        # 직전 PR 의 Dynamic Salience Map 7 카테고리도 그대로 살아있어야 함
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for kw in (
+            "Dynamic Salience Map",
+            "Core Entities", "Core Numbers", "Core Events",
+            "Core Tension", "Core Mechanism", "Core Outcome",
+            "Must-Keep Items",
+        ):
+            assert kw in GEMINI_VIDEO_ANALYSIS_PROMPT
+
+    # ── B. OpenAI Framework Preservation Rule ───────────────────────
+    def test_openai_has_framework_preservation_rule(self):
+        from app.providers.openai_provider import (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT,
+            YOUTUBE_FRAMEWORK_PRESERVATION_V1,
+        )
+        # 별도 상수도 노출
+        assert "Framework Preservation Rule" in (
+            YOUTUBE_FRAMEWORK_PRESERVATION_V1
+        )
+        for kw in (
+            "Framework Preservation Rule",
+            "7가지",
+            "2가지 유형",
+            "expected_count 와 실제 반영 항목 수가 맞아야",
+            "결론 한 문장으로 압축",
+            "FRAMEWORK_LOCK",
+            "번호형 구조",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"YouTube prompt 에 framework 보존 키워드 '{kw}' 누락"
+            )
+
+    def test_openai_framework_keeps_prior_layers(self):
+        # Salience-First Draft Planner / Truth Integrity / 5 모드 / 타겟
+        # 독자 등 직전 PR 들의 구조가 그대로 살아있는지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for kw in (
+            "Salience-First Draft Planner",
+            "Truth Integrity",
+            "타겟 독자",
+            "render_mode",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── C. Overfitting prevention — 도메인 spine 추가 없음 ──────────
+    def test_no_domain_spine_added(self):
+        # framework lock 은 도메인-agnostic. 경제/정책/의료/AI 전용 spine
+        # 헤더가 prompt 에 새로 들어오면 안 됨.
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for spine in (
+            "Economic Spine",
+            "Policy Spine",
+            "Medical Spine",
+            "AI Tech Spine",
+        ):
+            assert spine not in YOUTUBE_DIGEST_SYSTEM_PROMPT
+            assert spine not in GEMINI_VIDEO_ANALYSIS_PROMPT
+
+    def test_no_polymarket_kalshi_added(self):
+        # Polymarket/Kalshi 같은 사례명 전역 강제 0 hit 유지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for kw in ("Polymarket", "Kalshi"):
+            assert kw not in YOUTUBE_DIGEST_SYSTEM_PROMPT
+            assert kw not in GEMINI_VIDEO_ANALYSIS_PROMPT
+
+    def test_general_ko_prompt_no_framework_block(self):
+        # 일반 KO prompt 에 framework lock 이 새지 말 것
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for kw in (
+            "Framework Preservation Rule",
+            "Enumerated Framework Lock",
+            "FRAMEWORK_LOCK",
+            "expected_count",
+            "framework_items",
+        ):
+            assert kw not in SYSTEM_PROMPT_KO, (
+                f"일반 KO prompt 에 YouTube 전용 '{kw}' 가 새어들어가면 안 됨"
+            )
+
+    # ── D. schema/interface/모델 보존 ───────────────────────────────
+    def test_openai_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    def test_response_format_schema_unchanged(self):
+        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
+        assert set(_RESPONSE_FORMAT_KO["json_schema"]["schema"]["required"]) == {
+            "hook", "body", "stake", "point", "archetype",
+        }
+
+    def test_youtube_analysis_dataclass_unchanged(self):
+        # DB schema 변경 없이 기존 필드만 활용 — preservation_targets /
+        # atomic_claims 통해 framework items 보존
+        from app.sources.youtube_pipeline import YoutubeAnalysis
+        ana = YoutubeAnalysis(
+            video_id="v", url="u", channel="c", speaker="s",
+            video_summary="vs", main_argument="ma",
+            full_analysis="fa", downstream_summary="ds",
+        )
+        for f in ("preservation_targets", "atomic_claims"):
+            assert hasattr(ana, f)
