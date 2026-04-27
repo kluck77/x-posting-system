@@ -732,6 +732,10 @@ class TestYouTubeFourEditorBoardTrigger:
         "원문 사실은 유지하되, 문단 순서·첫 문장·마지막 문장·표현 방식은 "
         "과감하게 재구성해라. 단, 새 사실은 추가하지 마라."
     )
+    NO_REVIEW = (
+        "영상 리뷰/요약처럼 쓰지 말고, 원문 내용을 내 콘텐츠 관점으로 "
+        "소화한 독립적인 X 글처럼 써라."
+    )
 
     def _slim(self) -> str:
         from app.services.grok_handoff import format_handoff
@@ -744,31 +748,36 @@ class TestYouTubeFourEditorBoardTrigger:
         out = self._slim()
         assert self.TRIGGER in out
         assert self.RESTRUCTURE in out
+        assert self.NO_REVIEW in out
 
     def test_trigger_inside_grok_instruction_section(self):
-        # 두 줄 모두 `## Grok 편집 지시` 와 `## 원문 초안` 사이에 있어야 함
-        # 그리고 TRIGGER 가 RESTRUCTURE 보다 먼저 나와야 함 (사용자 명시 순서).
+        # 세 줄 모두 `## Grok 편집 지시` 와 `## 원문 초안` 사이 +
+        # TRIGGER → RESTRUCTURE → NO_REVIEW 순서 (사용자 명시 순서).
         out = self._slim()
         instr_idx = out.find("## Grok 편집 지시")
         draft_idx = out.find("## 원문 초안")
         trigger_idx = out.find(self.TRIGGER)
         restruct_idx = out.find(self.RESTRUCTURE)
+        no_review_idx = out.find(self.NO_REVIEW)
         assert instr_idx != -1 and draft_idx != -1
-        assert trigger_idx != -1 and restruct_idx != -1
-        assert instr_idx < trigger_idx < restruct_idx < draft_idx, (
-            "trigger 와 restructure 가 ## Grok 편집 지시 섹션 안 "
-            "(## 원문 초안 위) + 올바른 순서로 있어야 함"
+        assert trigger_idx != -1 and restruct_idx != -1 and no_review_idx != -1
+        assert (
+            instr_idx < trigger_idx < restruct_idx < no_review_idx < draft_idx
+        ), (
+            "세 지시 줄이 ## Grok 편집 지시 섹션 안 (## 원문 초안 위) + "
+            "trigger → restructure → no-review 순서로 있어야 함"
         )
 
     def test_trigger_not_inside_draft_codefence(self):
-        # 두 줄 모두 ```text ... ``` 원문 초안 코드블록 안에 들어가면 안 됨
+        # 세 줄 모두 ```text ... ``` 원문 초안 코드블록 안에 들어가면 안 됨
         out = self._slim()
         import re
         m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
         assert m is not None
         assert self.TRIGGER not in m.group(1)
-        assert self.RESTRUCTURE not in m.group(1), (
-            "재구성 지시가 원문 초안 코드블록 안에 들어가면 Grok 이 "
+        assert self.RESTRUCTURE not in m.group(1)
+        assert self.NO_REVIEW not in m.group(1), (
+            "no-review 지시가 원문 초안 코드블록 안에 들어가면 Grok 이 "
             "본문으로 오해함"
         )
 
@@ -781,12 +790,14 @@ class TestYouTubeFourEditorBoardTrigger:
         out = format_handoff(sp, ap, "본문", source_type="news_link")
         assert self.TRIGGER not in out
         assert self.RESTRUCTURE not in out
+        assert self.NO_REVIEW not in out
         # non-YouTube 는 관련 키워드 자체도 새지 말 것
         assert "4-Editor Board" not in out
         assert "과감하게 재구성" not in out
+        assert "영상 리뷰/요약처럼" not in out
 
     def test_trigger_absent_when_default_source_type(self):
-        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 두 줄 미포함
+        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 세 줄 미포함
         from app.services.grok_handoff import format_handoff
         sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
               "concept_translation": ""}
@@ -795,6 +806,7 @@ class TestYouTubeFourEditorBoardTrigger:
         out = format_handoff(sp, ap, "본문")
         assert "4-Editor Board" not in out
         assert "과감하게 재구성" not in out
+        assert "영상 리뷰/요약처럼" not in out
 
 
 # ─── Fix 1+2 — 영상 원문 밖 한국 macro 섞임 차단 ─────────────────────
