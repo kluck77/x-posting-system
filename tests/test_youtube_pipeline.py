@@ -1177,3 +1177,218 @@ class TestYouTubeGeminiTimingOptionD:
         for f in ("atomic_claims", "preservation_targets",
                   "conclusion_claim", "examples", "counter_arguments"):
             assert hasattr(ana, f)
+
+
+# ─── House X Post Shape v1 — 도메인-agnostic 하우스 스타일 ───────────
+class TestHouseXPostShapeV1:
+    """[A] OpenAI YouTube prompt 에 House X Post Shape v1.
+    [B] Grok handoff 하우스 스타일 1 줄.
+    [C] overfitting 차단 (도메인 spine / 산업 예시 / 기업명 0 hit).
+    [D] schema/interface/모델 보존.
+    [E] 위험 패턴 5 종 차단 지시 포함."""
+
+    # ── A. OpenAI prompt — House X Post Shape v1 ────────────────────
+    def test_openai_youtube_has_house_shape_block(self):
+        from app.providers.openai_provider import (
+            YOUTUBE_DIGEST_SYSTEM_PROMPT,
+            HOUSE_X_POST_SHAPE_V1,
+        )
+        # 공통 상수 노출 — 다른 lane 도 재사용 가능하도록
+        assert "House X Post Shape v1" in HOUSE_X_POST_SHAPE_V1
+        assert "House X Post Shape v1" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    def test_openai_youtube_has_core_principles(self):
+        # 핵심 5 기준 + 추가 룰 모두 prompt 안 명시
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for kw in (
+            "주제 설명으로 시작하지 않는다",
+            "독자가 계속 읽을 이유를 준다",
+            "N가지 / N단계 / N유형",
+            "일상 장면으로 번역",
+            "구조적 의미",
+            "고정 템플릿",
+            "하우스 스타일",
+        ):
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"House Shape 핵심 기준 '{kw}' 누락"
+            )
+
+    def test_openai_youtube_forbids_review_summary_styles(self):
+        # 뉴스 요약체 / 유튜브 리뷰체 / 보고서 말투 명시 금지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for forbidden in (
+            "뉴스 요약체",
+            "유튜브 리뷰체",
+            "보고서 말투",
+        ):
+            assert forbidden in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
+                f"금지 항목 '{forbidden}' 명시 누락"
+            )
+
+    def test_openai_youtube_keeps_prior_layers(self):
+        # 직전 PR 들의 핵심 구조가 그대로 살아있는지
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        for kw in (
+            "Salience-First Draft Planner",
+            "Truth Integrity",
+            "render_mode",
+            "Framework Preservation Rule",
+            "Enumerated Framework Lock",
+        ):
+            # Enumerated Framework Lock 은 Gemini prompt 에 있음 — OpenAI
+            # prompt 에는 없을 수 있음. 나머지만 검증.
+            if kw == "Enumerated Framework Lock":
+                continue
+            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
+
+    # ── B. Grok handoff 하우스 스타일 1 줄 ──────────────────────────
+    def test_grok_handoff_has_house_style_line(self):
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문 한 줄.", source_type="youtube")
+        for kw in (
+            "독립적인 X 글",
+            "뉴스 요약이나 영상 리뷰가 아니라",
+            "주제 설명이 아니라 판정/반전/긴장",
+            "마지막은 단순 요약이 아니라",
+            "구조적 의미로 닫아라",
+        ):
+            assert kw in out, f"Grok handoff 하우스 스타일 '{kw}' 누락"
+
+    def test_grok_handoff_house_line_inside_instruction_section(self):
+        # `## Grok 편집 지시` ↔ `## 원문 초안` 사이에 위치 + ```text
+        # 코드블록 안에 미포함
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문 한 줄.", source_type="youtube")
+        marker = "이 글은 뉴스 요약이나 영상 리뷰가 아니라"
+        instr_idx = out.find("## Grok 편집 지시")
+        draft_idx = out.find("## 원문 초안")
+        marker_idx = out.find(marker)
+        assert -1 < instr_idx < marker_idx < draft_idx, (
+            "house-style 1 줄이 ## Grok 편집 지시 ↔ ## 원문 초안 사이에 "
+            "있어야 함"
+        )
+        # ```text 코드블록 안에 들어가면 안 됨
+        import re
+        m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
+        assert m is not None
+        assert marker not in m.group(1)
+
+    def test_non_youtube_handoff_no_house_line(self):
+        from app.services.grok_handoff import format_handoff
+        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
+              "concept_translation": ""}
+        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
+              "frame_type": "x", "story_spine": []}
+        out = format_handoff(sp, ap, "본문", source_type="news_link")
+        for kw in (
+            "독립적인 X 글",
+            "뉴스 요약이나 영상 리뷰가 아니라",
+            "주제 설명이 아니라 판정/반전/긴장",
+        ):
+            assert kw not in out
+
+    # ── C. Overfitting prevention ───────────────────────────────────
+    def test_no_domain_spine_added(self):
+        # 도메인 spine 추가 없음
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
+        for spine in (
+            "Economic Spine",
+            "Policy Spine",
+            "Medical Spine",
+            "AI Tech Spine",
+        ):
+            assert spine not in YOUTUBE_DIGEST_SYSTEM_PROMPT
+            assert spine not in GEMINI_VIDEO_ANALYSIS_PROMPT
+
+    def test_no_industry_or_company_overfitting(self):
+        # 특정 기업/코인/정치인/산업 예시 전역 prompt 박힘 0
+        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+        # House Shape 안에 특정 실명 예시 들어가면 실패
+        forbidden_specifics = (
+            "Polymarket", "Kalshi",
+            "Tesla", "Apple", "Nvidia",
+            "비트코인", "이더리움", "USDT",
+            "삼성전자", "SK하이닉스",
+            "트럼프", "이재명",
+        )
+        # House Shape v1 블록만 추출
+        from app.providers.openai_provider import HOUSE_X_POST_SHAPE_V1
+        for kw in forbidden_specifics:
+            assert kw not in HOUSE_X_POST_SHAPE_V1, (
+                f"House Shape 안에 특정 실명 '{kw}' 박히면 안 됨 "
+                f"(도메인 과적합)"
+            )
+
+    def test_general_ko_prompt_no_house_shape(self):
+        # 일반 KO prompt 에 House Shape 가 새지 말 것 (기존 동작 보호)
+        from app.providers.openai_provider import SYSTEM_PROMPT_KO
+        for kw in (
+            "House X Post Shape",
+            "주제 설명으로 시작하지 않는다",
+            "하우스 스타일",
+        ):
+            assert kw not in SYSTEM_PROMPT_KO
+
+    # ── D. schema/interface/모델 보존 ───────────────────────────────
+    def test_model_unchanged(self):
+        from app.providers import openai_provider
+        assert openai_provider.OPENAI_MODEL == "gpt-4o-mini"
+
+    def test_response_format_schema_unchanged(self):
+        from app.providers.openai_provider import _RESPONSE_FORMAT_KO
+        assert set(_RESPONSE_FORMAT_KO["json_schema"]["schema"]["required"]) == {
+            "hook", "body", "stake", "point", "archetype",
+        }
+
+    # ── E. 위험 패턴 차단 지시 (실제 출력 검증 X, prompt 안 명시만) ──
+    def test_warns_against_topic_explainer_first_line(self):
+        # 주제 설명형 첫 줄 피하라는 지시
+        from app.providers.openai_provider import HOUSE_X_POST_SHAPE_V1
+        assert "주제 설명으로 시작하지 않는다" in HOUSE_X_POST_SHAPE_V1
+        # 약한 시작 패턴 예시 (이 영상에서는 / 발언자는)
+        assert "이 영상에서는" in HOUSE_X_POST_SHAPE_V1
+        assert "발언자는" in HOUSE_X_POST_SHAPE_V1
+
+    def test_warns_against_review_speaker_voice(self):
+        from app.providers.openai_provider import HOUSE_X_POST_SHAPE_V1
+        # 약한 전달자 표현 ("하더라고요" / "화제가 됐다")
+        assert "하더라고요" in HOUSE_X_POST_SHAPE_V1
+        assert "화제가 됐다" in HOUSE_X_POST_SHAPE_V1
+
+    def test_warns_against_n_items_dropping(self):
+        # N가지/N단계/N유형 누락 금지 지시
+        from app.providers.openai_provider import HOUSE_X_POST_SHAPE_V1
+        assert "N가지" in HOUSE_X_POST_SHAPE_V1
+        assert "누락하지 않는다" in HOUSE_X_POST_SHAPE_V1
+        assert "독자와의 약속" in HOUSE_X_POST_SHAPE_V1
+
+    def test_warns_against_summary_endings(self):
+        # 요약형 결말 금지 지시
+        from app.providers.openai_provider import HOUSE_X_POST_SHAPE_V1
+        for kw in (
+            "중요하다",
+            "주목해야 한다",
+            "생각해볼 필요가 있다",
+            "라고 할 수 있다",
+        ):
+            assert kw in HOUSE_X_POST_SHAPE_V1, (
+                f"요약형 결말 금지 예시 '{kw}' 누락"
+            )
+
+    def test_warns_against_fact_invention(self):
+        # 새 사실 / 새 숫자 / 새 인과 추가 금지 지시
+        from app.providers.openai_provider import HOUSE_X_POST_SHAPE_V1
+        assert "새 숫자 발명" in HOUSE_X_POST_SHAPE_V1
+        assert "새 인과관계 추가 금지" in HOUSE_X_POST_SHAPE_V1
+        # 원문에 없는 사실 금지 — phrasing 변형 허용
+        assert (
+            "원문에 없는 사실 발명" in HOUSE_X_POST_SHAPE_V1
+            or "원문에 없는 사실은 만들지 않는다" in HOUSE_X_POST_SHAPE_V1
+        )
