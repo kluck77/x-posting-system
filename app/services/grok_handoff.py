@@ -515,9 +515,11 @@ def _format_handoff_youtube_slim(final_body: str, *, body_max: int = 3500) -> st
         "렌즈를 억지로 끼워 맞추지 말고 글의 재료에 가장 자연스러운 관점을 "
         "선택해라.\n"
         "이 글은 뉴스 요약이나 영상 리뷰가 아니라 독립적인 X 글이어야 한다. "
-        "첫 줄은 주제 설명이 아니라 판정/반전/긴장으로 시작하고, 중간은 "
-        "숫자·구조·사례로 읽히게 만들며, 마지막은 단순 요약이 아니라 "
-        "원문 재료가 보여주는 구조적 의미로 닫아라.\n\n"
+        "재료에 따라 NUMBERED_INSIGHT, MARKET_MAP, POWER_NARRATIVE 중 가장 "
+        "자연스러운 글 모양을 선택하거나 필요하면 혼합하라. 첫 줄은 주제 "
+        "설명이 아니라 판정/반전/긴장으로 시작하고, 중간은 숫자·구조·사례로 "
+        "읽히게 만들며, 마지막은 단순 요약이 아니라 원문 재료가 보여주는 "
+        "구조적 의미로 닫아라.\n\n"
         "다음 한국어 초안을 X 단일 포스트용 장문으로 편집한다.\n\n"
         "규칙:\n"
         "- 새 사실 추가 금지\n"
@@ -724,13 +726,40 @@ def format_handoff(
         if len(ev_block) > 1:
             optional_sections.append(ev_block)
 
-    # 고정 4블록 (원문 초안 제외) 먼저 고정
+    # House Format 편집 지시 (lane 별 — non-YouTube only).
+    # YouTube 는 _format_handoff_youtube_slim 이 별도 처리하므로 여기 안 옴.
+    # 원문 초안 코드블록 밖, ## 최종 출력 규칙 다음 위치.
+    _src = (str(source_type or "").strip().lower())
+    section_house_format: list[str] = []
+    if _src == "news_link":
+        section_house_format = [
+            "## House Format 편집 지시",
+            "이 글은 기사 요약이 아니라 독립적인 X 글이어야 한다. 기사 "
+            "원문 안의 사실과 숫자는 보존하되, 제목 반복과 뉴스 리포트 "
+            "말투를 제거하라. 재료에 맞는 House Format을 자연스럽게 선택"
+            "하거나 필요하면 혼합하고, 마지막은 단순 요약이 아니라 기사 "
+            "재료가 보여주는 구조적 의미로 닫아라. 단, 새 사실·새 숫자·"
+            "새 인과는 추가하지 마라.",
+        ]
+    elif _src in ("manual", "community_input"):
+        section_house_format = [
+            "## House Format 편집 지시",
+            "이 글은 원문 정리가 아니라 독립적인 X 글이어야 한다. 사용자"
+            "가 준 핵심 재료는 보존하되, 뉴스 요약체/영상 리뷰체/보고서 "
+            "말투를 제거하고, 재료에 맞는 House Format을 자연스럽게 선택"
+            "하라. 마지막은 단순 요약이 아니라 원문 재료가 보여주는 "
+            "구조적 의미로 닫아라. 단, 새 사실·새 숫자·새 인과는 추가하지 "
+            "마라.",
+        ]
+    # 고정 4블록 (원문 초안 제외) + lane 별 House Format 지시 (있을 때만)
     fixed_tail = [
         "\n".join(section_angle),
         "\n".join(section_lock),
         "\n".join(section_free),
         "\n".join(section_rules),
     ]
+    if section_house_format:
+        fixed_tail.append("\n".join(section_house_format))
     # 본문 섹션은 남은 예산에 맞게 다시 잘라낸다 (고정 5블록 보존이 최우선)
     tail_text = "\n\n".join(fixed_tail)
     # 여유: "## 원문 초안\n```\n...\n```\n\n" 의 스캐폴드 (~20자) 감안
