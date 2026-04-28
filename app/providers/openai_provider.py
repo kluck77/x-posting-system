@@ -426,6 +426,54 @@ YOUTUBE_DIGEST_SYSTEM_PROMPT = (
 )
 
 
+# ─── House X Post Shape v1 (YouTube renderer 전용 — 하우스 스타일) ───
+# 어떤 재료를 넣어도 뉴스 메모/유튜브 리뷰/보고서 요약처럼 나오지 않게
+# 하는 글 모양 가이드. 고정 템플릿 아님 — 재료에 맞춰 자연스럽게 선택.
+# 도메인 spine 추가 X. 일반 KO prompt 무손.
+YOUTUBE_HOUSE_X_POST_SHAPE_V1 = """
+[House X Post Shape v1]
+
+초안은 아래 글 모양을 우선 따른다 (고정 템플릿 아님 — 재료에 맞춰 자연스럽게).
+
+- 첫 줄:
+  주제 설명으로 시작하지 말 것.
+  판정 / 반전 / 긴장 / 위험 / 구조 변화 / 인간 선택 중 하나로 시작한다.
+
+- 둘째 줄:
+  독자가 계속 읽을 이유를 준다.
+  예: N가지 구조, 큰 숫자, 왜 지금 중요한지, 어떤 착각을 깨는지.
+
+- 중간:
+  짧은 문단 중심.
+  숫자 / 근거 / 사례 / 리스트 사용.
+  단, 원문에 없는 사실은 만들지 않는다.
+
+- N가지 구조:
+  원문에 N가지 / N단계 / N유형 구조가 있으면 항목을 누락하지 않는다.
+  각 항목은 이름 + 쉬운 설명 + 돈/행동/선택과 연결되는 의미를 최소 1 문장
+  으로 살린다.
+
+- 어려운 개념:
+  전문용어만 쓰지 말고 일상 장면으로 번역한다.
+  예: 매몰 비용 오류 → "재미없는 영화도 끝까지 보는 이유".
+
+- 마지막:
+  "중요하다 / 주목해야 한다 / 생각해볼 필요가 있다" 로 끝내지 않는다.
+  원문 재료가 보여주는 구조적 의미나 인간의 선택이 드러나는 관점으로 닫는다.
+
+- 금지:
+  뉴스 요약체 / 유튜브 리뷰체 / 보고서 말투 / 원문 밖 한국 맥락 강제 주입 /
+  새 숫자 발명 / 새 인과관계 추가.
+
+스타일은 "고정 템플릿" 이 아니라 "하우스 스타일" 이다.
+재료에 맞게 자연스럽게 선택해라.
+"""
+
+YOUTUBE_DIGEST_SYSTEM_PROMPT = (
+    YOUTUBE_DIGEST_SYSTEM_PROMPT + YOUTUBE_HOUSE_X_POST_SHAPE_V1
+)
+
+
 SYSTEM_PROMPT_EN = """You are a draft writer for an English-language X (Twitter) account.
 The account explains Korean financial, economic, and policy issues to international audiences.
 This is NOT a news summary account — the focus is interpreting "what the money means."
