@@ -1529,3 +1529,101 @@ class TestGrokHandoffHouseFormatLines:
               "frame_type": "x", "story_spine": []}
         out = format_handoff(sp, ap, "본문")
         assert "## House Format 편집 지시" not in out
+
+
+# ─── Current Article Event Lock (news_link 분석 시점 강화) ──────────
+class TestCurrentArticleEventLock:
+    """draft 1497 류 — 2026 년 발표 기사를 2024 년 검토 사건으로 요약하는
+    시간 오염 차단. NEWS_ARTICLE_FACT_LOCK_V1 안에 Current Article Event
+    Lock 블록 (9 룰 + 4 금지) 명시."""
+
+    def test_event_lock_block_present(self):
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        assert "Current Article Event Lock" in NEWS_ARTICLE_FACT_LOCK_V1
+
+    def test_event_lock_has_9_rules(self):
+        # 9 핵심 룰 — phrasing 변형 허용, 핵심 키워드만 검증
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        for kw in (
+            "기사 제목 / 출처 / 작성일",
+            "새로 발생한 핵심 이벤트",
+            "과거 연도",
+            "과거 배경을 현재 기사 핵심 사건처럼 쓰지 않는다",
+            "2026 년",
+            "2024 년 사건으로 시작하면",
+            "고려했다",
+            "발표했다 / 결정했다 /\n   시행된다",
+            "확정 이벤트",
+            "보조\n   맥락으로만",
+        ):
+            assert kw in NEWS_ARTICLE_FACT_LOCK_V1, (
+                f"Event Lock 룰 '{kw}' 누락"
+            )
+
+    def test_event_lock_has_explicit_prohibitions(self):
+        # 4 명시 금지
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        for kw in (
+            "기사 작성일보다 과거인 배경 사건을 핵심 요약 첫 문장",
+            "탈퇴 발표",
+            "탈퇴 고려",
+            "시행 예정",
+            "검토 중",
+            "LLM 지식으로 끌어오지 마라",
+        ):
+            assert kw in NEWS_ARTICLE_FACT_LOCK_V1, (
+                f"Event Lock 금지 예시 '{kw}' 누락"
+            )
+
+    def test_event_lock_distinguishes_consider_vs_announce(self):
+        # "고려했다 / 검토했다 / 루머" vs "발표했다 / 결정했다 / 시행된다"
+        # 구분 명시
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        # 둘 다 prompt 안 명시 (구분 지시)
+        assert "고려했다" in NEWS_ARTICLE_FACT_LOCK_V1
+        assert "검토했다" in NEWS_ARTICLE_FACT_LOCK_V1
+        assert "발표했다" in NEWS_ARTICLE_FACT_LOCK_V1
+        assert "시행된다" in NEWS_ARTICLE_FACT_LOCK_V1
+
+    def test_event_lock_lists_decisive_events(self):
+        # "발표 / 결정 / 시행 / 탈퇴 / 승인 / 통past / 수주 / 공개" 같은
+        # 확정 이벤트 키워드 명시
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        for kw in ("발표", "결정", "시행", "탈퇴", "승인", "통과", "수주", "공개"):
+            assert kw in NEWS_ARTICLE_FACT_LOCK_V1
+
+    def test_event_lock_priority_before_fact_lock_rules(self):
+        # Current Article Event Lock 이 News Article Fact Lock 핵심 8 룰
+        # 보다 먼저 위치 (우선순위)
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        evt_idx = NEWS_ARTICLE_FACT_LOCK_V1.find("[Current Article Event Lock]")
+        fact_idx = NEWS_ARTICLE_FACT_LOCK_V1.find(
+            "[News Article Fact Lock — 핵심 8 룰]"
+        )
+        assert evt_idx != -1 and fact_idx != -1
+        assert evt_idx < fact_idx, (
+            "Event Lock 이 Fact Lock 핵심 8 룰보다 먼저 위치해야 함 "
+            "(시점 잠금 우선순위)"
+        )
+
+    def test_existing_fact_lock_rules_preserved(self):
+        # 기존 8 룰 그대로 유지 (Event Lock 추가가 기존 규칙 약화 X)
+        from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
+        for kw in (
+            "기사 안에 있는 사실",
+            "기사에 있는 사실과 작성자의 해석을 구분",
+            "확정되지 않은 내용은 단정하지 않는다",
+            "주장 강도를 높이지 않는다",
+            "한국 맥락을 강제 주입하지 않는다",
+        ):
+            assert kw in NEWS_ARTICLE_FACT_LOCK_V1
+
+    def test_news_link_runtime_append_still_present(self):
+        # generate_draft 의 news_link 분기에서 Fact Lock + Router runtime
+        # append 여전히 작동 (이전 PR 결과 유지)
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        assert 'source_type == "news_link"' in src
+        assert "NEWS_ARTICLE_FACT_LOCK_V1" in src
+        assert "HOUSE_FORMAT_ROUTER_V1" in src
