@@ -736,6 +736,12 @@ class TestYouTubeFourEditorBoardTrigger:
         "영상 리뷰/요약처럼 쓰지 말고, 원문 내용을 내 콘텐츠 관점으로 "
         "소화한 독립적인 X 글처럼 써라."
     )
+    FINAL_ANGLE = (
+        "마지막은 단순 요약으로 끝내지 말고, 원문이 보여주는 가장 중요한 "
+        "구조적 의미나 인간의 선택이 드러나는 관점으로 닫아라. 단, 특정 "
+        "렌즈를 억지로 끼워 맞추지 말고 글의 재료에 가장 자연스러운 관점을 "
+        "선택해라."
+    )
 
     def _slim(self) -> str:
         from app.services.grok_handoff import format_handoff
@@ -749,37 +755,60 @@ class TestYouTubeFourEditorBoardTrigger:
         assert self.TRIGGER in out
         assert self.RESTRUCTURE in out
         assert self.NO_REVIEW in out
+        assert self.FINAL_ANGLE in out
 
     def test_trigger_inside_grok_instruction_section(self):
-        # 세 줄 모두 `## Grok 편집 지시` 와 `## 원문 초안` 사이 +
-        # TRIGGER → RESTRUCTURE → NO_REVIEW 순서 (사용자 명시 순서).
+        # 네 줄 모두 `## Grok 편집 지시` 와 `## 원문 초안` 사이 +
+        # TRIGGER → RESTRUCTURE → NO_REVIEW → FINAL_ANGLE 순서.
         out = self._slim()
         instr_idx = out.find("## Grok 편집 지시")
         draft_idx = out.find("## 원문 초안")
         trigger_idx = out.find(self.TRIGGER)
         restruct_idx = out.find(self.RESTRUCTURE)
         no_review_idx = out.find(self.NO_REVIEW)
+        final_angle_idx = out.find(self.FINAL_ANGLE)
         assert instr_idx != -1 and draft_idx != -1
-        assert trigger_idx != -1 and restruct_idx != -1 and no_review_idx != -1
+        assert all(idx != -1 for idx in (
+            trigger_idx, restruct_idx, no_review_idx, final_angle_idx
+        ))
         assert (
-            instr_idx < trigger_idx < restruct_idx < no_review_idx < draft_idx
+            instr_idx < trigger_idx < restruct_idx < no_review_idx
+            < final_angle_idx < draft_idx
         ), (
-            "세 지시 줄이 ## Grok 편집 지시 섹션 안 (## 원문 초안 위) + "
-            "trigger → restructure → no-review 순서로 있어야 함"
+            "네 지시 줄이 ## Grok 편집 지시 섹션 안 (## 원문 초안 위) + "
+            "trigger → restructure → no-review → final-angle 순서로 있어야 함"
         )
 
     def test_trigger_not_inside_draft_codefence(self):
-        # 세 줄 모두 ```text ... ``` 원문 초안 코드블록 안에 들어가면 안 됨
+        # 네 줄 모두 ```text ... ``` 원문 초안 코드블록 안에 들어가면 안 됨
         out = self._slim()
         import re
         m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
         assert m is not None
         assert self.TRIGGER not in m.group(1)
         assert self.RESTRUCTURE not in m.group(1)
-        assert self.NO_REVIEW not in m.group(1), (
-            "no-review 지시가 원문 초안 코드블록 안에 들어가면 Grok 이 "
+        assert self.NO_REVIEW not in m.group(1)
+        assert self.FINAL_ANGLE not in m.group(1), (
+            "final-angle 지시가 원문 초안 코드블록 안에 들어가면 Grok 이 "
             "본문으로 오해함"
         )
+
+    def test_no_topic_specific_lens_examples(self):
+        # 주제별 렌즈 목록 (돈/욕망/공포/신뢰/권력/인프라 등) 이 handoff 에
+        # 나열되면 안 됨. final_angle 은 "유연하게 선택" 만 지시.
+        out = self._slim()
+        # 렌즈 키워드 목록이 prompt 에 박히면 X
+        forbidden_lens_lists = [
+            "돈/욕망/공포/신뢰/권력",
+            "돈 / 욕망 / 공포 / 신뢰 / 권력",
+            "권력/인프라",
+            "lens list",
+            "렌즈 목록",
+        ]
+        for kw in forbidden_lens_lists:
+            assert kw not in out, (
+                f"주제별 렌즈 나열 '{kw}' 이 handoff 에 들어가면 안 됨"
+            )
 
     def test_trigger_absent_from_non_youtube_handoff(self):
         from app.services.grok_handoff import format_handoff
@@ -791,13 +820,15 @@ class TestYouTubeFourEditorBoardTrigger:
         assert self.TRIGGER not in out
         assert self.RESTRUCTURE not in out
         assert self.NO_REVIEW not in out
+        assert self.FINAL_ANGLE not in out
         # non-YouTube 는 관련 키워드 자체도 새지 말 것
         assert "4-Editor Board" not in out
         assert "과감하게 재구성" not in out
         assert "영상 리뷰/요약처럼" not in out
+        assert "구조적 의미나 인간의 선택" not in out
 
     def test_trigger_absent_when_default_source_type(self):
-        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 세 줄 미포함
+        # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 네 줄 미포함
         from app.services.grok_handoff import format_handoff
         sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
               "concept_translation": ""}
@@ -807,6 +838,7 @@ class TestYouTubeFourEditorBoardTrigger:
         assert "4-Editor Board" not in out
         assert "과감하게 재구성" not in out
         assert "영상 리뷰/요약처럼" not in out
+        assert "구조적 의미나 인간의 선택" not in out
 
 
 # ─── Fix 1+2 — 영상 원문 밖 한국 macro 섞임 차단 ─────────────────────
