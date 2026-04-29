@@ -857,8 +857,14 @@ class TestYouTubeKoreanContextLeakBlock:
         # YouTube 전용 directive — 영상 원문 잠금
         assert "영상 원문 안에서만 드래프트를 작성하라" in src
         assert "한국 macro/시장/환율/투자/부동산" in src
-        # non-YouTube 기존 directive 유지
-        assert "한국 맥락이 강제 주입된 드래프트를" in src
+        # non-YouTube directive — Bug 1 fix 후 "한국 맥락이 강제 주입된" 제거,
+        # "한국 맥락이 명시된 경우에만" / "한국 맥락을 강제로 추가하지 마라"
+        # 같은 약화형 directive 사용
+        assert "한국 맥락이 강제 주입된 드래프트를" not in src
+        assert (
+            "한국 맥락이 명시된" in src
+            or "한국 맥락을 강제로 추가하지 마라" in src
+        )
         # source_type 분기 사용
         assert 'source_type == "youtube"' in src
 
@@ -1627,3 +1633,66 @@ class TestCurrentArticleEventLock:
         assert 'source_type == "news_link"' in src
         assert "NEWS_ARTICLE_FACT_LOCK_V1" in src
         assert "HOUSE_FORMAT_ROUTER_V1" in src
+
+
+# ─── Bug 1 fix — non-YouTube user_msg directive 한국 맥락 강제 제거 ──
+class TestNonYouTubeFinalDirective:
+    """기존 'non-YouTube directive = 한국 맥락 강제 주입' 명령이 글로벌
+    주제까지 한국 macro/시장/정책으로 오염시키던 문제 차단.
+
+    한국 키워드 (한국 / 국내 / 한국 시장 / 한국 기업 / 한국 투자자 /
+    한국 정책) 가 명시된 경우에만 한국 맥락 사용. 그 외 글로벌 주제는
+    한국 맥락 강제 추가 금지."""
+
+    def test_non_youtube_directive_no_forced_korea(self):
+        # generate_draft 안에 "한국 맥락이 강제 주입된 드래프트" 문구
+        # (강제 주입형) 0 hit
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        assert "한국 맥락이 강제 주입된 드래프트" not in src, (
+            "non-YouTube directive 가 '한국 맥락이 강제 주입된 드래프트' "
+            "문구를 그대로 사용하면 글로벌 주제까지 한국 맥락으로 오염됨"
+        )
+
+    def test_non_youtube_directive_conditional_korea_only(self):
+        # 한국 맥락은 키워드 명시된 경우에만 사용 — 조건문 명시
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        assert "한국 맥락이 명시된" in src or "한국 키워드" in src
+        assert "한국 맥락을 강제로 추가하지 마라" in src or (
+            "한국 맥락 강제" in src and "추가하지 마라" in src
+        )
+
+    def test_non_youtube_directive_lists_korea_keywords(self):
+        # 한국 명시 키워드 — Python 멀티라인 문자열 concat ("한국 " "기업"
+        # → 런타임 "한국 기업") 도 hit. 인접 string literal 사이의 `" "`
+        # 제거 후 whitespace normalize.
+        import inspect
+        import re
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        # Strip inter-literal `" "` + 일반 공백 normalize
+        joined = re.sub(r'"\s*"', "", src)
+        normalized = re.sub(r"\s+", " ", joined)
+        for kw in ("한국", "국내", "한국 시장", "한국 기업",
+                   "한국 투자자", "한국 정책"):
+            assert kw in normalized, f"한국 명시 키워드 '{kw}' 누락"
+
+    def test_non_youtube_directive_forbids_korea_macro_invention(self):
+        # 원문 밖 한국 거시경제 / 코인 / 정책 / 투자자 발명 금지 명시
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        for kw in ("거시", "한국 코인", "한국 정책", "한국 투자자"):
+            assert kw in src
+
+    def test_youtube_directive_unchanged(self):
+        # YouTube directive (영상 원문 잠금) 그대로 유지
+        import inspect
+        from app.providers.openai_provider import OpenAIDraftWriter
+        src = inspect.getsource(OpenAIDraftWriter.generate_draft)
+        assert "영상 원문 안에서만 드래프트를 작성하라" in src
+        assert "한국 macro/시장/환율/투자/부동산" in src
+        assert 'source_type == "youtube"' in src

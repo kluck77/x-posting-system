@@ -714,7 +714,8 @@ class OpenAIDraftWriter(BaseDraftWriter):
             if criteria_context:
                 context_block = f"\n\n## Gemini 리서치 결과 (필수 활용)\n{criteria_context}\n"
             # YouTube 95% 보존형 lane 만 영상 원문 잠금 지시. 다른 lane (manual/
-            # news_link 등) 은 기존 "한국 맥락 강제 주입" 지시 유지.
+            # news_link / community_input 등) 은 한국 맥락 강제 주입 X —
+            # 한국 키워드가 명시된 경우에만 한국 맥락 사용 (글로벌 주제 보호).
             if source_type == "youtube":
                 _final_directive = (
                     "위 규칙에 따라 영상 원문 안에서만 드래프트를 작성하라. "
@@ -723,8 +724,13 @@ class OpenAIDraftWriter(BaseDraftWriter):
                 )
             else:
                 _final_directive = (
-                    "위 규칙에 따라 한국 맥락이 강제 주입된 드래프트를 "
-                    "작성하라. JSON으로만 응답."
+                    "위 규칙에 따라 드래프트를 작성하라. "
+                    "원문/소스/사용자 요청에 한국, 국내, 한국 시장, 한국 "
+                    "기업, 한국 투자자, 한국 정책 등 한국 맥락이 명시된 "
+                    "경우에만 한국 맥락을 사용하라. 그 외 글로벌 주제는 "
+                    "한국 맥락을 강제로 추가하지 마라. 원문 밖 한국 거시 "
+                    "경제 / 한국 코인 / 한국 정책 / 한국 투자자 맥락을 "
+                    "발명하지 마라. JSON으로만 응답."
                 )
             user_msg = (
                 f"제목: {title}\n\n"

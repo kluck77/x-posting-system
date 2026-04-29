@@ -22,6 +22,7 @@ DAYTIME CANDIDATE ALERT SERVICE
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -242,10 +243,45 @@ async def try_daytime_alert(
             logger.info(f"[MOCK 텔레그램] daytime alert:\n{text}")
             return True
 
+        # Bug 2 fix — pending article 등록 + inline keyboard 추가.
+        # news_monitor.try_breaking_alert 와 동일한 callback_data 형식 사용:
+        # "news_draft:{hash}" / "news_skip:{hash}" → 기존 _handle_news_callback
+        # 가 그대로 처리. news_monitor 의 private registry 재사용 (같은 패키지).
+        # circular import 회피용 function-local import.
+        try:
+            from app.services.news_monitor import (
+                _article_hash, _pending_articles, _PENDING_ARTICLES_MAX,
+            )
+            ah = _article_hash(url) if url else _article_hash(title)
+            if len(_pending_articles) >= _PENDING_ARTICLES_MAX:
+                oldest_key = next(iter(_pending_articles))
+                del _pending_articles[oldest_key]
+            _pending_articles[ah] = {
+                "title": title,
+                "url": url or "",
+                "summary": (body or title)[:500],
+                "category": topic_domain,
+                "source": "daytime_alert",
+            }
+            keyboard_buttons = []
+            if url:
+                keyboard_buttons.append({"text": "🔗 원문", "url": url})
+            keyboard_buttons.extend([
+                {"text": "✍️ 초안 생성", "callback_data": f"news_draft:{ah}"},
+                {"text": "⏭ 3h 무시", "callback_data": f"news_skip:{ah}"},
+            ])
+            reply_markup = json.dumps({"inline_keyboard": [keyboard_buttons]})
+        except Exception as _kb_e:
+            logger.warning(f"[daytime-alert] keyboard 생성 실패 (text only): {_kb_e}")
+            reply_markup = None
+
         payload = {
             "chat_id": settings.telegram_chat_id,
             "text": text,
         }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+            payload["disable_web_page_preview"] = True
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
