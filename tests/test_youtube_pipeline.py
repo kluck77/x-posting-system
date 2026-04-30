@@ -392,7 +392,9 @@ class TestFormatHandoffYouTubeSlim:
         for block in forbidden_blocks:
             assert block not in out, f"슬림 handoff 에 '{block}' 가 남으면 안 됨"
 
-    def test_slim_instruction_has_all_13_rules(self):
+    def test_slim_instruction_has_core_rules(self):
+        # SCAN_FIRST_POST_STYLE_V1 도입 후 — 13 룰 → 핵심 룰 + 내부 분석 라벨
+        # 제거 + 보고서 결말 제거 지시로 재편.
         from app.services.grok_handoff import format_handoff
         out = format_handoff(
             self._sp_with_meta(), self._ap_with_meta(),
@@ -408,9 +410,10 @@ class TestFormatHandoffYouTubeSlim:
             "원문 내용 95% 보존",
             "중복 제거",
             "문장 리듬 개선",
-            "첫 문장 강화",
-            "마지막 문장 강화",
-            "⚠️ / 📌 형식 제거",
+            "둘째 줄에는 핵심 숫자",
+            "마지막 문장은 짧고 단단한 판단",
+            "내부 분석 라벨 제거",
+            "보고서 말투 / 뉴스 해설형 장문 / 유튜브 리뷰체 제거",
             "편집 결과만 출력",
         ]
         for rule in rules:
@@ -732,15 +735,14 @@ class TestYouTubeFourEditorBoardTrigger:
         "원문 사실은 유지하되, 문단 순서·첫 문장·마지막 문장·표현 방식은 "
         "과감하게 재구성해라. 단, 새 사실은 추가하지 마라."
     )
+    # SCAN_FIRST_POST_STYLE_V1 도입 — 기존 영상 리뷰체/구조적 의미 라인을
+    # 모바일 스캔형 X 포스트 지시 + 줄별 지시 (첫 줄 / 둘째 줄 / 마지막) 로 교체.
     NO_REVIEW = (
-        "영상 리뷰/요약처럼 쓰지 말고, 원문 내용을 내 콘텐츠 관점으로 "
-        "소화한 독립적인 X 글처럼 써라."
+        "이 글은 뉴스 요약이나 영상 리뷰가 아니라 모바일 스캔형 X 포스트여야 "
+        "한다."
     )
     FINAL_ANGLE = (
-        "마지막은 단순 요약으로 끝내지 말고, 원문이 보여주는 가장 중요한 "
-        "구조적 의미나 인간의 선택이 드러나는 관점으로 닫아라. 단, 특정 "
-        "렌즈를 억지로 끼워 맞추지 말고 글의 재료에 가장 자연스러운 관점을 "
-        "선택해라."
+        "마지막은 긴 철학적 결론이 아니라 짧은 판단 한 줄로 닫아라."
     )
 
     def _slim(self) -> str:
@@ -817,15 +819,17 @@ class TestYouTubeFourEditorBoardTrigger:
         ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
               "frame_type": "x", "story_spine": []}
         out = format_handoff(sp, ap, "본문", source_type="news_link")
+        # YouTube slim 전용 지시 (TRIGGER/RESTRUCTURE) 는 news_link 에 없어야 함
         assert self.TRIGGER not in out
         assert self.RESTRUCTURE not in out
-        assert self.NO_REVIEW not in out
-        assert self.FINAL_ANGLE not in out
-        # non-YouTube 는 관련 키워드 자체도 새지 말 것
+        # YouTube slim 전용 키워드도 새지 말 것
         assert "4-Editor Board" not in out
         assert "과감하게 재구성" not in out
-        assert "영상 리뷰/요약처럼" not in out
-        assert "구조적 의미나 인간의 선택" not in out
+        # 첫 줄/둘째 줄 줄별 지시 (YouTube slim 전용 phrasing)
+        assert "둘째 줄에는 핵심 숫자/판세/상태" not in out
+        # 단, news_link 자체 House Format 블록의 "모바일 스캔형 X 포스트"
+        # phrasing 은 OK (lane-specific block).
+        assert "모바일 스캔형 X 포스트" in out
 
     def test_trigger_absent_when_default_source_type(self):
         # source_type kwarg 미전달 시 (=일반 lane 기본 동작) 도 네 줄 미포함
@@ -1185,125 +1189,225 @@ class TestYouTubeGeminiTimingOptionD:
             assert hasattr(ana, f)
 
 
-# ─── House Format Router v1 — 도메인-agnostic 하우스 스타일 ───────────
-class TestHouseFormatRouterV1:
-    """[A] OpenAI YouTube prompt 에 House Format Router v1 (3 형식 후보 + 공통 House Style).
-    [B] Grok handoff 하우스 스타일 1 줄.
-    [C] overfitting 차단 (도메인 spine / 산업 예시 / 기업명 0 hit).
+# ─── SCAN_FIRST_POST_STYLE v1 — 모바일 스캔형 X 포스트 (House Format 폐기) ─
+class TestScanFirstPostStyleV1:
+    """[A] OpenAI YouTube prompt 에 SCAN_FIRST_POST_STYLE_V1 (4 형식 후보 +
+        공통 스캔 규칙).
+    [B] Grok handoff 모바일 스캔형 X 포스트 1 줄 + 4 후보 명시.
+    [C] overfitting 차단 (도메인 spine / 산업 예시 / 기업명 / 정치인명 /
+        코인명 / 국가명 0 hit).
     [D] schema/interface/모델 보존.
-    [E] 위험 패턴 5 종 차단 지시 포함."""
+    [E] 기존 내부 분석 라벨 ("진짜 쟁점" / "지금 봐야 할 포인트" /
+        "반드시 살릴 포인트" 등) 금지 목록 포함."""
 
-    # ── A. OpenAI prompt — House Format Router v1 ────────────────────
-    def test_openai_youtube_has_house_shape_block(self):
+    # ── A. OpenAI prompt — SCAN_FIRST_POST_STYLE_V1 ──────────────────
+    def test_scan_first_constant_exists_and_named(self):
         from app.providers.openai_provider import (
+            SCAN_FIRST_POST_STYLE_V1,
             YOUTUBE_DIGEST_SYSTEM_PROMPT,
-            HOUSE_FORMAT_ROUTER_V1,
         )
-        # 공통 상수 노출 — 다른 lane 도 재사용 가능하도록
-        assert "House Format Router v1" in HOUSE_FORMAT_ROUTER_V1
-        assert "House Format Router v1" in YOUTUBE_DIGEST_SYSTEM_PROMPT
+        assert "SCAN_FIRST_POST_STYLE v1" in SCAN_FIRST_POST_STYLE_V1
+        assert "SCAN_FIRST_POST_STYLE v1" in YOUTUBE_DIGEST_SYSTEM_PROMPT
 
-    def test_openai_youtube_has_core_principles(self):
-        # 핵심 5 기준 + 추가 룰 모두 prompt 안 명시
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
+    def test_house_format_router_alias_points_to_scan_first(self):
+        # backward-compat alias — 기존 호출부 (generate_draft 등) 무손
+        from app.providers.openai_provider import (
+            HOUSE_FORMAT_ROUTER_V1, SCAN_FIRST_POST_STYLE_V1,
+        )
+        assert HOUSE_FORMAT_ROUTER_V1 is SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_has_seven_common_rules(self):
+        # 7 섹션 — 첫 줄 / 둘째 줄 / 본문 / 이모지 / 숫자 / 단어 / 마지막
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
         for kw in (
-            "주제 설명으로 시작하지 않는다",
-            "독자가 계속 읽을 이유를 준다",
-            "N가지 / N단계 / N유형",
-            "일상 장면으로 번역",
-            "구조적 의미",
-            "고정 템플릿",
-            "하우스 스타일",
+            "1. 첫 줄",
+            "2. 둘째 줄",
+            "3. 본문",
+            "4. 이모지",
+            "5. 숫자 처리",
+            "6. 단어 선택",
+            "7. 마지막",
         ):
-            assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
-                f"House Shape 핵심 기준 '{kw}' 누락"
+            assert kw in SCAN_FIRST_POST_STYLE_V1, (
+                f"공통 규칙 섹션 '{kw}' 누락"
             )
 
-    def test_openai_youtube_forbids_review_summary_styles(self):
-        # 뉴스 요약체 / 유튜브 리뷰체 / 보고서 말투 명시 금지
+    def test_scan_first_first_line_rules(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "주제 제목 또는 강한 질문으로 시작" in SCAN_FIRST_POST_STYLE_V1
+        assert "뉴스 기사 제목을 그대로 복붙하지 않는다" in SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_second_line_rules(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "핵심 숫자" in SCAN_FIRST_POST_STYLE_V1
+        assert "숫자를 문장 속에 숨기지 않는다" in SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_short_block_rule(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "한 문단은 1~3 줄을 넘기지 않는다" in SCAN_FIRST_POST_STYLE_V1
+        assert "항목 구조" in SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_emoji_rules(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "구역 구분용으로만 사용" in SCAN_FIRST_POST_STYLE_V1
+        # 내부 분석 라벨 금지 (4 패턴)
+        for label in (
+            "진짜 쟁점",
+            "지금 봐야 할 포인트",
+            "왜 세게 써야 하는가",
+            "반드시 살릴 포인트",
+            "살릴 가치",
+        ):
+            assert label in SCAN_FIRST_POST_STYLE_V1, (
+                f"내부 분석 라벨 금지 목록 '{label}' 누락"
+            )
+
+    def test_scan_first_last_line_rules(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "짧은 판단" in SCAN_FIRST_POST_STYLE_V1
+        assert "긴 철학적 결론" in SCAN_FIRST_POST_STYLE_V1
+        assert "질문형 결말을 남발하지 않는다" in SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_has_four_format_candidates(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        for fmt in (
+            "CURRENT_ODDS_COMPARE",
+            "WHY_MARKET_HOLDS",
+            "DATA_LEDGER",
+            "SHORT_SIGNAL",
+        ):
+            assert fmt in SCAN_FIRST_POST_STYLE_V1, (
+                f"4 글 모양 후보 '{fmt}' 누락"
+            )
+
+    def test_scan_first_emphasizes_candidates_not_categories(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "고정 카테고리가 아니라" in SCAN_FIRST_POST_STYLE_V1
+        assert "글 모양 후보" in SCAN_FIRST_POST_STYLE_V1
+        assert "혼합" in SCAN_FIRST_POST_STYLE_V1
+        assert "자유형" in SCAN_FIRST_POST_STYLE_V1
+        assert "모든 글을 같은 템플릿으로 고정하지 않는다" in SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_forbids_review_summary_styles(self):
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
         for forbidden in (
-            "뉴스 요약체",
+            "뉴스 해설형 장문",
             "유튜브 리뷰체",
-            "보고서 말투",
+            "보고서 문체",
         ):
             assert forbidden in YOUTUBE_DIGEST_SYSTEM_PROMPT, (
                 f"금지 항목 '{forbidden}' 명시 누락"
             )
 
+    def test_scan_first_forbids_legacy_speaker_phrases(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        for kw in (
+            "이 영상에서는",
+            "발언자는",
+            "하더라고요",
+            "화제가 됐다",
+        ):
+            assert kw in SCAN_FIRST_POST_STYLE_V1, (
+                f"기존 약한 전달자 표현 '{kw}' 금지 목록 누락"
+            )
+
+    def test_scan_first_forbids_summary_endings(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        for kw in (
+            "주목된다",
+            "중요하다",
+            "의미가 있다",
+            "시사점을 준다",
+            "여러분의 생각은?",
+            "댓글로 남겨주세요",
+        ):
+            assert kw in SCAN_FIRST_POST_STYLE_V1, (
+                f"기존 보고서식 결말 금지 예시 '{kw}' 누락"
+            )
+
+    def test_scan_first_forbids_fact_invention(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "새 숫자 발명" in SCAN_FIRST_POST_STYLE_V1
+        assert "새 인과관계 추가" in SCAN_FIRST_POST_STYLE_V1
+        assert "새 사실 / 새 숫자 / 새 인과는 추가하지 않는다" in SCAN_FIRST_POST_STYLE_V1
+
+    def test_scan_first_forbids_korean_context_injection(self):
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
+        assert "원문에 없는 한국 맥락 강제 연결" in SCAN_FIRST_POST_STYLE_V1
+
     def test_openai_youtube_keeps_prior_layers(self):
-        # 직전 PR 들의 핵심 구조가 그대로 살아있는지
+        # 직전 PR 들의 핵심 구조가 그대로 살아있는지 (Fact Lock / Salience 등 무손)
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
         for kw in (
             "Salience-First Draft Planner",
             "Truth Integrity",
             "render_mode",
             "Framework Preservation Rule",
-            "Enumerated Framework Lock",
         ):
-            # Enumerated Framework Lock 은 Gemini prompt 에 있음 — OpenAI
-            # prompt 에는 없을 수 있음. 나머지만 검증.
-            if kw == "Enumerated Framework Lock":
-                continue
             assert kw in YOUTUBE_DIGEST_SYSTEM_PROMPT
 
-    # ── B. Grok handoff 하우스 스타일 1 줄 ──────────────────────────
-    def test_grok_handoff_has_house_style_line(self):
+    # ── B. Grok handoff — YouTube slim ───────────────────────────────
+    def test_grok_handoff_has_scan_first_line(self):
         from app.services.grok_handoff import format_handoff
         sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
         ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
               "frame_type": "x", "story_spine": []}
         out = format_handoff(sp, ap, "본문 한 줄.", source_type="youtube")
         for kw in (
-            "독립적인 X 글",
+            "모바일 스캔형 X 포스트",
             "뉴스 요약이나 영상 리뷰가 아니라",
-            "주제 설명이 아니라 판정/반전/긴장",
-            "마지막은 단순 요약이 아니라",
-            "구조적 의미로 닫아라",
+            "긴 해설보다 첫 줄, 핵심 숫자, 짧은 항목",
+            "원문에 없는 사실·숫자·사례·인과는 추가하지 마라",
         ):
-            assert kw in out, f"Grok handoff 하우스 스타일 '{kw}' 누락"
+            assert kw in out, f"Grok handoff 스캔형 지시 '{kw}' 누락"
 
-    def test_grok_handoff_house_line_inside_instruction_section(self):
-        # `## Grok 편집 지시` ↔ `## 원문 초안` 사이에 위치 + ```text
-        # 코드블록 안에 미포함
+    def test_grok_handoff_youtube_slim_lists_four_candidates(self):
         from app.services.grok_handoff import format_handoff
-        sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
-        ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
-              "frame_type": "x", "story_spine": []}
-        out = format_handoff(sp, ap, "본문 한 줄.", source_type="youtube")
-        marker = "이 글은 뉴스 요약이나 영상 리뷰가 아니라"
+        out = format_handoff(
+            {}, {"winner_angle": {"angle": "x"}}, "본문",
+            source_type="youtube",
+        )
+        for fmt in (
+            "CURRENT_ODDS_COMPARE", "WHY_MARKET_HOLDS",
+            "DATA_LEDGER", "SHORT_SIGNAL",
+        ):
+            assert fmt in out, f"YouTube slim 4 후보 '{fmt}' 누락"
+
+    def test_grok_handoff_directive_outside_codeblock(self):
+        # 모바일 스캔형 지시가 ```text 코드블록 안에 들어가면 실패
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            {}, {"winner_angle": {"angle": "x"}}, "본문 한 줄.",
+            source_type="youtube",
+        )
+        marker = "모바일 스캔형 X 포스트"
         instr_idx = out.find("## Grok 편집 지시")
         draft_idx = out.find("## 원문 초안")
         marker_idx = out.find(marker)
         assert -1 < instr_idx < marker_idx < draft_idx, (
-            "house-style 1 줄이 ## Grok 편집 지시 ↔ ## 원문 초안 사이에 "
-            "있어야 함"
+            "스캔형 지시가 ## Grok 편집 지시 ↔ ## 원문 초안 사이여야 함"
         )
-        # ```text 코드블록 안에 들어가면 안 됨
         import re
         m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
         assert m is not None
         assert marker not in m.group(1)
 
-    def test_non_youtube_handoff_no_youtube_specific_house_line(self):
-        # news_link 도 자체 House Format 블록을 받지만 (기사용 phrasing),
-        # YouTube slim 전용 phrasing ("뉴스 요약이나 영상 리뷰가 아니라"
-        # / "주제 설명이 아니라 판정/반전/긴장") 는 새지 말 것.
+    def test_grok_handoff_internal_label_removal_listed(self):
+        # 내부 분석 라벨 제거 지시 명시
         from app.services.grok_handoff import format_handoff
-        sp = {"confirmed_facts": ["사실 1"], "evidence_pack": [],
-              "concept_translation": ""}
-        ap = {"winner_angle": {"angle": "앵글"}, "core_tension": "긴장",
-              "frame_type": "x", "story_spine": []}
-        out = format_handoff(sp, ap, "본문", source_type="news_link")
-        # YouTube slim 전용 phrasing 은 0 hit
-        assert "뉴스 요약이나 영상 리뷰가 아니라" not in out
-        assert "주제 설명이 아니라 판정/반전/긴장" not in out
-        # 단, news_link 자체 House Format 블록의 phrasing 은 OK
-        assert "기사 요약이 아니라 독립적인 X 글" in out
+        out = format_handoff(
+            {}, {"winner_angle": {"angle": "x"}}, "본문",
+            source_type="youtube",
+        )
+        for kw in (
+            "진짜 쟁점",
+            "지금 봐야 할 포인트",
+            "반드시 살릴 포인트",
+        ):
+            assert kw in out, f"내부 분석 라벨 제거 지시 '{kw}' 누락"
 
     # ── C. Overfitting prevention ───────────────────────────────────
     def test_no_domain_spine_added(self):
-        # 도메인 spine 추가 없음
         from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
         from app.sources.youtube_pipeline import GEMINI_VIDEO_ANALYSIS_PROMPT
         for spine in (
@@ -1316,31 +1420,43 @@ class TestHouseFormatRouterV1:
             assert spine not in GEMINI_VIDEO_ANALYSIS_PROMPT
 
     def test_no_industry_or_company_overfitting(self):
-        # 특정 기업/코인/정치인/산업 예시 전역 prompt 박힘 0
-        from app.providers.openai_provider import YOUTUBE_DIGEST_SYSTEM_PROMPT
-        # House Shape 안에 특정 실명 예시 들어가면 실패
+        # 특정 기업/코인/정치인/국가/산업 예시 prompt 박힘 0
+        from app.providers.openai_provider import SCAN_FIRST_POST_STYLE_V1
         forbidden_specifics = (
             "Polymarket", "Kalshi",
             "Tesla", "Apple", "Nvidia",
             "비트코인", "이더리움", "USDT",
             "삼성전자", "SK하이닉스",
             "트럼프", "이재명",
+            # 특정 국가명
+            "미국", "중국", "일본",
         )
-        # House Shape v1 블록만 추출
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
         for kw in forbidden_specifics:
-            assert kw not in HOUSE_FORMAT_ROUTER_V1, (
-                f"House Shape 안에 특정 실명 '{kw}' 박히면 안 됨 "
-                f"(도메인 과적합)"
+            assert kw not in SCAN_FIRST_POST_STYLE_V1, (
+                f"SCAN_FIRST_POST_STYLE 안에 특정 실명 '{kw}' 박히면 안 됨 "
+                f"(과적합)"
             )
 
-    def test_general_ko_prompt_no_house_shape(self):
-        # 일반 KO prompt 에 House Shape 가 새지 말 것 (기존 동작 보호)
+    def test_grok_handoff_no_industry_overfitting(self):
+        from app.services.grok_handoff import format_handoff
+        out = format_handoff(
+            {}, {"winner_angle": {"angle": "x"}}, "본문",
+            source_type="youtube",
+        )
+        # 외부 Grok 편집용 마스터 프롬프트 + 4 후보 설명 안에 특정 실명 0
+        for kw in ("Polymarket", "Tesla", "비트코인", "삼성전자",
+                   "트럼프", "이재명"):
+            assert kw not in out, (
+                f"Grok handoff 안에 특정 실명 '{kw}' 박히면 안 됨"
+            )
+
+    def test_general_ko_prompt_no_scan_first(self):
+        # 일반 KO prompt 에 SCAN_FIRST 가 새지 말 것 (기존 동작 보호)
         from app.providers.openai_provider import SYSTEM_PROMPT_KO
         for kw in (
-            "House Format Router",
-            "주제 설명으로 시작하지 않는다",
-            "하우스 스타일",
+            "SCAN_FIRST_POST_STYLE",
+            "CURRENT_ODDS_COMPARE",
+            "WHY_MARKET_HOLDS",
         ):
             assert kw not in SYSTEM_PROMPT_KO
 
@@ -1355,73 +1471,96 @@ class TestHouseFormatRouterV1:
             "hook", "body", "stake", "point", "archetype",
         }
 
-    # ── E. 위험 패턴 차단 지시 (실제 출력 검증 X, prompt 안 명시만) ──
-    def test_warns_against_topic_explainer_first_line(self):
-        # 주제 설명형 첫 줄 피하라는 지시
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        assert "주제 설명으로 시작하지 않는다" in HOUSE_FORMAT_ROUTER_V1
-        # 약한 시작 패턴 예시 (이 영상에서는 / 발언자는)
-        assert "이 영상에서는" in HOUSE_FORMAT_ROUTER_V1
-        assert "발언자는" in HOUSE_FORMAT_ROUTER_V1
 
-    def test_warns_against_review_speaker_voice(self):
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        # 약한 전달자 표현 ("하더라고요" / "화제가 됐다")
-        assert "하더라고요" in HOUSE_FORMAT_ROUTER_V1
-        assert "화제가 됐다" in HOUSE_FORMAT_ROUTER_V1
+# ─── 외부 Grok 편집용 마스터 프롬프트 (SCAN_FIRST_GROK_EDITOR_PROMPT_V1) ─
+class TestScanFirstGrokEditorPromptV1:
+    """운영자가 외부 Grok UI 에 직접 복붙해 쓸 수 있는 편집 프롬프트."""
 
-    def test_warns_against_n_items_dropping(self):
-        # N가지/N단계/N유형 누락 금지 지시 (House Format Router 의 NUMBERED_INSIGHT
-        # 사용 기준 + 주의 phrasing)
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        assert "N가지" in HOUSE_FORMAT_ROUTER_V1
-        # NUMBERED_INSIGHT 주의 — 누락 / 합쳐서 / 발명 X
-        assert "항목 누락 X" in HOUSE_FORMAT_ROUTER_V1
-        assert "합쳐서 대표 몇 개만" in HOUSE_FORMAT_ROUTER_V1
-        # "원문에 없는\n항목 발명 X" (줄바꿈 사이) — 키워드 분리 검사
-        assert "원문에 없는" in HOUSE_FORMAT_ROUTER_V1
-        assert "항목 발명 X" in HOUSE_FORMAT_ROUTER_V1
+    def test_external_prompt_constant_exists(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "SCAN_FIRST_GROK_EDITOR_PROMPT_V1" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "X 포스트 전문 편집자" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
 
-    def test_warns_against_summary_endings(self):
-        # 요약형 결말 금지 지시
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        for kw in (
-            "중요하다",
-            "주목해야 한다",
-            "생각해볼 필요가 있다",
-            "라고 할 수 있다",
+    def test_external_prompt_has_four_candidates(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        for fmt in (
+            "CURRENT_ODDS_COMPARE", "WHY_MARKET_HOLDS",
+            "DATA_LEDGER", "SHORT_SIGNAL",
         ):
-            assert kw in HOUSE_FORMAT_ROUTER_V1, (
-                f"요약형 결말 금지 예시 '{kw}' 누락"
+            assert fmt in SCAN_FIRST_GROK_EDITOR_PROMPT_V1, (
+                f"외부 Grok 프롬프트 4 후보 '{fmt}' 누락"
             )
 
-    def test_warns_against_fact_invention(self):
-        # 새 사실 / 새 숫자 / 새 인과 추가 금지 지시 (HOUSE_FORMAT_ROUTER_V1
-        # 의 6 금지 + 도입부 "새 사실 / 새 숫자 / 새 인과는 추가하지 않는다")
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        assert "새 숫자 발명" in HOUSE_FORMAT_ROUTER_V1
-        assert "새 인과관계 추가" in HOUSE_FORMAT_ROUTER_V1
-        # 도입부 또는 본문 어디든 — phrasing 변형 허용
-        assert (
-            "원문에 없는 사실 발명" in HOUSE_FORMAT_ROUTER_V1
-            or "원문에 없는 사실은 만들지 않는다" in HOUSE_FORMAT_ROUTER_V1
-            or "새 사실 / 새 숫자 / 새 인과는 추가하지 않는다" in HOUSE_FORMAT_ROUTER_V1
-        )
-
-    # ── F. 3 형식 후보 (NUMBERED_INSIGHT / MARKET_MAP / POWER_NARRATIVE) ─
-    def test_router_has_three_format_candidates(self):
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        for fmt in ("NUMBERED_INSIGHT", "MARKET_MAP", "POWER_NARRATIVE"):
-            assert fmt in HOUSE_FORMAT_ROUTER_V1, (
-                f"3 형식 후보 '{fmt}' 누락"
+    def test_external_prompt_has_no_addition_rules(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        for kw in (
+            "새 사실 추가 금지",
+            "새 숫자 추가 금지",
+            "새 인물/기업/기관/국가/사례 추가 금지",
+            "새 인과관계 추가 금지",
+            "원문에 없는 한국 맥락 추가 금지",
+            "원문 핵심 재료 보존",
+        ):
+            assert kw in SCAN_FIRST_GROK_EDITOR_PROMPT_V1, (
+                f"외부 Grok 핵심 금지 '{kw}' 누락"
             )
 
-    def test_router_emphasizes_candidates_not_categories(self):
-        from app.providers.openai_provider import HOUSE_FORMAT_ROUTER_V1
-        assert "고정 카테고리가 아니라" in HOUSE_FORMAT_ROUTER_V1
-        assert "글 모양 후보" in HOUSE_FORMAT_ROUTER_V1
-        assert "혼합" in HOUSE_FORMAT_ROUTER_V1
-        assert "자유형" in HOUSE_FORMAT_ROUTER_V1
+    def test_external_prompt_removes_legacy_styles(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        for kw in (
+            "뉴스 해설형 장문",
+            "유튜브 리뷰체",
+            "보고서 말투",
+            "이 영상에서는",
+            "발언자는",
+            "주목된다",
+            "의미가 있다",
+            "시사점을 준다",
+            "여러분의 생각은?",
+            "댓글로 남겨주세요",
+            "긴 철학적 결론",
+        ):
+            assert kw in SCAN_FIRST_GROK_EDITOR_PROMPT_V1, (
+                f"외부 Grok 제거 문체 예시 '{kw}' 누락"
+            )
+
+    def test_external_prompt_removes_internal_analysis_labels(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        for label in (
+            "진짜 쟁점",
+            "지금 봐야 할 포인트",
+            "왜 이 글을 세게 써야 하는가",
+            "반드시 살릴 포인트",
+            "살릴 가치",
+        ):
+            assert label in SCAN_FIRST_GROK_EDITOR_PROMPT_V1, (
+                f"내부 분석 라벨 제거 지시 '{label}' 누락"
+            )
+
+    def test_external_prompt_emphasizes_candidates_not_categories(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        # "고정 템플릿 아님" / "고정 템플릿이 아니라" 등 변형 허용
+        assert "고정 템플릿" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "후보" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "혼합" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+
+    def test_external_prompt_no_specific_overfitting(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        for kw in (
+            "Polymarket", "Kalshi", "Tesla", "Apple", "Nvidia",
+            "비트코인", "이더리움", "USDT",
+            "삼성전자", "SK하이닉스",
+            "트럼프", "이재명",
+            "미국", "중국", "일본",
+        ):
+            assert kw not in SCAN_FIRST_GROK_EDITOR_PROMPT_V1, (
+                f"외부 Grok 프롬프트 안에 특정 실명 '{kw}' 박히면 안 됨"
+            )
+
+    def test_external_prompt_final_output_one_post_only(self):
+        from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "한국어 X 포스트 1 개만 출력" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "편집 결과만 출력" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
 
 
 # ─── News Article Fact Lock v1 + news_link lane 적용 ────────────────
@@ -1448,10 +1587,15 @@ class TestNewsArticleFactLockV1:
                 f"News Fact Lock 룰 '{kw}' 누락"
             )
 
-    def test_news_fact_lock_applies_three_candidates(self):
+    def test_news_fact_lock_applies_four_candidates(self):
         from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
-        for fmt in ("NUMBERED_INSIGHT", "MARKET_MAP", "POWER_NARRATIVE"):
-            assert fmt in NEWS_ARTICLE_FACT_LOCK_V1
+        for fmt in (
+            "CURRENT_ODDS_COMPARE", "WHY_MARKET_HOLDS",
+            "DATA_LEDGER", "SHORT_SIGNAL",
+        ):
+            assert fmt in NEWS_ARTICLE_FACT_LOCK_V1, (
+                f"News Fact Lock 의 형식 후보 '{fmt}' 누락"
+            )
 
     def test_news_fact_lock_forbids_review_phrases(self):
         from app.providers.openai_provider import NEWS_ARTICLE_FACT_LOCK_V1
@@ -1464,7 +1608,8 @@ class TestNewsArticleFactLockV1:
         src = inspect.getsource(OpenAIDraftWriter.generate_draft)
         assert 'source_type == "news_link"' in src
         assert "NEWS_ARTICLE_FACT_LOCK_V1" in src
-        assert "HOUSE_FORMAT_ROUTER_V1" in src
+        # SCAN_FIRST_POST_STYLE_V1 (구 HOUSE_FORMAT_ROUTER_V1) append 확인
+        assert "SCAN_FIRST_POST_STYLE_V1" in src
 
     def test_general_ko_prompt_no_fact_lock(self):
         from app.providers.openai_provider import SYSTEM_PROMPT_KO
@@ -1482,22 +1627,29 @@ class TestGrokHandoffHouseFormatLines:
               "frame_type": "x", "story_spine": []}
         return format_handoff(sp, ap, "본문", source_type=source_type)
 
-    def test_youtube_slim_mentions_three_candidates(self):
+    def test_youtube_slim_mentions_four_candidates(self):
         from app.services.grok_handoff import format_handoff
         sp = {"confirmed_facts": [], "evidence_pack": [], "concept_translation": ""}
         ap = {"winner_angle": {"angle": "x"}, "core_tension": "x",
               "frame_type": "x", "story_spine": []}
         out = format_handoff(sp, ap, "본문", source_type="youtube")
-        for fmt in ("NUMBERED_INSIGHT", "MARKET_MAP", "POWER_NARRATIVE"):
+        for fmt in (
+            "CURRENT_ODDS_COMPARE", "WHY_MARKET_HOLDS",
+            "DATA_LEDGER", "SHORT_SIGNAL",
+        ):
             assert fmt in out, f"YouTube slim 에 '{fmt}' 누락"
-        assert "필요하면 혼합" in out
+        assert "혼합" in out
 
     def test_news_link_handoff_has_house_format_section(self):
         out = self._full_handoff("news_link")
         assert "## House Format 편집 지시" in out
-        assert "기사 요약이 아니라 독립적인 X 글" in out
-        assert "뉴스 리포트 말투를 제거" in out
-        assert "단, 새 사실·새 숫자·새 인과는 추가하지 마라" in out
+        assert "모바일 스캔형 X 포스트" in out
+        assert "원문에 없는 사실·숫자·사례·인과는 추가하지 마라" in out
+        for fmt in (
+            "CURRENT_ODDS_COMPARE", "WHY_MARKET_HOLDS",
+            "DATA_LEDGER", "SHORT_SIGNAL",
+        ):
+            assert fmt in out, f"news_link handoff 4 후보 '{fmt}' 누락"
 
     def test_news_link_handoff_section_outside_codeblock(self):
         out = self._full_handoff("news_link")
@@ -1505,7 +1657,7 @@ class TestGrokHandoffHouseFormatLines:
         m = re.search(r"```text\n(.*?)\n```", out, re.DOTALL)
         if m:
             assert "## House Format 편집 지시" not in m.group(1)
-            assert "기사 요약이 아니라" not in m.group(1)
+            assert "모바일 스캔형 X 포스트" not in m.group(1)
         rules_idx = out.find("## 최종 출력 규칙")
         house_idx = out.find("## House Format 편집 지시")
         assert -1 < rules_idx < house_idx, (
@@ -1515,13 +1667,13 @@ class TestGrokHandoffHouseFormatLines:
     def test_manual_handoff_has_house_format_section(self):
         out = self._full_handoff("manual")
         assert "## House Format 편집 지시" in out
-        assert "원문 정리가 아니라 독립적인 X 글" in out
-        assert "뉴스 요약체/영상 리뷰체/보고서 말투를 제거" in out
+        assert "모바일 스캔형 X 포스트" in out
+        assert "긴 해설보다 첫 줄, 핵심 숫자, 짧은 항목" in out
 
     def test_community_input_handoff_has_house_format_section(self):
         out = self._full_handoff("community_input")
         assert "## House Format 편집 지시" in out
-        assert "원문 정리가 아니라 독립적인 X 글" in out
+        assert "모바일 스캔형 X 포스트" in out
 
     def test_rss_lane_no_house_format_section(self):
         out = self._full_handoff("rss")
@@ -1625,14 +1777,14 @@ class TestCurrentArticleEventLock:
             assert kw in NEWS_ARTICLE_FACT_LOCK_V1
 
     def test_news_link_runtime_append_still_present(self):
-        # generate_draft 의 news_link 분기에서 Fact Lock + Router runtime
-        # append 여전히 작동 (이전 PR 결과 유지)
+        # generate_draft 의 news_link 분기에서 Fact Lock + SCAN_FIRST_POST_STYLE
+        # runtime append 여전히 작동 (이전 PR 결과 유지)
         import inspect
         from app.providers.openai_provider import OpenAIDraftWriter
         src = inspect.getsource(OpenAIDraftWriter.generate_draft)
         assert 'source_type == "news_link"' in src
         assert "NEWS_ARTICLE_FACT_LOCK_V1" in src
-        assert "HOUSE_FORMAT_ROUTER_V1" in src
+        assert "SCAN_FIRST_POST_STYLE_V1" in src
 
 
 # ─── Bug 1 fix — non-YouTube user_msg directive 한국 맥락 강제 제거 ──

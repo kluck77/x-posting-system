@@ -252,16 +252,16 @@ def _recommend_format(
     source_type: str,
     timing: str,
 ) -> str:
-    """간이 형식 추천 (router v1 후보 중 1)."""
+    """간이 형식 추천 (SCAN_FIRST_POST_STYLE_V1 4 후보 중 1)."""
     if risk_level == LEVEL_HIGH:
-        return "MARKET_MAP (위험 분산 — 입장 단정 회피)"
+        return "DATA_LEDGER (위험 분산 — 숫자 스캔 우선)"
     if timing in (TIMING_BREAKING, TIMING_FRESH) and info_rarity == LEVEL_HIGH:
-        return "NUMBERED_INSIGHT (사실/숫자 다수)"
-    if source_type == "youtube":
-        return "POWER_NARRATIVE (영상 논지 그대로 전달)"
+        return "WHY_MARKET_HOLDS (시장 포지션 + N 가지 이유)"
+    if info_rarity == LEVEL_HIGH and source_type in ("news_link", "rss"):
+        return "CURRENT_ODDS_COMPARE (판세/비교 강조)"
     if info_rarity == LEVEL_LOW:
-        return "COMMENT_ONLY 권장 (정보 가치 부족)"
-    return "MARKET_MAP (균형 분석)"
+        return "SHORT_SIGNAL (짧은 헤드라인 + 첫 댓글로 보강)"
+    return "DATA_LEDGER (숫자 스캔)"
 
 
 # ---------------------------------------------------------------------------
