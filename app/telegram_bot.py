@@ -247,6 +247,25 @@ async def _run_analysis_and_show_card(
                 kr_corrections = [_normalize_to_korean(c) for c in factcheck.corrections[:2]]
                 factcheck_summary += "\n수정사항:\n" + "\n".join(f"  • {c}" for c in kr_corrections)
 
+        # Info Value Gate v1 — 정보 가치 / 신뢰 / 위험 / 한국 맥락 자동 평가
+        info_value: dict = {}
+        try:
+            from app.services.info_value_gate import (
+                evaluate_info_value, format_info_value_block,
+            )
+            info_value = evaluate_info_value(
+                title=title,
+                source_text=text,
+                source_url=source_url,
+                source_type=source_type,
+                content_type=content_type,
+                research_summary=research_summary,
+                factcheck_summary=factcheck_summary,
+            )
+        except Exception as _gate_e:
+            logger.warning(f"[info-value-gate] 평가 실패 (fail-open): {_gate_e}")
+            info_value = {}
+
         # 상태 저장
         _set_pending(context, {
             "title": title,
@@ -256,6 +275,7 @@ async def _run_analysis_and_show_card(
             "content_type": content_type,
             "research_summary": research_summary,
             "factcheck_summary": factcheck_summary,
+            "info_value": info_value,
             "msg_id": msg_id,
         })
         _set_state(context, STATE_AWAITING_TYPE)
@@ -271,6 +291,14 @@ async def _run_analysis_and_show_card(
             card_text += f"\n🔬 <b>핵심 내용:</b>\n{research_summary[:350]}\n"
         if factcheck_summary:
             card_text += f"\n{factcheck_summary}\n"
+        if info_value:
+            try:
+                from app.services.info_value_gate import format_info_value_block
+                gate_block = format_info_value_block(info_value)
+                if gate_block:
+                    card_text += f"\n{gate_block}\n"
+            except Exception:
+                pass
         card_text += f"\n{'─' * 28}\n<b>어떻게 사용할까요?</b>"
 
         keyboard = InlineKeyboardMarkup([
