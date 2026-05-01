@@ -1214,7 +1214,7 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
             title=article["title"],
             url=article["url"],
             source_text=source_text,
-            source_type="manual",
+            source_type="news_link",
             language="ko",
         )
 
@@ -1244,7 +1244,20 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
         # skip 시에만 제거 (line 612). 봇 재시작 시 자연 소멸.
 
         # 초안 텍스트 전달 (자동 게시 없음 — 사용자가 직접 X에 붙여넣기)
-        draft_text = f"{draft.hook}\n\n{draft.body}"
+        # SCAN_FIRST_POST_STYLE_V1: 옛 내부 분석 라벨 (⚠️ 진짜 쟁점 / 📌 지금
+        # 봐야 할 포인트) 줄 단위 strip — daytime alert 카드 전달 직전.
+        def _strip_internal_labels(text: str) -> str:
+            import re
+            t = re.sub(
+                r"^\s*(?:⚠️\s*진짜\s*쟁점\s*:|📌\s*지금\s*봐야\s*할\s*포인트\s*:|"
+                r"🔥\s*왜\s*세게\s*써야\s*하는가\s*:|💎\s*반드시\s*살릴\s*포인트\s*:|"
+                r"🎯\s*살릴\s*가치\s*:).*$",
+                "", text, flags=re.MULTILINE,
+            )
+            return re.sub(r"\n{3,}", "\n\n", t).strip()
+
+        clean_body = _strip_internal_labels(draft.body or "")
+        draft_text = f"{draft.hook}\n\n{clean_body}".strip()
         if draft.thread_continuation:
             draft_text += f"\n\n🧵 {draft.thread_continuation}"
 
@@ -1268,10 +1281,13 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-        # ai rationale (optional)
+        # ai rationale (optional) — 내부 분석 flag ([flags: ...]) 노출 차단.
         _rationale = getattr(draft, "ai_rationale", None)
         if _rationale:
-            meta_lines += f"\n🤖 {_rationale}"
+            import re
+            _rat_clean = re.sub(r"\s*\[flags:[^\]]*\]\s*", "", str(_rationale)).strip()
+            if _rat_clean:
+                meta_lines += f"\n🤖 {_rat_clean[:200]}"
 
         reply = (
             f"📝 <b>초안 완성!</b> {score_line}\n"
@@ -1282,9 +1298,31 @@ async def _handle_news_callback(query, context: ContextTypes.DEFAULT_TYPE):
             f"위 텍스트를 복사해서 X에 붙여넣기 해주세요."
         )
 
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔄 재생성", callback_data=f"news_regen:{article_hash}"),
-        ]])
+        # Grok 편집 버튼 + 본문 복사 버튼 추가 (정규 분석 카드와 동일 wiring).
+        # copy_body / copy_grok 콜백은 line 916 _handle_callback 에서 처리.
+        _draft_id = getattr(draft, "id", None)
+        if _draft_id:
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "📋 본문 복사", callback_data=f"copy_body:{_draft_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "🤖 Grok 편집용", callback_data=f"copy_grok:{_draft_id}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🔄 재생성", callback_data=f"news_regen:{article_hash}",
+                    ),
+                ],
+            ])
+        else:
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "🔄 재생성", callback_data=f"news_regen:{article_hash}",
+                ),
+            ]])
 
         # 재생성용으로 기사 정보 유지
         await query.message.reply_text(reply, parse_mode="HTML", reply_markup=keyboard)
