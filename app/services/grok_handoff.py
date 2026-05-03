@@ -515,7 +515,12 @@ def _format_handoff_youtube_slim(final_body: str, *, body_max: int = 3500) -> st
         "혼합하라. 단, 원문에 없는 사실·숫자·사례·인과는 추가하지 마라.\n"
         "첫 줄은 주제 제목 또는 강한 질문으로 시작하고, 둘째 줄에는 핵심 "
         "숫자/판세/상태를 두고, 본문은 짧은 항목 구조로 쪼개고, 마지막은 "
-        "긴 철학적 결론이 아니라 짧은 판단 한 줄로 닫아라.\n\n"
+        "긴 철학적 결론이 아니라 짧은 판단 한 줄로 닫아라.\n"
+        "Final edited post must be in English. Do not output Korean. "
+        "Do not translate literally from Korean. Turn the source material "
+        "into a natural, scan-friendly English X post. Preserve facts and "
+        "numbers. Do not add new facts, numbers, entities, examples, or "
+        "causal claims.\n\n"
         "다음 한국어 초안을 모바일 스캔형 X 포스트로 편집한다.\n\n"
         "규칙:\n"
         "- 새 사실 추가 금지\n"
@@ -732,6 +737,13 @@ def format_handoff(
     # 원문 초안 코드블록 밖, ## 최종 출력 규칙 다음 위치.
     _src = (str(source_type or "").strip().lower())
     section_house_format: list[str] = []
+    _english_directive = (
+        "Final edited post must be in English. Do not output Korean. "
+        "Do not translate literally from Korean. Turn the source material "
+        "into a natural, scan-friendly English X post. Preserve facts and "
+        "numbers. Do not add new facts, numbers, entities, examples, or "
+        "causal claims."
+    )
     if _src == "news_link":
         section_house_format = [
             "## House Format 편집 지시",
@@ -741,6 +753,7 @@ def format_handoff(
             "CURRENT_ODDS_COMPARE, WHY_MARKET_HOLDS, DATA_LEDGER, "
             "SHORT_SIGNAL 중 자연스러운 글 모양을 선택하거나 혼합하라. "
             "단, 원문에 없는 사실·숫자·사례·인과는 추가하지 마라.",
+            _english_directive,
         ]
     elif _src in ("manual", "community_input"):
         section_house_format = [
@@ -751,6 +764,7 @@ def format_handoff(
             "CURRENT_ODDS_COMPARE, WHY_MARKET_HOLDS, DATA_LEDGER, "
             "SHORT_SIGNAL 중 자연스러운 글 모양을 선택하거나 혼합하라. "
             "단, 원문에 없는 사실·숫자·사례·인과는 추가하지 마라.",
+            _english_directive,
         ]
     # 고정 4블록 (원문 초안 제외) + lane 별 House Format 지시 (있을 때만)
     fixed_tail = [
@@ -926,9 +940,18 @@ SCAN_FIRST_GROK_EDITOR_PROMPT_V1 = """[SCAN_FIRST_GROK_EDITOR_PROMPT_V1]
 - 단정이 위험한 내용은 강도를 낮춘다.
 - 원문 밖으로 나가지 않는다.
 
+[Output Language Rule]
+
+- Final edited post must be in English.
+- Do not output Korean.
+- Do not translate literally from Korean.
+- Turn the source material into a natural, scan-friendly English X post.
+- Preserve facts and numbers.
+- Do not add new facts, numbers, entities, examples, or causal claims.
+
 [최종 출력]
 
-- 한국어 X 포스트 1 개만 출력
+- 영어 X 포스트 1 개만 출력 (English X post only)
 - 설명 / 평가 / 후보안 / 분석표 출력 금지
 - 편집 결과만 출력
 """

@@ -1559,7 +1559,9 @@ class TestScanFirstGrokEditorPromptV1:
 
     def test_external_prompt_final_output_one_post_only(self):
         from app.services.grok_handoff import SCAN_FIRST_GROK_EDITOR_PROMPT_V1
-        assert "한국어 X 포스트 1 개만 출력" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        # Output Language Rule v1 도입 — 한국어 X 포스트 → 영어 X 포스트
+        assert "영어 X 포스트 1 개만 출력" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
+        assert "English X post" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
         assert "편집 결과만 출력" in SCAN_FIRST_GROK_EDITOR_PROMPT_V1
 
 

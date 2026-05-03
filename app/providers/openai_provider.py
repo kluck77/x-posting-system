@@ -606,6 +606,65 @@ YOUTUBE_DIGEST_SYSTEM_PROMPT = (
 )
 
 
+# ─── Output Language Rule v1 (최종 X post body 영어 전환) ────────────
+# 사용자/운영자/Telegram UI/로그/내부 문서는 한국어 유지. 오직 최종 X
+# post 본문 (hook + body + thread_continuation) 만 영어로 출력. 한국어
+# 자료 / 한국 뉴스 / 한국 커뮤니티 캡처도 자연스러운 글로벌 영어 X
+# 포스트로 변환. 직역 금지 / 새 사실·숫자·사례·인과 추가 금지.
+# 모든 KO lane prompt (SYSTEM_PROMPT_KO + YouTube + news_link + manual /
+# community_input) 에 runtime append. JSON 응답 schema (hook/body/...)
+# 변경 없음 — 필드 안 텍스트만 영어.
+OUTPUT_LANGUAGE_RULE_V1 = """
+
+[Output Language Rule v1]
+
+The final X post must be written in English.
+
+The user may provide Korean input, Korean articles, Korean community
+posts, Korean captions, or Korean instructions. You must understand the
+source material and write the final post in natural English.
+
+Do not translate Korean literally.
+Rewrite it as a native, concise, scan-friendly X post.
+
+Keep:
+- original facts
+- original numbers
+- original entities
+- original dates
+- original causal limits
+
+Do not add:
+- new facts
+- new numbers
+- new entities
+- new examples
+- new causal claims
+- forced Korea context
+
+Style:
+- clear global English
+- short lines
+- scan-first structure
+- strong headline
+- visible numbers
+- minimal jargon
+- no Korean final body
+- no bilingual final post unless explicitly requested
+
+Output rule:
+- All user-facing post text fields in the JSON response must be in English.
+- Meta fields (category / archetype / tone notes) keep their existing
+  schema values.
+"""
+
+
+# YOUTUBE_DIGEST_SYSTEM_PROMPT 도 최종 X post body 영어 적용
+YOUTUBE_DIGEST_SYSTEM_PROMPT = (
+    YOUTUBE_DIGEST_SYSTEM_PROMPT + OUTPUT_LANGUAGE_RULE_V1
+)
+
+
 # ─── News Article Fact Lock v1 (news_link lane 전용 강화) ────────────
 # 뉴스기사 lane 은 YouTube 보다 사실 오염 위험이 크므로, House Format
 # Router 적용 전에 Fact Lock 을 먼저 적용. generate_draft 에서 source_type
@@ -765,17 +824,29 @@ class OpenAIDraftWriter(BaseDraftWriter):
                         + NEWS_ARTICLE_FACT_LOCK_V1
                         + SCAN_FIRST_POST_STYLE_V1
                     )
+                # Output Language Rule — 모든 KO-lane (manual / news_link /
+                # community_input / topic_search 등) 최종 X post body 영어로.
+                # YouTube lane 은 YOUTUBE_DIGEST_SYSTEM_PROMPT 안에 이미 포함.
+                system_prompt = system_prompt + OUTPUT_LANGUAGE_RULE_V1
             context_block = ""
             if criteria_context:
                 context_block = f"\n\n## Gemini 리서치 결과 (필수 활용)\n{criteria_context}\n"
             # YouTube 95% 보존형 lane 만 영상 원문 잠금 지시. 다른 lane (manual/
             # news_link / community_input 등) 은 한국 맥락 강제 주입 X —
             # 한국 키워드가 명시된 경우에만 한국 맥락 사용 (글로벌 주제 보호).
+            # 최종 X post body 는 영어로 (Output Language Rule v1).
+            # 한국어 자료를 이해해 자연스러운 영어 X post 로 변환.
+            _english_directive = (
+                "최종 X post (JSON 의 hook / body / thread_continuation) 는 "
+                "반드시 영어로만 작성하라. 사용자 입력은 한국어여도 좋지만, "
+                "최종 게시글 본문은 한국어 직역이 아니라 자연스러운 글로벌 "
+                "영어 X post 로 작성한다. Korean final body 금지. JSON 으로만 응답."
+            )
             if source_type == "youtube":
                 _final_directive = (
                     "위 규칙에 따라 영상 원문 안에서만 드래프트를 작성하라. "
                     "영상에 없는 한국 macro/시장/환율/투자/부동산 데이터나 "
-                    "조언을 추가하지 마라. JSON으로만 응답."
+                    "조언을 추가하지 마라. " + _english_directive
                 )
             else:
                 _final_directive = (
@@ -785,7 +856,7 @@ class OpenAIDraftWriter(BaseDraftWriter):
                     "경우에만 한국 맥락을 사용하라. 그 외 글로벌 주제는 "
                     "한국 맥락을 강제로 추가하지 마라. 원문 밖 한국 거시 "
                     "경제 / 한국 코인 / 한국 정책 / 한국 투자자 맥락을 "
-                    "발명하지 마라. JSON으로만 응답."
+                    "발명하지 마라. " + _english_directive
                 )
             user_msg = (
                 f"제목: {title}\n\n"
